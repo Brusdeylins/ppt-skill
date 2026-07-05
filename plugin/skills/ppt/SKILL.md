@@ -1,13 +1,14 @@
 ---
 name: ppt
 description: >
-  Build, edit and maintain PowerPoint PPTX files with the bundled pptc CLI:
-  template-aware, atomic, schema-validated. Trigger this skill to BUILD a deck
-  from an approved content plan, or to edit/modify an EXISTING deck -- add or
-  change slides, text, images, charts, tables, speaker notes, footers, or
-  image-generation prompts for picture placeholders. For a brand-new deck from
-  just an idea or topic (no plan yet), the `ppt-prepare` skill runs FIRST to
-  plan the story; this skill then builds that plan into the PPTX.
+  Build, edit and maintain existing-plan PowerPoint PPTX decks with the bundled
+  pptc CLI: template-aware, atomic, schema-validated. Trigger to BUILD a deck
+  from an approved content plan, or to edit/modify an EXISTING .pptx -- add or
+  change slides, text, images, charts, tables, speaker notes, footers, or the
+  image-generation prompts written into picture placeholders.
+  NOT for: planning, structuring or outlining a brand-new deck from just an idea
+  or topic -- that is `ppt-prepare`, which runs FIRST and hands its approved plan
+  to this skill to build.
 user-invocable: true
 disable-model-invocation: false
 model: opus

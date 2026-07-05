@@ -1,7 +1,7 @@
 **Template notes (neutral Office default):**
 
-This is the bundled fallback template -- Microsoft's default PowerPoint
-design (Office theme, 16:9). It is used when the user names no template.
+This is the bundled fallback template -- a neutral Office-style fallback
+theme (16:9). It is used when the user names no template.
 Always TELL the user the neutral default is in use and that a corporate
 `.potx`/`.pptx` can be supplied instead at any time.
 
