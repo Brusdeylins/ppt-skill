@@ -11,7 +11,7 @@
 
 import { PptcError } from "../../infra/errors.js"
 import { resolveSlide } from "../selector.js"
-import { lintPlaceholderText, richTextToPlain } from "../lint.js"
+import { lintFontSize, lintPlaceholderText, richTextSizes, richTextToPlain } from "../lint.js"
 import { seedPlaceholderName, type Layout, type Placeholder } from "../model.js"
 import type { PlaceholderFill } from "../../schema/ops.js"
 import { selectableEntries, type PlanContext, type SlidePlanEntry } from "./registry.js"
@@ -162,6 +162,14 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
             const warning = lintPlaceholderText(content.text, ph, slideAddr)
             if (warning !== null)
                 ctx.plan.warnings.push(warning)
+            /*  warn on runs that override the template size below the readability
+                floor; footer/slide-number/date placeholders use footer scale by
+                design and are exempt (they reach this path only defensively)  */
+            if (ph.kind !== "footer" && ph.kind !== "slideNumber" && ph.kind !== "date") {
+                const tooSmall = lintFontSize({ placeholder: ph.idx }, richTextSizes(content.text), ctx.minFontPt, slideAddr)
+                if (tooSmall !== null)
+                    ctx.plan.warnings.push(tooSmall)
+            }
             if (ph.kind === "title")
                 entry.title = richTextToPlain(content.text).join(" ")
         }

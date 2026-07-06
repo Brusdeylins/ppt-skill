@@ -343,3 +343,112 @@ describe("write-path features", () => {
         await expectIntact(deck)
     })
 })
+
+describe("font-size lint (W_FONT_TOO_SMALL)", () => {
+    const deck = path.join(TMP, "fonts.pptx")
+    const fontWarnings = (r: Awaited<ReturnType<typeof executeOps>>): typeof r.warnings =>
+        r.warnings.filter((w) => w.code === "W_FONT_TOO_SMALL")
+
+    beforeAll(async () => {
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        /*  slide 0: a CONTENT filler; slide 1: a blank DEFAULT surface (no text
+            placeholder) so el.add elements never trip the overlap lint -- keeping
+            these font-size assertions isolated from W_ELEMENT_OVERLAP  */
+        await executeOps(deck, { ops: [
+            { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Fonts" } } },
+            { op: "slide.add", layout: "DEFAULT" }
+        ] }, opts)
+    })
+
+    it("flags a free textbox run below the 11pt floor", async () => {
+        const r = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "textbox", name: "Tiny", frame: { x: 0.3, y: 3, w: 3, h: 0.3 },
+                    text: [{ runs: [{ text: "winzig", size: 8 }] }] }
+            ] }
+        ] }, opts)
+        const f = fontWarnings(r)
+        expect(f).toHaveLength(1)
+        expect(f[0]?.element).toBe("Tiny")
+        expect(f[0]?.fontPt).toBe(8)
+        expect(f[0]?.minPt).toBe(11)
+    })
+
+    it("does not flag 12pt or exactly 11pt", async () => {
+        const r = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "textbox", name: "Ok12", frame: { x: 0.3, y: 3.5, w: 3, h: 0.3 },
+                    text: [{ runs: [{ text: "ok", size: 12 }] }] },
+                { type: "textbox", name: "Ok11", frame: { x: 4, y: 3.5, w: 3, h: 0.3 },
+                    text: [{ runs: [{ text: "grenz", size: 11 }] }] }
+            ] }
+        ] }, opts)
+        expect(fontWarnings(r)).toHaveLength(0)
+    })
+
+    it("flags small shape, table and chart fonts", async () => {
+        const r = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "shape", name: "S", shape: "rect", text: "x", fontSize: 9,
+                    frame: { x: 0.3, y: 1, w: 1.5, h: 0.6 } },
+                { type: "table", name: "T", frame: { x: 2, y: 1, w: 3, h: 1 },
+                    data: { rows: [["a", "b"]], style: { fontSize: 8 } } },
+                { type: "chart", name: "C", frame: { x: 5.3, y: 1, w: 3, h: 2 },
+                    data: { type: "bar", categories: ["a", "b"],
+                        series: [{ name: "s", values: [1, 2] }], fontSize: 8 } }
+            ] }
+        ] }, opts)
+        expect(fontWarnings(r).map((w) => w.element).sort()).toEqual(["C", "S", "T"])
+    })
+
+    it("respects --min-font-pt: 0 disables, a higher floor tightens", async () => {
+        const off = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "shape", name: "S0", shape: "rect", text: "x", fontSize: 8,
+                    frame: { x: 0.3, y: 4, w: 1.5, h: 0.6 } }
+            ] }
+        ] }, { ...opts, minFontPt: 0 })
+        expect(fontWarnings(off)).toHaveLength(0)
+
+        const tight = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "shape", name: "S14", shape: "rect", text: "x", fontSize: 12,
+                    frame: { x: 0.3, y: 4.8, w: 1.5, h: 0.6 } }
+            ] }
+        ] }, { ...opts, minFontPt: 14 })
+        expect(fontWarnings(tight)).toHaveLength(1)
+        expect(fontWarnings(tight)[0]?.minPt).toBe(14)
+    })
+
+    it("escalates a small font under --strict (exit 7 / E_LINT)", async () => {
+        await expect(executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "shape", name: "SS", shape: "rect", text: "x", fontSize: 8,
+                    frame: { x: 0.3, y: 5.5, w: 1.5, h: 0.6 } }
+            ] }
+        ] }, { ...opts, strict: true })).rejects.toSatisfy((err: unknown) =>
+            (err as PptcError).code === "E_LINT")
+    })
+
+    it("flags a placeholder run that overrides the template size too small", async () => {
+        const r = await executeOps(deck, { ops: [
+            { op: "slide.add", layout: "CONTENT",
+                placeholders: { title: { text: "PhFont" },
+                    body: { text: [{ runs: [{ text: "mini", size: 7 }] }] } } }
+        ] }, opts)
+        const f = fontWarnings(r)
+        expect(f.some((w) => typeof w.placeholder === "number" && w.fontPt === 7)).toBe(true)
+    })
+
+    it("does not flag prompt-box captions on a picture layout", async () => {
+        const r = await executeOps(deck, { ops: [
+            { op: "slide.add", layout: "PICTURE", placeholders: { title: { text: "Bild" } } },
+            { op: "img.prompts", slide: "title:Bild", prompts: "a prompt" }
+        ] }, opts)
+        expect(fontWarnings(r)).toHaveLength(0)
+    })
+
+    it("written deck passes the file-integrity validation", async () => {
+        await expectIntact(deck)
+    })
+})

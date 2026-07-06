@@ -14,7 +14,7 @@ import type { ElementSpec } from "../../schema/payloads.js"
 import type { Frame, ShapeInfo } from "../model.js"
 import type { OpHandler, PlanContext, SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
-import { lintElementOverlap, richTextToPlain, type Obstacle } from "../lint.js"
+import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain, type Obstacle } from "../lint.js"
 import { nearestAspect } from "../describe/position.js"
 
 /**  shape-name prefix of generated prompt boxes (removable via el.rm)  */
@@ -29,6 +29,19 @@ const specFrame = (spec: ElementSpec): Frame | null => {
     return f.w !== undefined && f.h !== undefined
         ? { x: f.x, y: f.y, w: f.w, h: f.h }
         : null
+}
+
+/**  every explicitly set font size (pt) an element carries, for the readability
+     lint: textbox runs/paragraphs, shape/table/chart font sizes; empty when the
+     element sets none (image/connector, or a spec that inherits template sizes)  */
+const collectElementSizes = (spec: ElementSpec): number[] => {
+    switch (spec.type) {
+        case "textbox": return richTextSizes(spec.text)
+        case "shape": return spec.fontSize !== undefined ? [spec.fontSize] : []
+        case "table": return spec.data.style?.fontSize !== undefined ? [spec.data.style.fontSize] : []
+        case "chart": return spec.data.fontSize !== undefined ? [spec.data.fontSize] : []
+        default: return []
+    }
 }
 
 /**  text-bearing obstacles a new element must not cover: text placeholders
@@ -68,16 +81,23 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
     plan(ctx, op): void {
         const entry = resolveEntry(ctx, op.slide)
         for (const spec of op.elements) {
-            /*  warn when the new element covers a text-bearing shape
-                (prompt boxes are exempt -- they overlay by design)  */
             const frame = specFrame(spec)
             const name = spec.name ?? spec.type
-            if (frame !== null && !name.startsWith(PROMPT_BOX_PREFIX)) {
+            /*  prompt boxes are exempt from both checks -- they overlay picture
+                placeholders by design and their footer-scale caption is intentional  */
+            if (!name.startsWith(PROMPT_BOX_PREFIX)) {
                 const slideAddr = { id: entry.virtualId > 0 ? entry.virtualId : null,
                     index: ctx.plan.entries.indexOf(entry), title: entry.title }
-                const warning = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr)
-                if (warning !== null)
-                    ctx.plan.warnings.push(warning)
+                /*  warn when the new element covers a text-bearing shape  */
+                if (frame !== null) {
+                    const overlap = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr)
+                    if (overlap !== null)
+                        ctx.plan.warnings.push(overlap)
+                }
+                /*  warn when any run/element font is below the readability floor  */
+                const tooSmall = lintFontSize({ element: name }, collectElementSizes(spec), ctx.minFontPt, slideAddr)
+                if (tooSmall !== null)
+                    ctx.plan.warnings.push(tooSmall)
             }
             entry.elements.push({ name: spec.name ?? null, spec })
         }

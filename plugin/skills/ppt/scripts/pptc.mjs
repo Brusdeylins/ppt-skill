@@ -38462,7 +38462,13 @@ Options:
   --dry-run         validate and plan only, no write; warnings included
   --strict          lint warnings become exit 7: W_TEXT_OVERFLOW
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add
-                    element covers a text shape -- reposition it)
+                    element covers a text shape -- reposition it),
+                    W_FONT_TOO_SMALL (a run/element font is below the
+                    readable minimum -- enlarge it)
+  --min-font-pt N   readability floor for explicit font sizes (default
+                    11); runs/elements below N trigger W_FONT_TOO_SMALL.
+                    0 disables the check. Footer/slide-number/date
+                    placeholders and prompt boxes are always exempt
   --rev R           optimistic lock: fail with exit 6 unless the deck
                     still has revision R (from 'pptc state')
   --out F           write the result to a new file, keep the input
@@ -38913,6 +38919,19 @@ var richTextToPlain = (text) => {
     return text.split("\n");
   return text.map((p) => p.text ?? (p.runs ?? []).map((r) => r.text).join(""));
 };
+var richTextSizes = (text) => {
+  if (typeof text === "string")
+    return [];
+  const sizes = [];
+  for (const p of text) {
+    if (p.size !== void 0)
+      sizes.push(p.size);
+    for (const r of p.runs ?? [])
+      if (r.size !== void 0)
+        sizes.push(r.size);
+  }
+  return sizes;
+};
 var lintPlaceholderText = (text, ph, slide) => {
   if (ph.capacity === null)
     return null;
@@ -38926,6 +38945,30 @@ var lintPlaceholderText = (text, ph, slide) => {
     estimatedLines: used,
     maxLines: ph.capacity.lines,
     message: `text needs ~${used} lines but placeholder ${ph.idx} fits ~${ph.capacity.lines}`
+  };
+};
+var lintFontSize = (target, sizes, minPt, slide) => {
+  if (minPt <= 0 || sizes.length === 0)
+    return null;
+  const smallest = Math.min(...sizes);
+  if (smallest >= minPt)
+    return null;
+  if ("element" in target)
+    return {
+      code: "W_FONT_TOO_SMALL",
+      slide,
+      element: target.element,
+      fontPt: smallest,
+      minPt,
+      message: `element '${target.element}' sets ${smallest}pt -- below the ${minPt}pt minimum for readable slides; enlarge it or lower --min-font-pt`
+    };
+  return {
+    code: "W_FONT_TOO_SMALL",
+    slide,
+    placeholder: target.placeholder,
+    fontPt: smallest,
+    minPt,
+    message: `placeholder ${target.placeholder} sets ${smallest}pt -- below the ${minPt}pt minimum; enlarge it or lower --min-font-pt`
   };
 };
 
@@ -39029,6 +39072,11 @@ var planFill = (ctx, entry, fill) => {
       const warning = lintPlaceholderText(content.text, ph, slideAddr);
       if (warning !== null)
         ctx.plan.warnings.push(warning);
+      if (ph.kind !== "footer" && ph.kind !== "slideNumber" && ph.kind !== "date") {
+        const tooSmall = lintFontSize({ placeholder: ph.idx }, richTextSizes(content.text), ctx.minFontPt, slideAddr);
+        if (tooSmall !== null)
+          ctx.plan.warnings.push(tooSmall);
+      }
       if (ph.kind === "title")
         entry.title = richTextToPlain(content.text).join(" ");
     }
@@ -39261,6 +39309,20 @@ var specFrame = (spec) => {
   const f = spec.frame;
   return f.w !== void 0 && f.h !== void 0 ? { x: f.x, y: f.y, w: f.w, h: f.h } : null;
 };
+var collectElementSizes = (spec) => {
+  switch (spec.type) {
+    case "textbox":
+      return richTextSizes(spec.text);
+    case "shape":
+      return spec.fontSize !== void 0 ? [spec.fontSize] : [];
+    case "table":
+      return spec.data.style?.fontSize !== void 0 ? [spec.data.style.fontSize] : [];
+    case "chart":
+      return spec.data.fontSize !== void 0 ? [spec.data.fontSize] : [];
+    default:
+      return [];
+  }
+};
 var overlapObstacles = (ctx, entry) => {
   const obstacles = [];
   const layout = entryLayout(ctx, entry);
@@ -39291,15 +39353,20 @@ var elAdd = {
     for (const spec of op.elements) {
       const frame = specFrame(spec);
       const name = spec.name ?? spec.type;
-      if (frame !== null && !name.startsWith(PROMPT_BOX_PREFIX)) {
+      if (!name.startsWith(PROMPT_BOX_PREFIX)) {
         const slideAddr = {
           id: entry.virtualId > 0 ? entry.virtualId : null,
           index: ctx.plan.entries.indexOf(entry),
           title: entry.title
         };
-        const warning = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr);
-        if (warning !== null)
-          ctx.plan.warnings.push(warning);
+        if (frame !== null) {
+          const overlap = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr);
+          if (overlap !== null)
+            ctx.plan.warnings.push(overlap);
+        }
+        const tooSmall = lintFontSize({ element: name }, collectElementSizes(spec), ctx.minFontPt, slideAddr);
+        if (tooSmall !== null)
+          ctx.plan.warnings.push(tooSmall);
       }
       entry.elements.push({ name: spec.name ?? null, spec });
     }
@@ -39438,7 +39505,7 @@ var HANDLERS = new Map(
     metaProps
   ].map((h) => [h.name, h])
 );
-var planOps = (doc, deck, deckLayouts, template) => {
+var planOps = (doc, deck, deckLayouts, template, minFontPt = 11) => {
   if (doc.expectRev !== void 0 && doc.expectRev !== deck.rev)
     throw new PptcError(
       "E_REV_CONFLICT",
@@ -39451,7 +39518,8 @@ var planOps = (doc, deck, deckLayouts, template) => {
     deck,
     deckLayouts,
     template,
-    nextVirtualId: -1
+    nextVirtualId: -1,
+    minFontPt
   };
   doc.ops.forEach((op, i) => {
     const handler = HANDLERS.get(op.op);
@@ -56110,7 +56178,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     requireFile(opts.templatePath, "template");
     template = await readTemplateInfo(await DeckArchive.open(opts.templatePath));
   }
-  const plan = planOps(doc, deck, deckInfo.layouts, template);
+  const plan = planOps(doc, deck, deckInfo.layouts, template, opts.minFontPt ?? 11);
   if (opts.strict && plan.warnings.length > 0)
     throw new PptcError(
       "E_LINT",
@@ -56148,7 +56216,8 @@ var cmdApply = async (argv) => {
     "dry-run": { type: "boolean" },
     "strict": { type: "boolean" },
     "rev": { type: "string" },
-    "out": { type: "string" }
+    "out": { type: "string" },
+    "min-font-pt": { type: "string" }
   }, ["deck"]);
   const opsArg = args.str("ops");
   const exprArg = args.str("expr");
@@ -56156,12 +56225,17 @@ var cmdApply = async (argv) => {
     throw new PptcError("E_USAGE", "pass exactly one of --ops <@file|-> or -e '<op-json>'");
   const rawDoc = opsArg !== null ? parseJson(resolvePayload(opsArg)) : { ops: [parseJson(exprArg)] };
   const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc;
+  const minFontRaw = args.str("min-font-pt");
+  const minFontPt = minFontRaw === null ? 11 : Number(minFontRaw);
+  if (!Number.isFinite(minFontPt) || minFontPt < 0)
+    throw new PptcError("E_USAGE", "--min-font-pt must be a non-negative number (0 disables)");
   return await executeOps(args.positionals[0], doc, {
     templatePath: args.str("template"),
     dryRun: args.flag("dry-run"),
     strict: args.flag("strict"),
     expectRev: args.str("rev"),
-    outFile: args.str("out")
+    outFile: args.str("out"),
+    minFontPt
   });
 };
 

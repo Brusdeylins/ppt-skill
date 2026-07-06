@@ -29,6 +29,8 @@ export interface ExecuteOptions {
     expectRev: string | null
     /**  output file, defaults to the deck file itself  */
     outFile: string | null
+    /**  readability font-size floor in pt (0 disables); defaults to 11  */
+    minFontPt?: number
 }
 
 /**  result payload of an ops execution  */
@@ -79,7 +81,7 @@ export const executeOps = async (
     }
 
     /*  plan everything before touching anything  */
-    const plan = planOps(doc, deck, deckInfo.layouts, template)
+    const plan = planOps(doc, deck, deckInfo.layouts, template, opts.minFontPt ?? 11)
     if (opts.strict && plan.warnings.length > 0)
         throw new PptcError("E_LINT",
             `${plan.warnings.length} lint finding(s) under --strict`,
@@ -125,7 +127,8 @@ export const cmdApply = async (argv: string[]): Promise<ExecuteResult> => {
         "dry-run": { type: "boolean" },
         "strict": { type: "boolean" },
         "rev": { type: "string" },
-        "out": { type: "string" }
+        "out": { type: "string" },
+        "min-font-pt": { type: "string" }
     }, ["deck"])
     const opsArg = args.str("ops")
     const exprArg = args.str("expr")
@@ -136,11 +139,16 @@ export const cmdApply = async (argv: string[]): Promise<ExecuteResult> => {
         : { ops: [parseJson(exprArg as string)] }
     /*  a bare op list is accepted as shorthand for { ops: [...] }  */
     const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc
+    const minFontRaw = args.str("min-font-pt")
+    const minFontPt = minFontRaw === null ? 11 : Number(minFontRaw)
+    if (!Number.isFinite(minFontPt) || minFontPt < 0)
+        throw new PptcError("E_USAGE", "--min-font-pt must be a non-negative number (0 disables)")
     return await executeOps(args.positionals[0] as string, doc, {
         templatePath: args.str("template"),
         dryRun: args.flag("dry-run"),
         strict: args.flag("strict"),
         expectRev: args.str("rev"),
-        outFile: args.str("out")
+        outFile: args.str("out"),
+        minFontPt
     })
 }

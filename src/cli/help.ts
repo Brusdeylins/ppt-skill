@@ -91,7 +91,13 @@ Options:
   --dry-run         validate and plan only, no write; warnings included
   --strict          lint warnings become exit 7: W_TEXT_OVERFLOW
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add
-                    element covers a text shape -- reposition it)
+                    element covers a text shape -- reposition it),
+                    W_FONT_TOO_SMALL (a run/element font is below the
+                    readable minimum -- enlarge it)
+  --min-font-pt N   readability floor for explicit font sizes (default
+                    11); runs/elements below N trigger W_FONT_TOO_SMALL.
+                    0 disables the check. Footer/slide-number/date
+                    placeholders and prompt boxes are always exempt
   --rev R           optimistic lock: fail with exit 6 unless the deck
                     still has revision R (from 'pptc state')
   --out F           write the result to a new file, keep the input

@@ -282,10 +282,15 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   (new slides are instantiated from the template's layouts)
 - `--dry-run` -- full validation and planning, no write; warnings included
 - `--strict` -- lint warnings become exit 7: `W_TEXT_OVERFLOW` (planned
-  text exceeds the placeholder capacity -- shorten or split) and
+  text exceeds the placeholder capacity -- shorten or split),
   `W_ELEMENT_OVERLAP` (an `el.add` element covers a text-bearing shape,
   incl. the footer/slide-number area -- reposition it; prompt boxes are
-  exempt)
+  exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
+  readable minimum -- enlarge it)
+- `--min-font-pt N` -- readability floor for explicit font sizes (default
+  `11`); runs or `el.add` elements below `N` raise `W_FONT_TOO_SMALL`. `0`
+  disables the check. Footer/slide-number/date placeholders and prompt
+  boxes are always exempt
 - `--rev R` -- optimistic lock: fail with exit 6 unless the deck still has
   revision `R` (alternative: `expectRev` inside the document)
 - `--out F` -- write the result to a new file, leave the input untouched

@@ -127,6 +127,8 @@ export interface PlanContext {
     template: TemplateInfo | null
     /**  next virtual id for newly created slides (negative, decreasing)  */
     nextVirtualId: number
+    /**  font-size floor in pt for the readability lint (0 disables)  */
+    minFontPt: number
 }
 
 /**  contract every op module fulfills  */

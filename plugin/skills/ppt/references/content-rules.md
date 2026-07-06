@@ -109,6 +109,22 @@ Elements (tables, charts, free shapes)
     enforces this: `W_ELEMENT_OVERLAP` names the covered shape; under
     `--strict` the apply fails (exit 7). On a finding, REPOSITION the
     element, never ignore it.
+-   **Element font sizes -- readable, few, never tiny.** The template
+    scale ("take sizes from the template") only covers PLACEHOLDER text;
+    free `el.add` elements (chips, cards, captions, diagram labels,
+    annotations) have no template size, so DON'T invent tiny ones. A
+    workable scale derived from a 16pt body / ~9pt footer template:
+    **14pt** for card titles, central diagram labels and code; **12-13pt**
+    for chips, card subtexts and annotations; **11pt** for captions,
+    helper labels and hints. **11pt is the absolute floor** -- nothing
+    smaller on a presented slide (Kawasaki: oldest audience age / 2; Duarte
+    leans stricter at 12pt). Keep to **3-4 sizes per slide**; scattered
+    ad-hoc sizes are visual noise. pptc enforces the floor: `W_FONT_TOO_SMALL`
+    names any run/element below the minimum (default 11pt, tune with
+    `--min-font-pt`, `0` disables); under `--strict` the apply fails (exit 7).
+    Footer/slide-number/date placeholders and prompt boxes are exempt --
+    footnote-scale text belongs in the footer placeholder, not a free 8pt
+    textbox.
 
 Self-explanatory slides (decks READ without a presenter)
 --------------------------------------------------------
