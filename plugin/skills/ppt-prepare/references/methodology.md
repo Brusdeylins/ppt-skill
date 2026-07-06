@@ -181,17 +181,17 @@ Work slide by slide, the message kept visible as the yardstick.
   is not a finished slide. When a slide would hold little text, plan a
   picture/infographic with meaningful content rather than empty space.
 - **Land a point on every slide.** Showing the status quo or "what we
-  already do" is NOT enough. Each slide must close on a conclusion -- the
-  **Fazit / implication** ("so: persist these steps as a skill") -- or a
+  already do" is NOT enough. Each slide must close on a point -- the
+  **conclusion / implication** ("so: persist these steps as a skill") -- or a
   pointed **question** ("wouldn't it be better if everyone could reuse
   it?"). For every slide ask: are these few sentences enough, and what is
   the takeaway the reader should leave with? If there is no point, the
   slide is not done.
-- **Each chapter has a Fazit, twice.** Synthesize every chapter's slides
-  and their takeaways into one chapter **Fazit** (its core point). The
-  chapter divider states that Fazit as a subtitle (an advance organizer up
+- **Each chapter has a conclusion, twice.** Synthesize every chapter's slides
+  and their takeaways into one chapter **conclusion** (its core point). The
+  chapter divider states that conclusion as a subtitle (an advance organizer up
   front), and each chapter ENDS with a short "Key takeaways" slide (2-4
-  bullets, closing on the Fazit). Plan both per chapter; `ppt`'s divider
+  bullets, closing on the conclusion). Plan both per chapter; `ppt`'s divider
   image is then derived from the whole chapter, not just its title.
 - **Content:** content that PROVES the message; prefer the single strongest
   visual exhibit over a bullet list (assertion-evidence), and use bullets

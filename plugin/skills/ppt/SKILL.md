@@ -2,12 +2,14 @@
 name: ppt
 description: >
   Build, edit and maintain PowerPoint PPTX files with the bundled pptc CLI:
-  template-aware, atomic, schema-validated. Trigger this skill to BUILD a deck
-  from an approved content plan, or to edit/modify an EXISTING deck -- add or
-  change slides, text, images, charts, tables, speaker notes, footers, or
-  image-generation prompts for picture placeholders. For a brand-new deck from
-  just an idea or topic (no plan yet), the `ppt-prepare` skill runs FIRST to
-  plan the story; this skill then builds that plan into the PPTX.
+  template-aware, atomic, schema-validated. Trigger this skill to BUILD a
+  deck from an approved content plan, or to edit/modify an EXISTING .pptx --
+  add or change slides, text, images, charts, tables, speaker notes,
+  footers, or image-generation prompts for picture placeholders. NOT for: a
+  brand-new deck from just an idea or topic when no approved content plan
+  exists yet -- even if the user says build or make -- that is
+  `ppt-prepare`, which runs FIRST; this skill then builds its approved plan
+  into the PPTX.
 user-invocable: true
 disable-model-invocation: false
 model: opus
@@ -203,8 +205,8 @@ follow-ups within the same run.
 2.  <step id="STEP 2: Template">
 
     Determine the template. The skill prefers an external `.potx`/`.pptx`
-    from the user, always carries a NEUTRAL fallback (Microsoft's default
-    Office design) in `assets/`, and an internal build may bundle ADDITIONAL
+    from the user, always carries a NEUTRAL fallback (an Office-style
+    theme) in `assets/`, and an internal build may bundle ADDITIONAL
     templates there (e.g. company templates, not in the public release):
 
     -   <if condition="the user names a template path">use it.</if>
@@ -222,7 +224,7 @@ follow-ups within the same run.
         <if condition="exactly one template is bundled AND it is NOT the neutral default">use it
         (an internal build supplied a single corporate template).</if>
         <elseif condition="the only bundled template is the neutral default">do
-        NOT proceed silently on the generic Office design: ASK via the **Asking
+        NOT proceed silently on the generic fallback theme: ASK via the **Asking
         the User** procedure whether to build on the neutral default or supply a
         corporate template (a `.potx`/`.pptx` path, or a directory to scan).
         Use the neutral default only once the user picks it.</elseif>
@@ -516,10 +518,10 @@ follow-ups within the same run.
         with "No text. No letters. No symbols." unless the prompt
         deliberately embeds quoted text (never on a background image).
     2.  Choose a motif that makes THIS slide's POINT tangible -- its
-        message AND its takeaway/Fazit, leaning toward the resolution the
+        message AND its takeaway/conclusion, leaning toward the resolution the
         slide concludes with, not just the problem -- and does not repeat a
         motif already used in the deck.
-        <if condition="the slide message, its Fazit, deck topic and role do NOT determine a concrete, non-generic motif -- or a strong metaphor could plausibly go several clearly different ways">
+        <if condition="the slide message, its conclusion, deck topic and role do NOT determine a concrete, non-generic motif -- or a strong metaphor could plausibly go several clearly different ways">
         ASK the user ONE short, targeted question (offer 2-3 motif directions,
         or invite free text) BEFORE composing.</if>
         A wrong motif costs the user a whole image-generation cycle, so a quick

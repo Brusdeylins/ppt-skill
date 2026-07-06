@@ -122,7 +122,7 @@ Mayer.)
 -   **Assertion title + takeaway -- land a point.** The title is a
     full-sentence claim; the slide also carries a one-line plain-language
     **takeaway** -- the "so what / what this means for you" -- besides the
-    exhibit. Every slide closes on a POINT: a conclusion (the Fazit /
+    exhibit. Every slide closes on a POINT: a conclusion (the
     implication) or a pointed question ("wouldn't it be better if ...?").
     Showing the status quo alone is not a finished slide.
 -   **Explain every exhibit, for a beginner:**
@@ -175,13 +175,13 @@ Structural slides
     chapters are added/renamed/removed, update the agenda slide in the
     same ops document (`slide.fill` on the agenda slide).
 -   **Chapter divider** carries the chapter title AND a one-line chapter
-    **Fazit** as a subtitle (an advance organizer: what the chapter
+    **conclusion** as a subtitle (an advance organizer: what the chapter
     concludes), synthesized from the chapter's slides and their takeaways.
     Its image synthesizes the WHOLE chapter (see `prompt-formula.md`), not
     just the title.
 -   **Chapter summary.** Each chapter ENDS with a "Key takeaways" slide:
     2-4 short bullets distilled from the chapter's slides (close on the
-    chapter Fazit). This is segmenting + retrieval for self-study decks.
+    chapter conclusion). This is segmenting + retrieval for self-study decks.
 -   **Closing slide** carries a call-to-action, not a summary.
 -   Business decks follow SCQA where it fits: situation, complication,
     question, answer -- recommendation early, not last.

@@ -2,13 +2,14 @@
 name: ppt-prepare
 description: >
   START HERE to create a NEW presentation from an idea or topic: a
-  story-first, collaborative method (Pyramid Principle, MECE, SCR narrative,
-  densification, headline titles) that produces an approved storyline and a
-  per-slide plan BEFORE any slide is built. Trigger when the user wants to
-  create, make, build, plan, structure, outline or think through a new
-  talk/deck/pitch/presentation -- its message, story, argument, slide
-  messages, titles or speaker notes. This is the entry point for any new deck;
-  it hands the approved plan to the `ppt` skill, which builds the PPTX.
+  story-first method (Pyramid Principle and SCR narrative) that produces
+  an approved storyline and a per-slide plan BEFORE any slide is built.
+  Trigger when the user wants to create, make, build, plan, structure,
+  outline, storyboard or think through a new talk/deck/pitch/presentation
+  -- its message, story, argument, slide messages, titles or speaker
+  notes. This is the entry point for any new deck; it hands the approved
+  plan to the `ppt` skill, which builds the PPTX. NOT for: editing or
+  changing an EXISTING deck's slides/text/images/charts -- that is `ppt`.
 user-invocable: true
 disable-model-invocation: false
 model: opus

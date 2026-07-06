@@ -66,20 +66,20 @@ Per-image creative step
 Never template the motif. For each picture placeholder, decide
 deliberately:
 
-1.  What is THIS slide's POINT -- its message AND its takeaway / Fazit
+1.  What is THIS slide's POINT -- its message AND its takeaway / conclusion
     (the conclusion it lands), not just its topic or the problem it states?
 2.  What is the placeholder's role (title / chapter / content /
     background / contact)?
 3.  Which single motif makes that POINT tangible -- leaning toward the
     resolution the slide concludes with, not only the status quo -- without
-    repeating a motif already used in this deck? A slide whose Fazit is
+    repeating a motif already used in this deck? A slide whose conclusion is
     "capture and reuse" should show capture/reuse, not just the repetition;
     one whose point is "share it" should hint at sharing, not only the
     locked-away problem.
 
 A chapter / divider image synthesizes the WHOLE chapter: make the
 chapter's core point tangible -- derived from all its slides and their
-Fazits together -- not just the literal chapter title.
+conclusions together -- not just the literal chapter title.
 
 Contact placeholders get neutral business portraits.
 

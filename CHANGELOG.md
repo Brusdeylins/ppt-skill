@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.4 (plugin 1.0.4)
+
+- **Skill routing: reciprocal NOT-for clauses between `ppt` and `ppt-prepare`**
+  (PR #5 by Milofax, reworked -- documentation only). Both skill descriptions
+  now state their boundary explicitly: `ppt-prepare` excludes editing an
+  EXISTING deck, `ppt` excludes a brand-new deck from just an idea. Unlike the
+  PR, the trigger verbs "make" and "build" STAY in `ppt-prepare`'s description
+  and `ppt`'s exclusion is stated by STATE, not verb ("when no approved
+  content plan exists yet -- even if the user says build or make"), so
+  idea-only prompts like "build me a PowerPoint about X" keep routing to
+  `ppt-prepare`. The advertised method list shrinks to "Pyramid Principle and
+  SCR narrative" (details stay in the reference docs); "slide messages"
+  remains in the trigger-object list.
+- **Skill docs: German "Fazit" replaced with "conclusion" throughout.** The
+  PR renamed it only in `ppt-prepare`'s methodology.md; the `ppt`-side
+  consumers of the same term (SKILL.md, prompt-formula.md, content-rules.md)
+  are now renamed too, keeping the plan-to-build vocabulary consistent at the
+  handoff.
+- **Neutral-template label corrected at every site.** The bundled fallback
+  carries a legacy Office-style palette (accent1 `4F81BD`), not Microsoft's
+  current default theme; the sidecar body (as in the PR), its heading and the
+  two claims in `ppt`/SKILL.md STEP 2 now all say "Office-style fallback
+  theme" instead of "Microsoft's default Office design".
+
 ## 1.0.3 (plugin 1.0.3)
 
 - **`apply` no longer un-hides hidden slides.** Every apply rebuilds the slide
