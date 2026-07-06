@@ -24,6 +24,11 @@ export interface Frame {
 export type PlaceholderKind =
     | "title" | "subtitle" | "body" | "picture" | "footer" | "slideNumber" | "date" | "other"
 
+/**  placeholder kinds of the footer band -- their small text is by design
+     (footer scale), so capacity/font lints and content fills skip them  */
+export const isFooterKind = (kind: PlaceholderKind): boolean =>
+    kind === "footer" || kind === "slideNumber" || kind === "date"
+
 /**  A placeholder as defined on a slide layout (or instantiated on a slide).  */
 export interface Placeholder {
     /**  OOXML placeholder index (`idx` attribute, 0 for the title)  */

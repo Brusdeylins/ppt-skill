@@ -55,7 +55,8 @@ Execution Rules
 - Every pptc command emits exactly one JSON envelope on stdout; parse it.
   `"ok": false` carries a stable `error.code` -- react to it, do not retry
   blindly. Exit 7 = lint failure: W_TEXT_OVERFLOW -> shorten or split,
-  W_ELEMENT_OVERLAP -> reposition the element.
+  W_ELEMENT_OVERLAP -> reposition the element, W_FONT_TOO_SMALL -> enlarge
+  the font (sizes come from the template, see content-rules.md).
 - **The user edits between turns.** Treat every deck as changed: begin
   EVERY write with a fresh `state` (rev + structure) and pass that rev to
   `apply --rev`. On exit 6 (E_REV_CONFLICT): re-read `state`, re-check your
@@ -431,6 +432,9 @@ follow-ups within the same run.
     APPROVED/user-supplied wording, do NOT shorten it silently — propose a
     shortening (or a roomier layout) and re-validate only after the user
     confirms (see the preserve rule above).</if>
+    <if condition="exit 7 / W_FONT_TOO_SMALL">an explicit run/element font
+    is below the readability floor -- raise it to the template's scale
+    (content-rules.md), never lower the floor to silence the finding.</if>
     Then apply for real with `--rev <rev/>` and record the new <rev/>.
 
     **Verify the write (mandatory).** `apply` self-checks its output against

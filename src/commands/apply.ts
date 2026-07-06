@@ -14,8 +14,8 @@ import { OpsDocumentSchema, type OpsDocument } from "../schema/ops.js"
 import { DeckArchive, readDeckState, readTemplateInfo } from "../engine/reader.js"
 import { runSession } from "../engine/session.js"
 import { parseJson, requireFile, resolvePayload } from "../infra/fs.js"
-import { parse } from "../infra/args.js"
-import type { LintWarning } from "../core/lint.js"
+import { parse, type Parsed } from "../infra/args.js"
+import { DEFAULT_MIN_FONT_PT, type LintWarning } from "../core/lint.js"
 
 /**  options controlling one ops execution  */
 export interface ExecuteOptions {
@@ -29,8 +29,22 @@ export interface ExecuteOptions {
     expectRev: string | null
     /**  output file, defaults to the deck file itself  */
     outFile: string | null
-    /**  readability font-size floor in pt (0 disables); defaults to 11  */
-    minFontPt?: number
+    /**  readability font-size floor in pt (0 disables)  */
+    minFontPt: number
+}
+
+/**
+ *  Resolve the shared `--min-font-pt` flag of the write commands.
+ *
+ *  @param args - parsed command arguments
+ *  @returns the floor in pt; the default when the flag is absent
+ *  @throws PptcError E_USAGE on a non-numeric or negative value
+ */
+export const minFontPtArg = (args: Parsed): number => {
+    const minFontPt = args.num("min-font-pt") ?? DEFAULT_MIN_FONT_PT
+    if (minFontPt < 0)
+        throw new PptcError("E_USAGE", "--min-font-pt must be a non-negative number (0 disables)")
+    return minFontPt
 }
 
 /**  result payload of an ops execution  */
@@ -81,7 +95,7 @@ export const executeOps = async (
     }
 
     /*  plan everything before touching anything  */
-    const plan = planOps(doc, deck, deckInfo.layouts, template, opts.minFontPt ?? 11)
+    const plan = planOps(doc, deck, deckInfo.layouts, template, opts.minFontPt)
     if (opts.strict && plan.warnings.length > 0)
         throw new PptcError("E_LINT",
             `${plan.warnings.length} lint finding(s) under --strict`,
@@ -139,16 +153,12 @@ export const cmdApply = async (argv: string[]): Promise<ExecuteResult> => {
         : { ops: [parseJson(exprArg as string)] }
     /*  a bare op list is accepted as shorthand for { ops: [...] }  */
     const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc
-    const minFontRaw = args.str("min-font-pt")
-    const minFontPt = minFontRaw === null ? 11 : Number(minFontRaw)
-    if (!Number.isFinite(minFontPt) || minFontPt < 0)
-        throw new PptcError("E_USAGE", "--min-font-pt must be a non-negative number (0 disables)")
     return await executeOps(args.positionals[0] as string, doc, {
         templatePath: args.str("template"),
         dryRun: args.flag("dry-run"),
         strict: args.flag("strict"),
         expectRev: args.str("rev"),
         outFile: args.str("out"),
-        minFontPt
+        minFontPt: minFontPtArg(args)
     })
 }

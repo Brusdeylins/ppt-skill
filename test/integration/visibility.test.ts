@@ -23,7 +23,7 @@ const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
 const TMP = path.join(here, "..", "tmp")
 const DECK = path.join(TMP, "visibility.pptx")
 
-const opts = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
+const opts = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 /**  set show="0" on the `p:sld` root of one slide part inside the deck zip --
      emulating a deck a user hid in PowerPoint  */

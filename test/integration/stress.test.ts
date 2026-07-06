@@ -28,7 +28,7 @@ const DECK = path.join(TMP, "stress.pptx")
 const FUZZ = path.join(TMP, "fuzz.pptx")
 const PNG = path.join(TMP, "stress-pixel.png")
 
-const opts: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
+const opts: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 beforeAll(async () => {
     mkdirSync(TMP, { recursive: true })

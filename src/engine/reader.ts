@@ -17,7 +17,7 @@ import { contentHash, requireFile } from "../infra/fs.js"
 import { estimateCapacity } from "../core/describe/capacity.js"
 import { regionWithin, coverageFraction } from "../core/describe/position.js"
 import { elements, firstElement, drawingText, parseXml } from "./xml.js"
-import { emuToInch } from "../core/model.js"
+import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
     DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
     RunInfo, ShapeInfo, SlideInfo, TemplateInfo
@@ -257,7 +257,7 @@ const readLayouts = async (archive: DeckArchive): Promise<Layout[]> => {
             const ph = phFacts(sp)
             if (ph === null)
                 continue
-            if (ph.kind === "footer" || ph.kind === "slideNumber" || ph.kind === "date") {
+            if (isFooterKind(ph.kind)) {
                 const f = resolveFrame(sp, ph.kind, ph.idx)
                 if (f !== null)
                     reserved.push(f)

@@ -26,7 +26,7 @@ const TMP = path.join(here, "..", "tmp")
 const DECK = path.join(TMP, "elements.pptx")
 const PNG = path.join(TMP, "pixel.png")
 
-const opts: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
+const opts: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 /**  smallest valid 1x1 PNG  */
 const PIXEL = Buffer.from(
@@ -360,27 +360,37 @@ describe("font-size lint (W_FONT_TOO_SMALL)", () => {
         ] }, opts)
     })
 
-    it("flags a free textbox run below the 11pt floor", async () => {
+    it("flags a free textbox run below the 8pt floor", async () => {
         const r = await executeOps(deck, { ops: [
             { op: "el.add", slide: "index:1", elements: [
                 { type: "textbox", name: "Tiny", frame: { x: 0.3, y: 3, w: 3, h: 0.3 },
-                    text: [{ runs: [{ text: "winzig", size: 8 }] }] }
+                    text: [{ runs: [{ text: "winzig", size: 7 }] }] }
             ] }
         ] }, opts)
         const f = fontWarnings(r)
         expect(f).toHaveLength(1)
         expect(f[0]?.element).toBe("Tiny")
-        expect(f[0]?.fontPt).toBe(8)
-        expect(f[0]?.minPt).toBe(11)
+        expect(f[0]?.fontPt).toBe(7)
+        expect(f[0]?.minPt).toBe(8)
     })
 
-    it("does not flag 12pt or exactly 11pt", async () => {
+    it("does not flag 12pt or exactly 8pt", async () => {
         const r = await executeOps(deck, { ops: [
             { op: "el.add", slide: "index:1", elements: [
                 { type: "textbox", name: "Ok12", frame: { x: 0.3, y: 3.5, w: 3, h: 0.3 },
                     text: [{ runs: [{ text: "ok", size: 12 }] }] },
-                { type: "textbox", name: "Ok11", frame: { x: 4, y: 3.5, w: 3, h: 0.3 },
-                    text: [{ runs: [{ text: "grenz", size: 11 }] }] }
+                { type: "textbox", name: "Ok8", frame: { x: 4, y: 3.5, w: 3, h: 0.3 },
+                    text: [{ runs: [{ text: "grenz", size: 8 }] }] }
+            ] }
+        ] }, opts)
+        expect(fontWarnings(r)).toHaveLength(0)
+    })
+
+    it("ignores a paragraph-level size that runs override (never rendered)", async () => {
+        const r = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "textbox", name: "ParaSz", frame: { x: 0.3, y: 6.2, w: 3, h: 0.3 },
+                    text: [{ size: 6, runs: [{ text: "gross", size: 12 }] }] }
             ] }
         ] }, opts)
         expect(fontWarnings(r)).toHaveLength(0)
@@ -389,13 +399,13 @@ describe("font-size lint (W_FONT_TOO_SMALL)", () => {
     it("flags small shape, table and chart fonts", async () => {
         const r = await executeOps(deck, { ops: [
             { op: "el.add", slide: "index:1", elements: [
-                { type: "shape", name: "S", shape: "rect", text: "x", fontSize: 9,
+                { type: "shape", name: "S", shape: "rect", text: "x", fontSize: 7,
                     frame: { x: 0.3, y: 1, w: 1.5, h: 0.6 } },
                 { type: "table", name: "T", frame: { x: 2, y: 1, w: 3, h: 1 },
-                    data: { rows: [["a", "b"]], style: { fontSize: 8 } } },
+                    data: { rows: [["a", "b"]], style: { fontSize: 7 } } },
                 { type: "chart", name: "C", frame: { x: 5.3, y: 1, w: 3, h: 2 },
                     data: { type: "bar", categories: ["a", "b"],
-                        series: [{ name: "s", values: [1, 2] }], fontSize: 8 } }
+                        series: [{ name: "s", values: [1, 2] }], fontSize: 7 } }
             ] }
         ] }, opts)
         expect(fontWarnings(r).map((w) => w.element).sort()).toEqual(["C", "S", "T"])
@@ -404,7 +414,7 @@ describe("font-size lint (W_FONT_TOO_SMALL)", () => {
     it("respects --min-font-pt: 0 disables, a higher floor tightens", async () => {
         const off = await executeOps(deck, { ops: [
             { op: "el.add", slide: "index:1", elements: [
-                { type: "shape", name: "S0", shape: "rect", text: "x", fontSize: 8,
+                { type: "shape", name: "S0", shape: "rect", text: "x", fontSize: 7,
                     frame: { x: 0.3, y: 4, w: 1.5, h: 0.6 } }
             ] }
         ] }, { ...opts, minFontPt: 0 })
@@ -423,11 +433,32 @@ describe("font-size lint (W_FONT_TOO_SMALL)", () => {
     it("escalates a small font under --strict (exit 7 / E_LINT)", async () => {
         await expect(executeOps(deck, { ops: [
             { op: "el.add", slide: "index:1", elements: [
-                { type: "shape", name: "SS", shape: "rect", text: "x", fontSize: 8,
+                { type: "shape", name: "SS", shape: "rect", text: "x", fontSize: 7,
                     frame: { x: 0.3, y: 5.5, w: 1.5, h: 0.6 } }
             ] }
         ] }, { ...opts, strict: true })).rejects.toSatisfy((err: unknown) =>
             (err as PptcError).code === "E_LINT")
+    })
+
+    it("lints el.set text -- both on a planned element and an existing shape", async () => {
+        /*  patching an element planned earlier in the SAME document must
+            re-lint the new text (the el.add lint saw only the old text)  */
+        const planned = await executeOps(deck, { ops: [
+            { op: "el.add", slide: "index:1", elements: [
+                { type: "textbox", name: "SetMe", frame: { x: 4, y: 6.2, w: 3, h: 0.3 },
+                    text: [{ runs: [{ text: "ok", size: 12 }] }] }
+            ] },
+            { op: "el.set", slide: "index:1", name: "SetMe",
+                text: [{ runs: [{ text: "mini", size: 6 }] }] }
+        ] }, { ...opts, dryRun: true })
+        expect(fontWarnings(planned).map((w) => w.element)).toEqual(["SetMe"])
+
+        /*  retexting a shape that already exists on the slide  */
+        const existing = await executeOps(deck, { ops: [
+            { op: "el.set", slide: "index:1", name: "Ok12",
+                text: [{ runs: [{ text: "mini", size: 6 }] }] }
+        ] }, { ...opts, dryRun: true })
+        expect(fontWarnings(existing).map((w) => w.element)).toEqual(["Ok12"])
     })
 
     it("flags a placeholder run that overrides the template size too small", async () => {

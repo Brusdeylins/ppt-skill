@@ -12,9 +12,9 @@
 import { PptcError } from "../../infra/errors.js"
 import { resolveSlide } from "../selector.js"
 import { lintFontSize, lintPlaceholderText, richTextSizes, richTextToPlain } from "../lint.js"
-import { seedPlaceholderName, type Layout, type Placeholder } from "../model.js"
+import { isFooterKind, seedPlaceholderName, type Layout, type Placeholder } from "../model.js"
 import type { PlaceholderFill } from "../../schema/ops.js"
-import { selectableEntries, type PlanContext, type SlidePlanEntry } from "./registry.js"
+import { selectableEntries, slideAddrOf, type PlanContext, type SlidePlanEntry } from "./registry.js"
 
 /**
  *  Resolve a slide selector against the current plan entries.
@@ -157,15 +157,14 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
             throw new PptcError("E_SCHEMA",
                 `placeholder ${ph.idx} ('${ph.name}') is a picture placeholder, cannot take text`)
         if (content.text !== undefined) {
-            const slideAddr = { id: entry.virtualId > 0 ? entry.virtualId : null,
-                index: ctx.plan.entries.indexOf(entry), title: entry.title }
+            const slideAddr = slideAddrOf(ctx, entry)
             const warning = lintPlaceholderText(content.text, ph, slideAddr)
             if (warning !== null)
                 ctx.plan.warnings.push(warning)
             /*  warn on runs that override the template size below the readability
                 floor; footer/slide-number/date placeholders use footer scale by
                 design and are exempt (they reach this path only defensively)  */
-            if (ph.kind !== "footer" && ph.kind !== "slideNumber" && ph.kind !== "date") {
+            if (!isFooterKind(ph.kind)) {
                 const tooSmall = lintFontSize({ placeholder: ph.idx }, richTextSizes(content.text), ctx.minFontPt, slideAddr)
                 if (tooSmall !== null)
                     ctx.plan.warnings.push(tooSmall)

@@ -30,7 +30,7 @@ const HANDLERS: ReadonlyMap<string, OpHandler> = new Map(
  *  @param deck - read model of the deck on disk
  *  @param deckLayouts - layouts available inside the deck itself
  *  @param template - resolved template info, null when no --template given
- *  @param minFontPt - readability font-size floor in pt (0 disables), default 11
+ *  @param minFontPt - readability font-size floor in pt (0 disables)
  *  @returns the complete mutation plan
  *  @throws PptcError E_REV_CONFLICT when expectRev mismatches, or any
  *          planning error of the individual ops (deck untouched)
@@ -40,7 +40,7 @@ export const planOps = (
     deck: DeckState,
     deckLayouts: Layout[],
     template: TemplateInfo | null,
-    minFontPt: number = 11
+    minFontPt: number
 ): MutationPlan => {
     if (doc.expectRev !== undefined && doc.expectRev !== deck.rev)
         throw new PptcError("E_REV_CONFLICT",

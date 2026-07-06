@@ -24,8 +24,8 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
 const TMP = path.join(here, "..", "tmp")
 
-const withTpl: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
-const noTpl: ExecuteOptions = { templatePath: null, dryRun: false, strict: false, expectRev: null, outFile: null }
+const withTpl: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
+const noTpl: ExecuteOptions = { templatePath: null, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 /**  count non-overlapping occurrences of a literal substring in a zip part  */
 const countIn = async (file: string, part: string, needle: string): Promise<number> => {

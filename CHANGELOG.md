@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.0.5 (plugin 1.0.5)
+
+- **New lint `W_FONT_TOO_SMALL` -- explicit font sizes get a readability
+  floor** (PR #4 by Michael Kagel, merged and reworked). Explicitly set
+  run/element font sizes (textbox runs, shape/table/chart `fontSize`,
+  placeholder runs overriding the template size) below the floor raise the
+  warning; `--strict` escalates to exit 7. Footer/slide-number/date
+  placeholders and prompt boxes are exempt.
+- **Reworked on top of the PR:** the default floor is **8pt** (not 11) -- per
+  project policy the floor is a pure legibility backstop; all sizes ABOVE it
+  derive from the template (`tpl inspect` `fontSizePt`), never from pptc or
+  the skill docs. content-rules.md's new element-size guidance is rewritten
+  template-relative (the PR hardcoded a 14/12-13/11pt scale). `el.set` is
+  linted too (the PR only covered `el.add` and fills -- an el.set could
+  retext a checked element with tiny runs unchecked). A paragraph-level
+  `size` next to `runs` no longer lints (the writer never renders it --
+  false positive under --strict). `--min-font-pt` is also accepted by `new`
+  and the quick-edit commands (the PR offered it only on `apply`, leaving
+  one-shot strict builds without an escape hatch), and an empty flag value
+  now fails E_USAGE instead of silently disabling the check (new `num()`
+  accessor in the args parser). The default lives once
+  (`DEFAULT_MIN_FONT_PT`), `ExecuteOptions.minFontPt` is required like its
+  siblings, the footer-kind exemption shares one predicate with the reader
+  (`isFooterKind`), and the skill's exit-7 playbook documents the new code.
+
 ## 1.0.4 (plugin 1.0.4)
 
 - **Skill routing: reciprocal NOT-for clauses between `ppt` and `ppt-prepare`**

@@ -12,7 +12,7 @@ import { PptcError } from "../../infra/errors.js"
 import type { Op } from "../../schema/ops.js"
 import type { ElementSpec } from "../../schema/payloads.js"
 import type { Frame, ShapeInfo } from "../model.js"
-import type { OpHandler, PlanContext, SlidePlanEntry } from "./registry.js"
+import { slideAddrOf, type OpHandler, type PlanContext, type SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
 import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain, type Obstacle } from "../lint.js"
 import { nearestAspect } from "../describe/position.js"
@@ -86,8 +86,7 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
             /*  prompt boxes are exempt from both checks -- they overlay picture
                 placeholders by design and their footer-scale caption is intentional  */
             if (!name.startsWith(PROMPT_BOX_PREFIX)) {
-                const slideAddr = { id: entry.virtualId > 0 ? entry.virtualId : null,
-                    index: ctx.plan.entries.indexOf(entry), title: entry.title }
+                const slideAddr = slideAddrOf(ctx, entry)
                 /*  warn when the new element covers a text-bearing shape  */
                 if (frame !== null) {
                     const overlap = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr)
@@ -129,6 +128,16 @@ export const elSet: OpHandler<Extract<Op, { op: "el.set" }>> = {
     name: "el.set",
     plan(ctx, op): void {
         const entry = resolveEntry(ctx, op.slide)
+
+        /*  the new text is rendered verbatim on both paths below, so it gets
+            the same readability lint as el.add (prompt boxes stay exempt)  */
+        if (!op.name.startsWith(PROMPT_BOX_PREFIX)) {
+            const tooSmall = lintFontSize({ element: op.name }, richTextSizes(op.text),
+                ctx.minFontPt, slideAddrOf(ctx, entry))
+            if (tooSmall !== null)
+                ctx.plan.warnings.push(tooSmall)
+        }
+
         /*  an element generated earlier in the same run: patch its spec  */
         const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name))
         if (planned !== undefined) {

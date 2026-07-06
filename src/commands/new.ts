@@ -14,7 +14,7 @@ import { PptcError } from "../infra/errors.js"
 import { buildEmptyDeck } from "../engine/seed.js"
 import { atomicWrite, cacheDir, parseJson, requireFile, resolvePayload } from "../infra/fs.js"
 import { parse } from "../infra/args.js"
-import { executeOps, type ExecuteResult } from "./apply.js"
+import { executeOps, minFontPtArg, type ExecuteResult } from "./apply.js"
 
 /**
  *  CLI command `pptc new <deck> --template <file.potx> [--force] [--ops @file]`.
@@ -27,7 +27,8 @@ export const cmdNew = async (argv: string[]): Promise<Record<string, unknown>> =
         "template": { type: "string" },
         "force": { type: "boolean" },
         "ops": { type: "string" },
-        "strict": { type: "boolean" }
+        "strict": { type: "boolean" },
+        "min-font-pt": { type: "string" }
     }, ["deck"])
     const deckFile = args.positionals[0] as string
     const templatePath = args.need("template")
@@ -52,7 +53,8 @@ export const cmdNew = async (argv: string[]): Promise<Record<string, unknown>> =
             dryRun: false,
             strict: args.flag("strict"),
             expectRev: null,
-            outFile: path.resolve(deckFile)
+            outFile: path.resolve(deckFile),
+            minFontPt: minFontPtArg(args)
         })
         return { ...result, result: { ...result.result, created: true } }
     }

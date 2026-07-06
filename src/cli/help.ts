@@ -70,6 +70,8 @@ Options:
   --force           overwrite an existing file
   --ops @file       build the deck in the same run (see 'pptc help ops')
   --strict          lint warnings become errors (exit 7)
+  --min-font-pt N   readability floor for explicit font sizes (default 8,
+                    0 disables) -- see 'pptc help apply'
 
 Example:
   pptc new deck.pptx --template corporate.potx --ops @build.json`,
@@ -95,9 +97,11 @@ Options:
                     W_FONT_TOO_SMALL (a run/element font is below the
                     readable minimum -- enlarge it)
   --min-font-pt N   readability floor for explicit font sizes (default
-                    11); runs/elements below N trigger W_FONT_TOO_SMALL.
+                    8); runs/elements below N trigger W_FONT_TOO_SMALL.
                     0 disables the check. Footer/slide-number/date
-                    placeholders and prompt boxes are always exempt
+                    placeholders and prompt boxes are always exempt.
+                    A pure legibility backstop -- sizes themselves come
+                    from the template ('tpl inspect'), never from pptc
   --rev R           optimistic lock: fail with exit 6 unless the deck
                     still has revision R (from 'pptc state')
   --out F           write the result to a new file, keep the input

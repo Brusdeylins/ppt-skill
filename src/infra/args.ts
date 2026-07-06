@@ -18,6 +18,8 @@ export interface Parsed {
     str(name: string): string | null
     /**  string flag value, required  */
     need(name: string): string
+    /**  numeric flag value or null; E_USAGE when present but not a number  */
+    num(name: string): number | null
     /**  boolean flag  */
     flag(name: string): boolean
 }
@@ -62,6 +64,17 @@ export const parse = (
             if (typeof v !== "string")
                 throw new PptcError("E_USAGE", `missing required option --${name}`)
             return v
+        },
+        num: (name) => {
+            const v = values[name]
+            if (typeof v !== "string")
+                return null
+
+            /*  Number("") is 0, so an empty value must not slip through  */
+            const n = v.trim() === "" ? NaN : Number(v)
+            if (!Number.isFinite(n))
+                throw new PptcError("E_USAGE", `--${name} must be a number`)
+            return n
         },
         flag: (name) => values[name] === true
     }

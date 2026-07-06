@@ -288,9 +288,12 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
   readable minimum -- enlarge it)
 - `--min-font-pt N` -- readability floor for explicit font sizes (default
-  `11`); runs or `el.add` elements below `N` raise `W_FONT_TOO_SMALL`. `0`
-  disables the check. Footer/slide-number/date placeholders and prompt
-  boxes are always exempt
+  `8`); runs or `el.add`/`el.set` elements below `N` raise
+  `W_FONT_TOO_SMALL`. `0` disables the check. Footer/slide-number/date
+  placeholders and prompt boxes are always exempt. The floor is a pure
+  legibility backstop: font sizes themselves come from the template
+  (`tpl inspect` reports each placeholder's size), never from pptc. Also
+  accepted by `new` and the quick-edit commands
 - `--rev R` -- optimistic lock: fail with exit 6 unless the deck still has
   revision `R` (alternative: `expectRev` inside the document)
 - `--out F` -- write the result to a new file, leave the input untouched

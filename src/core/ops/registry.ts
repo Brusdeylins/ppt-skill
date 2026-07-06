@@ -13,7 +13,7 @@ import { PptcError } from "../../infra/errors.js"
 import type { Op } from "../../schema/ops.js"
 import type { ElementSpec, RichText } from "../../schema/payloads.js"
 import type { DeckState, Layout, TemplateInfo } from "../model.js"
-import type { LintWarning } from "../lint.js"
+import type { LintWarning, SlideAddr } from "../lint.js"
 import type { SelectableSlide } from "../selector.js"
 
 /**  one planned placeholder fill on a slide  */
@@ -130,6 +130,14 @@ export interface PlanContext {
     /**  font-size floor in pt for the readability lint (0 disables)  */
     minFontPt: number
 }
+
+/**  slide address of a plan entry as reported on lint findings; owns the
+     virtualId-is-real-id-only-when-positive convention  */
+export const slideAddrOf = (ctx: PlanContext, entry: SlidePlanEntry): SlideAddr => ({
+    id: entry.virtualId > 0 ? entry.virtualId : null,
+    index: ctx.plan.entries.indexOf(entry),
+    title: entry.title
+})
 
 /**  contract every op module fulfills  */
 export interface OpHandler<T extends Op = Op> {

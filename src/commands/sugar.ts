@@ -13,14 +13,15 @@ import { PptcError } from "../infra/errors.js"
 import type { Op } from "../schema/ops.js"
 import { DeckArchive, readDeckState } from "../engine/reader.js"
 import { parse, type Parsed } from "../infra/args.js"
-import { executeOps, type ExecuteResult } from "./apply.js"
+import { executeOps, minFontPtArg, type ExecuteResult } from "./apply.js"
 
 /**  shared flags of all sugar commands  */
 const COMMON = {
     "slide": { type: "string" as const },
     "rev": { type: "string" as const },
     "strict": { type: "boolean" as const },
-    "dry-run": { type: "boolean" as const }
+    "dry-run": { type: "boolean" as const },
+    "min-font-pt": { type: "string" as const }
 }
 
 /**  run sugar-built ops through the standard apply path  */
@@ -30,7 +31,8 @@ const runOps = async (args: Parsed, deck: string, ops: Op[]): Promise<ExecuteRes
         dryRun: args.flag("dry-run"),
         strict: args.flag("strict"),
         expectRev: args.str("rev"),
-        outFile: null
+        outFile: null,
+        minFontPt: minFontPtArg(args)
     })
 
 /**  run a single sugar-built op through the standard apply path  */

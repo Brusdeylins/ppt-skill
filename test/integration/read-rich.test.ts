@@ -24,7 +24,7 @@ const TMP = path.join(here, "..", "tmp")
 const DECK = path.join(TMP, "read-rich.pptx")
 const PNG = path.join(TMP, "read-rich-pixel.png")
 
-const opts: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
+const opts: ExecuteOptions = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 /**  smallest valid 1x1 PNG  */
 const PIXEL = Buffer.from(

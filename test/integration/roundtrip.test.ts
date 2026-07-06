@@ -24,7 +24,7 @@ const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
 const TMP = path.join(here, "..", "tmp")
 const DECK = path.join(TMP, "integration.pptx")
 
-const opts = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
+const opts = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 beforeAll(async () => {
     mkdirSync(TMP, { recursive: true })

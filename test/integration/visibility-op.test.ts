@@ -22,7 +22,7 @@ const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
 const TMP = path.join(here, "..", "tmp")
 const DECK = path.join(TMP, "visibility-op.pptx")
 
-const opts = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null }
+const opts = { templatePath: TEMPLATE, dryRun: false, strict: false, expectRev: null, outFile: null, minFontPt: 8 }
 
 const hiddenOf = async (title: string): Promise<boolean | undefined> => {
     const state = await readDeckState(await DeckArchive.open(DECK))
