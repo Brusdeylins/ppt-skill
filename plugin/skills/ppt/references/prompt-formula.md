@@ -57,8 +57,8 @@ Element rules
     it from the placeholder geometry and surfaces it in the box header, so
     the image model is not nudged by a ratio phrase inside the prompt.
 -   **Secondary colors**: only for graphic elements within the image
-    (dashboards, charts, UI), listed as hex codes from the template's
-    `accent2`-`accent6`.
+    (dashboards, charts, UI) -- usage rules and hex sources per
+    `color-roles.md`.
 
 Per-image creative step
 -----------------------

@@ -86,6 +86,15 @@ describe("documentation sync contract", () => {
         expect(pluginReadme).toContain("/plugin install ppt@ppt-skill")
     })
 
+    it("both skills import the shared plugin-level control.md", () => {
+        const shared = readFileSync(path.join(root, "plugin", "meta", "control.md"), "utf8")
+        expect(shared).toContain("Control Tags")
+        for (const skill of ["ppt", "ppt-prepare"]) {
+            const src = readFileSync(path.join(root, "plugin", "skills", skill, "SKILL.md"), "utf8")
+            expect(src, skill).toContain("@${CLAUDE_SKILL_DIR}/../../meta/control.md")
+        }
+    })
+
     it("the README and the apply help document every lint warning code", () => {
         const codes = warningCodes()
         expect(codes.length).toBeGreaterThanOrEqual(2)

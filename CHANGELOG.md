@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.0.6 (plugin 1.0.6)
+
+Documentation/skill release -- the pptc engine is unchanged.
+
+- **One shared `plugin/meta/control.md` for all skills** (ASE-style). The
+  two per-skill near-duplicates are merged into a single, generic control
+  file (tags, step banners, progress task list, stage gate); both SKILL.md
+  import it via `@${CLAUDE_SKILL_DIR}/../../meta/control.md` and now carry
+  their OWN specifics (phase table + markers, task-list scope, gate option
+  set) in a contract block. Unification bonus: each skill gains the
+  generic rule the other file had exclusively (never guess a required
+  value; never batch two gates).
+- **Harness-portable user dialogs.** The "Asking the User" procedure no
+  longer calls host-specific selection tools (Claude Code's
+  `AskUserQuestion`): choices are always rendered as a numbered Markdown
+  list and the user replies with a number, a label or free text -- the
+  skills behave identically in any LLM harness.
+- **Per-skill ZIP distribution retired; the marketplace is the single
+  channel.** A stand-alone skill folder cannot carry the shared
+  control.md, and both Claude Code and the Claude app install from the
+  marketplace directly. `skill:zip`/`skill:zip:internal` and
+  `scripts/skill-zip.mjs` are removed; releases carry no ZIP assets;
+  in-house template bundles move to the downstream company repo. The
+  update banners now point at `/plugin marketplace update ppt-skill`.
+- **Prompt fixes and dedup from a full prompt review.** ppt: the scoped-
+  edit path (STEP 4 -> STEP 6) never Read content-rules.md -- STEP 6 now
+  Reads it and the ~55 lines it had restated as compensation collapse to
+  index bullets; the strict-validate branch gains the missing
+  W_ELEMENT_OVERLAP remediation; STEP 7 defers to prompt-formula.md
+  instead of restating it and re-reads `state --level full` explicitly.
+  ppt-prepare: stray TABs inside the PHASE 7 plan template no longer leak
+  into `<deck>-plan.md` (they rendered the slide headings as code blocks);
+  the plan template gains a "Structural slides" section (title, agenda,
+  dividers, closing had no defined place) and continuous 1-based slide
+  numbering is stated; PHASE 6 defers the six layout types to
+  methodology.md. References: the "only sanctioned overlay" claim now
+  names the AI-note textbox; the final checklist no longer demands notes
+  on self-study decks; the capacity SHORTEN-or-SPLIT rule is scoped to
+  self-authored text; table-accent honors a sidecar primary-slot
+  override; the AI-note wording and secondary-color rules live in ONE
+  place each; methodology's code font is the template sidecar's, not "any
+  monospace". The docs contract test pins the shared control.md import.
+
 ## 1.0.5 (plugin 1.0.5)
 
 - **New lint `W_FONT_TOO_SMALL` -- explicit font sizes get a readability

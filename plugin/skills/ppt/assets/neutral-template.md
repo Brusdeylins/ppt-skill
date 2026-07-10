@@ -25,7 +25,7 @@ Footer pattern (set via `footer` on every slide):
 
 - `<presentation title> | <current year>`
 - On slides with picture placeholders append the AI-image note in the
-  deck language (de: "Bilder mit KI generiert", en: "Images AI-generated").
+  deck language (wording per `references/content-rules.md`).
 - All layouts carry footer and slide-number placeholders.
 
 Image design constraints:

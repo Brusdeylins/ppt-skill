@@ -49,9 +49,10 @@ roles, footer pattern, design constraints) lives in a Markdown sidecar next
 to the template file -- see `skills/ppt/assets/neutral-template.md` for the
 pattern.
 
-Company templates can be bundled into a private, in-house build (see the
-CLI repo's `skill:zip:internal`), which **replaces** the neutral default
-with your corporate templates -- they are never part of the public release.
+Company templates are never part of the public release: an in-house
+distribution lives in a downstream company repo that vendors this plugin
+and **replaces** the neutral default with the corporate templates in the
+skill's `assets/`.
 
 ## Layout
 
@@ -59,16 +60,15 @@ with your corporate templates -- they are never part of the public release.
 plugin/
   .claude-plugin/plugin.json   manifest
   bin/pptc                     PATH wrapper
+  meta/control.md              shared control-tag definitions (all skills)
   skills/ppt/
-    SKILL.md                   the build skill (imports meta/control.md)
+    SKILL.md                   the build skill (imports ../../meta/control.md)
     VERSION                    bundled version (checked against GitHub releases)
-    meta/control.md            control-tag definitions
     references/                content rules, prompt formula, styles
     scripts/pptc.mjs           bundled pptc build
     assets/                    neutral fallback template + sidecar
   skills/ppt-prepare/
-    SKILL.md                   the content-planning skill (imports meta/control.md)
+    SKILL.md                   the content-planning skill (imports ../../meta/control.md)
     VERSION                    bundled version (checked against GitHub releases)
-    meta/control.md            control-tag definitions
     references/                methodology + storyline patterns
 ```

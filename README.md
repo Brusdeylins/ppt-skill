@@ -78,9 +78,9 @@ No further setup: the plugin bundles its own pptc build
 the plugin-root `bin/` puts a `pptc` command on the Bash tool's PATH
 while the plugin is enabled. The public plugin ships only a neutral
 default template; point the skill at any external `.potx`/`.pptx`
-(optionally with a `<name>.md` sidecar for template-specific knowledge),
-or build an in-house package that bundles your company templates (see
-[Packaging & Distribution](#packaging--distribution)). Deck-level settings
+(optionally with a `<name>.md` sidecar for template-specific knowledge) --
+in-house distributions with company templates live in a downstream
+company repo, not here. Deck-level settings
 (language, image style, ...) persist as **custom document properties inside the
 `.pptx`**, so the deck is self-describing -- hand it to someone else and the
 skill reads its setup straight back, no side file.
@@ -88,31 +88,25 @@ skill reads its setup straight back, no side file.
 The skill definitions live in
 [`plugin/skills/ppt/SKILL.md`](plugin/skills/ppt/SKILL.md) and
 [`plugin/skills/ppt-prepare/SKILL.md`](plugin/skills/ppt-prepare/SKILL.md);
-each imports its own `meta/control.md`.
+both import the shared [`plugin/meta/control.md`](plugin/meta/control.md)
+(control tags, step banners, progress task list, stage gate) -- one file
+for all skills of the plugin.
 
-### Use it on claude.ai (web -- no build, no Node setup)
+### Use it in the Claude app (desktop / claude.ai)
 
-Not a developer? Each skill is published as a ready-to-upload ZIP on the
-[Releases page](https://github.com/Brusdeylins/ppt-skill/releases). Steps:
+Not a developer? The Claude app installs the same plugin from this repo:
+**Settings → Plugins → Add → "Add marketplace"**, enter
+`Brusdeylins/ppt-skill`, then install the **ppt** plugin. No clone, no
+`npm` -- the bundled pptc is self-contained. (Per-skill ZIP uploads were
+retired in 1.0.6; the marketplace is the single distribution channel.)
 
-1. **Enable code execution** (skills require it, otherwise they appear
-   greyed out): **Settings → Capabilities → "Code execution and file
-   creation"**. On Team/Enterprise plans the org owner enables it under
-   **Organization settings → Skills**.
-2. Download `ppt.zip` and `ppt-prepare.zip` from the latest release.
-3. Open the **sidebar → Customize → Skills → Create skill → Upload skill**
-   and upload each ZIP -- one skill per ZIP, so upload **both** separately.
-
-That is the whole install -- no clone, no `npm`. The bundled pptc is
-self-contained and runs on the claude.ai code-execution runtime.
-
-**Handing the plan from `ppt-prepare` to `ppt` on claude.ai.** Unlike the
-local CLI, each claude.ai skill runs in its own sandbox that is not shared,
-so `ppt` cannot see a file `ppt-prepare` wrote to disk. `ppt-prepare` now
-produces a **single** file -- `<deck>-plan.md`, with the deck setup in its
-header (no separate sidecar) -- so when you switch to `ppt`, just **download
-that one plan file and attach/upload it** (ideally in the same conversation).
-`ppt` reads its setup straight from the plan.
+**Handing the plan from `ppt-prepare` to `ppt` when files are not
+shared.** On hosts where each skill run has its own sandbox (no shared
+filesystem), `ppt` cannot see a file `ppt-prepare` wrote to disk.
+`ppt-prepare` produces a **single** file -- `<deck>-plan.md`, with the deck
+setup in its header (no separate sidecar) -- so when you switch to `ppt`,
+just **download that one plan file and attach/upload it** (ideally in the
+same conversation). `ppt` reads its setup straight from the plan.
 
 ## Quick Start
 
@@ -520,48 +514,21 @@ npm test           # build + vitest (unit, golden, integration, contract)
 npm run lint       # eslint (incl. TSDoc) + tsc --noEmit
 npm run build      # esbuild bundle -> dst/pptc.mjs
 npm run plugin:sync # rebuild + copy the bundle into the plugin (+ both VERSION files)
-npm run skill:zip  # package each skill as deploy/<skill>.zip (claude.ai upload)
 ```
 
 ## Packaging & Distribution
 
-How the `ppt` skill is bundled, packaged into upload-ready ZIPs (including
-in-house builds with your own company templates) and released.
-
-### Skill ZIPs (with your own templates)
-
-Each skill is packaged as a self-contained ZIP with the skill folder at
-the ZIP root (e.g. `ppt/SKILL.md`), written to `deploy/` (a git-ignored
-build artifact). The ZIP is uploaded in claude.ai via the sidebar →
-Customize → Skills → Create skill → Upload skill (code execution must be
-enabled under Settings → Capabilities). Every variant runs `plugin:sync`
-first, so the bundled pptc is always fresh.
-
-```
-npm run skill:zip               # PUBLIC: bundles only the neutral default
-                                #   template  ->  deploy/ppt.zip
-npm run skill:zip:internal      # IN-HOUSE: REPLACES the neutral default with
-                                #   every template in ./private-templates  ->  deploy/ppt-internal.zip
-npm run skill:zip -- --from DIR # IN-HOUSE: same, but from DIR instead
-                                #   (no need to pre-stage files)  ->  deploy/ppt-internal.zip
-```
-
-- **Public build** ships only `assets/neutral-template.pptx` -- this is
-  the ZIP attached to GitHub releases for non-developers.
-- **Internal build** overlays your own `.potx`/`.pptx` (plus optional
-  `<name>.md` sidecars) into the skill's `assets/` and **drops the neutral
-  default** (`neutral-template.pptx`) -- the in-house package ships ONLY your
-  templates, so no one picks the generic Office look by accident. When no
-  template is named the skill uses your template (or, with several, offers a
-  choice). Sources come from `private-templates/` (git-ignored) or any
-  `--from <dir>`.
-- **Company templates never touch git.** They live only inside the
-  internal ZIP; `private-templates/` and `deploy/` are both git-ignored,
-  so corporate material is never committed or released publicly.
+The plugin marketplace in this repo is the single distribution channel
+(Claude Code and the Claude app install from it directly); the pptc CLI is
+additionally published to npm. Per-skill ZIPs were retired in 1.0.6 -- the
+skills share `plugin/meta/control.md`, which a stand-alone skill folder
+cannot carry. In-house distributions that bundle company templates live in
+a downstream company repo that vendors this plugin and overlays its own
+templates.
 
 Templates are richer with a sidecar: put `<name>.md` next to `<name>.potx`
-(layout-role map, footer pattern, design constraints) and it is bundled
-alongside, so `tpl describe`/the skill pick up the template-specific
+(layout-role map, footer pattern, design constraints) and it is picked up
+alongside, so `tpl describe`/the skill get the template-specific
 knowledge automatically.
 
 ### Versioning & release rule
@@ -584,16 +551,8 @@ which build it ships -- both written by `plugin:sync`.
   release -- and `npm publish --access public` once the package is live
   (`prepublishOnly` enforces lint + tests + build).
 
-Either way, attach the web-upload ZIP(s) to the GitHub release so
-non-developers can install on claude.ai without building:
-`npm run skill:zip` then `gh release upload <tag> deploy/ppt.zip`
-(`deploy/` is a git-ignored build artifact -- the release asset is the
-distribution point, not the repo tree).
-
-The release asset is always the PUBLIC ZIP (neutral default only). Builds
-that bundle company templates (`skill:zip:internal` / `--from`) produce
-in-house ZIPs that are distributed within the company and never attached
-to a git release -- see *Packaging skill ZIPs* above.
+Releases carry no ZIP assets (retired in 1.0.6): the tag + notes are the
+release, and installs/updates flow through the marketplace and npm.
 
 CLI change ⇒ plugin release, but skill change ⇏ CLI release. Lint and the
 test suite must be green before any push.

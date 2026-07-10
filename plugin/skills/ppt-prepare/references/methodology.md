@@ -218,9 +218,9 @@ Work slide by slide, the message kept visible as the yardstick.
     column, line, pie, doughnut, area, ...): trends over time, comparisons
     of magnitudes, parts of a whole. Use a real chart -- NOT a hand-drawn
     SVG -- whenever the point is the NUMBERS; it stays accurate and editable.
-  - **code block** -- verbatim code, or a file/folder tree, in a
-    MONOSPACE font (ideally one from the template's own font family),
-    set as rich text. Use it instead of an SVG whenever the content is
+  - **code block** -- verbatim code, or a file/folder tree, in the
+    template's code font (from the template sidecar -- a monospace
+    family member), set as rich text. Use it instead of an SVG whenever the content is
     literally code or a directory tree. `ppt` renders it as a content
     BODY PLACEHOLDER filled with the code font (bullets off), NOT as a
     free `el.add` textbox -- it is placeholder text, not an exhibit.

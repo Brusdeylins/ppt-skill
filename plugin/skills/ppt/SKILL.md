@@ -18,18 +18,35 @@ effort: high
 
 <!-- (c) Matthias Brusdeylins -->
 
-@${CLAUDE_SKILL_DIR}/meta/control.md
+@${CLAUDE_SKILL_DIR}/../../meta/control.md
 
 You are an expert in corporate presentation engineering. You build and edit
 PPTX decks deterministically via the bundled `pptc` CLI and you author
 color-faithful Nano Banana Pro image prompts for picture placeholders.
 
-The imported `meta/control.md` defines the control tags, the phase-marker
-banners, the **Progress Task List** and the **Stage Gate**. Honor them, plus
-two skill-specific notes: keep the task list for a full-flow run (new deck or
-major addition) but skip it for a small scoped edit; the gates are STEP 3
-(deck setup) and STEP 5 (outline) -- advance only on explicit approval and
-never guess a required value (e.g. the deck language), ask it at the gate.
+The imported `meta/control.md` (shared by all skills of this plugin)
+defines the control tags, the step banners, the **Progress Task List** and
+the **Stage Gate**. This skill fills in its contract as follows:
+
+**Work phases and markers.** The flow has eight steps, `STEP 1`..`STEP 8`,
+in two work phases; `<step-marker/>` in the step banner is the phase's
+bullet, so the color tells the user at a glance whether you are still
+reading/planning or actively changing the deck:
+
+| Phase                                                             | Steps    | Marker |
+| ----------------------------------------------------------------- | -------- | ------ |
+| **Analyze** — read state, inspect, set up, plan; no deck mutation | STEP 1–5 | 🔵     |
+| **Write** — mutate the deck (`new`/`apply`) and report            | STEP 6–8 | 🟢     |
+
+**Task-list scope.** Use the task list when a run traverses the full flow
+(a new deck, or a major addition that goes through the outline gate); task
+titles look like "🔵 STEP 1: Current State". For a single small scoped
+edit that touches only a step or two, skip it -- it would be noise.
+
+**Gates.** The gates are STEP 3 (deck setup) and STEP 5 (outline); besides
+**Approve and continue** offer **Change** (adjust a value / revise and
+gate again). Advance only on explicit approval, and never guess a required
+value (e.g. the deck language) -- ask it at the gate.
 
 <objective>
 Create clean, story-driven slides from a PowerPoint template and write one
@@ -134,7 +151,7 @@ banner, never a gate -- never let it block or delay the actual work.
     </template>
     <if condition="the check reported behind: true">
     <template>
-    › ↑ **Update** v<version/> → v<latest/> · via npm (`@brusdeylins/pptc`) or re-upload the latest skill ZIP — https://github.com/Brusdeylins/ppt-skill/releases
+    › ↑ **Update** v<version/> → v<latest/> · Claude Code: `/plugin marketplace update ppt-skill` — release notes: https://github.com/Brusdeylins/ppt-skill/releases
     </template>
     </if>
 
@@ -176,9 +193,9 @@ follow-ups within the same run.
     Also look for a **ppt-prepare plan** (`*-plan.md` -- the SINGLE hand-off
     artefact from the `ppt-prepare` skill: a setup header with deck language,
     title and topic, plus the approved storyline, per-slide messages, headline
-    titles, content and speaker notes). It may exist before the deck does, and
-    it now carries everything `ppt` needs to start -- there is NO separate
-    `ppt-prepare` deck sidecar to look for.
+    titles, content, layout type and speaker notes). It may exist before
+    the deck does, and it now carries everything `ppt` needs to start --
+    there is NO separate `ppt-prepare` deck sidecar to look for.
 
     -   <if condition="the user points to a plan, or exactly one matches the deck (<deck>-plan.md)">
         adopt it -- its header pre-answers the STEP 3 setup (deck language,
@@ -362,14 +379,13 @@ follow-ups within the same run.
 
 6.  <step id="STEP 6: Content">
 
-    Build ONE ops document for the change set, obeying
-    `references/content-rules.md`:
+    Read `references/content-rules.md` (skip if already read in STEP 5).
+    Build ONE ops document for the change set, obeying all of its rules:
 
     -   **Persist the setup into the deck.**
         <if condition="the deck is first built, or a setup value changed since the last `state`">
-        include ONE `meta.props` op with the `custom` map from STEP 3
-        (`pptcImageStyle`, `pptcInfoStyle`, `pptcDeckLang`, `pptcTitle`,
-        `pptcTopic`) so the deck stays self-describing.</if>
+        include the ONE `meta.props` op with the `custom` map exactly as
+        defined in STEP 3, so the deck stays self-describing.</if>
         <else>the values are unchanged -- skip it.</else>
     -   **Preserve approved wording — do not rewrite the plan.**
         <if condition="a ppt-prepare plan or the user supplies a slide's content (headline, bullets, body)">
@@ -387,42 +403,20 @@ follow-ups within the same run.
     -   Texts written within the placeholder capacity from STEP 2 — but for
         self-authored content only; supplied wording follows the two rules
         above.
-    -   Action titles, unique per slide; one message per slide; ~6 bullets
-        of ~6-8 words, `level` <= 2.
-        <if condition="the deck is PRESENTED (a speaker is present)">details go
-        into `notes` (40-70 words: message, numbers, transition; for visuals +
-        1-2 descriptive sentences).</if>
-        <else>(a SELF-STUDY / teaching deck) write NO notes -- the slide is
-        self-contained and the explaining text stays on the slide.</else>
-    -   Chapters: `slide.add` on the chapter-role layout. The agenda slide
-        derives from chapter titles.
-        <if condition="chapters change (add/rename/remove)">include the agenda
-        `slide.fill` in the SAME ops document.</if>
-    -   **Placeholders first**: anything that is TEXT goes into a layout
-        placeholder via `slide.fill` (rich text covers monospace, sizes,
-        colors, hyperlinks) -- pick the layout whose placeholder fits.
-        `el.add` is ONLY for tables/charts/shapes/images/connectors and
-        sanctioned overlays.
-    -   **Elements on blank layouts**: slides receiving `el.add` content
-        (tables, charts, shapes) use the blank-role layout (title + empty
-        surface, no body placeholders in the content area) -- elements
-        never overlap text placeholders (pptc warns: W_ELEMENT_OVERLAP).
+    -   **Apply the content rules just read**: action titles (unique, one
+        message per slide), 6x6 within the STEP 2 capacities, the notes
+        policy (presented: 40-70 words per slide; self-study: none),
+        placeholders first / `el.add` only on the blank-role layout, the
+        agenda updated in the SAME ops document when chapters change, and
+        the footer pattern + AI-image note on every slide -- set via the
+        `footer` field, in <deck-lang/>, with <deck-title/> and the
+        current year.
     -   **Quantitative data → a native chart, not a drawn SVG.** Trends,
         magnitude comparisons or parts of a whole go into an `el.add` chart
         (bar/column/line/pie/doughnut/area -- data-bound and editable in
         PowerPoint) on the blank layout; never hand-draw numbers as shapes.
         Reserve drawn SVG shapes for NON-numeric diagrams (flow, hierarchy,
         cycle, timeline, structure).
-    -   **Footer on every slide** (via the `footer` field): follow the
-        template's footer pattern (see sidecar) with <deck-title/> and
-        the CURRENT year -- never keep the template's placeholder title
-        or a stale year.
-        <if condition="the slide's layout carries picture placeholders">append
-        the AI-image note in <deck-lang/> (e.g. German "Bilder mit KI
-        generiert", English "Images AI-generated").</if>
-        <if condition="the layout has NO footer placeholder (typically title and closing layouts) but the slide carries images">place
-        the note as a small discreet `el.add` textbox near the bottom edge
-        instead.</if>
     -   New slides get `$ref`s so later ops in the document can address
         them.
 
@@ -432,6 +426,9 @@ follow-ups within the same run.
     APPROVED/user-supplied wording, do NOT shorten it silently — propose a
     shortening (or a roomier layout) and re-validate only after the user
     confirms (see the preserve rule above).</if>
+    <if condition="exit 7 / W_ELEMENT_OVERLAP">reposition the named element
+    fully inside the `contentArea` -- never ignore the finding or delete
+    the covered shape -- then re-validate.</if>
     <if condition="exit 7 / W_FONT_TOO_SMALL">an explicit run/element font
     is below the readability floor -- raise it to the template's scale
     (content-rules.md), never lower the floor to silence the finding.</if>
@@ -455,9 +452,9 @@ follow-ups within the same run.
 
     A prompt box is a TRANSIENT instruction, never the deliverable: the
     user reads it, generates the image elsewhere, places it in the
-    placeholder and removes the box. Using the fresh `state --level full`
-    from STEP 1 (re-read it now if anything changed), act on each picture
-    placeholder's CURRENT state.
+    placeholder and removes the box. Run `state --level full` now for the
+    affected slides (STEP 6's apply changed the rev, and the user edits
+    between turns), and act on each picture placeholder's CURRENT state.
 
     Each prompt box carries a stable, unique name
     `PptcPromptBox-<idx>-<guid>` (idx = the picture placeholder it
@@ -499,46 +496,24 @@ follow-ups within the same run.
             slide-local and does NOT appear in `tpl inspect`. Re-read it
             every turn so boxes the user added since the last prompt are
             honored.
-        Use the picture placeholder's `coverage` (reported by `tpl
-        inspect`/`describe`) to pick the mode -- see
-        `references/prompt-formula.md` → "Background image vs. negative
-        space":
-        <if condition="coverage < 0.65 -- partial overlay">
-        each overlapping shape becomes a NEGATIVE-SPACE clause ("the
-        [region] is a vast empty [color] canvas creating significant
-        negative space") and the subject moves to a free region.
-        </if>
-        <else>
-        the whole frame is a true BACKGROUND image, not a subject: carry
-        NO text (this OVERRIDES the title-text rule), keep ONE even tone (a
-        dark backdrop with no bright hotspots, or a light backdrop with no
-        dark blocks), and SET the overlay placeholder's text colour to
-        contrast that tone — light text (`lt1`) on a dark backdrop, dark
-        text (`dk1`) on a light one — via the `slide.fill` run colour, so
-        the words stay legible.
-        </else>
-        NEVER explain why -- typographic words (title/footer/caption/
-        label) make the image model render pseudo text. End prompts
-        with "No text. No letters. No symbols." unless the prompt
-        deliberately embeds quoted text (never on a background image).
-    2.  Choose a motif that makes THIS slide's POINT tangible -- its
-        message AND its takeaway/conclusion, leaning toward the resolution the
-        slide concludes with, not just the problem -- and does not repeat a
-        motif already used in the deck.
+        Pick the mode by the placeholder's `coverage` and compose the
+        overlay/backdrop clauses exactly per `prompt-formula.md` →
+        "Background image vs. negative space". On a true background image
+        ALSO set the overlay placeholder's text colour to contrast the
+        backdrop tone — light (`lt1`) on dark, dark (`dk1`) on light — via
+        the `slide.fill` run colour, so the words stay legible.
+    2.  Choose the motif per `prompt-formula.md` → "Per-image creative
+        step".
         <if condition="the slide message, its conclusion, deck topic and role do NOT determine a concrete, non-generic motif -- or a strong metaphor could plausibly go several clearly different ways">
         ASK the user ONE short, targeted question (offer 2-3 motif directions,
-        or invite free text) BEFORE composing.</if>
-        A wrong motif costs the user a whole image-generation cycle, so a quick
-        question beats guessing; NEVER fall back to a generic filler motif just
-        to avoid asking.
-    3.  <if condition="this is a title-role image, or the scene carries text surfaces">
-        embed the slide title/topic as short text-in-image.</if>
-    4.  Compose the prompt per the formula, with the deck-wide style
-        block and `#`-prefixed hex codes from <colors/> (primary
-        `accent1` unless sidecar/user overrides). Do NOT put the aspect
-        ratio in the prompt TEXT -- pptc derives it from the placeholder
-        geometry and prints it in the box header (`IMAGE PROMPT · <ratio>`);
-        the mirrored markdown header shows the same ratio.
+        or invite free text) BEFORE composing -- a wrong motif costs a whole
+        image-generation cycle; NEVER fall back to a generic filler motif.</if>
+    3.  Compose the prompt per the formula: the chosen style block
+        verbatim, `#`-prefixed hex codes from <colors/> per
+        `color-roles.md`, title text-in-image where the formula calls for
+        it. Never put the aspect ratio in the prompt TEXT -- pptc derives
+        it from the placeholder geometry and prints it in the box header
+        (`IMAGE PROMPT · <ratio>`).
     </for>
 
     Write all prompts into the deck via ONE `img.prompts` op per slide

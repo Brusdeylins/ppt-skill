@@ -33,7 +33,9 @@ Body
     placeholder `~N lines of ~M chars`. Write text AGAINST that
     budget. Validation: `pptc apply ... --dry-run --strict` fails with
     `W_TEXT_OVERFLOW` (exit 7) on overflow -- then SHORTEN or SPLIT,
-    never rely on PowerPoint auto-shrink.
+    never rely on PowerPoint auto-shrink. That applies to SELF-AUTHORED
+    text only: approved plan/user wording is never shortened without
+    explicit confirmation (SKILL.md STEP 6).
 -   **Consistent font sizes -- take them from the template, never invent.**
     `tpl inspect` reports each placeholder's `fontSizePt`. Use the BODY
     size for body/explanatory text and the FOOTER size (the small one) for
@@ -96,19 +98,23 @@ Elements (tables, charts, free shapes)
     start in the title band above it), its bottom at or above
     `contentArea.y + h`, and its left/right within the side guides. When a
     slide stacks a table or diagram AND an explanation textbox, the two
-    TOGETHER must fit inside the contentArea height -- shrink rows, font or
-    text to fit; never let an element overflow the guides or the slide.
+    TOGETHER must fit inside the contentArea height -- shrink rows or text,
+    or step font sizes down within the template's scale (never below the
+    lint floor), to fit; never let an element overflow the guides or the
+    slide.
 -   **Uniform tables.** Across the deck all tables share ONE look: header
-    fill = the template's primary accent (`accent1`) with white text,
+    fill = the template's primary accent (default `accent1`; honor a
+    sidecar primary-slot override, see `color-roles.md`) with white text,
     single-line headers, a light `altRowBg`, a subtle `border`, and a
     FIXED `headerHeight`/`rowHeight` (table `style`) so header bands and
     row heights match on every slide.
 -   **Never cover existing text fields** (placeholders incl. the
     footer/slide-number area, textboxes, tables, charts) with a new
-    element -- prompt boxes are the only sanctioned overlay. pptc
-    enforces this: `W_ELEMENT_OVERLAP` names the covered shape; under
-    `--strict` the apply fails (exit 7). On a finding, REPOSITION the
-    element, never ignore it.
+    element -- prompt boxes and the AI-note textbox (where no footer
+    placeholder exists) are the only sanctioned overlays, and even the
+    AI note must not sit on text. pptc enforces this: `W_ELEMENT_OVERLAP`
+    names the covered shape; under `--strict` the apply fails (exit 7).
+    On a finding, REPOSITION the element, never ignore it.
 -   **Element font sizes -- from the template, readable, few.** Free
     `el.add` elements (chips, cards, captions, diagram labels,
     annotations) carry no template size of their own -- NEVER invent one.
@@ -208,7 +214,8 @@ Final checklist (report unanswered items to the user)
 - [ ] Titles alone tell a coherent story (read in order)
 - [ ] Every slide has exactly one message
 - [ ] No placeholder over capacity (`--dry-run --strict` passes)
-- [ ] Speaker notes present on every content slide
+- [ ] Speaker notes on every content slide (presented deck) / no notes
+      (self-study deck)
 - [ ] Agenda matches the actual chapters
 - [ ] Image prompts use template hex codes and the deck-wide styles
 - [ ] All slide titles unique
