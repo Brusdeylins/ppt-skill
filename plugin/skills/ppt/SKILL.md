@@ -255,7 +255,9 @@ follow-ups within the same run.
         corporate template (a `.potx`/`.pptx` path, or a directory to scan).
         Use the neutral default only once the user picks it.</elseif>
         <else>ask which bundled template to use via the **Asking the User**
-        procedure; the user can still point to an external file instead.</else>
+        procedure -- one option per template, described by its sidecar's
+        purpose where a `<name>.md` exists; the user can still point to an
+        external file instead.</else>
         </else>
 
     A sidecar Markdown next to the template (`<name>.md` beside
