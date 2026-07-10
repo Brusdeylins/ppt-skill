@@ -84,8 +84,9 @@ Step Announcement
 -----------------
 
 All user-facing output uses ONE clean style: an icon + **bold** label, `·` as
-the separator, a thin `────────` rule to open a section, `›` before a prompt
-line. No drawn boxes, no ASCII art.
+the separator, a thin `────────` rule to open a section (user choices are
+framed by a rule above AND below), `›` before a prompt line. No drawn
+boxes, no ASCII art.
 
 The moment a `<step>` begins executing, FIRST emit a one-line banner so
 the user can see exactly where you are, THEN carry out the step:
@@ -143,15 +144,19 @@ identically in every LLM harness. NEVER end a turn on a half-asked question
 
 1.  Frame it as a short question plus 2-4 options, each a
     `Label — one-line description`.
-2.  Render the choice, then END the turn and wait for the reply:
+2.  Render the choice framed by a thin rule above and below (so the
+    decision stands out from the surrounding prose), then END the turn
+    and wait for the reply:
 
     <template>
-    **<the question>**
+    ────────────────────────────────────────
+    ❓ **<the question>**
 
     1. **<label>** — <description>
     2. **<label>** — <description>
 
     › _Reply with a number — or your own answer._
+    ────────────────────────────────────────
     </template>
 
 3.  Map the reply back to an option: a number picks that option; a label
