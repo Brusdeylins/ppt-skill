@@ -22,6 +22,10 @@ Placeholders
 -   `<xxx/>` *reads* the placeholder named `xxx` and expands to its
     current value.
 
+Angle-bracket tokens inside code spans or command lines (`state <deck>`,
+`<name>.md`) are literal CLI/documentation syntax, NOT control tags --
+only tags outside code follow the set/read grammar above.
+
 
 Objective
 ---------
@@ -51,7 +55,9 @@ Flow Constructs
 
 -   `<for items="...">...</for>`:
     Repeat the body once per item; inside the body, `<item/>` expands
-    to the current item. A `<break/>` stops the repetition early.
+    to the current item. When the items are structured, the body reads an
+    item's fields as `<field/>` placeholders (e.g. `<title/>`, `<n/>`).
+    A `<break/>` stops the repetition early.
 
 -   `<while condition="...">...</while>`:
     Repeat the body as long as the condition is met. A `<break/>`

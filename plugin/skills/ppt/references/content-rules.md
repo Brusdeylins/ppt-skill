@@ -46,15 +46,17 @@ Body
 Language and footer
 -----------------
 
--   **Deck language**: fixed once in deck setup (ask when not obvious
-    from the request), independent of the conversation language. ALL
+-   **Deck language**: fixed once in deck setup (asked at the STEP 3 gate
+    via the Asking the User procedure when not explicitly stated),
+    independent of the conversation language. ALL
     deck-facing text -- titles, bullets, notes, footer, AI note -- is
     written/translated into the deck language. Image prompts stay
     English.
 -   **Footer on every slide**: the template's footer pattern (see
     template sidecar) with the actual deck title and the CURRENT year.
     Never ship the template's placeholder title (e.g. "Insert title") or
-    a stale year; ask for the title when it cannot be derived.
+    a stale year; when the title cannot be derived it is asked at the
+    STEP 3 gate (Asking the User procedure).
 -   **AI-image note**: every slide whose layout has picture
     placeholders carries a note that the images are AI-generated, in
     the deck language (de: "Bilder mit KI generiert", en: "Images

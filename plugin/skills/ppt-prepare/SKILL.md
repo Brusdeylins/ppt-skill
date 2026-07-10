@@ -62,7 +62,9 @@ Ground Rules
 
 - **Language:** detect the user's language from their first message and run
   the WHOLE session in it. (This skill's own text is English; the dialogue
-  is the user's language.)
+  is the user's language.) The DECK language is a separate, third value --
+  fixed in PHASE 1, carried as the plan's `Deck language` header; plan
+  VALUES are written in it, the plan's fixed labels stay English.
 - **Collaborative:** you PROPOSE with a one-line rationale, the user
   DECIDES. Never decide content silently.
 - **Never guess content — research, then ask.** When a fact or content gap
@@ -90,16 +92,23 @@ Protocols
 
 - **Checkpoint (every gate).** Run the Stage Gate as defined in the imported
   `meta/control.md`, with this skill's option set (see **Gates** above).
-  After two revise rounds without approval, offer to escalate (step back a
-  phase, or hand off the draft as-is).
-- **Short-Path (skip).** When the user wants to skip a phase, state the
-  concrete quality risk in one line and offer a 2-question minimal version
-  instead of a full skip; skip only on explicit confirmation.
-- **Story/Slide barrier (PHASE 3 → 4).** If the user asks about slides,
-  titles or layout during PHASE 1–3, answer: "The story has to stand first
-  so the slides can carry it -- once the storyline is approved we go
-  straight to the slides." No transition to PHASE 4 without explicit
-  storyline approval.
+  <if condition="two revise rounds passed without approval">offer, via the
+  **Asking the User** procedure: **Escalate** (step back a phase) /
+  **Hand off as-is** / **Keep revising**.</if>
+- **Short-Path (skip).** <if condition="the user wants to skip a phase">
+  state the concrete quality risk in one line, then ask via the **Asking
+  the User** procedure: **Minimal version** (the phase as 2 quick
+  questions) / **Full skip** (accept the risk) / **Stay in the phase**.
+  Skip only on that explicit confirmation.</if>
+- **Story/Slide barrier (PHASE 3 → 4).**
+  <if condition="the user asks about slides, titles or layout during PHASE 1-3">
+  reply with:
+  <template>
+  The story has to stand first so the slides can carry it -- once the
+  storyline is approved we go straight to the slides.
+  </template>
+  </if>
+  No transition to PHASE 4 without explicit storyline approval.
 
 
 Startup
@@ -109,18 +118,21 @@ The FIRST thing you do when this skill is activated (ONCE per conversation,
 before PHASE 1): announce the version and check for an update -- a one-line
 banner, never a gate; never let it block or delay the work.
 
-1.  Read the `VERSION` file in this skill's directory (next to this SKILL.md)
-    -- that is `<version/>`.
-2.  Best-effort update check (Node's `fetch`; on ANY error or no network, skip
-    the update line silently). Substitute `SKILLDIR` with this skill's absolute
-    directory:
+`<skill-dir/>` is the absolute directory containing this SKILL.md;
+substitute it literally in the command below.
+
+1.  Read `<skill-dir/>/VERSION`; <version>the file's trimmed
+    content</version>.
+2.  Best-effort update check (Node's `fetch`; on ANY error or no network,
+    skip the update line silently -- never retry, never warn):
 
     ```bash
-    node -e 'const fs=require("fs");let v="?";try{v=fs.readFileSync(process.argv[1],"utf8").trim()}catch{};const cmp=(a,b)=>{const p=s=>s.split(".").map(Number),x=p(a),y=p(b);for(let i=0;i<3;i++){const d=(x[i]||0)-(y[i]||0);if(d)return d}return 0};fetch("https://api.github.com/repos/Brusdeylins/ppt-skill/releases/latest",{headers:{"User-Agent":"ppt-skill"},signal:AbortSignal.timeout(3000)}).then(r=>r.json()).then(j=>{const l=String(j.tag_name||"").replace(/^v/,"");console.log(JSON.stringify({current:v,latest:l||null,behind:!!l&&cmp(v,l)<0}))}).catch(()=>console.log(JSON.stringify({current:v,latest:null,behind:false})))' 'SKILLDIR/VERSION'
+    node -e 'const fs=require("fs");let v="?";try{v=fs.readFileSync(process.argv[1],"utf8").trim()}catch{};const cmp=(a,b)=>{const p=s=>s.split(".").map(Number),x=p(a),y=p(b);for(let i=0;i<3;i++){const d=(x[i]||0)-(y[i]||0);if(d)return d}return 0};fetch("https://api.github.com/repos/Brusdeylins/ppt-skill/releases/latest",{headers:{"User-Agent":"ppt-skill"},signal:AbortSignal.timeout(3000)}).then(r=>r.json()).then(j=>{const l=String(j.tag_name||"").replace(/^v/,"");console.log(JSON.stringify({current:v,latest:l||null,behind:!!l&&cmp(v,l)<0}))}).catch(()=>console.log(JSON.stringify({current:v,latest:null,behind:false})))' '<skill-dir/>/VERSION'
     ```
 
-3.  Emit the banner; add the update line ONLY when the check reported
-    `behind: true` (translate the labels into the user's language):
+3.  <latest>the check's reported `latest` field</latest>. Emit the banner;
+    add the update line ONLY when the check reported `behind: true`
+    (translate the labels into the USER's language):
 
     <template>
     📝 **ppt-prepare** · v<version/>
@@ -131,7 +143,8 @@ banner, never a gate; never let it block or delay the work.
     </template>
     </if>
 
-Do this once per conversation, not on every turn.
+Do this once per conversation, not on every turn, and not for trivial
+follow-ups within the same run.
 
 <flow>
 
@@ -171,6 +184,9 @@ Do this once per conversation, not on every turn.
     goal concrete (what changes after); the decision asked for — or, for a
     teaching deck, the learning objective — is named; time frame known; deck
     language fixed.
+    On approval set <topic>the presentation topic</topic>,
+    <deck-lang>the fixed deck language</deck-lang> and
+    <briefing>type / audience / goal / time, one line</briefing>.
 
     <gate/>
 
@@ -183,8 +199,10 @@ Do this once per conversation, not on every turn.
 
     Read `references/methodology.md` → "Pyramid Principle".
 
-    1.  Propose the core message (1 sentence, action-oriented) + rationale;
-        refine with the user until approved.
+    1.  Propose the core message (1 sentence, action-oriented) + rationale.
+        <while condition="the user has not approved the draft">refine it via
+        the **Asking the User** procedure.</while> (This loop refines the
+        DRAFT; the phase itself is approved at the gate below.)
     2.  Run the **elevator-pitch** and **"so what?"** tests on it.
     3.  Develop 3–5 key arguments; run and STATE the MECE check explicitly.
     4.  Add 1–2 pieces of evidence per argument.
@@ -195,6 +213,8 @@ Do this once per conversation, not on every turn.
     action-oriented; passes elevator-pitch + "so what?"; arguments MECE
     (no overlap, no gap); a single explicit call to action exists; output
     contains NO slide structure.
+    On approval set <core-message>the approved core message</core-message>
+    and <cta>the approved call to action</cta>.
 
     <gate/>
 
@@ -215,8 +235,11 @@ Do this once per conversation, not on every turn.
     3.  **Red-team** it: argue against the recommendation; close gaps or note
         appendix answers. Check consistency with the core message and that
         the complication is genuinely urgent.
-    4.  Refine until approved; on approval announce: "The story stands — now
-        we move to the slides."
+    4.  <while condition="the user has not approved the draft">refine it via
+        the **Asking the User** procedure.</while> On approval announce:
+        <template>
+        The story stands — now we move to the slides.
+        </template>
 
     Keep the Story/Slide barrier active (see Protocols).
 
@@ -224,6 +247,7 @@ Do this once per conversation, not on every turn.
     with the core message; complication creates urgency; survives the
     red-team (or open points are parked for the appendix); output contains
     NO slides or titles.
+    On approval set <storyline>the approved SCR, one line per part</storyline>.
 
     <gate/>
 
@@ -235,8 +259,11 @@ Do this once per conversation, not on every turn.
 
     Read `references/methodology.md` → "Densification".
 
-    1.  Open explicitly: "The story stands. Now we decide which statements
-        earn their own slide and what we merge."
+    1.  Open explicitly with:
+        <template>
+        The story stands. Now we decide which statements earn their own
+        slide and what we merge.
+        </template>
     2.  Derive one-sentence messages from the storyline (1 message = 1
         sentence).
     3.  Apply the densification question to related messages; propose merges.
@@ -264,12 +291,14 @@ Do this once per conversation, not on every turn.
 
     Read `references/methodology.md` → "Headlines and title-reading test".
 
-    -   Per slide: show the message → propose a headline + rationale.
-        Reject descriptors ("Market analysis") and offer an assertion.
-    -   Run the **"so what?"** gate on each headline.
-    -   Run the **title-reading test** (mandatory): read the headlines only —
-        do they convey the topic, the core message, and what is expected?
-        On failure, name the weakest headline and re-derive from its message.
+    <for items="content slides">show <item/>'s message → propose a headline
+    + rationale; reject descriptors ("Market analysis") and offer an
+    assertion; run the **"so what?"** test on the headline.</for>
+    Then run the **title-reading test** (mandatory): read the headlines
+    only — do they convey the topic, the core message, and what is
+    expected?
+    <if condition="the title-reading test fails">name the weakest headline
+    and re-derive it from its message.</if>
 
     Result: a `message → headline` list + the title-reading-test verdict.
 
@@ -288,29 +317,33 @@ Do this once per conversation, not on every turn.
 
     Read `references/methodology.md` → "Content, layout and storyboard".
 
-    Per slide: content that PROVES the message, then a recommended layout
-    TYPE + why it serves the message; iterate until the user agrees. Pick
-    the type by FIT to the message from the six equal-rank types defined in
-    the methodology section just read — **no type is the default**, least
-    of all bullets.
+    <for items="content slides">
+    <while condition="the user has not agreed this slide's content and layout">
+    propose content that PROVES <item/>'s message, plus a recommended
+    layout TYPE + why it serves the message, via the **Asking the User**
+    procedure. Pick the type by FIT to the message from the six equal-rank
+    types defined in the methodology section just read — **no type is the
+    default**, least of all bullets.
+    </while>
+    </for>
 
-    Present the per-slide plan **grouped by chapter**: emit one
-    <expand name="chapter-plan"/> per chapter, so every chapter is a
-    self-contained Markdown table with its OWN header row — NEVER one
-    table spanning chapters (without a repeated header the rows after the
-    first chapter stop rendering as a table). Pad every column to a
-    uniform width so the pipes line up vertically (clean columns, no
-    ragged shifts). List the structural slides (title, agenda, chapter
-    dividers, closing) in one leading table of the same shape.
+    Present the per-slide plan **grouped by chapter** — every chapter a
+    self-contained Markdown table with its OWN header row, NEVER one table
+    spanning chapters (without a repeated header the rows after the first
+    chapter stop rendering as a table). Pad every column to a uniform
+    width so the pipes line up vertically. List the structural slides
+    (title, agenda, chapter dividers, closing) in one leading table of the
+    same shape.
+    <for items="chapters"><expand name="chapter-plan"/></for>
 
     <define name="chapter-plan">
     <template>
-    ### <chapter-marker/> Chapter <c/> · <chapter-title/>
+    ### Chapter <c/> · <chapter-title/>
 
     | Slide | Title | Content (proves the message) | Layout type |
     |---|---|---|---|
     <for items="chapter-slides">
-    | <n/> | <title/> | <content/> | <layout/> |
+    | <n/> | <title/> | <content/> | <layout-type/> |
     </for>
     </template>
     </define>
@@ -343,7 +376,8 @@ Do this once per conversation, not on every turn.
         self-contained, so the explaining text lives ON the slide (Phase 6),
         not in a notes pane no reader opens.</else>
     2.  **Q and A pre-build:** 5–10 likely questions, each with a one-sentence
-        answer and an optional appendix slide.
+        answer and an optional appendix slide;
+        <qa>the question/answer list</qa>.
     3.  Assemble the final **content plan** as the following output, grouped
         by chapter and naming the resolved layout TYPE per slide from the
         fixed vocabulary (key-message | bullets + image | table | chart |
@@ -353,12 +387,10 @@ Do this once per conversation, not on every turn.
         agreed. Do NOT re-summarize, re-densify or re-word anything already
         approved (densification closed in Phase 4); this phase collects, it
         does not re-derive.
-        <if condition="the deck has no call to action">omit the call-to-action
-        line.</if>
-        <if condition="a teaching / self-study deck">omit the per-slide Speaker
-        notes line.</if>
         Slide numbers <n/> are the continuous 1-based deck positions across
-        ALL slides -- structural and chapter slides alike.
+        ALL slides -- structural and chapter slides alike. The plan's fixed
+        labels stay in ENGLISH (they are `ppt`'s contract); only the
+        VALUES carry the deck language.
 
         <template>
         # Presentation plan: <project/>
@@ -369,7 +401,9 @@ Do this once per conversation, not on every turn.
         - Topic: <topic/>
         - Type / audience / goal / time: <briefing/>
         - Core message: <core-message/>
+        <if condition="the deck has a call to action">
         - Call to action: <cta/>
+        </if>
         - Storyline (SCR): <storyline/>
 
         ## Slides
@@ -388,7 +422,9 @@ Do this once per conversation, not on every turn.
         - Message: <message/>
         - Content: <content/>
         - Layout type: <layout-type/>
+        <if condition="a presented deck (not teaching / self-study)">
         - Speaker notes: <notes/>
+        </if>
         </for>
         </for>
 
@@ -413,32 +449,38 @@ Do this once per conversation, not on every turn.
     title, topic), so NO separate deck sidecar is written -- one file to keep,
     one file to hand on.
 
-    1.  Ask for the intended deck file name (default `<project>.pptx`).
+    1.  Ask, via the **Asking the User** procedure (open-question form), for
+        the intended deck file name -- propose `<project/>.pptx` as the
+        default -- and confirm the deck title in the same ask (propose one
+        derived from the core message).
+        <project>the confirmed project/file base name</project>;
+        <deck>the deck file name, without extension</deck>;
+        <deck-title>the confirmed deck title</deck-title>.
     2.  Write the content plan **exactly as assembled and approved in
-        PHASE 7** to **`<deck>-plan.md`** next to where the deck will live --
+        PHASE 7** to **`<deck/>-plan.md`** next to where the deck will live --
         verbatim, no re-summarizing or re-condensing. This happens on BOTH
         delivery paths.
-    3.  Offer the two delivery paths via the **Asking the User** procedure
-        (this is the phase's gate):
-        -   **Save and finish** — the plan file is the deliverable; stop here.
-        -   **Save and hand off to `ppt`** — also explain the build step.
-    4.  Tell the user how to continue, by platform (the hand-off is file-based,
-        and the two platforms share files differently):
-        -   <if condition="on Claude Code (shared filesystem)">just run the
-            **`ppt` skill** on `<deck>.pptx` -- it finds `<deck>-plan.md` next
-            to it automatically; the deck language is set and the outline gate
-            is satisfied by this plan, so it goes straight to building
-            (template, placeholders, image prompts).</if>
-        -   <else>(on claude.ai, sandboxed) each skill runs in its own
-            ephemeral sandbox that is NOT shared, so `ppt` cannot see this file
-            on disk. **Download `<deck>-plan.md` and attach/upload it** when you
-            run the `ppt` skill (ideally in the same conversation). `ppt` reads
-            its setup straight from the plan -- there is no second file to
-            carry.</else>
+    3.  Tell the user how to continue, by platform (the hand-off is
+        file-based, and hosts share files differently):
+        -   <if condition="the host shares a filesystem between skill runs (e.g. Claude Code)">just
+            run the **`ppt` skill** on `<deck/>.pptx` -- it finds
+            `<deck/>-plan.md` next to it automatically; the deck language is
+            set and the outline gate is satisfied by this plan, so it goes
+            straight to building (template, placeholders, image prompts).</if>
+        -   <else>(sandboxed host, no shared files) `ppt` cannot see this
+            file on disk. **Download `<deck/>-plan.md` and attach/upload it**
+            when you run the `ppt` skill (ideally in the same conversation).
+            `ppt` reads its setup straight from the plan -- there is no
+            second file to carry.</else>
 
-    Quality criteria: the plan is written to `<deck>-plan.md` and its header
-    carries the setup (language, title, topic); NO separate sidecar is
-    produced; the user knows how to hand it to `ppt` on their platform.
+    Quality criteria for the gate: the plan is written to `<deck/>-plan.md`
+    and its header carries the setup (language, title, topic); NO separate
+    sidecar is produced; the user knows how to hand it to `ppt` on their
+    platform. This gate IS the delivery choice -- its options are
+    **Save and finish** (the plan file is the deliverable; stop here) and
+    **Save and hand off to `ppt`** (also explain the build step).
+
+    <gate/>
 
     </step>
 
