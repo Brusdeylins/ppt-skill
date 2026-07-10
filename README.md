@@ -89,8 +89,8 @@ The skill definitions live in
 [`plugin/skills/ppt/SKILL.md`](plugin/skills/ppt/SKILL.md) and
 [`plugin/skills/ppt-prepare/SKILL.md`](plugin/skills/ppt-prepare/SKILL.md);
 both import the shared [`plugin/meta/control.md`](plugin/meta/control.md)
-(control tags, step banners, progress task list, stage gate) -- one file
-for all skills of the plugin.
+(control tags, step banners, progress task list, the Asking-the-User
+dialog, stage gate) -- one file for all skills of the plugin.
 
 ### Use it in the Claude app (desktop / claude.ai)
 

@@ -25,18 +25,18 @@ PPTX decks deterministically via the bundled `pptc` CLI and you author
 color-faithful Nano Banana Pro image prompts for picture placeholders.
 
 The imported `meta/control.md` (shared by all skills of this plugin)
-defines the control tags, the step banners, the **Progress Task List** and
-the **Stage Gate**. This skill fills in its contract as follows:
+defines the control tags, the step banners, the **Progress Task List**,
+the **Asking the User** procedure and the **Stage Gate**. This skill fills in its contract as follows:
 
 **Work phases and markers.** The flow has eight steps, `STEP 1`..`STEP 8`,
 in two work phases; `<step-marker/>` in the step banner is the phase's
 bullet, so the color tells the user at a glance whether you are still
 reading/planning or actively changing the deck:
 
-| Work phase                                                        | Steps    | Marker |
-| ----------------------------------------------------------------- | -------- | ------ |
-| **Analyze** — read state, inspect, set up, plan; no deck mutation | STEP 1–5 | 🔵     |
-| **Write** — mutate the deck (`new`/`apply`) and report            | STEP 6–8 | 🟢     |
+| Work phase                                                          | Steps    | Marker |
+| ------------------------------------------------------------------- | -------- | ------ |
+| **Analyze** — read, inspect, set up, plan; no content is written    | STEP 1–5 | 🔵     |
+| **Write** — put content into the deck (`apply`) and report          | STEP 6–8 | 🟢     |
 
 **Task-list scope.** Use the task list when a run traverses the full flow
 (a new deck, or a major addition that goes through the outline gate); task
@@ -108,7 +108,7 @@ tpl describe <tpl>    # LLM-readable description (uses <tpl>.md sidecar)
 tpl inspect <tpl>     # precise JSON: colors, layouts, placeholders, capacity
 tpl validate <tpl>    # check template against pptc's expectations (exit 7 on fail)
 new <deck> --template <tpl>
-state <deck> [--level summary|text|full]   # slides + rev; full = shape geometry
+state <deck> [--slide SEL] [--level summary|text|full]   # slides + rev; full = shape geometry
                       #   + table cells/colWidths + autoshape styling (round-trip)
 apply <deck> --ops @<ops.json> --rev <rev> [--dry-run] [--strict] [--template <tpl>]
 verify <deck> [--strict]   # PowerPoint repair-trigger check (exit 8 on --strict)
@@ -199,7 +199,7 @@ follow-ups within the same run.
     the deck does, and it now carries everything `ppt` needs to start --
     there is NO separate `ppt-prepare` deck sidecar to look for.
 
-    -   <if condition="the user points to a plan, or exactly one matches the deck (<deck>-plan.md)">
+    -   <if condition="the user points to a plan, or exactly one matches the deck (`<deck/>-plan.md`)">
         adopt it -- its header pre-answers the STEP 3 setup (deck language,
         title, topic) and its body pre-answers the STEP 5 outline.</if>
     -   <elseif condition="several plan files are found (ambiguous)">ask which
@@ -230,7 +230,12 @@ follow-ups within the same run.
     theme) in `assets/`, and an internal build may bundle ADDITIONAL
     templates there (e.g. company templates, not in the public release):
 
-    -   <if condition="the user names a template path">use it.</if>
+    -   <if condition="the deck already exists and the user names no new template">
+        the deck is self-contained: run `tpl inspect` and `tpl describe`
+        on the DECK itself (a `.pptx` is a valid template source) and
+        skip template selection -- no bundled-template question on an
+        edit run.</if>
+    -   <elseif condition="the user names a template path">use it.</elseif>
     -   <elseif condition="the user names a directory (or the project documents a template location, e.g. in CLAUDE.md)">
         run `tpl list` on it.
         <if condition="the scan finds exactly one template">use it silently.</if>
@@ -262,7 +267,7 @@ follow-ups within the same run.
 
     Once the template is chosen, run `tpl validate` on it (layouts present,
     notes master for speaker notes, ...). <if condition="tpl validate reports a fail-grade issue (exit 7)">tell
-    the user and pick another template rather than building on a broken
+    the user and re-run this step's template selection rather than building on a broken
     one.</if> Then run `tpl inspect` (JSON) and `tpl describe` on the template.
     Record:
 
@@ -281,13 +286,16 @@ follow-ups within the same run.
 
 3.  <step id="STEP 3: Deck Setup">
 
-    Resolve four setup values once per deck, then confirm them at a gate
-    and persist them.
+    Resolve the setup values once per deck (deck language, title, topic,
+    image + info-graphic style), then confirm them at a gate and persist
+    them.
     <if condition="STEP 1's state already carries customProps (pptcImageStyle, pptcInfoStyle, pptcDeckLang, pptcTitle, pptcTopic)">
     adopt those -- the deck remembers its own setup.</if>
     <if condition="a ppt-prepare plan was found">its header answers deck
     language, title and topic (image and info-graphic style are never in the
-    plan -- they stay `ppt`'s decision).</if>
+    plan -- they stay `ppt`'s decision). On a conflict with customProps the
+    PLAN wins (the newer intent); update the customProps key on the next
+    write.</if>
     Only resolve what is still missing.
 
     -   **Deck language**: the language of the deck (slide content, notes,
@@ -327,6 +335,13 @@ follow-ups within the same run.
     relevant key whenever a value changes. (Template-specific notes that are
     not deck setup may still go in a `<deck>.md` sidecar.)
 
+    <if condition="ALL setup values were adopted unchanged (customProps and/or plan) and none was newly resolved this run">
+    set <deck-lang>the adopted deck language</deck-lang> and
+    <deck-title>the adopted presentation title</deck-title>, state the
+    adopted setup in one line, and SKIP this step's gate -- nothing new
+    needs confirming (typical for a small edit on a set-up deck).
+    </if>
+    <else>
     **Gate:** present the resolved setup (deck language, title, image
     style, info-graphic style) and confirm it via the **Asking the User**
     procedure before any slide is created. A required value that is still
@@ -339,13 +354,14 @@ follow-ups within the same run.
     <deck-title>the approved presentation title</deck-title>.
 
     <gate/>
+    </else>
 
     </step>
 
 4.  <step id="STEP 4: Route and Scope">
 
-    Using the state and sidecar already read in STEP 1 (and the deck
-    setup from STEP 3, only asking for values the sidecar did not answer):
+    Using the state already read in STEP 1 and the deck setup confirmed
+    in STEP 3:
 
     -   <if condition="the user works on an existing deck">
         Show the structure briefly (chapters/slides) where it helps. Derive
@@ -358,8 +374,11 @@ follow-ups within the same run.
         addition goes through STEP 5 first.
         </if>
     -   <else>
-        (the user starts a new deck) Run `new <deck> --template <tpl>`, then
-        continue with STEP 5.
+        (the user starts a new deck) Run `new <deck> --template <tpl>` --
+        it creates a valid, ZERO-slide deck (no slide exists before the
+        STEP 5 gate). <deck>the deck file path</deck>;
+        <rev>the revision from new's envelope</rev>. Then continue with
+        STEP 5.
         </else>
 
     </step>
@@ -370,7 +389,7 @@ follow-ups within the same run.
 
     -   <if condition="a ppt-prepare plan was found in STEP 1">
         The plan already carries the approved storyline plus, per slide, a
-        message, headline title, content and layout intent. Do NOT
+        message, headline title, content and layout type. Do NOT
         re-derive it -- adopt it as the outline and show it back as the
         checkpoint. The plan's prior approval is what this gate confirms.
         </if>
@@ -395,14 +414,18 @@ follow-ups within the same run.
 6.  <step id="STEP 6: Content">
 
     Read `references/content-rules.md` (skip if already read in STEP 5).
-    Build ONE ops document for the change set, obeying all of its rules:
+    Build ONE ops document for the change set, obeying all of its rules.
+    (Exception: a single-shape, text-only fix may use the quick-edit
+    commands from the Command Reference instead of an ops document --
+    they run the identical validated apply path; the verify duty below
+    still applies.)
 
     -   **Persist the setup into the deck.**
         <if condition="the deck is first built, or a setup value changed since the last `state`">
         include the ONE `meta.props` op with the `custom` map exactly as
         defined in STEP 3, so the deck stays self-describing.</if>
         <else>the values are unchanged -- skip it.</else>
-    -   **Preserve approved wording — do not rewrite the plan.**
+    -   **Preserve approved wording -- do not rewrite the plan.**
         <if condition="a ppt-prepare plan or the user supplies a slide's content (headline, bullets, body)">
         write it to the slide AS GIVEN: do NOT paraphrase, summarize, re-order,
         merge or "improve" it. That wording was already approved in
@@ -414,10 +437,9 @@ follow-ups within the same run.
         do NOT quietly shorten or condense it. Surface the overflow and ask
         via the **Asking the User** procedure (Shorten as proposed / Roomier
         layout / I shorten it myself); apply only the confirmed choice.</if>
-        Any change to approved/user wording is gated on explicit confirmation.
-    -   Texts written within the placeholder capacity from STEP 2 — but for
-        self-authored content only; supplied wording follows the two rules
-        above.
+        Any change to approved/user wording requires explicit confirmation.
+    -   Write self-authored texts within the placeholder capacity from
+        STEP 2; supplied wording follows the two rules above.
     -   **Apply the content rules just read**: action titles (unique, one
         message per slide), 6x6 within the STEP 2 capacities, the notes
         policy (presented: 40-70 words per slide; self-study: none),
@@ -438,7 +460,7 @@ follow-ups within the same run.
     Validate: `apply --ops ... --rev <rev/> --dry-run --strict`.
     <if condition="exit 7 / W_TEXT_OVERFLOW">never rely on auto-shrink. For
     SELF-AUTHORED text, shorten or split the slide, then re-validate. For
-    APPROVED/user-supplied wording, do NOT shorten it silently — run the
+    APPROVED/user-supplied wording, do NOT shorten it silently -- run the
     capacity-overflow ask above (Asking the User) and re-validate only
     after the user confirms.</if>
     <if condition="exit 7 / W_ELEMENT_OVERLAP">reposition the named element
@@ -462,7 +484,7 @@ follow-ups within the same run.
 
     </step>
 
-7.  <step id="STEP 7: Image Prompts">
+7.  <step id="STEP 7: Image Prompts" condition="the change set touches picture placeholders, or the user asked for image prompts -- a scoped edit elsewhere skips this step">
 
     Read `references/prompt-formula.md` and `references/color-roles.md`, and
     re-read `references/style-catalog.md` for the chosen style blocks.
@@ -487,7 +509,7 @@ follow-ups within the same run.
         `el.add` an image at the placeholder frame). This is image INSERTION,
         not generation -- it is allowed (see Non-Goals). Remove any stale
         `PptcPromptBox-<idx>` for that placeholder in the SAME ops document.</if>
-    -   <elseif condition="the placeholder is empty, or its prompt box is still present">
+    -   <elseif condition="the placeholder is empty, or it holds no image and its prompt box is still present">
         (re)write the prompt box.</elseif>
     -   <elseif condition="the user asks for a NEW prompt and the old box is already gone">
         that is the NORMAL post-generation state, not an error. Write a FRESH
@@ -518,9 +540,9 @@ follow-ups within the same run.
         Pick the mode by the placeholder's `coverage` and compose the
         overlay/backdrop clauses exactly per `prompt-formula.md` →
         "Background image vs. negative space". On a true background image
-        ALSO set the overlay placeholder's text colour to contrast the
-        backdrop tone — light (`lt1`) on dark, dark (`dk1`) on light — via
-        the `slide.fill` run colour, so the words stay legible.
+        ALSO set the overlay placeholder's text color to contrast the
+        backdrop tone -- light (`lt1`) on dark, dark (`dk1`) on light -- via
+        the `slide.fill` run color, so the words stay legible.
     2.  Choose the motif per `prompt-formula.md` → "Per-image creative
         step".
         <if condition="the slide message, its conclusion, deck topic and role do NOT determine a concrete, non-generic motif -- or a strong metaphor could plausibly go several clearly different ways">
@@ -537,7 +559,8 @@ follow-ups within the same run.
     </for>
 
     Write all prompts into the deck via ONE `img.prompts` op per slide
-    (prompt text per picture-placeholder idx) and `apply --rev <rev/>`.
+    (prompt text per picture-placeholder idx) and `apply --rev <rev/>`;
+    <rev>the new revision returned by apply</rev>.
     <if condition="a prompt box for that placeholder already exists (`PptcPromptBox-<idx>` among the slide's shapes)">
     `el.rm` it by name in the SAME ops document, BEFORE the `img.prompts`, so
     two boxes never stack on one placeholder.</if>

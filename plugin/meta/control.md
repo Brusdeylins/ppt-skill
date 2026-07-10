@@ -9,8 +9,8 @@ independent of any other plugin or MCP server.
 This file defines only the generic machinery. Where a definition below
 defers to "the skill", the importing SKILL.md supplies the specifics: the
 flow's steps, the work-phase table (which steps carry which marker color),
-which steps carry a `<gate/>`, the gate's option set, and the task-list
-scope.
+which steps carry a `<gate/>`, the gate's option set and quality
+criteria, and the task-list scope.
 
 
 Placeholders
@@ -20,11 +20,16 @@ Placeholders
     Expands to nothing; do not output anything.
 
 -   `<xxx/>` *reads* the placeholder named `xxx` and expands to its
-    current value.
+    current value. A read whose placeholder was never set is *derived*:
+    fill it from the step's own results (never from a guess about the
+    user's intent).
 
-Angle-bracket tokens inside code spans or command lines (`state <deck>`,
-`<name>.md`) are literal CLI/documentation syntax, NOT control tags --
-only tags outside code follow the set/read grammar above.
+BARE angle-bracket tokens (no trailing `/>`) inside code spans or command
+lines (`state <deck>`, `<name>.md`) are literal CLI/documentation syntax,
+NOT control tags. A self-closing `<xxx/>` READ expands everywhere,
+including inside commands and code (`--rev <rev/>`). A multi-word
+descriptive token (`<what this step does, one short clause>`) is a
+fill-in slot for you to write.
 
 
 Objective
@@ -68,11 +73,13 @@ Output Templates
 ----------------
 
 -   `<template>...</template>`:
-    The ONLY mechanism for user-visible output. Output the template
+    Fixed-form user-visible output. Where a template exists, output its
     content *exactly* as given (including newlines), expanding only
-    control constructs and `<xxx/>` placeholders, and removing
-    trailing spaces. Do not output explanations or summaries of your
-    own unless a template requests them.
+    control constructs and `<xxx/>` placeholders, and removing trailing
+    spaces; a construct occupying whole lines consumes its trailing
+    newline. Steps that PROPOSE or draft content (messages, storylines,
+    summaries) present it as normal prose -- but never replace an
+    existing template with prose of your own.
 
 
 Reusable Blocks
@@ -90,9 +97,9 @@ Step Announcement
 -----------------
 
 All user-facing output uses ONE clean style: an icon + **bold** label, `·` as
-the separator, a thin `────────` rule to open a section (user choices are
-framed by a rule above AND below), `›` before a prompt line. No drawn
-boxes, no ASCII art.
+the separator, a thin `────────` rule to open a section (asks for user
+input are framed by a rule above AND below), `›` before a prompt line. No
+drawn boxes, no ASCII art.
 
 The moment a `<step>` begins executing, FIRST emit a one-line banner so
 the user can see exactly where you are, THEN carry out the step:
@@ -106,9 +113,10 @@ phase maps a range of steps to one marker color). The color tells the user
 at a glance which kind of work is active; the step id in the banner names
 the exact step within the phase.
 
-Emit the banner exactly once per step entry; when a step is skipped by an
-`<if>`/route condition, do not emit its banner. The skill's phase markers
-are the only decoration -- do not invent other status glyphs or colors.
+Emit the banner exactly once per step entry; when a step is skipped by
+its `condition`, an `<if>` or a route, do not emit its banner. In the
+step banner the phase marker is the only decoration -- invent no glyphs
+beyond those this file and the skill's own templates define.
 
 
 Progress Task List
@@ -128,8 +136,8 @@ banner and the gate question orient the user on their own:
     step banner); **when the step finishes** -- its `<gate/>` approved, or
     for a gateless step its body done -- set it completed and move the next
     step to in_progress.
-3.  **A step skipped** by an `<if>`/route condition is marked completed
-    with a "skipped" note, so the map stays honest.
+3.  **A step skipped** by its `condition`, an `<if>` or a route is marked
+    completed with a "skipped" note, so the map stays honest.
 4.  **Run scope:** every run that traverses the flow gets the list; where
     the skill's SKILL.md exempts small scoped runs, skip it there -- it
     would be noise.
@@ -200,10 +208,10 @@ Stage Gate
     places it at its decision points. The flow does NOT advance past it
     until the user explicitly approves. Run it like this:
 
-    1.  Emit a **checkpoint** in the clean style: a header line
-        `◆ **Checkpoint · <step-id>**`, a short summary of what the step
-        produced (its key values), then the quality criteria as a list
-        (`✅` met / `⬜` not met).
+    1.  Emit a **checkpoint** in the clean style, opened by the thin
+        section rule: a header line `◆ **Checkpoint · <step-id/>**`, a
+        short summary of what the step produced (its key values), then
+        the quality criteria as a list (`✅` met / `⬜` not met).
     2.  Ask, via the **Asking the User** procedure, offering at least
         **Approve and continue** and a revise option (stay in this step,
         apply the change, and gate again). The skill's SKILL.md fixes the
@@ -215,6 +223,7 @@ Stage Gate
 
     Never advance past a `<gate/>` by assuming or inferring an unanswered
     value -- an unresolved required value is asked at the gate, not
-    guessed. Stay inside the current step until its gate is approved; do
-    not batch two gated steps into one gate. Steps without a `<gate/>`
-    proceed normally.
+    guessed: the gate's ask then asks for that VALUE (instead of Approve);
+    re-gate once it is supplied. Stay inside the current step until its
+    gate is approved; do not batch two gated steps into one gate. Steps
+    without a `<gate/>` proceed normally.
