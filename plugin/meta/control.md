@@ -135,18 +135,18 @@ the step banner or the gate's question -- it sits beside them.
 Asking the User
 ---------------
 
-Whenever a step needs the user to choose -- a `<gate/>`, a template or style
-pick, a disambiguation -- ask with ONE consistent, harness-portable
-procedure. Do NOT call a host-specific selection tool (e.g. Claude Code's
-`AskUserQuestion`); render the choice as plain Markdown so the skill works
-identically in every LLM harness. NEVER end a turn on a half-asked question
-(a bare colon or a trailing "..." with no options):
+EVERY time a step needs input from the user -- a `<gate/>`, a pick, a
+disambiguation, a clarification, a missing value -- the turn ends on ONE
+framed ask block, so the user always SEES that action is required. Do NOT
+call a host-specific selection tool (e.g. Claude Code's `AskUserQuestion`);
+render the ask as plain Markdown so the skill works identically in every
+LLM harness. NEVER end a turn on a half-asked question (a bare colon or a
+trailing "..." with no options), and never bury a question in prose
+outside the frame:
 
-1.  Frame it as a short question plus 2-4 options, each a
-    `Label — one-line description`.
-2.  Render the choice framed by a thin rule above and below (so the
-    decision stands out from the surrounding prose), then END the turn
-    and wait for the reply:
+1.  PREFER a choice: frame the decision as a short question plus 2-4
+    options, each a `Label — one-line description` (you PROPOSE, the user
+    decides), then END the turn and wait for the reply:
 
     <template>
     ────────────────────────────────────────
@@ -159,10 +159,30 @@ identically in every LLM harness. NEVER end a turn on a half-asked question
     ────────────────────────────────────────
     </template>
 
-3.  Map the reply back to an option: a number picks that option; a label
-    (or an unambiguous prefix of one) picks its option; any other free
-    text is an "Other" answer -- act on it.
-4.  <if condition="the user declines or cancels">treat it as Cancel: do not
+2.  Only when options would be artificial (a genuinely open question --
+    a name, a fact only the user knows), use the SAME frame without
+    numbered options, listing at most ~3 short sub-points of what is
+    needed:
+
+    <template>
+    ────────────────────────────────────────
+    ❓ **<the question>**
+
+    - <needed value, one line>
+    - <needed value, one line>
+
+    › _<what kind of answer is expected>_
+    ────────────────────────────────────────
+    </template>
+
+3.  ONE ask block per turn: bundle related sub-questions into it instead
+    of scattering questions through the prose. Everything above the frame
+    is context; everything the user must answer lives inside it.
+4.  Map the reply back: a number picks that option; a label (or an
+    unambiguous prefix of one) picks its option; any other free text is
+    an "Other" answer -- act on it. A partial answer to an open ask is
+    fine: adopt what was given and propose the rest.
+5.  <if condition="the user declines or cancels">treat it as Cancel: do not
     advance; ask what they want instead.</if>
 
 

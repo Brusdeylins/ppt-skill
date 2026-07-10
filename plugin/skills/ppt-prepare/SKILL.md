@@ -142,8 +142,12 @@ Do this once per conversation, not on every turn.
     Read `references/methodology.md` → "Audience and decision analysis".
 
     Adapt the entry to what the user brings:
-    -   <if condition="a vague idea / topic only">one open question: "What is
-        the occasion and who do you need to convince?"</if>
+    -   <if condition="a vague idea / topic only">open with a CHOICE via the
+        **Asking the User** procedure: "What is the occasion and who do you
+        need to convince?", offering 2-4 plausible type + audience
+        combinations FOR THIS topic (e.g. management pitch / teaching /
+        concept review). Then capture the remaining setup values (time,
+        deck language, materials) in ONE bundled follow-up ask.</if>
     -   <elseif condition="a clear assignment but no content">go straight to
         context capture.</elseif>
     -   <elseif condition="raw material / documents are provided">read them,
