@@ -27,8 +27,18 @@ import { DOMParser } from "@xmldom/xmldom"
  *  @returns list of human-readable findings; empty when the deck is clean
  */
 export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
+    /*  without [Content_Types].xml there is no OPC package to check (an
+        interleaved "piece" save stores it fragmented) -- report a single
+        finding instead of crashing the part-based checks below  */
+    if (zip.file("[Content_Types].xml") === null)
+        return ["[Content_Types].xml: part missing (not a flat OPC package)"]
     const findings: string[] = []
-    const names = new Set(Object.keys(zip.files).filter((n) => !n.endsWith("/")))
+    /*  parts under the reserved OPC folder [trash]/ are logically deleted
+        (left by PowerPoint incremental save / OneDrive co-authoring), carry
+        no content type by design and are ignored by PowerPoint -- exclude
+        them from every check (the post-pass drops them from the output)  */
+    const names = new Set(Object.keys(zip.files)
+        .filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")))
     const text = async (part: string): Promise<string> =>
         await (zip.file(part) as JSZip.JSZipObject).async("string")
 

@@ -97,9 +97,10 @@ Step Announcement
 -----------------
 
 All user-facing output uses ONE clean style: an icon + **bold** label, `·` as
-the separator, a thin `────────` rule to open a section (asks for user
-input are framed by a rule above AND below), `›` before a prompt line. No
-drawn boxes, no ASCII art.
+the separator, a thin `────────` rule to open a section (OPEN asks for user
+input are framed by a rule above AND below; choice asks are an
+AskUserQuestion dialog, not text), `›` before a prompt line. No drawn
+boxes, no ASCII art.
 
 The moment a `<step>` begins executing, FIRST emit a one-line banner so
 the user can see exactly where you are, THEN carry out the step:
@@ -130,14 +131,24 @@ web chat), SKIP the task list entirely -- do not fake it as text; the step
 banner and the gate question orient the user on their own:
 
 1.  **At flow start**, create one task per `<step>` of the `<flow>`, in
-    order, each titled with the step's marker and `id`. Create the list
-    once per run; reuse an existing list rather than duplicating.
+    order. A task's subject is the step's marker and `id` followed by the
+    step's work in IMPERATIVE form; where the facility carries an active
+    form (Claude Code: `activeForm`), phrase that in PRESENT CONTINUOUS --
+    e.g. subject "🔵 PHASE 1: Capture the briefing", activeForm
+    "Capturing the briefing". A required description field (Claude Code:
+    `description`) carries what the step produces, in one line. Where the
+    facility supports dependencies (Claude Code: TaskUpdate's
+    `addBlockedBy`), chain each task as blocked by its predecessor, so
+    the list also SHOWS the flow's order. Create the list once per run;
+    reuse an existing list rather than duplicating.
 2.  **On entering a step**, set its task to in_progress (right after the
-    step banner); **when the step finishes** -- its `<gate/>` approved, or
-    for a gateless step its body done -- set it completed and move the next
-    step to in_progress.
-3.  **A step skipped** by its `condition`, an `<if>` or a route is marked
-    completed with a "skipped" note, so the map stays honest.
+    step banner); **the moment the step finishes** -- its `<gate/>`
+    approved, or for a gateless step its body done -- set it completed.
+    Never batch completions across steps, and exactly ONE task -- the
+    current step -- is in_progress at any time while the flow runs.
+3.  **A step skipped** by its `condition`, an `<if>` or a route is set
+    completed with "(skipped)" appended to its subject -- the subject is
+    what the list view shows -- so the map stays honest.
 4.  **Run scope:** every run that traverses the flow gets the list; where
     the skill's SKILL.md exempts small scoped runs, skip it there -- it
     would be noise.
@@ -150,33 +161,29 @@ Asking the User
 ---------------
 
 EVERY time a step needs input from the user -- a `<gate/>`, a pick, a
-disambiguation, a clarification, a missing value -- the turn ends on ONE
-framed ask block, so the user always SEES that action is required. Do NOT
-call a host-specific selection tool (e.g. Claude Code's `AskUserQuestion`);
-render the ask as plain Markdown so the skill works identically in every
-LLM harness. NEVER end a turn on a half-asked question (a bare colon or a
-trailing "..." with no options), and never bury a question in prose
-outside the frame:
+disambiguation, a clarification, a missing value -- the work STOPS at ONE
+explicit ask (a blocking AskUserQuestion dialog, or an open frame ending
+the turn), so the user always SEES that action is required. NEVER leave a
+half-asked question (a bare colon or a trailing "..." with no options),
+and never bury a question in prose:
 
-1.  PREFER a choice: frame the decision as a short question plus 2-4
-    options, each a `Label — one-line description` (you PROPOSE, the user
-    decides), then END the turn and wait for the reply:
-
-    <template>
-    ────────────────────────────────────────
-    ❓ **<the question>**
-
-    1. **<label>** — <description>
-    2. **<label>** — <description>
-
-    › _Reply with a number — or your own answer._
-    ────────────────────────────────────────
-    </template>
-
+1.  PREFER a choice, and present it with the **AskUserQuestion tool** --
+    never as a plain-text question list. Fill the tool's fields like
+    this:
+    -   `question`: the complete decision question, ending in "?".
+    -   `header`: a short chip naming the decision, at most 12
+        characters (e.g. "Template", "Deck lang", "Motif").
+    -   `options`: 2-4 entries, each a `label` of 1-5 words plus a
+        `description` explaining what the choice means or trades off.
+        You PROPOSE, the user DECIDES: put the recommended option FIRST
+        and append "(Recommended)" to its label. Do NOT add an "Other"
+        option -- the UI appends a free-text "Other" automatically.
+    -   `multiSelect`: true only when the choices are not mutually
+        exclusive (e.g. "which sections to include").
 2.  Only when options would be artificial (a genuinely open question --
-    a name, a fact only the user knows), use the SAME frame without
-    numbered options, listing at most ~3 short sub-points of what is
-    needed:
+    a name, a fact only the user knows), ask in plain Markdown with this
+    frame, listing at most ~3 short sub-points of what is needed, then
+    END the turn:
 
     <template>
     ────────────────────────────────────────
@@ -189,14 +196,21 @@ outside the frame:
     ────────────────────────────────────────
     </template>
 
-3.  ONE ask block per turn: bundle related sub-questions into it instead
-    of scattering questions through the prose. Everything above the frame
-    is context; everything the user must answer lives inside it.
-4.  Map the reply back: a number picks that option; a label (or an
-    unambiguous prefix of one) picks its option; any other free text is
-    an "Other" answer -- act on it. A partial answer to an open ask is
-    fine: adopt what was given and propose the rest.
-5.  <if condition="the user declines or cancels">treat it as Cancel: do not
+3.  ONE ask per turn: bundle related sub-questions into ONE
+    AskUserQuestion call (it carries up to 4 questions) or ONE open
+    frame, instead of scattering questions through the prose. Everything
+    before the ask is context; everything the user must decide lives in
+    the ask.
+4.  Act on the reply: a selected option is the decision; free text (the
+    UI's "Other", or any reply to an open frame) is acted on as given. A
+    partial answer to an open ask is fine: adopt what was given and
+    propose the rest.
+5.  <if condition="the host does not provide the AskUserQuestion tool (e.g. a plain chat harness)">
+    render the choice in the open frame above with numbered options
+    (`1. **<label>** — <description>`) and map the reply back: a number
+    or an unambiguous label prefix picks that option; other text is an
+    "Other" answer.</if>
+6.  <if condition="the user declines or cancels">treat it as Cancel: do not
     advance; ask what they want instead.</if>
 
 
@@ -212,11 +226,12 @@ Stage Gate
         section rule: a header line `◆ **Checkpoint · <step-id/>**`, a
         short summary of what the step produced (its key values), then
         the quality criteria as a list (`✅` met / `⬜` not met).
-    2.  Ask, via the **Asking the User** procedure, offering at least
-        **Approve and continue** and a revise option (stay in this step,
-        apply the change, and gate again). The skill's SKILL.md fixes the
-        exact option set and labels, and defines the protocol behind any
-        further option (e.g. a skip).
+    2.  Ask via the **Asking the User** procedure -- i.e. an
+        AskUserQuestion dialog, one option per outcome -- offering at
+        least **Approve and continue** and a revise option (stay in this
+        step, apply the change, and gate again). The skill's SKILL.md
+        fixes the exact option set and labels, and defines the protocol
+        behind any further option (e.g. a skip).
     3.  Act on the choice: on *approve* advance to the next `<step>`; on
         *revise* stay here, apply the change, and gate again; any further
         option follows the protocol the skill defines for it.

@@ -111,7 +111,7 @@ export const executeOps = async (
 
     /*  execute and report the final identities  */
     const outFile = opts.outFile ?? deckFile
-    const session = await runSession(deckFile, outFile, plan, opts.templatePath)
+    const session = await runSession(deckFile, outFile, plan, archive, opts.templatePath)
     const finalState = await readDeckState(await DeckArchive.open(outFile))
     const slides: Record<string, { id: number, index: number }> = {}
     for (const [ref, index] of Object.entries(session.refIndexes)) {

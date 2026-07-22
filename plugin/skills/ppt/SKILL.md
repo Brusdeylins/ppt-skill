@@ -12,7 +12,7 @@ description: >
   into the PPTX.
 user-invocable: true
 disable-model-invocation: false
-model: opus
+argument-hint: "[deck.pptx] [change request]"
 effort: high
 ---
 
@@ -39,9 +39,10 @@ reading/planning or actively changing the deck:
 | **Write** — put content into the deck (`apply`) and report          | STEP 6–8 | 🟢     |
 
 **Task-list scope.** Use the task list when a run traverses the full flow
-(a new deck, or a major addition that goes through the outline gate); task
-titles look like "🔵 STEP 1: Current State". For a single small scoped
-edit that touches only a step or two, skip it -- it would be noise.
+(a new deck, or a major addition that goes through the outline gate); a
+task looks like subject "🔵 STEP 1: Read the current state", activeForm
+"Reading the current state". For a single small scoped edit that touches
+only a step or two, skip it -- it would be noise.
 
 **Gates.** The gates are STEP 3 (deck setup) and STEP 5 (outline); besides
 **Approve and continue** offer **Revise** (adjust a value / revise and
@@ -216,8 +217,10 @@ follow-ups within the same run.
         Story-first is the better path. Before building anything, OFFER (via
         the **Asking the User** procedure) to plan the content first with the
         **`ppt-prepare`** skill (recommended) vs. build directly from a quick
-        outline here. If they pick ppt-prepare, tell them to run it and stop;
-        build directly only when they choose to.</elseif>
+        outline here. If they pick ppt-prepare, invoke it directly with the
+        **Skill tool** (skill `ppt-prepare`) and stop this run -- or, on a
+        host that cannot chain skills, tell them to run it and stop; build
+        directly only when they choose to.</elseif>
     -   <else>proceed without a plan; you derive the outline yourself in
         STEP 5.</else>
 
@@ -257,7 +260,10 @@ follow-ups within the same run.
         <else>ask which bundled template to use via the **Asking the User**
         procedure -- one option per template, described by its sidecar's
         purpose where a `<name>.md` exists; the user can still point to an
-        external file instead.</else>
+        external file instead. (A choice dialog carries at most 4 options:
+        with more templates, list them ALL in the prose above the ask,
+        offer the 4 most plausible, and any other arrives as the dialog's
+        "Other".)</else>
         </else>
 
     A sidecar Markdown next to the template (`<name>.md` beside
@@ -320,10 +326,10 @@ follow-ups within the same run.
         <if condition="the image style or the info-graphic style is still unset">
         Show the COMPLETE list from `style-catalog.md` -- EVERY style with its
         one-line "Best for" note (never a curated few) -- then ask for the pick
-        via the **Asking the User** procedure (offer a few representative
-        styles plus "Other -- type a style name"). The "Best for" notes guide
-        the USER's choice; they are NOT an auto-pick default. WAIT for the
-        choice.
+        via the **Asking the User** procedure (offer 3-4 representative styles
+        as options; the dialog's automatic "Other" lets the user type any
+        style name from the list). The "Best for" notes guide the USER's
+        choice; they are NOT an auto-pick default. WAIT for the choice.
         </if>
         Keep both chosen blocks verbatim in every prompt.
 
@@ -549,7 +555,8 @@ follow-ups within the same run.
         step".
         <if condition="the slide message, its conclusion, deck topic and role do NOT determine a concrete, non-generic motif -- or a strong metaphor could plausibly go several clearly different ways">
         ASK ONE short, targeted question via the **Asking the User**
-        procedure (2-3 motif directions as options, free text welcome)
+        procedure (2-3 motif directions as options; a custom direction
+        arrives as the dialog's "Other")
         BEFORE composing -- a wrong motif costs a whole image-generation
         cycle; NEVER fall back to a generic filler motif.</if>
     3.  Compose the prompt per the formula: the chosen style block

@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.0.7 (plugin 1.0.7)
+
+- **Fix: decks from OneDrive/SharePoint sync or PowerPoint co-authoring no
+  longer fail every apply with E_INTEGRITY.** Such decks carry logically
+  deleted parts under the reserved OPC folder `[trash]/` (e.g.
+  `[trash]/0001.dat`) that have neither relationship nor content type by
+  design; the every-part-needs-a-content-type self-check flagged them as
+  "no content type". The verifier now excludes `[trash]/**` from all
+  checks, and the post-pass drops these parts from the output entirely --
+  OPC-conform, since PowerPoint ignores them too and re-registering a
+  `.dat` default would have resurrected deleted content instead.
+- **Fix: slide tags (think-cell chart links and other add-in metadata)
+  survive an apply.** pptx-automizer hardcodes `p:custDataLst` and the
+  `/tags` relationship as "unsupported" and strips both from every
+  re-imported slide -- and since pptc rebuilds all slides per apply, one
+  apply silently unlinked think-cell charts deck-wide. The session now
+  snapshots each source slide's `p:custDataLst` references before the
+  automizer pass and the post-pass re-attaches them with freshly minted
+  relationship ids; references whose tags part vanished are dropped.
+  `slide.copy` of a tagged slide clones the tags part per copy (PowerPoint
+  mints an independent part per duplicate; a shared part would alias both
+  slides onto one think-cell instance). Presentation-level `custDataLst`
+  (think-cell workbook data) survives untouched -- now guarded by a test.
+- **Fix: `pptc verify` on a non-flat OPC package (interleaved "piece"
+  save, no `[Content_Types].xml`) reports a clean finding instead of
+  crashing with a TypeError.**
+- **Skills: user choices go through Claude Code's `AskUserQuestion` tool
+  again** (reversing the 1.0.6 "harness-portable Markdown dialogs"
+  decision -- the skills serve as Claude Code training examples, and an
+  explicit tool name is what reliably keeps the model off plain-text
+  questions). `control.md`'s Asking-the-User procedure now specifies the
+  tool's fields (question ending in "?", header <= 12 chars, 2-4 options
+  with label 1-5 words + trade-off description, recommended first with
+  "(Recommended)", no manual "Other" -- the UI appends it, multiSelect
+  only for non-exclusive choices, up to 4 bundled questions per call).
+  Genuinely open questions keep the framed Markdown ask; hosts without
+  the tool fall back to the numbered-options frame.
+- **Skills: more native Claude Code surface.** `argument-hint` in both
+  frontmatters (slash-command autocomplete); the task list chains steps
+  via TaskUpdate `addBlockedBy` so the flow's order SHOWS in the UI;
+  skill chaining via the Skill tool (ppt-prepare PHASE 8 hands off to
+  `ppt` directly, ppt STEP 1 launches `ppt-prepare` directly);
+  ppt-prepare's research rule names WebSearch/WebFetch explicitly; the
+  bundled-template ask documents the 4-option dialog cap.
+- **Skills: the Progress Task List teaches the task-tool conventions
+  explicitly** (`plugin/meta/control.md` + both skill contracts): task
+  subject in imperative form, activeForm in present continuous (e.g.
+  "🔵 PHASE 1: Capture the briefing" / "Capturing the briefing"),
+  completions never batched, and exactly ONE task -- the current step --
+  in_progress at any time (replacing the ambiguous "move the next step
+  to in_progress" clause).
+
 ## 1.0.6 (plugin 1.0.6)
 
 Documentation/skill release -- the pptc engine is unchanged.

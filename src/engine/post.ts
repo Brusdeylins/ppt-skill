@@ -25,6 +25,17 @@ import { HLINK_ATTR } from "./text.js"
 import { partText, cleanContentTypes } from "./parts.js"
 import { NS_A, NS_P, NS_R, NS_REL, elements, firstElement, parseXml, serializeXml } from "./xml.js"
 
+/**  one captured p:custDataLst child: the element kind plus the slide
+     relationship it referenced in the source deck  */
+export interface SlideTagRef {
+    /**  element kind: "p:custData" or "p:tags"  */
+    kind: string
+    /**  relationship type of the source rel  */
+    relType: string
+    /**  relationship target, relative to ppt/slides/  */
+    target: string
+}
+
 /**  per-output-slide work items, in final slide order  */
 export interface PostSlideWork {
     /**  speaker notes text to set, null = leave untouched  */
@@ -39,12 +50,17 @@ export interface PostSlideWork {
     hidden: boolean
     /**  images to insert into picture placeholders  */
     images: { phIdx: number, path: string, frame?: Frame }[]
+    /**  slide-tags references (p:custDataLst) captured from the source
+         slide, to restore after the automizer rebuild; empty = none  */
+    slideTags: SlideTagRef[]
 }
 
 /**  mutable archive context shared by the post steps  */
 interface Post {
     zip: JSZip
     rid: number
+    /**  tags parts already wired to an output slide in this pass  */
+    tagsSeen: Set<string>
 }
 
 /**  slide part paths referenced from the presentation, in sldIdLst order  */
@@ -511,6 +527,62 @@ const dedupeSharedNotes = async (zip: JSZip, slides: string[]): Promise<void> =>
     }
 }
 
+/**  restore the slide-tags references (p:custDataLst) captured from the
+     source slide. pptx-automizer strips the element and its /tags
+     relationships as "unsupported" on every re-import, which would silently
+     unlink think-cell charts (and other add-in metadata) deck-wide on every
+     apply. The list is rebuilt after p:spTree (its CT_CommonSlideData slot)
+     with freshly minted relationship ids; references whose target part
+     vanished from the package are dropped, so no dead rel can trip the
+     self-verify. The tags part keeps its content-type coverage: automizer
+     copies [Content_Types].xml from the root template, so the original
+     override survives, and a clone carries the original's override along.  */
+const restoreSlideTags = async (post: Post, slide: Document, slideRels: Document, refs: SlideTagRef[]): Promise<void> => {
+    const cSld = firstElement(slide, "p:cSld")
+    const spTree = firstElement(slide, "p:spTree")
+    if (cSld === null || spTree === null)
+        return
+    const old = firstElement(slide, "p:custDataLst")
+    if (old !== null)
+        old.parentNode?.removeChild(old)
+    const lst = slide.createElementNS(NS_P, "p:custDataLst")
+    for (const ref of refs) {
+        let target = ref.target
+        let part = path.posix.normalize(path.posix.join("ppt/slides", target))
+        if (post.zip.file(part) === null)
+            continue
+        /*  a source slide copied within one apply (slide.copy) would leave
+            both output slides referencing ONE tags part -- PowerPoint mints
+            an independent part per duplicated slide (think-cell tags are
+            per-instance), so every re-use gets a private clone: the tags
+            sibling of dedupeSharedNotes  */
+        if (post.tagsSeen.has(part)) {
+            const ext = path.posix.extname(part)
+            const stem = part.slice(0, part.length - ext.length)
+            let n = 2
+            let clone = `${stem}-pptc-${n}${ext}`
+            while (post.zip.file(clone) !== null)
+                clone = `${stem}-pptc-${++n}${ext}`
+            post.zip.file(clone, await (post.zip.file(part) as JSZip.JSZipObject).async("uint8array"))
+            const ct = await partText(post.zip, "[Content_Types].xml")
+            const override = new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(ct)
+            if (override !== null)
+                post.zip.file("[Content_Types].xml",
+                    ct.replace("</Types>", `${override[0].replace(part, clone)}</Types>`))
+            target = path.posix.join(path.posix.dirname(target), path.posix.basename(clone))
+            part = clone
+        }
+        post.tagsSeen.add(part)
+        const rid = nextRid(post)
+        addRel(slideRels, rid, ref.relType, target)
+        const el = slide.createElementNS(NS_P, ref.kind)
+        el.setAttributeNS(NS_R, "r:id", rid)
+        lst.appendChild(el)
+    }
+    if (lst.childNodes.length > 0)
+        cSld.insertBefore(lst, spTree.nextSibling)
+}
+
 /**  read a slide's title text (title/ctrTitle placeholder), "" if none  */
 const slideTitle = (slide: Document): string => {
     for (const sp of elements(slide, "p:sp")) {
@@ -668,6 +740,16 @@ export const postProcess = async (
     customProps: Record<string, string> | null = null
 ): Promise<Buffer> => {
     const zip = await JSZip.loadAsync(bytes)
+    /*  drop parts under the reserved OPC folder [trash]/ FIRST -- before the
+        rid scan below reads stale deleted content. PowerPoint's incremental
+        save and OneDrive/SharePoint co-authoring park logically deleted parts
+        there, without relationship or content type. Carrying them into the
+        output would resurrect deleted content and trip the every-part-needs-
+        a-content-type self-check (engine/verify.ts ignores the folder for
+        the same reason). PowerPoint ignores these parts too.  */
+    for (const f of Object.keys(zip.files))
+        if (f.startsWith("[trash]/"))
+            zip.remove(f)
     /*  the rid counter must clear every rIdPptc left by EARLIER applies,
         or re-wiring (e.g. refilled hyperlinks) collides with old ids  */
     let maxRid = 9000
@@ -676,7 +758,7 @@ export const postProcess = async (
         for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
             maxRid = Math.max(maxRid, Number(m[1]))
     }
-    const post: Post = { zip, rid: maxRid + 1 }
+    const post: Post = { zip, rid: maxRid + 1, tagsSeen: new Set() }
     const slides = await referencedSlides(zip)
     await gcParts(zip, slides)
 
@@ -710,6 +792,8 @@ export const postProcess = async (
                 await setNotes(post, slidePart, slideRels, job.notes)
             wireHyperlinks(post, slide, slideRels)
             setSlideVisibility(slide, job.hidden)
+            if (job.slideTags.length > 0)
+                await restoreSlideTags(post, slide, slideRels, job.slideTags)
         }
         const idsChanged = uniquifyShapeIds(slide)
         const relsChanged = pruneUnusedSlideRels(slide, slideRels)

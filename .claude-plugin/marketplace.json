@@ -6,14 +6,14 @@
     },
     "metadata": {
         "description": "PowerPoint tooling: pptc CLI and the template-aware ppt skill",
-        "version": "1.0.6"
+        "version": "1.0.7"
     },
     "plugins": [
         {
             "name": "ppt",
             "source": "./plugin",
             "description": "Template-aware PowerPoint skill: builds and edits PPTX decks via the bundled pptc CLI and writes color-faithful image prompts into picture placeholders",
-            "version": "1.0.6",
+            "version": "1.0.7",
             "author": {
                 "name": "Matthias Brusdeylins",
                 "email": "brusdeylins@gmx.de"

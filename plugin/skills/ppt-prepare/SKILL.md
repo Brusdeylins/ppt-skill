@@ -12,7 +12,7 @@ description: >
   changing an EXISTING deck's slides/text/images/charts -- that is `ppt`.
 user-invocable: true
 disable-model-invocation: false
-model: opus
+argument-hint: "[topic or rough brief]"
 effort: high
 ---
 
@@ -41,8 +41,9 @@ still being shaped or the slides are being planned:
 | **Slides** — messages, titles, content and layout, notes, handoff | PHASE 4–8 | 🟢     |
 
 **Task-list scope.** Every run traverses the full flow: create the task
-list at flow start, before entering PHASE 1; task titles look like
-"🔵 PHASE 1: Briefing". Never skip it where the host has a task list.
+list at flow start, before entering PHASE 1; a task looks like subject
+"🔵 PHASE 1: Capture the briefing", activeForm "Capturing the briefing".
+Never skip it where the host has a task list.
 
 **Gates.** EVERY phase ends with its `<gate/>` (in PHASE 8 the gate is the
 delivery choice). Besides **Approve and continue** and **Revise**, offer
@@ -69,9 +70,9 @@ Ground Rules
   DECIDES. Never decide content silently.
 - **Never guess content -- research, then ask.** When a fact or content gap
   is unclear, do not invent it. Where web research would help, research it
-  first, then ask the user to close the gap via the **Asking the User**
-  procedure, offering the researched findings as the options. A silent guess
-  is never allowed.
+  first (Claude Code: the **WebSearch** / **WebFetch** tools), then ask the
+  user to close the gap via the **Asking the User** procedure, offering the
+  researched findings as the options. A silent guess is never allowed.
 - **One phase at a time:** stay inside a phase until its `<gate/>` is
   approved (see `meta/control.md`). At most ~3 clarifying questions per
   phase before you make a proposal; never interrogate.
@@ -385,10 +386,13 @@ follow-ups within the same run.
         answer and an optional appendix slide;
         <qa>the question/answer list</qa>.
     3.  Confirm the deck naming BEFORE assembly, via the **Asking the
-        User** procedure (open-question form): propose a file base name
-        derived from <topic/> and a deck title derived from
-        <core-message/>. <deck>the confirmed deck file name, without
-        extension</deck>; <deck-title>the confirmed deck title</deck-title>.
+        User** procedure: ONE ask with two questions -- the file base
+        name (derived from <topic/>) and the deck title (derived from
+        <core-message/>) -- each offering the derived proposal as the
+        recommended option plus one alternative variant; a custom name
+        arrives as the dialog's "Other". <deck>the confirmed deck file
+        name, without extension</deck>; <deck-title>the confirmed deck
+        title</deck-title>.
     4.  Assemble the final **content plan** as the following output, grouped
         by chapter and naming the resolved layout TYPE per slide from the
         fixed vocabulary (key-message | bullets + image | table | chart |
@@ -464,13 +468,15 @@ follow-ups within the same run.
         PHASE 7** to **`<deck/>-plan.md`** next to where the deck will live
         -- verbatim, no re-summarizing or re-condensing. This happens
         regardless of the delivery choice at the gate below.
-    2.  Tell the user how to continue, by platform (the hand-off is
-        file-based, and hosts share files differently):
-        -   <if condition="the host shares a filesystem between skill runs (e.g. Claude Code)">just
-            run the **`ppt` skill** on `<deck/>.pptx` -- it finds
-            `<deck/>-plan.md` next to it automatically; the deck language is
-            set and the outline gate is satisfied by this plan, so it goes
-            straight to building (template, placeholders, image prompts).</if>
+    2.  Continue by platform (the hand-off is file-based, and hosts share
+        files differently):
+        -   <if condition="the host shares a filesystem between skill runs and can chain skills (e.g. Claude Code)">on
+            the gate's **Hand off to `ppt`** choice, invoke the **`ppt`
+            skill** directly with the **Skill tool** (skill `ppt`, args
+            `<deck/>.pptx`) -- it finds `<deck/>-plan.md` next to it
+            automatically; the deck language is set and the outline gate
+            is satisfied by this plan, so it goes straight to building
+            (template, placeholders, image prompts).</if>
         -   <else>(sandboxed host, no shared files) `ppt` cannot see this
             file on disk. **Download `<deck/>-plan.md` and attach/upload it**
             when you run the `ppt` skill (ideally in the same conversation).

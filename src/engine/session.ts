@@ -18,7 +18,9 @@ import { PptcError, toPptcError } from "../infra/errors.js"
 import type { MutationPlan, SlidePlanEntry } from "../core/ops/registry.js"
 import { atomicWrite, cacheDir } from "../infra/fs.js"
 import { addElement, type GenRoot, type GenSlide } from "./elements.js"
-import { postProcess, type PostSlideWork } from "./post.js"
+import { postProcess, type PostSlideWork, type SlideTagRef } from "./post.js"
+import type { DeckArchive } from "./reader.js"
+import { elements, firstElement, parseXml } from "./xml.js"
 import { verifyBytes } from "./verify.js"
 import { ensureSeed, ensureSeedFromDeck } from "./seed.js"
 import { setShapeText } from "./text.js"
@@ -95,15 +97,58 @@ const slideCallback = (entry: SlidePlanEntry) =>
                 planned.name ?? undefined)
     }
 
+/**  capture the slide-tags references (p:custDataLst: think-cell and other
+     add-in metadata) of every re-imported source slide, in plan order.
+     pptx-automizer strips the element and its /tags relationships as
+     "unsupported" on every rebuild, which would silently unlink think-cell
+     charts deck-wide -- the post-pass restores them from this snapshot.
+     Reads go through the caller's open archive (no re-load of the deck; the
+     rels DOMs are already cached from readDeckState). Children are captured
+     in schema order (custData*, then a single tags -- its maxOccurs is 1).  */
+const captureSlideTags = async (archive: DeckArchive, plan: MutationPlan): Promise<SlideTagRef[][]> => {
+    const out: SlideTagRef[][] = []
+    for (const entry of plan.entries) {
+        const refs: SlideTagRef[] = []
+        out.push(refs)
+        if (entry.source.kind !== "self")
+            continue
+        const part = entry.source.part
+        const slideText = await archive.text(part)
+        if (slideText === null || !slideText.includes("<p:custDataLst"))
+            continue
+        const lst = firstElement(parseXml(slideText), "p:custDataLst")
+        if (lst === null)
+            continue
+        const relsDoc = await archive.xml(`ppt/slides/_rels/${path.posix.basename(part)}.rels`)
+        const rels = new Map(elements(relsDoc, "Relationship")
+            .map((r) => [r.getAttribute("Id") ?? "", r]))
+        const tagsEl = firstElement(lst, "p:tags")
+        const children = [...elements(lst, "p:custData"), ...(tagsEl === null ? [] : [tagsEl])]
+        for (const el of children) {
+            const rel = rels.get(el.getAttribute("r:id") ?? "")
+            if (rel !== undefined)
+                refs.push({
+                    kind: el.nodeName,
+                    relType: rel.getAttribute("Type") ?? "",
+                    target: rel.getAttribute("Target") ?? ""
+                })
+        }
+    }
+    return out
+}
+
 /**  the two engine passes: automizer rebuild plus zip-level post work  */
 const executePlan = async (
     deckFile: string,
     outFile: string,
     plan: MutationPlan,
+    archive: DeckArchive,
     seedPath: string | null,
     tmpName: string,
     tmpFile: string
 ): Promise<SessionResult> => {
+    /*  snapshot the slide tags BEFORE the automizer pass strips them  */
+    const slideTags = await captureSlideTags(archive, plan)
     const automizer = new Automizer({
         templateDir: "",
         outputDir: cacheDir(),
@@ -123,11 +168,12 @@ const executePlan = async (
     }
     await pres.write(tmpName)
 
-    const work: PostSlideWork[] = plan.entries.map((entry) => ({
+    const work: PostSlideWork[] = plan.entries.map((entry, i) => ({
         notes: entry.notes,
         footer: entry.footer,
         background: entry.background,
         hidden: entry.hidden,
+        slideTags: slideTags[i] as SlideTagRef[],
         images: entry.fills
             .filter((f) => f.image !== undefined)
             .map((f) => ({
@@ -160,6 +206,7 @@ const executePlan = async (
  *  @param deckFile - the deck to read from (root of the rebuild)
  *  @param outFile - the file to write atomically (may equal deckFile)
  *  @param plan - the finished mutation plan
+ *  @param archive - the caller's open archive of deckFile (read-only reuse)
  *  @param templatePath - template for seed slides, null when none needed
  *  @returns session facts for the result envelope
  *  @throws PptcError E_TEMPLATE when seed slides are planned without a
@@ -169,6 +216,7 @@ export const runSession = async (
     deckFile: string,
     outFile: string,
     plan: MutationPlan,
+    archive: DeckArchive,
     templatePath: string | null
 ): Promise<SessionResult> => {
     /*  new slides import from a seed = one slide per layout. When the caller
@@ -186,7 +234,7 @@ export const runSession = async (
     const tmpFile = path.join(cacheDir(), tmpName)
     try {
         return await withStdoutShield(() =>
-            executePlan(deckFile, outFile, plan, seedPath, tmpName, tmpFile))
+            executePlan(deckFile, outFile, plan, archive, seedPath, tmpName, tmpFile))
     }
     catch (err) {
         throw toPptcError(err)

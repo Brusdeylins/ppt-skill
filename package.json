@@ -1,6 +1,6 @@
 {
   "name": "@brusdeylins/pptc",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Deterministic PowerPoint (PPTX) CLI for LLM agents: template-aware creation and editing with atomic, schema-validated operations",
   "keywords": [
     "pptx",
