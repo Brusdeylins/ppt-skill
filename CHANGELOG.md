@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.8
+
+- **Skill ZIP for marketplace owners is back, as ONE plugin-layout ZIP.**
+  `npm run skill:zip` builds `deploy/ppt-skills-<version>.zip` with
+  `skills/ppt`, `skills/ppt-prepare` and `meta/control.md`, so the skills'
+  relative `../../meta/control.md` import works unchanged after the owner
+  copies the folders into the company plugin. Template overlays stay in
+  the downstream company repo. The same command also writes
+  `deploy/ppt.zip` and `deploy/ppt-prepare.zip` (skill folder at the ZIP
+  root) for upload into the Claude app; there `meta/control.md` is inlined
+  into SKILL.md in place of the `@` import line.
+- **`sync-versions` no longer touches plugin manifests.** The plugin
+  version (`plugin.json`) belongs to the marketplace owner, since the
+  plugin bundles more than these skills; the script now only writes the
+  two skill `VERSION` sidecars.
+- **Skills: hosts without task tools (claude.ai app) get a one-time
+  roadmap at flow start** -- one line per step with its phase marker, so
+  the user sees how many phases lie ahead. Static by design: printed
+  once, never re-printed or ticked off (the no-fake-live-list rule
+  stands); step banners and gates carry the orientation from there.
+
 ## 1.0.7 (plugin 1.0.7)
 
 - **Fix: decks from OneDrive/SharePoint sync or PowerPoint co-authoring no

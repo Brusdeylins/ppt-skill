@@ -52,7 +52,8 @@ pattern.
 Company templates are never part of the public release: an in-house
 distribution lives in a downstream company repo that vendors this plugin
 and **replaces** the neutral default with the corporate templates in the
-skill's `assets/`.
+skill's `assets/`. `npm run skill:zip` packages the skills (with
+`meta/control.md`) as one ZIP in this plugin layout for such a repo.
 
 ## Layout
 

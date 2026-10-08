@@ -123,12 +123,23 @@ beyond those this file and the skill's own templates define.
 Progress Task List
 ------------------
 
-So the user always sees where they are in the flow, maintain a visible
-task list of the steps via the host's task-list facility WHEN THE HOST
-PROVIDES ONE (in Claude Code: the Task tools -- TaskCreate / TaskUpdate /
-TaskList). Where the host has no task-list facility (e.g. the claude.ai
-web chat), SKIP the task list entirely -- do not fake it as text; the step
-banner and the gate question orient the user on their own:
+So the user always sees where they are in the flow -- and how many steps
+lie ahead -- maintain a visible task list of the steps via the host's
+task-list facility WHEN THE HOST PROVIDES ONE (in Claude Code: the Task
+tools -- TaskCreate / TaskUpdate / TaskList). Where the host has no
+task-list facility (e.g. the claude.ai app), do NOT fake a live list in
+text; instead emit a one-time ROADMAP right at flow start, so the user
+still sees the whole route ahead:
+
+    🗺 **<the skill's name>** · <step count> steps
+    <step-marker/> <step-id/>
+    <step-marker/> <step-id/>
+    ...
+
+Print the roadmap exactly once, never re-print it and never tick it off
+-- from there the step banner and the gate question orient the user. The
+roadmap follows the same run scope as the tool-backed list (rule 4). The
+numbered rules below apply to the tool-backed list:
 
 1.  **At flow start**, create one task per `<step>` of the `<flow>`, in
     order. A task's subject is the step's marker and `id` followed by the
