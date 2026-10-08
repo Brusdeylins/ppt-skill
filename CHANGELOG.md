@@ -9,6 +9,9 @@
   exists (or `--from <dir>`), `ppt-msg.zip` and `ppt-skills-msg-<version>.zip`
   carry the msg templates instead of the neutral one. `deploy/` is
   gitignored; the GitHub release always ships the neutral template only.
+  The msg variant also stamps a `metadata:` block (owners from
+  `private-templates/skill-metadata.json`, plus the skill version) into
+  each SKILL.md front matter, as the company marketplace requires.
 - **Security: runtime dependencies updated.** `pptx-automizer` 0.8.1 ->
   0.9.4 (drops the vulnerable `extract-zip`), `@xmldom/xmldom` 0.9.10 ->
   0.9.12 (XML injection / ReDoS fixes); `npm audit fix` also clears the

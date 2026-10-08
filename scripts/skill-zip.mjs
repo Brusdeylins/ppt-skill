@@ -21,6 +21,11 @@
 **  default in the ppt skill's assets/ (neutral-template.pptx and its sidecar are dropped).
 **  They are never part of the git tree or a GitHub release, which always
 **  carries the neutral template only.
+**
+**  The msg variant also stamps a `metadata:` block (the keys of
+**  <templates>/skill-metadata.json, e.g. business-owner and technical-owner,
+**  plus `version`) into each SKILL.md front matter, as the company
+**  marketplace requires; the public variant stays without it.
 */
 
 import { readdirSync, statSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs"
@@ -55,8 +60,17 @@ const walk = (dir) => {
 const importLine = /^@\$\{CLAUDE_SKILL_DIR\}\/\.\.\/\.\.\/meta\/control\.md[ \t]*$/m
 const control = readFileSync(path.join(pluginDir, "meta", "control.md"), "utf8").trim()
 
+/*  add a `metadata:` block to the SKILL.md front matter  */
+const stampMetadata = (name, text, meta) => {
+    const m = /^---\r?\n[\s\S]*?\r?\n(?=---\r?\n)/.exec(text)
+    if (!m || /^metadata:/m.test(m[0]))
+        throw new Error(`${name}/SKILL.md: no front matter, or metadata already present`)
+    const lines = Object.entries({ ...meta, version: version }).map(([ k, v ]) => `  ${k}: ${k === "version" ? JSON.stringify(v) : v}\n`)
+    return text.slice(0, m[0].length) + "metadata:\n" + lines.join("") + text.slice(m[0].length)
+}
+
 /*  files of one skill as [ relative path, data ]; msg templates replace the neutral default  */
-const skillFiles = (name, msgFiles, inlineControl) => {
+const skillFiles = (name, msgFiles, inlineControl, meta) => {
     const skillPath = path.join(skillsDir, name)
     const hasAssets = existsSync(path.join(skillPath, "assets"))
     const out = []
@@ -65,11 +79,16 @@ const skillFiles = (name, msgFiles, inlineControl) => {
         if (msgFiles.length > 0 && hasAssets && /^neutral-template\.(pptx|md)$/.test(path.basename(file)))
             continue
         let data = readFileSync(file)
-        if (inlineControl && rel === "SKILL.md") {
-            const text = data.toString("utf8")
-            if (!importLine.test(text))
-                throw new Error(`${name}/SKILL.md: control.md import line not found`)
-            data = Buffer.from(text.replace(importLine, () => control))
+        if (rel === "SKILL.md") {
+            let text = data.toString("utf8")
+            if (inlineControl) {
+                if (!importLine.test(text))
+                    throw new Error(`${name}/SKILL.md: control.md import line not found`)
+                text = text.replace(importLine, () => control)
+            }
+            if (meta)
+                text = stampMetadata(name, text, meta)
+            data = Buffer.from(text)
         }
         out.push([ rel, data ])
     }
@@ -89,23 +108,25 @@ mkdirSync(outDir, { recursive: true })
 const names = readdirSync(skillsDir).filter((n) => statSync(path.join(skillsDir, n)).isDirectory())
 
 /*  variant "" = neutral template (public), "msg" = msg templates  */
-const variants = [ { tag: "", msgFiles: [] } ]
+const variants = [ { tag: "", msgFiles: [], meta: null } ]
 if (existsSync(templatesSrc)) {
     const msgFiles = walk(templatesSrc).filter((f) => /\.(potx|pptx|md)$/i.test(f))
     if (!msgFiles.some((f) => /\.(potx|pptx)$/i.test(f)))
         throw new Error(`no .potx/.pptx templates in ${templatesSrc}`)
-    variants.push({ tag: "msg", msgFiles })
+    const metaFile = path.join(templatesSrc, "skill-metadata.json")
+    const meta = existsSync(metaFile) ? JSON.parse(readFileSync(metaFile, "utf8")) : null
+    variants.push({ tag: "msg", msgFiles, meta })
 }
 else if (fromDir)
     throw new Error(`template source not found: ${templatesSrc}`)
 
-for (const { tag, msgFiles } of variants) {
+for (const { tag, msgFiles, meta } of variants) {
     const note = msgFiles.length > 0 ? `, ${msgFiles.length} msg template file(s)` : ""
 
     /*  marketplace owner: plugin layout  */
     const plugin = new JSZip()
     for (const name of names)
-        for (const [ rel, data ] of skillFiles(name, msgFiles, false))
+        for (const [ rel, data ] of skillFiles(name, msgFiles, false, meta))
             plugin.file(`skills/${name}/${rel}`, data)
     plugin.file("meta/control.md", readFileSync(path.join(pluginDir, "meta", "control.md")))
     await write(plugin, `ppt-skills${tag ? `-${tag}` : ""}-${version}.zip`, note)
@@ -113,7 +134,7 @@ for (const { tag, msgFiles } of variants) {
     /*  Claude app: stand-alone skill folders (skills without templates are identical in both variants)  */
     for (const name of names) {
         const zip = new JSZip()
-        for (const [ rel, data ] of skillFiles(name, msgFiles, true))
+        for (const [ rel, data ] of skillFiles(name, msgFiles, true, meta))
             zip.file(`${name}/${rel}`, data)
         await write(zip, `${name}${tag ? `-${tag}` : ""}.zip`, note)
     }
