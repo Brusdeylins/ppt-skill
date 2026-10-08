@@ -15,7 +15,8 @@
 **                               replaced by the inlined meta/control.md
 **
 **  If ./private-templates exists (or --from <dir> is given), the msg variants
-**  are built as well: ppt-msg.zip and ppt-skills-msg-<version>.zip. The msg
+**  are built as well: ppt-msg.zip, ppt-prepare-msg.zip and
+**  ppt-skills-msg-<version>.zip. The msg
 **  templates (.potx/.pptx + optional <name>.md sidecars) REPLACE the neutral
 **  default in the ppt skill's assets/ (neutral-template.pptx and its sidecar are dropped).
 **  They are never part of the git tree or a GitHub release, which always
@@ -109,10 +110,8 @@ for (const { tag, msgFiles } of variants) {
     plugin.file("meta/control.md", readFileSync(path.join(pluginDir, "meta", "control.md")))
     await write(plugin, `ppt-skills${tag ? `-${tag}` : ""}-${version}.zip`, note)
 
-    /*  Claude app: stand-alone skill folders; skills without templates are identical to the neutral ZIP  */
+    /*  Claude app: stand-alone skill folders (skills without templates are identical in both variants)  */
     for (const name of names) {
-        if (tag && !existsSync(path.join(skillsDir, name, "assets")))
-            continue
         const zip = new JSZip()
         for (const [ rel, data ] of skillFiles(name, msgFiles, true))
             zip.file(`${name}/${rel}`, data)
