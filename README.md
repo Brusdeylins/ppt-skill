@@ -486,7 +486,8 @@ the 5% they cannot do -- never a self-built PPTX engine.
   unknown refs are errors with candidate lists -- determinism beats
   convenience.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the layer model and data flow.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the layer model and data flow, and
+[DEPLOY.md](DEPLOY.md) for building and delivering releases.
 
 ## Updating
 
