@@ -1,6 +1,6 @@
 {
   "name": "@brusdeylins/pptc",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Deterministic PowerPoint (PPTX) CLI for LLM agents: template-aware creation and editing with atomic, schema-validated operations",
   "keywords": [
     "pptx",
@@ -45,9 +45,9 @@
     "pretest": "npm run build"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.9.0",
+    "@xmldom/xmldom": "^0.9.12",
     "jszip": "^3.10.1",
-    "pptx-automizer": "^0.8.1",
+    "pptx-automizer": "^0.9.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.9
+
+- **Security: runtime dependencies updated.** `pptx-automizer` 0.8.1 ->
+  0.9.4 (drops the vulnerable `extract-zip`), `@xmldom/xmldom` 0.9.10 ->
+  0.9.12 (XML injection / ReDoS fixes); `npm audit fix` also clears the
+  dev-only alerts (`brace-expansion`, `fast-uri`, `postcss`,
+  `source-map-js`, `vitest`). Remaining: `image-size` via `pptxgenjs`
+  (ICNS/JXL/HEIF parsers, not used by pptc); no non-breaking fix exists.
+  Lint, 106 tests and the bundled-engine contract pass.
+
 ## 1.0.8
 
 - **Skill ZIP for marketplace owners is back, as ONE plugin-layout ZIP.**

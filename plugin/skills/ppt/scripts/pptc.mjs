@@ -10131,9 +10131,10 @@ var require_errors = __commonJS({
     }
     var key;
     var i;
-    function ParseError(message, locator) {
+    function ParseError(message, locator, cause) {
       this.message = message;
       this.locator = locator;
+      this.cause = cause;
       if (Error.captureStackTrace) Error.captureStackTrace(this, ParseError);
     }
     extendError(ParseError);
@@ -10191,7 +10192,7 @@ var require_grammar = __commonJS({
           }
           return isStr ? part : part.source;
         }).join(""),
-        UNICODE_SUPPORT ? "mu" : "m"
+        UNICODE_SUPPORT ? "u" : ""
       );
     }
     function regg(args) {
@@ -10217,6 +10218,7 @@ var require_grammar = __commonJS({
     var NameStartChar_s = chars(NameStartChar);
     var NameChar = reg("[", NameStartChar_s, chars(/[-.0-9\xB7]/), chars(/[\u0300-\u036F\u203F-\u2040]/), "]");
     var Name = reg(NameStartChar, NameChar, "*");
+    var Name_exact = reg("^", Name, "$");
     var Nmtoken = reg(NameChar, "+");
     var EntityRef = reg("&", Name, ";");
     var CharRef = regg(/&#[0-9]+;|&#x[0-9a-fA-F]+;/);
@@ -10231,11 +10233,12 @@ var require_grammar = __commonJS({
     var NCNameStartChar = chars_without(NameStartChar, ":");
     var NCNameChar = chars_without(NameChar, ":");
     var NCName = reg(NCNameStartChar, NCNameChar, "*");
+    var NCName_exact = reg("^", NCName, "$");
     var QName = reg(NCName, regg(":", NCName), "?");
     var QName_exact = reg("^", QName, "$");
     var QName_group = reg("(", QName, ")");
     var SystemLiteral = regg(/"[^"]*"|'[^']*'/);
-    var PI = reg(/^<\?/, "(", Name, ")", regg(S, "(", Char, "*?)"), "?", /\?>/);
+    var PI = reg(/^<\?/, "(", Name, ")", regg(S, "(?!", _SChar, ")(", Char, "*?)"), "?", /\?>/);
     var PubidChar = /[\x20\x0D\x0Aa-zA-Z0-9-'()+,./:=?;!*#@$_%]/;
     var PubidLiteral = regg('"', PubidChar, '*"', "|", "'", chars_without(PubidChar, "'"), "*'");
     var COMMENT_START = "<!--";
@@ -10324,6 +10327,8 @@ var require_grammar = __commonJS({
     exports.ExternalID = ExternalID;
     exports.ExternalID_match = ExternalID_match;
     exports.Name = Name;
+    exports.Name_exact = Name_exact;
+    exports.NCName_exact = NCName_exact;
     exports.NotationDecl = NotationDecl;
     exports.Reference = Reference;
     exports.PEReference = PEReference;
@@ -10615,6 +10620,8 @@ var require_dom = __commonJS({
     };
     _extends(LiveNodeList, NodeList);
     function NamedNodeMap() {
+      this._nsIndex = /* @__PURE__ */ Object.create(null);
+      this._noNsIndex = /* @__PURE__ */ Object.create(null);
     }
     function _findNodeIndex(list, node) {
       var i = 0;
@@ -10625,6 +10632,30 @@ var require_dom = __commonJS({
         i++;
       }
     }
+    function _nnmBucket(map2, namespaceURI, create) {
+      if (!namespaceURI) {
+        return map2._noNsIndex;
+      }
+      var bucket = map2._nsIndex[namespaceURI];
+      if (!bucket && create) {
+        bucket = map2._nsIndex[namespaceURI] = /* @__PURE__ */ Object.create(null);
+      }
+      return bucket;
+    }
+    function _nnmIndexFind(map2, namespaceURI, localName) {
+      var bucket = _nnmBucket(map2, namespaceURI, false);
+      var found = bucket && bucket[localName];
+      return found ? found : null;
+    }
+    function _nnmIndexAdd(map2, attr) {
+      _nnmBucket(map2, attr.namespaceURI, true)[attr.localName] = attr;
+    }
+    function _nnmIndexRemove(map2, attr) {
+      var bucket = _nnmBucket(map2, attr.namespaceURI, false);
+      if (bucket) {
+        delete bucket[attr.localName];
+      }
+    }
     function _addNamedNode(el, list, newAttr, oldAttr) {
       if (oldAttr) {
         list[_findNodeIndex(list, oldAttr)] = newAttr;
@@ -10632,6 +10663,7 @@ var require_dom = __commonJS({
         list[list.length] = newAttr;
         list.length++;
       }
+      _nnmIndexAdd(list, newAttr);
       if (el) {
         newAttr.ownerElement = el;
         var doc = el.ownerDocument;
@@ -10649,6 +10681,7 @@ var require_dom = __commonJS({
           list[i] = list[++i];
         }
         list.length = lastIndex;
+        _nnmIndexRemove(list, attr);
         if (el) {
           var doc = el.ownerDocument;
           if (doc) {
@@ -10704,7 +10737,7 @@ var require_dom = __commonJS({
         if (el && el !== this._ownerElement) {
           throw new DOMException(DOMException.INUSE_ATTRIBUTE_ERR);
         }
-        var oldAttr = this.getNamedItemNS(attr.namespaceURI, attr.localName);
+        var oldAttr = _nnmIndexFind(this, attr.namespaceURI, attr.localName);
         if (oldAttr === attr) {
           return attr;
         }
@@ -11366,8 +11399,29 @@ var require_dom = __commonJS({
             while (child) {
               var next = child.nextSibling;
               if (next !== null && next.nodeType === TEXT_NODE && child.nodeType === TEXT_NODE) {
-                node.removeChild(next);
-                child.appendData(next.data);
+                var tail = [];
+                var sibling = next;
+                while (sibling !== null && sibling.nodeType === TEXT_NODE) {
+                  tail.push(sibling.data);
+                  sibling = sibling.nextSibling;
+                }
+                var removed = child.nextSibling;
+                while (removed !== sibling) {
+                  var following = removed.nextSibling;
+                  removed.parentNode = null;
+                  removed.previousSibling = null;
+                  removed.nextSibling = null;
+                  removed = following;
+                }
+                child.nextSibling = sibling;
+                if (sibling !== null) {
+                  sibling.previousSibling = child;
+                } else {
+                  node.lastChild = child;
+                }
+                child.appendData(tail.join(""));
+                _onUpdateChild(node.ownerDocument, node);
+                child = sibling;
               } else {
                 child = next;
               }
@@ -12005,10 +12059,10 @@ var require_dom = __commonJS({
        * "InvalidCharacterError".
        *
        * Note: When the resulting document is serialized with `requireWellFormed: true`, the
-       * serializer throws `InvalidStateError` if `.target` contains `:` or is an ASCII
-       * case-insensitive match for `"xml"`, or if `.data` contains `?>` or characters outside the
-       * XML Char production (W3C DOM Parsing §3.2.1.7). Without that option the data is emitted
-       * verbatim.
+       * serializer throws `InvalidStateError` if `.target` is not a valid XML `NCName` (a `Name`
+       * with no colon) or is an ASCII case-insensitive match for `"xml"`, or if `.data` contains
+       * `?>` or characters outside the XML Char production (W3C DOM Parsing §3.2.1.7). Without that
+       * option the target and data are emitted verbatim.
        *
        * @param {string} target
        * @param {string} data
@@ -12063,19 +12117,29 @@ var require_dom = __commonJS({
        * The current implementation does not fill the `childNodes` with those of the corresponding
        * `Entity`
        *
+       * The `name` is validated against the XML `Name` production at creation time; an invalid name
+       * throws `InvalidCharacterError`. When the resulting node is serialized with
+       * `requireWellFormed: true`, the serializer re-validates `nodeName` against the XML `Name`
+       * production and throws `InvalidStateError` if a later `nodeName` mutation made it invalid;
+       * without that option the name is emitted verbatim.
+       *
+       * __This implementation differs from the specification:__ xmldom does not expand entities —
+       * the parser resolves entity references inline and never constructs `EntityReference` nodes,
+       * so this method is the only producer.
+       *
        * @deprecated
        * In DOM Level 4.
        * @param {string} name
        * The name of the entity to reference. No namespace well-formedness checks are performed.
        * @returns {EntityReference}
        * @throws {DOMException}
-       * With code `INVALID_CHARACTER_ERR` when `name` is not valid.
+       * With code `INVALID_CHARACTER_ERR` when `name` is not a valid XML `Name`.
        * @throws {DOMException}
        * with code `NOT_SUPPORTED_ERR` when the document is of type `html`
        * @see https://www.w3.org/TR/DOM-Level-3-Core/core.html#ID-392B75AE
        */
       createEntityReference: function(name) {
-        if (!g.Name.test(name)) {
+        if (!g.Name_exact.test(name)) {
           throw new DOMException(DOMException.INVALID_CHARACTER_ERR, 'not a valid xml name "' + name + '"');
         }
         if (this.type === "html") {
@@ -12513,7 +12577,13 @@ var require_dom = __commonJS({
       }
       return true;
     }
-    function addSerializedAttribute(buf, qualifiedName, value) {
+    function addSerializedAttribute(buf, qualifiedName, value, requireWellFormed) {
+      if (requireWellFormed && !g.QName_exact.test(qualifiedName)) {
+        throw new DOMException(
+          'The attribute name "' + qualifiedName + '" is not a valid XML QName',
+          DOMExceptionName.InvalidStateError
+        );
+      }
       buf.push(" ", qualifiedName, '="', value.replace(/[<>&"\t\n\r]/g, _xmlEncoder), '"');
     }
     function serializeToString(node, buf, visibleNamespaces, opts) {
@@ -12577,6 +12647,12 @@ var require_dom = __commonJS({
                     }
                   }
                 }
+                if (requireWellFormed && !g.QName_exact.test(prefixedNodeName)) {
+                  throw new DOMException(
+                    'The element name "' + prefixedNodeName + '" is not a valid XML QName',
+                    DOMExceptionName.InvalidStateError
+                  );
+                }
                 buf.push("<", prefixedNodeName);
                 var childNamespaces = namespaces.slice();
                 for (var i = 0; i < len; i++) {
@@ -12595,7 +12671,7 @@ var require_dom = __commonJS({
                   if (needNamespaceDefine(attr, isHTML, childNamespaces)) {
                     var attrPrefix = attr.prefix || "";
                     var uri = attr.namespaceURI;
-                    addSerializedAttribute(buf, attrPrefix ? "xmlns:" + attrPrefix : "xmlns", uri);
+                    addSerializedAttribute(buf, attrPrefix ? "xmlns:" + attrPrefix : "xmlns", uri, requireWellFormed);
                     childNamespaces.push({ prefix: attrPrefix, namespace: uri });
                   }
                   var filteredAttr = nodeFilter ? nodeFilter(attr) : attr;
@@ -12603,14 +12679,14 @@ var require_dom = __commonJS({
                     if (typeof filteredAttr === "string") {
                       buf.push(filteredAttr);
                     } else {
-                      addSerializedAttribute(buf, filteredAttr.name, filteredAttr.value);
+                      addSerializedAttribute(buf, filteredAttr.name, filteredAttr.value, requireWellFormed);
                     }
                   }
                 }
                 if (nodeName === prefixedNodeName && needNamespaceDefine(n, isHTML, childNamespaces)) {
                   var nodePrefix = n.prefix || "";
                   var uri = n.namespaceURI;
-                  addSerializedAttribute(buf, nodePrefix ? "xmlns:" + nodePrefix : "xmlns", uri);
+                  addSerializedAttribute(buf, nodePrefix ? "xmlns:" + nodePrefix : "xmlns", uri, requireWellFormed);
                   childNamespaces.push({ prefix: nodePrefix, namespace: uri });
                 }
                 var canCloseTag = !n.firstChild;
@@ -12643,7 +12719,7 @@ var require_dom = __commonJS({
                 }
                 return { ns: namespaces };
               case ATTRIBUTE_NODE:
-                addSerializedAttribute(buf, n.name, n.value);
+                addSerializedAttribute(buf, n.name, n.value, requireWellFormed);
                 return null;
               case TEXT_NODE:
                 if (requireWellFormed && g.InvalidChar.test(n.data)) {
@@ -12685,6 +12761,12 @@ var require_dom = __commonJS({
                 var pubid = n.publicId;
                 var sysid = n.systemId;
                 if (requireWellFormed) {
+                  if (!g.Name_exact.test(n.name)) {
+                    throw new DOMException(
+                      'The doctype name "' + n.name + '" is not a valid XML Name',
+                      DOMExceptionName.InvalidStateError
+                    );
+                  }
                   if (pubid && !g.PubidLiteral_match.test(pubid)) {
                     throw new DOMException("DocumentType publicId is not a valid PubidLiteral", DOMExceptionName.InvalidStateError);
                   }
@@ -12711,8 +12793,11 @@ var require_dom = __commonJS({
                 return null;
               case PROCESSING_INSTRUCTION_NODE:
                 if (requireWellFormed) {
-                  if (n.target.indexOf(":") !== -1 || n.target.toLowerCase() === "xml") {
-                    throw new DOMException("The ProcessingInstruction target is not well-formed", DOMExceptionName.InvalidStateError);
+                  if (!g.NCName_exact.test(n.target) || n.target.toLowerCase() === "xml") {
+                    throw new DOMException(
+                      'The processing instruction target "' + n.target + '" is not a valid XML NCName or is reserved',
+                      DOMExceptionName.InvalidStateError
+                    );
                   }
                   if (g.InvalidChar.test(n.data)) {
                     throw new DOMException(
@@ -12727,6 +12812,12 @@ var require_dom = __commonJS({
                 buf.push("<?", n.target, " ", n.data, "?>");
                 return null;
               case ENTITY_REFERENCE_NODE:
+                if (requireWellFormed && !g.Name_exact.test(n.nodeName)) {
+                  throw new DOMException(
+                    'The entity reference name "' + n.nodeName + '" is not a valid XML Name',
+                    DOMExceptionName.InvalidStateError
+                  );
+                }
                 buf.push("&", n.nodeName, ";");
                 return null;
               //case ENTITY_NODE:
@@ -12863,6 +12954,25 @@ var require_dom = __commonJS({
                 this.nodeValue = data;
             }
           }
+        });
+        Object.defineProperty(CharacterData.prototype, "data", {
+          get: function() {
+            return this._data != null ? this._data : "";
+          },
+          set: function(v) {
+            this._data = v;
+            this.length = typeof v === "string" ? v.length : 0;
+          }
+        });
+        Object.defineProperty(CharacterData.prototype, "nodeValue", {
+          get: function() {
+            return this.data;
+          },
+          set: function(v) {
+            this.data = v;
+          },
+          enumerable: true,
+          configurable: true
         });
         Object.defineProperty(Element.prototype, "children", {
           get: function() {
@@ -15177,9 +15287,26 @@ var require_sax = __commonJS({
               if (!tagNameRaw) {
                 return errorHandler.fatalError("end tag name missing");
               }
-              var tagNameMatch = end > 0 && g.reg("^", g.QName_group, g.S_OPT, "$").exec(tagNameRaw);
+              var endTagNameStrict = g.reg("^", g.QName_group, g.S_OPT, "$");
+              var tagNameMatch = end > 0 && endTagNameStrict.exec(tagNameRaw);
               if (!tagNameMatch) {
-                return errorHandler.fatalError('end tag name contains invalid characters: "' + tagNameRaw + '"');
+                var leadingTagNameMatch = end > 0 && g.reg("^", g.QName_group).exec(tagNameRaw);
+                if (isHTML && leadingTagNameMatch) {
+                  errorHandler.warning('end tag name contains invalid trailing characters: "' + tagNameRaw + '"');
+                  tagNameMatch = leadingTagNameMatch;
+                } else if (
+                  // Backward compatibility, remove this whole `else if` arm in the next breaking release
+                  // (XML then falls through to the `fatalError` below, for a clean mode split: XML fatal,
+                  // HTML warning). A valid end-tag name followed by a line break and trailing content was
+                  // silently accepted while `reg` still used the `m` flag; re-adding `m` here matches exactly
+                  // those inputs, kept recoverable and reported.
+                  leadingTagNameMatch && new RegExp(endTagNameStrict.source, endTagNameStrict.flags + "m").test(tagNameRaw)
+                ) {
+                  errorHandler.error('end tag name is followed by a line break and trailing content: "' + tagNameRaw + '"');
+                  tagNameMatch = leadingTagNameMatch;
+                } else {
+                  return errorHandler.fatalError('end tag name contains invalid characters: "' + tagNameRaw + '"');
+                }
               }
               if (!domBuilder.currentElement && !domBuilder.doc.documentElement) {
                 return;
@@ -15253,7 +15380,7 @@ var require_sax = __commonJS({
           if (e instanceof ParseError) {
             throw e;
           } else if (e instanceof DOMException) {
-            throw new ParseError(e.name + ": " + e.message, domBuilder.locator, e);
+            return errorHandler.fatalError("Error constructing the DOM: " + e.name + ": " + e.message, e);
           }
           errorHandler.error("element parse error: " + e);
           end = -1;
@@ -15294,6 +15421,9 @@ var require_sax = __commonJS({
       var s = S_TAG;
       while (true) {
         var c = source.charAt(p);
+        if (s === S_TAG && c === "<") {
+          throw new Error("unexpected < in tag name: " + source.slice(start, p));
+        }
         switch (c) {
           case "=":
             if (s === S_ATTR) {
@@ -15469,7 +15599,7 @@ var require_sax = __commonJS({
         if (nsPrefix !== false) {
           if (localNSMap == null) {
             localNSMap = /* @__PURE__ */ Object.create(null);
-            _copy(currentNSMap, currentNSMap = /* @__PURE__ */ Object.create(null));
+            currentNSMap = Object.create(currentNSMap);
           }
           currentNSMap[nsPrefix] = localNSMap[nsPrefix] = value;
           a.uri = NAMESPACE.XMLNS;
@@ -15516,7 +15646,13 @@ var require_sax = __commonJS({
     function parseHtmlSpecialContent(source, elStartEnd, tagName, entityReplacer, domBuilder) {
       var isEscapableRaw = isHTMLEscapableRawTextElement(tagName);
       if (isEscapableRaw || isHTMLRawTextElement(tagName)) {
-        var elEndStart = source.indexOf("</" + tagName + ">", elStartEnd);
+        var closeTag = new RegExp("</" + tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ">", "ig");
+        closeTag.lastIndex = elStartEnd;
+        var match = closeTag.exec(source);
+        var elEndStart = match ? match.index : -1;
+        if (elEndStart < 0) {
+          return elStartEnd + 1;
+        }
         var text = source.substring(elStartEnd + 1, elEndStart);
         if (isEscapableRaw) {
           text = text.replace(ENTITY_REG, entityReplacer);
@@ -16020,14 +16156,16 @@ var require_dom_parser = __commonJS({
        *
        * @param {string} message
        * - The message to be used for reporting and throwing the error.
+       * @param {Error} [cause]
+       * The error that caused this fatal error, preserved as the thrown `ParseError`'s `cause`.
        * @returns {never}
        * This function always throws an error and never returns a value.
        * @throws {ParseError}
        * Always throws a ParseError with the provided message.
        */
-      fatalError: function(message) {
+      fatalError: function(message, cause) {
         this.reportError("fatalError", message);
-        throw new ParseError(message, this.locator);
+        throw new ParseError(message, this.locator, cause);
       }
     };
     function _locator(l) {
@@ -16115,6 +16253,1125 @@ var require_lib4 = __commonJS({
     exports.normalizeLineEndings = domParser.normalizeLineEndings;
     exports.onErrorStopParsing = domParser.onErrorStopParsing;
     exports.onWarningStopParsing = domParser.onWarningStopParsing;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/logger.js
+var require_logger = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/logger.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.log = exports.runWithLogger = exports.NullLogger = exports.ConsoleLogger = void 0;
+    var async_hooks_1 = __require("async_hooks");
+    var ConsoleLogger = class {
+      constructor(verbosity = 1) {
+        this.verbosity = verbosity;
+      }
+      error(message, ...details) {
+        console.error("[pptx-automizer]", message, ...details);
+      }
+      warn(message, ...details) {
+        if (this.verbosity >= 1) {
+          console.warn("[pptx-automizer]", message, ...details);
+        }
+      }
+      info(message, ...details) {
+        if (this.verbosity >= 2) {
+          console.info("[pptx-automizer]", message, ...details);
+        }
+      }
+      debug(message, ...details) {
+        if (this.verbosity >= 2) {
+          console.debug("[pptx-automizer]", message, ...details);
+        }
+      }
+    };
+    exports.ConsoleLogger = ConsoleLogger;
+    var NullLogger = class {
+      error() {
+      }
+      warn() {
+      }
+      info() {
+      }
+      debug() {
+      }
+    };
+    exports.NullLogger = NullLogger;
+    var activeLogger = new async_hooks_1.AsyncLocalStorage();
+    var defaultLogger = new ConsoleLogger();
+    var runWithLogger = (logger, fn) => {
+      return activeLogger.run(logger, fn);
+    };
+    exports.runWithLogger = runWithLogger;
+    exports.log = {
+      error: (message, ...details) => {
+        var _a3;
+        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).error(message, ...details);
+      },
+      warn: (message, ...details) => {
+        var _a3;
+        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).warn(message, ...details);
+      },
+      info: (message, ...details) => {
+        var _a3;
+        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).info(message, ...details);
+      },
+      debug: (message, ...details) => {
+        var _a3;
+        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).debug(message, ...details);
+      }
+    };
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/xmldom-sax-patch.js
+var require_xmldom_sax_patch = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/xmldom-sax-patch.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.patchXmldomSaxRegExpCache = patchXmldomSaxRegExpCache;
+    var applied = false;
+    function patchXmldomSaxRegExpCache() {
+      if (applied) {
+        return;
+      }
+      applied = true;
+      try {
+        const grammar = require_grammar();
+        if (typeof (grammar === null || grammar === void 0 ? void 0 : grammar.reg) !== "function") {
+          return;
+        }
+        const original = grammar.reg;
+        const cache = /* @__PURE__ */ new Map();
+        grammar.reg = function(...args) {
+          const key = args.map((part) => typeof part === "string" ? part : part.source).join("");
+          let compiled = cache.get(key);
+          if (!compiled) {
+            compiled = original.apply(this, args);
+            cache.set(key, compiled);
+          }
+          return compiled;
+        };
+      } catch (_a3) {
+      }
+    }
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/archive/archive.js
+var require_archive = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/archive/archive.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var xmldom_1 = require_lib4();
+    var xmldom_sax_patch_1 = require_xmldom_sax_patch();
+    (0, xmldom_sax_patch_1.patchXmldomSaxRegExpCache)();
+    var Archive = class {
+      constructor(filename, params) {
+        this.buffer = /* @__PURE__ */ new Map();
+        this.options = {
+          type: "nodebuffer"
+        };
+        this.filename = filename;
+        this.params = params;
+      }
+      parseXml(xmlString) {
+        const dom = new xmldom_1.DOMParser();
+        return dom.parseFromString(xmlString, "application/xml");
+      }
+      serializeXml(xml) {
+        const s = new xmldom_1.XMLSerializer();
+        return s.serializeToString(xml);
+      }
+      writeBuffer(archiveType) {
+        return __awaiter(this, void 0, void 0, function* () {
+          for (const buffered of this.buffer.values()) {
+            const serialized = this.serializeXml(buffered.content);
+            yield archiveType.write(buffered.relativePath, serialized);
+          }
+        });
+      }
+      toBuffer(relativePath, content) {
+        this.buffer.set(relativePath, {
+          relativePath,
+          name: relativePath,
+          content
+        });
+      }
+      /**
+       * Serializes a buffered part back into the underlying archive and drops
+       * its DOM from the buffer. A parsed xmldom document costs ~25x its XML
+       * source size, so parts that are finished (an appended slide after
+       * cleanSlide, a master/layout after append) must not stay buffered for
+       * the rest of the run. Re-reading a flushed part re-parses it from the
+       * serialized content written here. No-op if the part is not buffered.
+       */
+      flushBuffered(archiveType, relativePath) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const buffered = this.buffer.get(relativePath);
+          if (!buffered) {
+            return;
+          }
+          yield archiveType.write(relativePath, this.serializeXml(buffered.content));
+          this.buffer.delete(relativePath);
+        });
+      }
+      setOptions(params) {
+        if (params.compression > 0) {
+          this.options.compression = "DEFLATE";
+          this.options.compressionOptions = {
+            level: params.compression
+          };
+        }
+      }
+      fromBuffer(relativePath) {
+        return this.buffer.get(relativePath);
+      }
+    };
+    exports.default = Archive;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/archive/archive-jszip.js
+var require_archive_jszip = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/archive/archive-jszip.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var logger_1 = require_logger();
+    var archive_1 = __importDefault(require_archive());
+    var fs_1 = __importDefault(__require("fs"));
+    var jszip_1 = __importDefault(require_lib3());
+    var path_1 = __importDefault(__require("path"));
+    var ArchiveJszip = class _ArchiveJszip extends archive_1.default {
+      constructor(filename, params) {
+        super(filename, params);
+      }
+      /**
+       * Opens the underlying zip on first use. Idempotent; every method that
+       * needs the loaded archive awaits this. `extract()` creates instances with
+       * a preloaded `archive`, so an already present archive short-circuits.
+       */
+      ensureOpen() {
+        var _a3;
+        if (this.archive) {
+          return Promise.resolve(this);
+        }
+        this.opened = (_a3 = this.opened) !== null && _a3 !== void 0 ? _a3 : this.initialize();
+        return this.opened;
+      }
+      initialize() {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (typeof this.filename !== "object") {
+            this.file = yield fs_1.default.promises.readFile(this.filename);
+          } else {
+            this.file = this.filename;
+          }
+          const zip = new jszip_1.default();
+          this.archive = yield zip.loadAsync(this.file);
+          return this;
+        });
+      }
+      fileExists(file2) {
+        if (this.archive === void 0 || this.archive.files[file2] === void 0) {
+          return false;
+        }
+        return true;
+      }
+      folder(dir) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          const files = [];
+          this.archive.folder(dir).forEach((relativePath, file2) => {
+            if (!relativePath.includes("/")) {
+              files.push({
+                name: file2.name,
+                relativePath
+              });
+            }
+          });
+          return files;
+        });
+      }
+      read(file2, type) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          if (!this.archive.files[file2]) {
+            if (typeof this.filename === "string") {
+              throw new Error("Could not find file " + file2 + "@" + path_1.default.basename(this.filename));
+            } else {
+              throw new Error("Could not find file " + file2);
+            }
+          }
+          return this.archive.files[file2].async(type || "string");
+        });
+      }
+      write(file2, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          this.archive.file(file2, data);
+          return this;
+        });
+      }
+      remove(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          this.archive.remove(file2);
+        });
+      }
+      extract(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const contents = yield this.read(file2, "nodebuffer");
+          const zip = new jszip_1.default();
+          const newArchive = new _ArchiveJszip(file2, this.params);
+          newArchive.archive = yield zip.loadAsync(contents);
+          return newArchive;
+        });
+      }
+      output(location, params) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const content = yield this.getContent(params);
+          yield fs_1.default.promises.writeFile(location, content).catch((err) => {
+            logger_1.log.error(err);
+            throw new Error(`Could not write output file: ${location}`);
+          });
+        });
+      }
+      stream(params, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          this.setOptions(params);
+          yield this.writeBuffer(this);
+          const mergedOptions = Object.assign(Object.assign({}, this.options), options);
+          return this.archive.generateNodeStream(mergedOptions);
+        });
+      }
+      getFinalArchive() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          yield this.writeBuffer(this);
+          return this.archive;
+        });
+      }
+      getContent(params) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          this.setOptions(params);
+          yield this.writeBuffer(this);
+          return yield this.archive.generateAsync(this.options);
+        });
+      }
+      readXml(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const isBuffered = this.fromBuffer(file2);
+          if (!isBuffered) {
+            let xmlString = "";
+            if (this.params.decodeText) {
+              const buffer = yield this.read(file2, "nodebuffer");
+              xmlString = new TextDecoder().decode(buffer);
+            } else {
+              xmlString = yield this.read(file2, "string");
+            }
+            const XmlDocument = this.parseXml(xmlString);
+            this.toBuffer(file2, XmlDocument);
+            return XmlDocument;
+          } else {
+            return isBuffered.content;
+          }
+        });
+      }
+      writeXml(file2, XmlDocument) {
+        this.toBuffer(file2, XmlDocument);
+      }
+      flushXml(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.flushBuffered(this, file2);
+        });
+      }
+    };
+    exports.default = ArchiveJszip;
+  }
+});
+
+// node_modules/pptx-automizer/dist/errors.js
+var require_errors2 = __commonJS({
+  "node_modules/pptx-automizer/dist/errors.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CallbackError = exports.OutputError = exports.ArchiveError = exports.ElementNotFoundError = exports.SlideNotFoundError = exports.TemplateNotFoundError = exports.AutomizerError = void 0;
+    var AutomizerError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = new.target.name;
+        Object.setPrototypeOf(this, new.target.prototype);
+      }
+    };
+    exports.AutomizerError = AutomizerError;
+    var TemplateNotFoundError = class extends AutomizerError {
+      constructor(file2, searchedDirs) {
+        super(`Template file not found: "${file2}". Searched in: ${searchedDirs.map((dir) => dir === "" ? "<working directory>" : dir).join(", ")}`);
+        this.file = file2;
+        this.searchedDirs = searchedDirs;
+      }
+    };
+    exports.TemplateNotFoundError = TemplateNotFoundError;
+    var SlideNotFoundError = class extends AutomizerError {
+      constructor(message, info) {
+        super(message);
+        this.slideIdentifier = info === null || info === void 0 ? void 0 : info.slideIdentifier;
+        this.templateName = info === null || info === void 0 ? void 0 : info.templateName;
+      }
+    };
+    exports.SlideNotFoundError = SlideNotFoundError;
+    var ElementNotFoundError = class extends AutomizerError {
+      constructor(message, info) {
+        super(message);
+        this.selector = info === null || info === void 0 ? void 0 : info.selector;
+        this.file = info === null || info === void 0 ? void 0 : info.file;
+      }
+    };
+    exports.ElementNotFoundError = ElementNotFoundError;
+    var ArchiveError = class extends AutomizerError {
+      constructor(message, info) {
+        super(message);
+        this.file = info === null || info === void 0 ? void 0 : info.file;
+      }
+    };
+    exports.ArchiveError = ArchiveError;
+    var OutputError = class extends AutomizerError {
+    };
+    exports.OutputError = OutputError;
+    var CallbackError = class extends AutomizerError {
+      constructor(element, slideFile, cause) {
+        const causeMessage = cause instanceof Error ? cause.message : String(cause);
+        super(`Modification callback failed on element "${element}" (${slideFile}): ${causeMessage}. Set params.continueOnError to true to log and skip failing callbacks instead.`);
+        this.element = element;
+        this.slideFile = slideFile;
+        this.cause = cause;
+      }
+    };
+    exports.CallbackError = CallbackError;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/jszip-helper.js
+var require_jszip_helper = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/jszip-helper.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o2) {
+          var ar = [];
+          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
+          return ar;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.compressFolder = exports.extractToFolder = void 0;
+    var logger_1 = require_logger();
+    var fs_1 = __importStar(__require("fs"));
+    var promises_1 = __require("stream/promises");
+    var path_1 = __importDefault(__require("path"));
+    var jszip_1 = __importDefault(require_lib3());
+    var getFilePathsRecursively = (dir) => __awaiter(void 0, void 0, void 0, function* () {
+      const list = yield fs_1.promises.readdir(dir);
+      const statPromises = list.map((file2) => __awaiter(void 0, void 0, void 0, function* () {
+        const fullPath = path_1.default.resolve(dir, file2);
+        const stat = yield fs_1.promises.stat(fullPath);
+        if (stat && stat.isDirectory()) {
+          return getFilePathsRecursively(fullPath);
+        }
+        return fullPath;
+      }));
+      return (yield Promise.all(statPromises)).flat();
+    });
+    var createZipFromFolder = (dir) => __awaiter(void 0, void 0, void 0, function* () {
+      const absRoot = path_1.default.resolve(dir);
+      const filePaths = yield getFilePathsRecursively(dir);
+      return filePaths.reduce((z2, filePath) => {
+        const relative = filePath.replace(absRoot, "");
+        const zipFolder = path_1.default.dirname(relative).split(path_1.default.sep).reduce((zf, dirName) => zf.folder(dirName), z2);
+        zipFolder.file(path_1.default.basename(filePath), fs_1.default.createReadStream(filePath));
+        return z2;
+      }, new jszip_1.default());
+    });
+    var S_IFMT = 61440;
+    var S_IFLNK = 40960;
+    var isSymlinkEntry = (entry) => {
+      var _a3;
+      return (Number((_a3 = entry.unixPermissions) !== null && _a3 !== void 0 ? _a3 : 0) & S_IFMT) === S_IFLNK;
+    };
+    var extractToFolder = (srcFile, destDir) => __awaiter(void 0, void 0, void 0, function* () {
+      const root = path_1.default.resolve(destDir);
+      yield fs_1.promises.mkdir(root, { recursive: true });
+      const zip = yield new jszip_1.default().loadAsync(yield fs_1.promises.readFile(srcFile));
+      for (const entry of Object.values(zip.files)) {
+        if (path_1.default.isAbsolute(entry.name) || entry.name.startsWith("/") || entry.name.startsWith("\\") || /^[a-zA-Z]:/.test(entry.name)) {
+          throw new Error("Zip entry has an absolute path: " + entry.name);
+        }
+        const dest = path_1.default.resolve(root, entry.name);
+        if (dest !== root && !dest.startsWith(root + path_1.default.sep)) {
+          throw new Error("Zip entry resolves outside target directory: " + entry.name);
+        }
+        if (isSymlinkEntry(entry)) {
+          logger_1.log.warn("Skipping symlink entry in zip file: " + entry.name);
+          continue;
+        }
+        if (entry.dir) {
+          yield fs_1.promises.mkdir(dest, { recursive: true });
+        } else {
+          yield fs_1.promises.mkdir(path_1.default.dirname(dest), { recursive: true });
+          yield fs_1.promises.writeFile(dest, yield entry.async("nodebuffer"));
+        }
+      }
+    });
+    exports.extractToFolder = extractToFolder;
+    var compressFolder = (srcDir, destFile, options) => __awaiter(void 0, void 0, void 0, function* () {
+      const start = Date.now();
+      try {
+        const zip = yield createZipFromFolder(srcDir);
+        yield (0, promises_1.pipeline)(zip.generateNodeStream(Object.assign({ streamFiles: true }, options)), fs_1.default.createWriteStream(destFile));
+        logger_1.log.info("Zip written successfully:", Date.now() - start, "ms");
+      } catch (ex) {
+        logger_1.log.error("Error creating zip", ex);
+        throw ex;
+      }
+    });
+    exports.compressFolder = compressFolder;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/archive/archive-fs.js
+var require_archive_fs = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/archive/archive-fs.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var errors_1 = require_errors2();
+    var archive_1 = __importDefault(require_archive());
+    var fs_1 = __require("fs");
+    var jszip_1 = __importDefault(require_lib3());
+    var archive_jszip_1 = __importDefault(require_archive_jszip());
+    var file_helper_1 = require_file_helper();
+    var jszip_helper_1 = require_jszip_helper();
+    var ArchiveFs = class extends archive_1.default {
+      constructor(filename, params) {
+        super(filename, params);
+        this.dir = void 0;
+      }
+      /**
+       * Extracts the template and prepares the work dir on first use.
+       * Idempotent; every method touching the extracted files awaits this.
+       */
+      ensureOpen() {
+        var _a3;
+        if (this.archive) {
+          return Promise.resolve(this);
+        }
+        this.opened = (_a3 = this.opened) !== null && _a3 !== void 0 ? _a3 : this.initialize();
+        return this.opened;
+      }
+      initialize() {
+        return __awaiter(this, void 0, void 0, function* () {
+          this.setPaths();
+          yield this.assertDirs();
+          yield this.extractFile(this.filename);
+          if (!this.params.name) {
+            yield this.prepareWorkDir(this.filename);
+            this.isRoot = true;
+          }
+          this.archive = true;
+          return this;
+        });
+      }
+      setPaths() {
+        this.dir = this.params.baseDir + "/";
+        this.templatesDir = this.dir + "templates/";
+        this.outputDir = this.dir + "output/";
+        this.templateDir = void 0;
+        this.workDir = this.outputDir + this.params.workDir + "/";
+      }
+      assertDirs() {
+        return __awaiter(this, void 0, void 0, function* () {
+          (0, file_helper_1.makeDirIfNotExists)(this.dir);
+          (0, file_helper_1.makeDirIfNotExists)(this.templatesDir);
+          (0, file_helper_1.makeDirIfNotExists)(this.outputDir);
+          (0, file_helper_1.makeDirIfNotExists)(this.workDir);
+        });
+      }
+      extractFile(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetDir = this.getTemplateDir(file2);
+          if ((0, file_helper_1.exists)(targetDir)) {
+            return;
+          }
+          yield (0, jszip_helper_1.extractToFolder)(file2, targetDir);
+        });
+      }
+      getTemplateDir(file2) {
+        const info = file_helper_1.FileHelper.getFileInfo(file2);
+        this.templateDir = this.templatesDir + info.base + "/";
+        return this.templateDir;
+      }
+      prepareWorkDir(templateDir) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.cleanupWorkDir();
+          const fromTemplate = this.getTemplateDir(templateDir);
+          yield (0, file_helper_1.copyDir)(fromTemplate, this.workDir);
+        });
+      }
+      fileExists(file2) {
+        return (0, file_helper_1.exists)(this.getPath(file2));
+      }
+      folder(dir) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          const path10 = this.getPath(dir);
+          const files = [];
+          if (!(0, file_helper_1.exists)(path10)) {
+            return files;
+          }
+          const entries = yield fs_1.promises.readdir(path10, { withFileTypes: true });
+          for (const entry of entries) {
+            if (!entry.isDirectory()) {
+              files.push({
+                name: dir + "/" + entry.name,
+                relativePath: entry.name
+              });
+            }
+          }
+          return files;
+        });
+      }
+      read(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          const path10 = this.getPath(file2);
+          return yield fs_1.promises.readFile(path10);
+        });
+      }
+      getPath(file2) {
+        if (this.isRoot) {
+          return this.workDir + file2;
+        }
+        return this.templateDir + file2;
+      }
+      write(file2, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          const filename = this.workDir + file2;
+          (0, file_helper_1.ensureDirectoryExistence)(filename);
+          yield fs_1.promises.writeFile(filename, data);
+          return this;
+        });
+      }
+      remove(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          const path10 = this.getPath(file2);
+          if ((0, file_helper_1.exists)(path10)) {
+            yield fs_1.promises.unlink(path10);
+          }
+        });
+      }
+      output(location, params) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.ensureOpen();
+          yield this.writeBuffer(this);
+          this.setOptions(params);
+          if ((0, file_helper_1.exists)(location)) {
+            yield fs_1.promises.rm(location);
+          }
+          yield (0, jszip_helper_1.compressFolder)(this.workDir, location, this.options);
+          if (this.params.cleanupWorkDir === true) {
+            yield this.cleanupWorkDir();
+          }
+        });
+      }
+      cleanupWorkDir() {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!(0, file_helper_1.exists)(this.workDir)) {
+            return;
+          }
+          yield fs_1.promises.rm(this.workDir, { recursive: true, force: true });
+        });
+      }
+      readXml(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const isBuffered = this.fromBuffer(file2);
+          if (!isBuffered) {
+            const buffer = yield this.read(file2);
+            if (!buffer) {
+              throw new errors_1.ArchiveError("No buffer for file: " + file2, { file: file2 });
+            }
+            const xmlString = buffer.toString();
+            const XmlDocument = this.parseXml(xmlString);
+            this.toBuffer(file2, XmlDocument);
+            return XmlDocument;
+          } else {
+            return isBuffered.content;
+          }
+        });
+      }
+      writeXml(file2, XmlDocument) {
+        this.toBuffer(file2, XmlDocument);
+      }
+      flushXml(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.flushBuffered(this, file2);
+        });
+      }
+      /**
+       * Used for worksheets only
+       **/
+      extract(file2) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const contents = yield this.read(file2);
+          const zip = new jszip_1.default();
+          const newArchive = new archive_jszip_1.default(file2, this.params);
+          newArchive.archive = yield zip.loadAsync(contents);
+          return newArchive;
+        });
+      }
+    };
+    exports.default = ArchiveFs;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/file-helper.js
+var require_file_helper = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/file-helper.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ensureDirectoryExistence = exports.copyDir = exports.makeDir = exports.makeDirIfNotExists = exports.exists = exports.FileHelper = void 0;
+    var fs_1 = __importDefault(__require("fs"));
+    var fs_2 = __require("fs");
+    var path_1 = __importDefault(__require("path"));
+    var archive_jszip_1 = __importDefault(require_archive_jszip());
+    var archive_fs_1 = __importDefault(require_archive_fs());
+    var FileHelper = class _FileHelper {
+      static importArchive(file2, params) {
+        if (typeof file2 !== "object") {
+          if (!fs_1.default.existsSync(file2)) {
+            throw new Error("File not found: " + file2);
+          }
+          switch (params.mode) {
+            case "jszip":
+              return new archive_jszip_1.default(file2, params);
+            case "fs":
+              return new archive_fs_1.default(file2, params);
+          }
+        } else {
+          return new archive_jszip_1.default(file2, params);
+        }
+      }
+      static removeFromDirectory(archive, dir, cb) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const removed = [];
+          const files = yield archive.folder(dir);
+          for (const file2 of files) {
+            if (cb(file2)) {
+              yield archive.remove(file2.name);
+              removed.push(file2.name);
+            }
+          }
+          return removed;
+        });
+      }
+      static getFileExtension(filename) {
+        return path_1.default.extname(filename).replace(".", "");
+      }
+      static getFileInfo(filename) {
+        return {
+          base: path_1.default.basename(filename),
+          dir: path_1.default.dirname(filename),
+          isDir: filename[filename.length - 1] === "/",
+          extension: path_1.default.extname(filename).replace(".", "")
+        };
+      }
+      static check(archive, file2) {
+        _FileHelper.isArchive(archive);
+        return _FileHelper.fileExistsInArchive(archive, file2);
+      }
+      static isArchive(archive) {
+        if (archive === void 0) {
+          throw new Error("Archive is invalid or empty.");
+        }
+      }
+      static fileExistsInArchive(archive, file2) {
+        return archive.fileExists(file2);
+      }
+      static zipCopyWithRelations(context, type, sourceNumber, targetNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const typePlural = type + "s";
+          yield _FileHelper.zipCopyByIndex(context, `ppt/${typePlural}/${type}`, sourceNumber, targetNumber);
+          yield _FileHelper.zipCopyByIndex(context, `ppt/${typePlural}/_rels/${type}`, sourceNumber, targetNumber, ".xml.rels");
+        });
+      }
+      static zipCopyByIndex(context, prefix, sourceId, targetId, suffix) {
+        return __awaiter(this, void 0, void 0, function* () {
+          suffix = suffix || ".xml";
+          return _FileHelper.zipCopy(context.sourceArchive, `${prefix}${sourceId}${suffix}`, context.targetArchive, `${prefix}${targetId}${suffix}`);
+        });
+      }
+      /**
+       * Copies a file from one archive to another. The new file can have a different name to the origin.
+       * @param {IArchive} sourceArchive - Source archive
+       * @param {string} sourceFile - file path and name inside source archive
+       * @param {IArchive} targetArchive - Target archive
+       * @param {string} targetFile - file path and name inside target archive
+       * @return {IArchive} targetArchive as an instance of IArchive
+       */
+      static zipCopy(sourceArchive, sourceFile, targetArchive, targetFile) {
+        return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
+          _FileHelper.check(sourceArchive, sourceFile);
+          (_a3 = targetArchive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackFile(targetFile);
+          const content = yield sourceArchive.read(sourceFile, "nodebuffer").catch((e) => {
+            throw e;
+          });
+          return targetArchive.write(targetFile || sourceFile, content);
+        });
+      }
+    };
+    exports.FileHelper = FileHelper;
+    var exists = (dir) => {
+      return fs_1.default.existsSync(dir);
+    };
+    exports.exists = exists;
+    var makeDirIfNotExists = (dir) => {
+      if (!(0, exports.exists)(dir)) {
+        (0, exports.makeDir)(dir);
+      }
+    };
+    exports.makeDirIfNotExists = makeDirIfNotExists;
+    var makeDir = (dir) => {
+      if (!fs_1.default.existsSync(dir)) {
+        fs_1.default.mkdirSync(dir);
+      }
+    };
+    exports.makeDir = makeDir;
+    var copyDir = (src, dest) => __awaiter(void 0, void 0, void 0, function* () {
+      yield fs_2.promises.mkdir(dest, { recursive: true });
+      const entries = yield fs_2.promises.readdir(src, { withFileTypes: true });
+      for (const entry of entries) {
+        const srcPath = path_1.default.join(src, entry.name);
+        const destPath = path_1.default.join(dest, entry.name);
+        if (entry.isDirectory()) {
+          yield (0, exports.copyDir)(srcPath, destPath);
+        } else {
+          yield fs_2.promises.copyFile(srcPath, destPath);
+        }
+      }
+    });
+    exports.copyDir = copyDir;
+    var ensureDirectoryExistence = (filePath) => {
+      const dirname = path_1.default.dirname(filePath);
+      if (fs_1.default.existsSync(dirname)) {
+        return;
+      }
+      (0, exports.ensureDirectoryExistence)(dirname);
+      fs_1.default.mkdirSync(dirname);
+    };
+    exports.ensureDirectoryExistence = ensureDirectoryExistence;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/ppt-paths.js
+var require_ppt_paths = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/ppt-paths.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PptPaths = void 0;
+    var PptPaths = class _PptPaths {
+      /**
+       * Generic numbered part: `ppt/<prefix>s/<prefix><n>.xml`.
+       * Covers slide, slideMaster, slideLayout and notesSlide.
+       */
+      static part(prefix, n) {
+        return `ppt/${prefix}s/${prefix}${n}.xml`;
+      }
+      /**
+       * Relationships file of a numbered part:
+       * `ppt/<prefix>s/_rels/<prefix><n>.xml.rels`.
+       */
+      static partRels(prefix, n) {
+        return `ppt/${prefix}s/_rels/${prefix}${n}.xml.rels`;
+      }
+      static slide(n) {
+        return _PptPaths.part("slide", n);
+      }
+      static slideRels(n) {
+        return _PptPaths.partRels("slide", n);
+      }
+      static slideMaster(n) {
+        return _PptPaths.part("slideMaster", n);
+      }
+      static slideMasterRels(n) {
+        return _PptPaths.partRels("slideMaster", n);
+      }
+      static slideLayout(n) {
+        return _PptPaths.part("slideLayout", n);
+      }
+      static slideLayoutRels(n) {
+        return _PptPaths.partRels("slideLayout", n);
+      }
+      static notesSlide(n) {
+        return _PptPaths.part("notesSlide", n);
+      }
+      static notesSlideRels(n) {
+        return _PptPaths.partRels("notesSlide", n);
+      }
+      static theme(n) {
+        return `ppt/theme/theme${n}.xml`;
+      }
+      /**
+       * Numbered part in `ppt/charts/`: pass 'chart', 'chartEx', 'style'
+       * or 'colors' as name.
+       */
+      static chartPart(name, n) {
+        return `ppt/charts/${name}${n}.xml`;
+      }
+      static chartPartRels(name, n) {
+        return `ppt/charts/_rels/${name}${n}.xml.rels`;
+      }
+      static media(filename) {
+        return `ppt/media/${filename}`;
+      }
+      static embedding(filename) {
+        return `ppt/embeddings/${filename}`;
+      }
+      /**
+       * `[Content_Types].xml` PartName attributes require a leading slash.
+       */
+      static partName(path10) {
+        return `/${path10}`;
+      }
+    };
+    exports.PptPaths = PptPaths;
+    PptPaths.presentation = "ppt/presentation.xml";
+    PptPaths.presentationRels = "ppt/_rels/presentation.xml.rels";
+    PptPaths.contentTypes = "[Content_Types].xml";
+    PptPaths.mediaDir = "ppt/media";
+    PptPaths.relative = {
+      slide: (n) => `../slides/slide${n}.xml`,
+      notesSlide: (n) => `../notesSlides/notesSlide${n}.xml`,
+      slideLayout: (n) => `../slideLayouts/slideLayout${n}.xml`,
+      slideMaster: (n) => `../slideMasters/slideMaster${n}.xml`,
+      theme: (n) => `../theme/theme${n}.xml`
+    };
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/general-helper.js
+var require_general_helper = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/general-helper.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.last = exports.vd = exports.GeneralHelper = void 0;
+    var GeneralHelper = class {
+      static arrayify(input) {
+        if (Array.isArray(input)) {
+          return input;
+        } else if (input !== void 0) {
+          return [input];
+        } else {
+          return [];
+        }
+      }
+      static propertyExists(object2, property) {
+        if (!object2 || typeof object2 !== "object")
+          return false;
+        return !!Object.getOwnPropertyDescriptor(object2, property);
+      }
+    };
+    exports.GeneralHelper = GeneralHelper;
+    var vd = (v, keys) => {
+      if (keys && typeof v === "object") {
+        v = Object.keys(v);
+      }
+      console.log("--------- [pptx-automizer] ---------");
+      console.log(new Error().stack.split("\n")[2].trim());
+      console.dir(v, { depth: 10 });
+    };
+    exports.vd = vd;
+    var last = (arr) => arr[arr.length - 1];
+    exports.last = last;
   }
 });
 
@@ -16377,69 +17634,6 @@ var require_xml_pretty_print = __commonJS({
   }
 });
 
-// node_modules/pptx-automizer/dist/helper/general-helper.js
-var require_general_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/general-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.logDebug = exports.log = exports.Logger = exports.last = exports.vd = exports.GeneralHelper = void 0;
-    var GeneralHelper = class {
-      static arrayify(input) {
-        if (Array.isArray(input)) {
-          return input;
-        } else if (input !== void 0) {
-          return [input];
-        } else {
-          return [];
-        }
-      }
-      static propertyExists(object2, property) {
-        if (!object2 || typeof object2 !== "object")
-          return false;
-        return !!Object.getOwnPropertyDescriptor(object2, property);
-      }
-    };
-    exports.GeneralHelper = GeneralHelper;
-    var vd = (v, keys) => {
-      if (keys && typeof v === "object") {
-        v = Object.keys(v);
-      }
-      console.log("--------- [pptx-automizer] ---------");
-      console.log(new Error().stack.split("\n")[2].trim());
-      console.dir(v, { depth: 10 });
-    };
-    exports.vd = vd;
-    var last = (arr) => arr[arr.length - 1];
-    exports.last = last;
-    exports.Logger = {
-      verbosity: 1,
-      target: "console",
-      log: (message, verbosity, showStack, target) => {
-        if (verbosity > exports.Logger.verbosity) {
-          return;
-        }
-        target = target || exports.Logger.target;
-        if (target === "console") {
-          if (showStack) {
-            (0, exports.vd)(message);
-          } else {
-            console.log(message);
-          }
-        } else {
-        }
-      }
-    };
-    var log = (message, verbosity) => {
-      exports.Logger.log(message, verbosity);
-    };
-    exports.log = log;
-    var logDebug = (message, verbosity) => {
-      exports.Logger.log(message, verbosity, true);
-    };
-    exports.logDebug = logDebug;
-  }
-});
-
 // node_modules/pptx-automizer/dist/enums/content-type-map.js
 var require_content_type_map = __commonJS({
   "node_modules/pptx-automizer/dist/enums/content-type-map.js"(exports) {
@@ -16461,7 +17655,7 @@ var require_content_type_map = __commonJS({
       ContentTypeMap2["xml"] = "application/xml";
       ContentTypeMap2["bin"] = "application/vnd.openxmlformats-officedocument.oleObject";
       ContentTypeMap2["vml"] = "application/vnd.openxmlformats-officedocument.vmlDrawing";
-    })(ContentTypeMap = exports.ContentTypeMap || (exports.ContentTypeMap = {}));
+    })(ContentTypeMap || (exports.ContentTypeMap = ContentTypeMap = {}));
   }
 });
 
@@ -16498,11 +17692,11 @@ var require_xml_helper = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.XmlHelper = void 0;
+    var errors_1 = require_errors2();
     var xmldom_1 = require_lib4();
     var constants_1 = require_constants2();
     var xml_pretty_print_1 = require_xml_pretty_print();
-    var general_helper_1 = require_general_helper();
-    var content_tracker_1 = require_content_tracker();
+    var logger_1 = require_logger();
     var content_type_map_1 = require_content_type_map();
     var XmlHelper = class _XmlHelper {
       static modifyXmlInArchive(archive, file2, callbacks) {
@@ -16532,14 +17726,16 @@ var require_xml_helper = __commonJS({
       }
       static append(element) {
         return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
           const xml = yield _XmlHelper.getXmlFromArchive(element.archive, element.file);
           const newElement = xml.createElement(element.tag);
-          for (const attribute in element.attributes) {
-            const value = element.attributes[attribute];
+          const attributes = element.attributes || {};
+          for (const attribute in attributes) {
+            const value = attributes[attribute];
             const setValue = typeof value === "function" ? value(xml) : value;
-            newElement.setAttribute(attribute, setValue);
+            newElement.setAttribute(attribute, String(setValue));
           }
-          content_tracker_1.contentTracker.trackRelation(element.file, element.attributes);
+          (_a3 = element.archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(element.file, element.attributes);
           if (element.assert) {
             element.assert(xml);
           }
@@ -16554,7 +17750,7 @@ var require_xml_helper = __commonJS({
           const xml = yield _XmlHelper.getXmlFromArchive(element.archive, element.file);
           const collection = xml.getElementsByTagName(element.tag);
           const toRemove = [];
-          _XmlHelper.modifyCollection(collection, (item, index) => {
+          _XmlHelper.modifyCollection(collection, (item) => {
             if (element.clause(xml, item)) {
               toRemove.push(item);
             }
@@ -16692,6 +17888,7 @@ var require_xml_helper = __commonJS({
       }
       static replaceAttribute(archive, path10, tagName, attributeName, attributeValue, replaceValue, replaceAttributeName) {
         return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
           const xml = yield _XmlHelper.getXmlFromArchive(archive, path10);
           const elements2 = xml.getElementsByTagName(tagName);
           for (const i in elements2) {
@@ -16700,7 +17897,7 @@ var require_xml_helper = __commonJS({
               element.setAttribute(replaceAttributeName || attributeName, replaceValue);
             }
             if (element.getAttribute !== void 0) {
-              content_tracker_1.contentTracker.trackRelation(path10, {
+              (_a3 = archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(path10, {
                 Id: element.getAttribute("Id"),
                 Target: element.getAttribute("Target"),
                 Type: element.getAttribute("Type")
@@ -16711,8 +17908,8 @@ var require_xml_helper = __commonJS({
         });
       }
       static getTargetByRelId(archive, relsPath, element, type) {
-        var _a3;
         return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
           const params = constants_1.TargetByRelIdMap[type];
           if (params.findAll) {
             const hyperlinks = element.getElementsByTagName(params.relRootTag);
@@ -16734,7 +17931,9 @@ var require_xml_helper = __commonJS({
           } else {
             const sourceRid = (_a3 = element.getElementsByTagName(params.relRootTag).item(0)) === null || _a3 === void 0 ? void 0 : _a3.getAttribute(params.relAttribute);
             if (!sourceRid) {
-              throw "No sourceRid for " + params.relRootTag;
+              throw new errors_1.ElementNotFoundError("No sourceRid for " + params.relRootTag, {
+                selector: params.relRootTag
+              });
             }
             const shapeRels = yield _XmlHelper.getRelationshipTargetsByPrefix(archive, relsPath, params.prefix);
             const target = shapeRels.find((rel) => {
@@ -16808,17 +18007,21 @@ var require_xml_helper = __commonJS({
         return {
           archive,
           file: `[Content_Types].xml`,
-          parent: (xml) => xml.getElementsByTagName("Types")[0],
+          // `Types` is the document element; a live getElementsByTagName lookup
+          // would re-walk the whole (growing) part on every append.
+          parent: (xml) => xml.documentElement,
           tag: "Override",
           attributes
         };
       }
       static createRelationshipChild(archive, targetRelFile, attributes) {
-        content_tracker_1.contentTracker.trackRelation(targetRelFile, attributes);
+        var _a3;
+        (_a3 = archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(targetRelFile, attributes);
         return {
           archive,
           file: targetRelFile,
-          parent: (xml) => xml.getElementsByTagName("Relationships")[0],
+          // `Relationships` is the document element of a .rels part.
+          parent: (xml) => xml.documentElement,
           tag: "Relationship",
           attributes
         };
@@ -16832,7 +18035,7 @@ var require_xml_helper = __commonJS({
       }
       static appendSharedString(sharedStrings, stringValue) {
         const strings = sharedStrings.getElementsByTagName("sst")[0];
-        const newLabel = sharedStrings.createTextNode(stringValue);
+        const newLabel = sharedStrings.createTextNode(_XmlHelper.sanitizeText(stringValue));
         const newText = sharedStrings.createElement("t");
         newText.appendChild(newLabel);
         const newString = sharedStrings.createElement("si");
@@ -16840,19 +18043,128 @@ var require_xml_helper = __commonJS({
         strings.appendChild(newString);
         return strings.getElementsByTagName("si").length - 1;
       }
+      /**
+       * Sanitize text for XML 1.0 compatibility.
+       * - Replace vertical tab (\u000B / \v) with a newline.
+       * - Remove other disallowed control characters (except TAB, LF, CR).
+       */
+      static sanitizeText(value) {
+        if (value == null)
+          return "";
+        return String(value).replace(/\u000B/g, "\n").replace(/[\u0000-\u0008\u000C\u000E-\u001F]/g, "");
+      }
+      /**
+       * Sanitize attribute values for XML 1.0. Uses same rules as sanitizeText.
+       */
+      static sanitizeAttr(value) {
+        return _XmlHelper.sanitizeText(value);
+      }
       static insertAfter(newNode, referenceNode) {
         return referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling);
       }
+      /**
+       * Copies a node collection into a plain array. xmldom's LiveNodeList
+       * re-walks the entire document on `.length` access after a mutation,
+       * while indexed access returns entries from before it — snapshot before
+       * iterating whenever the loop (or its callback) mutates the tree.
+       */
+      static collectionToArray(collection) {
+        const items = [];
+        const length = collection.length;
+        for (let i = 0; i < length; i++) {
+          items.push(collection[i]);
+        }
+        return items;
+      }
       static sliceCollection(collection, length, from) {
-        if (from !== void 0) {
-          for (let i = from; i < length; i++) {
-            _XmlHelper.remove(collection[i]);
-          }
-        } else {
-          for (let i = collection.length; i > length; i--) {
-            _XmlHelper.remove(collection[i - 1]);
+        const items = _XmlHelper.collectionToArray(collection);
+        const removeItems = from !== void 0 ? items.slice(from, length) : items.slice(length);
+        removeItems.forEach((item) => _XmlHelper.remove(item));
+      }
+      /**
+       * Find the first *direct* child of an element matching one of the given
+       * tag names. Unlike getElementsByTagName, this will not descend into
+       * grandchildren - e.g. an <a:ln> inside <p:spPr> is the shape outline,
+       * while an <a:ln> found anywhere below <p:sp> might belong to a text run.
+       *
+       * @param element - The parent element to scan
+       * @param tagNames - Tag names to look for, in no particular order
+       * @returns The first matching child element, or undefined
+       */
+      static getFirstDirectChild(element, tagNames) {
+        for (let i = 0; i < element.childNodes.length; i++) {
+          const child = element.childNodes.item(i);
+          if (tagNames.includes(child.nodeName)) {
+            return child;
           }
         }
+      }
+      /**
+       * Insert a child element at the position required by an OOXML schema
+       * sequence. Most DrawingML property containers (`a:pPr`, `a:rPr`, `a:ln`, …)
+       * declare their children as an ordered <xsd:sequence>: appending in call
+       * order instead of schema order is what makes PowerPoint offer to repair the
+       * file.
+       *
+       * The new child is inserted before the first existing direct child that
+       * ranks *after* it in `order`. Tags missing from `order` are treated as
+       * "ranks last" and therefore never displace a known tag.
+       *
+       * @param parent - The property container
+       * @param child - The element to insert
+       * @param order - Tag names in schema sequence order
+       */
+      static insertInSchemaOrder(parent, child, order) {
+        const rank = (tagName) => {
+          const index = order.indexOf(tagName);
+          return index === -1 ? order.length : index;
+        };
+        const childRank = rank(child.nodeName);
+        for (let i = 0; i < parent.childNodes.length; i++) {
+          const existing = parent.childNodes.item(i);
+          if (existing.nodeType !== 1) {
+            continue;
+          }
+          if (rank(existing.nodeName) > childRank) {
+            return parent.insertBefore(child, existing);
+          }
+        }
+        return parent.appendChild(child);
+      }
+      /**
+       * Reorder the direct element children of a property container into the
+       * OOXML schema sequence given by `order`, keeping the relative order of
+       * equally-ranked and unknown tags (stable).
+       *
+       * Useful when several independent helpers append to the same container and
+       * no single one of them can know the final child set - e.g. `a:rPr`, which
+       * collects a fill, a highlight, a typeface and a hyperlink from four
+       * different code paths.
+       *
+       * @param parent - The property container
+       * @param order - Tag names in schema sequence order
+       */
+      static sortChildrenBySchema(parent, order) {
+        if (!(parent === null || parent === void 0 ? void 0 : parent.childNodes)) {
+          return;
+        }
+        const children = [];
+        for (let i = 0; i < parent.childNodes.length; i++) {
+          const child = parent.childNodes.item(i);
+          if (child.nodeType === 1) {
+            children.push(child);
+          }
+        }
+        const rank = (element) => {
+          const index = order.indexOf(element.nodeName);
+          return index === -1 ? order.length : index;
+        };
+        const sorted = children.map((child, index) => ({ child, index })).sort((a, b) => rank(a.child) - rank(b.child) || a.index - b.index).map((entry) => entry.child);
+        const alreadySorted = sorted.every((child, index) => child === children[index]);
+        if (alreadySorted) {
+          return;
+        }
+        sorted.forEach((child) => parent.appendChild(child));
       }
       static getClosestParent(tag2, element) {
         if (element.parentNode) {
@@ -16890,7 +18202,7 @@ var require_xml_helper = __commonJS({
         const parent = collection[0].parentNode;
         order.forEach((index, i) => {
           if (!collection[index]) {
-            (0, general_helper_1.log)("sortCollection index not found" + index, 1);
+            logger_1.log.warn("sortCollection index not found" + index);
             return;
           }
           const item = collection[index];
@@ -16901,16 +18213,16 @@ var require_xml_helper = __commonJS({
         });
       }
       static modifyCollection(collection, callback) {
-        for (let i = 0; i < collection.length; i++) {
-          const item = collection[i];
-          callback(item, i);
+        const items = _XmlHelper.collectionToArray(collection);
+        for (let i = 0; i < items.length; i++) {
+          callback(items[i], i);
         }
       }
       static modifyCollectionAsync(collection, callback) {
         return __awaiter(this, void 0, void 0, function* () {
-          for (let i = 0; i < collection.length; i++) {
-            const item = collection[i];
-            yield callback(item, i);
+          const items = _XmlHelper.collectionToArray(collection);
+          for (let i = 0; i < items.length; i++) {
+            yield callback(items[i], i);
           }
         });
       }
@@ -16954,3330 +18266,6 @@ var require_xml_helper = __commonJS({
       if (tagToRemove)
         XmlHelper.remove(tagToRemove);
     };
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/content-tracker.js
-var require_content_tracker = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/content-tracker.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.contentTracker = exports.ContentTracker = void 0;
-    var file_helper_1 = require_file_helper();
-    var xml_helper_1 = require_xml_helper();
-    var constants_1 = require_constants2();
-    var ContentTracker = class {
-      constructor() {
-        this.files = {
-          "ppt/slideMasters": [],
-          "ppt/slideLayouts": [],
-          "ppt/slides": [],
-          "ppt/charts": [],
-          "ppt/embeddings": []
-        };
-        this.relations = {
-          // '.': [],
-          "ppt/slides/_rels": [],
-          "ppt/slideMasters/_rels": [],
-          "ppt/slideLayouts/_rels": [],
-          "ppt/charts/_rels": [],
-          "ppt/_rels": [],
-          ppt: []
-        };
-        this.relationTags = (0, constants_1.contentTrack)();
-      }
-      reset() {
-        ["files", "relations"].forEach((section) => Object.keys(this[section]).forEach((key) => {
-          this[section][key] = [];
-        }));
-        this.relationTags = (0, constants_1.contentTrack)();
-      }
-      trackFile(file2) {
-        const info = file_helper_1.FileHelper.getFileInfo(file2);
-        if (this.files[info.dir]) {
-          this.files[info.dir].push(info.base);
-        }
-      }
-      trackRelation(file2, attributes) {
-        const info = file_helper_1.FileHelper.getFileInfo(file2);
-        if (this.relations[info.dir]) {
-          this.relations[info.dir].push({
-            base: info.base,
-            attributes
-          });
-        }
-      }
-      analyzeContents(archive) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setArchive(archive);
-          yield this.analyzeRelationships();
-          yield this.trackSlideMasters();
-          yield this.trackSlideLayouts();
-        });
-      }
-      setArchive(archive) {
-        this.archive = archive;
-      }
-      /**
-       * This will be replaced by future slideMaster handling.
-       */
-      trackSlideMasters() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideMasters = this.getRelationTag("ppt/presentation.xml").getTrackedRelations("slideMaster");
-          yield this.addAndAnalyze(slideMasters, "ppt/slideMasters");
-        });
-      }
-      trackSlideLayouts() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const usedSlideLayouts = this.getRelationTag("ppt/slideMasters").getTrackedRelations("slideLayout");
-          yield this.addAndAnalyze(usedSlideLayouts, "ppt/slideLayouts");
-        });
-      }
-      addAndAnalyze(trackedRelations, section) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targets = yield this.getRelatedContents(trackedRelations);
-          targets.forEach((target) => {
-            this.trackFile(section + "/" + target.filename);
-          });
-          const relationTagInfo = this.getRelationTag(section);
-          yield this.analyzeRelationship(relationTagInfo);
-        });
-      }
-      getRelatedContents(trackedRelations) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relatedContents = [];
-          for (const trackedRelation of trackedRelations) {
-            for (const target of trackedRelation.targets) {
-              const trackedRelationInfo = yield target.getRelatedContent();
-              relatedContents.push(trackedRelationInfo);
-            }
-          }
-          return relatedContents;
-        });
-      }
-      getRelationTag(source) {
-        return exports.contentTracker.relationTags.find((relationTag) => relationTag.source === source);
-      }
-      analyzeRelationships() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const relationTagInfo of this.relationTags) {
-            yield this.analyzeRelationship(relationTagInfo);
-          }
-        });
-      }
-      analyzeRelationship(relationTagInfo) {
-        return __awaiter(this, void 0, void 0, function* () {
-          relationTagInfo.getTrackedRelations = (role) => {
-            return relationTagInfo.tags.filter((tag2) => tag2.role === role);
-          };
-          for (const relationTag of relationTagInfo.tags) {
-            relationTag.targets = relationTag.targets || [];
-            if (relationTagInfo.isDir === true) {
-              const files = this.files[relationTagInfo.source] || [];
-              if (!files.length) {
-              }
-              for (const file2 of files) {
-                yield this.pushRelationTagTargets(relationTagInfo.source + "/" + file2, file2, relationTag, relationTagInfo);
-              }
-            } else {
-              const pathInfo = file_helper_1.FileHelper.getFileInfo(relationTagInfo.source);
-              yield this.pushRelationTagTargets(relationTagInfo.source, pathInfo.base, relationTag, relationTagInfo);
-            }
-          }
-        });
-      }
-      pushRelationTagTargets(file2, filename, relationTag, relationTagInfo) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const attribute = relationTag.attribute || "r:id";
-          const addTargets = yield xml_helper_1.XmlHelper.getRelationshipItems(this.archive, file2, (element, rels) => {
-            rels.push({
-              file: file2,
-              filename,
-              rId: element.getAttribute(attribute),
-              type: relationTag.type
-            });
-          }, relationTag.tag);
-          this.addCreatedRelationsFunctions(addTargets, exports.contentTracker.relations[relationTagInfo.relationsKey], relationTagInfo);
-          relationTag.targets = [...relationTag.targets, ...addTargets];
-        });
-      }
-      addCreatedRelationsFunctions(addTargets, createdRelations, relationTagInfo) {
-        addTargets.forEach((addTarget) => {
-          addTarget.getCreatedContent = this.getCreatedContent(createdRelations, addTarget);
-          addTarget.getRelatedContent = this.addRelatedContent(relationTagInfo, addTarget);
-        });
-      }
-      getCreatedContent(createdRelations, addTarget) {
-        return () => {
-          return createdRelations.find((relation) => {
-            var _a3;
-            return relation.base === addTarget.filename + ".rels" && ((_a3 = relation.attributes) === null || _a3 === void 0 ? void 0 : _a3.Id) === addTarget.rId;
-          });
-        };
-      }
-      addRelatedContent(relationTagInfo, addTarget) {
-        return () => __awaiter(this, void 0, void 0, function* () {
-          if (addTarget.relatedContent)
-            return addTarget.relatedContent;
-          const relationsFile = relationTagInfo.isDir === true ? relationTagInfo.relationsKey + "/" + addTarget.filename + ".rels" : relationTagInfo.relationsKey;
-          const relationTarget = yield xml_helper_1.XmlHelper.getRelationshipItems(this.archive, relationsFile, (element, rels) => {
-            const rId = element.getAttribute("Id");
-            if (rId === addTarget.rId) {
-              const target = element.getAttribute("Target");
-              const targetMode = element.getAttribute("TargetMode");
-              const fileInfo = file_helper_1.FileHelper.getFileInfo(target);
-              if (targetMode !== "External") {
-                rels.push({
-                  file: target,
-                  filename: fileInfo.base,
-                  rId,
-                  type: element.getAttribute("Type")
-                });
-              }
-            }
-          });
-          addTarget.relatedContent = relationTarget.find((relationTarget2) => relationTarget2.rId === addTarget.rId);
-          return addTarget.relatedContent;
-        });
-      }
-      collect(section, role, collection) {
-        return __awaiter(this, void 0, void 0, function* () {
-          collection = collection || [];
-          const trackedRelationTag = this.getRelationTag(section);
-          const trackedRelations = trackedRelationTag.getTrackedRelations(role);
-          const relatedTargets = yield this.getRelatedContents(trackedRelations);
-          relatedTargets.forEach((relatedTarget) => collection.push(relatedTarget.filename));
-          return collection;
-        });
-      }
-      filterRelations(section, target) {
-        const relations = this.relations[section];
-        return relations.filter((rel) => rel.attributes.Target === target);
-      }
-    };
-    exports.ContentTracker = ContentTracker;
-    exports.contentTracker = new ContentTracker();
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/archive/archive.js
-var require_archive = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/archive/archive.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xmldom_1 = require_lib4();
-    var Archive = class {
-      constructor(filename, params) {
-        this.buffer = [];
-        this.options = {
-          type: "nodebuffer"
-        };
-        this.filename = filename;
-        this.params = params;
-      }
-      parseXml(xmlString) {
-        const dom = new xmldom_1.DOMParser();
-        return dom.parseFromString(xmlString, "application/xml");
-      }
-      serializeXml(XmlDocument) {
-        const s = new xmldom_1.XMLSerializer();
-        return s.serializeToString(XmlDocument);
-      }
-      writeBuffer(archiveType) {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const buffered of this.buffer) {
-            const serialized = this.serializeXml(buffered.content);
-            yield archiveType.write(buffered.relativePath, serialized);
-          }
-        });
-      }
-      toBuffer(relativePath, content) {
-        const existing = this.fromBuffer(relativePath);
-        if (!existing) {
-          this.buffer.push({
-            relativePath,
-            name: relativePath,
-            content
-          });
-        }
-      }
-      setOptions(params) {
-        if (params.compression > 0) {
-          this.options.compression = "DEFLATE";
-          this.options.compressionOptions = {
-            level: params.compression
-          };
-        }
-      }
-      fromBuffer(relativePath) {
-        return this.buffer.find((file2) => file2.relativePath === relativePath);
-      }
-    };
-    exports.default = Archive;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/archive/archive-jszip.js
-var require_archive_jszip = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/archive/archive-jszip.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var archive_1 = __importDefault(require_archive());
-    var fs_1 = __importDefault(__require("fs"));
-    var jszip_1 = __importDefault(require_lib3());
-    var path_1 = __importDefault(__require("path"));
-    var ArchiveJszip = class _ArchiveJszip extends archive_1.default {
-      constructor(filename, params) {
-        super(filename, params);
-      }
-      initialize() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (typeof this.filename !== "object") {
-            this.file = yield fs_1.default.promises.readFile(this.filename);
-          } else {
-            this.file = this.filename;
-          }
-          const zip = new jszip_1.default();
-          this.archive = yield zip.loadAsync(this.file);
-          return this;
-        });
-      }
-      fileExists(file2) {
-        if (this.archive === void 0 || this.archive.files[file2] === void 0) {
-          return false;
-        }
-        return true;
-      }
-      folder(dir) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const files = [];
-          this.archive.folder(dir).forEach((relativePath, file2) => {
-            if (!relativePath.includes("/")) {
-              files.push({
-                name: file2.name,
-                relativePath
-              });
-            }
-          });
-          return files;
-        });
-      }
-      read(file2, type) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.archive) {
-            yield this.initialize();
-          }
-          if (!this.archive.files[file2]) {
-            if (typeof this.filename === "string") {
-              throw new Error("Could not find file " + file2 + "@" + path_1.default.basename(this.filename));
-            } else {
-              throw new Error("Could not find file " + file2);
-            }
-          }
-          return this.archive.files[file2].async(type || "string");
-        });
-      }
-      write(file2, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.archive.file(file2, data);
-          return this;
-        });
-      }
-      remove(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.archive.remove(file2);
-        });
-      }
-      extract(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contents = yield this.read(file2, "nodebuffer");
-          const zip = new jszip_1.default();
-          const newArchive = new _ArchiveJszip(file2, this.params);
-          newArchive.archive = yield zip.loadAsync(contents);
-          return newArchive;
-        });
-      }
-      output(location, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const content = yield this.getContent(params);
-          yield fs_1.default.promises.writeFile(location, content).catch((err) => {
-            console.error(err);
-            throw new Error(`Could not write output file: ${location}`);
-          });
-        });
-      }
-      stream(params, options) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setOptions(params);
-          yield this.writeBuffer(this);
-          const mergedOptions = Object.assign(Object.assign({}, this.options), options);
-          return this.archive.generateNodeStream(mergedOptions);
-        });
-      }
-      getFinalArchive() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.writeBuffer(this);
-          return this.archive;
-        });
-      }
-      getContent(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setOptions(params);
-          yield this.writeBuffer(this);
-          return yield this.archive.generateAsync(this.options);
-        });
-      }
-      readXml(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const isBuffered = this.fromBuffer(file2);
-          if (!isBuffered) {
-            let xmlString = "";
-            if (this.params.decodeText) {
-              const buffer = yield this.read(file2, "nodebuffer");
-              xmlString = new TextDecoder().decode(buffer);
-            } else {
-              xmlString = yield this.read(file2, "string");
-            }
-            const XmlDocument = this.parseXml(xmlString);
-            this.toBuffer(file2, XmlDocument);
-            return XmlDocument;
-          } else {
-            return isBuffered.content;
-          }
-        });
-      }
-      writeXml(file2, XmlDocument) {
-        this.toBuffer(file2, XmlDocument);
-      }
-    };
-    exports.default = ArchiveJszip;
-  }
-});
-
-// node_modules/ms/index.js
-var require_ms = __commonJS({
-  "node_modules/ms/index.js"(exports, module) {
-    var s = 1e3;
-    var m = s * 60;
-    var h = m * 60;
-    var d = h * 24;
-    var w = d * 7;
-    var y = d * 365.25;
-    module.exports = function(val, options) {
-      options = options || {};
-      var type = typeof val;
-      if (type === "string" && val.length > 0) {
-        return parse4(val);
-      } else if (type === "number" && isFinite(val)) {
-        return options.long ? fmtLong(val) : fmtShort(val);
-      }
-      throw new Error(
-        "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
-      );
-    };
-    function parse4(str) {
-      str = String(str);
-      if (str.length > 100) {
-        return;
-      }
-      var match = /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
-        str
-      );
-      if (!match) {
-        return;
-      }
-      var n = parseFloat(match[1]);
-      var type = (match[2] || "ms").toLowerCase();
-      switch (type) {
-        case "years":
-        case "year":
-        case "yrs":
-        case "yr":
-        case "y":
-          return n * y;
-        case "weeks":
-        case "week":
-        case "w":
-          return n * w;
-        case "days":
-        case "day":
-        case "d":
-          return n * d;
-        case "hours":
-        case "hour":
-        case "hrs":
-        case "hr":
-        case "h":
-          return n * h;
-        case "minutes":
-        case "minute":
-        case "mins":
-        case "min":
-        case "m":
-          return n * m;
-        case "seconds":
-        case "second":
-        case "secs":
-        case "sec":
-        case "s":
-          return n * s;
-        case "milliseconds":
-        case "millisecond":
-        case "msecs":
-        case "msec":
-        case "ms":
-          return n;
-        default:
-          return void 0;
-      }
-    }
-    function fmtShort(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d) {
-        return Math.round(ms / d) + "d";
-      }
-      if (msAbs >= h) {
-        return Math.round(ms / h) + "h";
-      }
-      if (msAbs >= m) {
-        return Math.round(ms / m) + "m";
-      }
-      if (msAbs >= s) {
-        return Math.round(ms / s) + "s";
-      }
-      return ms + "ms";
-    }
-    function fmtLong(ms) {
-      var msAbs = Math.abs(ms);
-      if (msAbs >= d) {
-        return plural(ms, msAbs, d, "day");
-      }
-      if (msAbs >= h) {
-        return plural(ms, msAbs, h, "hour");
-      }
-      if (msAbs >= m) {
-        return plural(ms, msAbs, m, "minute");
-      }
-      if (msAbs >= s) {
-        return plural(ms, msAbs, s, "second");
-      }
-      return ms + " ms";
-    }
-    function plural(ms, msAbs, n, name) {
-      var isPlural = msAbs >= n * 1.5;
-      return Math.round(ms / n) + " " + name + (isPlural ? "s" : "");
-    }
-  }
-});
-
-// node_modules/debug/src/common.js
-var require_common2 = __commonJS({
-  "node_modules/debug/src/common.js"(exports, module) {
-    function setup(env) {
-      createDebug.debug = createDebug;
-      createDebug.default = createDebug;
-      createDebug.coerce = coerce;
-      createDebug.disable = disable;
-      createDebug.enable = enable;
-      createDebug.enabled = enabled;
-      createDebug.humanize = require_ms();
-      createDebug.destroy = destroy;
-      Object.keys(env).forEach((key) => {
-        createDebug[key] = env[key];
-      });
-      createDebug.names = [];
-      createDebug.skips = [];
-      createDebug.formatters = {};
-      function selectColor(namespace) {
-        let hash2 = 0;
-        for (let i = 0; i < namespace.length; i++) {
-          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
-          hash2 |= 0;
-        }
-        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
-      }
-      createDebug.selectColor = selectColor;
-      function createDebug(namespace) {
-        let prevTime;
-        let enableOverride = null;
-        let namespacesCache;
-        let enabledCache;
-        function debug(...args) {
-          if (!debug.enabled) {
-            return;
-          }
-          const self2 = debug;
-          const curr = Number(/* @__PURE__ */ new Date());
-          const ms = curr - (prevTime || curr);
-          self2.diff = ms;
-          self2.prev = prevTime;
-          self2.curr = curr;
-          prevTime = curr;
-          args[0] = createDebug.coerce(args[0]);
-          if (typeof args[0] !== "string") {
-            args.unshift("%O");
-          }
-          let index = 0;
-          args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
-            if (match === "%%") {
-              return "%";
-            }
-            index++;
-            const formatter = createDebug.formatters[format];
-            if (typeof formatter === "function") {
-              const val = args[index];
-              match = formatter.call(self2, val);
-              args.splice(index, 1);
-              index--;
-            }
-            return match;
-          });
-          createDebug.formatArgs.call(self2, args);
-          const logFn = self2.log || createDebug.log;
-          logFn.apply(self2, args);
-        }
-        debug.namespace = namespace;
-        debug.useColors = createDebug.useColors();
-        debug.color = createDebug.selectColor(namespace);
-        debug.extend = extend2;
-        debug.destroy = createDebug.destroy;
-        Object.defineProperty(debug, "enabled", {
-          enumerable: true,
-          configurable: false,
-          get: () => {
-            if (enableOverride !== null) {
-              return enableOverride;
-            }
-            if (namespacesCache !== createDebug.namespaces) {
-              namespacesCache = createDebug.namespaces;
-              enabledCache = createDebug.enabled(namespace);
-            }
-            return enabledCache;
-          },
-          set: (v) => {
-            enableOverride = v;
-          }
-        });
-        if (typeof createDebug.init === "function") {
-          createDebug.init(debug);
-        }
-        return debug;
-      }
-      function extend2(namespace, delimiter) {
-        const newDebug = createDebug(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
-        newDebug.log = this.log;
-        return newDebug;
-      }
-      function enable(namespaces) {
-        createDebug.save(namespaces);
-        createDebug.namespaces = namespaces;
-        createDebug.names = [];
-        createDebug.skips = [];
-        const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
-        for (const ns of split) {
-          if (ns[0] === "-") {
-            createDebug.skips.push(ns.slice(1));
-          } else {
-            createDebug.names.push(ns);
-          }
-        }
-      }
-      function matchesTemplate(search, template) {
-        let searchIndex = 0;
-        let templateIndex = 0;
-        let starIndex = -1;
-        let matchIndex = 0;
-        while (searchIndex < search.length) {
-          if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
-            if (template[templateIndex] === "*") {
-              starIndex = templateIndex;
-              matchIndex = searchIndex;
-              templateIndex++;
-            } else {
-              searchIndex++;
-              templateIndex++;
-            }
-          } else if (starIndex !== -1) {
-            templateIndex = starIndex + 1;
-            matchIndex++;
-            searchIndex = matchIndex;
-          } else {
-            return false;
-          }
-        }
-        while (templateIndex < template.length && template[templateIndex] === "*") {
-          templateIndex++;
-        }
-        return templateIndex === template.length;
-      }
-      function disable() {
-        const namespaces = [
-          ...createDebug.names,
-          ...createDebug.skips.map((namespace) => "-" + namespace)
-        ].join(",");
-        createDebug.enable("");
-        return namespaces;
-      }
-      function enabled(name) {
-        for (const skip of createDebug.skips) {
-          if (matchesTemplate(name, skip)) {
-            return false;
-          }
-        }
-        for (const ns of createDebug.names) {
-          if (matchesTemplate(name, ns)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      function coerce(val) {
-        if (val instanceof Error) {
-          return val.stack || val.message;
-        }
-        return val;
-      }
-      function destroy() {
-        console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
-      }
-      createDebug.enable(createDebug.load());
-      return createDebug;
-    }
-    module.exports = setup;
-  }
-});
-
-// node_modules/debug/src/browser.js
-var require_browser = __commonJS({
-  "node_modules/debug/src/browser.js"(exports, module) {
-    exports.formatArgs = formatArgs;
-    exports.save = save;
-    exports.load = load;
-    exports.useColors = useColors;
-    exports.storage = localstorage();
-    exports.destroy = /* @__PURE__ */ (() => {
-      let warned = false;
-      return () => {
-        if (!warned) {
-          warned = true;
-          console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
-        }
-      };
-    })();
-    exports.colors = [
-      "#0000CC",
-      "#0000FF",
-      "#0033CC",
-      "#0033FF",
-      "#0066CC",
-      "#0066FF",
-      "#0099CC",
-      "#0099FF",
-      "#00CC00",
-      "#00CC33",
-      "#00CC66",
-      "#00CC99",
-      "#00CCCC",
-      "#00CCFF",
-      "#3300CC",
-      "#3300FF",
-      "#3333CC",
-      "#3333FF",
-      "#3366CC",
-      "#3366FF",
-      "#3399CC",
-      "#3399FF",
-      "#33CC00",
-      "#33CC33",
-      "#33CC66",
-      "#33CC99",
-      "#33CCCC",
-      "#33CCFF",
-      "#6600CC",
-      "#6600FF",
-      "#6633CC",
-      "#6633FF",
-      "#66CC00",
-      "#66CC33",
-      "#9900CC",
-      "#9900FF",
-      "#9933CC",
-      "#9933FF",
-      "#99CC00",
-      "#99CC33",
-      "#CC0000",
-      "#CC0033",
-      "#CC0066",
-      "#CC0099",
-      "#CC00CC",
-      "#CC00FF",
-      "#CC3300",
-      "#CC3333",
-      "#CC3366",
-      "#CC3399",
-      "#CC33CC",
-      "#CC33FF",
-      "#CC6600",
-      "#CC6633",
-      "#CC9900",
-      "#CC9933",
-      "#CCCC00",
-      "#CCCC33",
-      "#FF0000",
-      "#FF0033",
-      "#FF0066",
-      "#FF0099",
-      "#FF00CC",
-      "#FF00FF",
-      "#FF3300",
-      "#FF3333",
-      "#FF3366",
-      "#FF3399",
-      "#FF33CC",
-      "#FF33FF",
-      "#FF6600",
-      "#FF6633",
-      "#FF9900",
-      "#FF9933",
-      "#FFCC00",
-      "#FFCC33"
-    ];
-    function useColors() {
-      if (typeof window !== "undefined" && window.process && (window.process.type === "renderer" || window.process.__nwjs)) {
-        return true;
-      }
-      if (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
-        return false;
-      }
-      let m;
-      return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || // Is firebug? http://stackoverflow.com/a/398120/376773
-      typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || // Is firefox >= v31?
-      // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-      typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
-      typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
-    }
-    function formatArgs(args) {
-      args[0] = (this.useColors ? "%c" : "") + this.namespace + (this.useColors ? " %c" : " ") + args[0] + (this.useColors ? "%c " : " ") + "+" + module.exports.humanize(this.diff);
-      if (!this.useColors) {
-        return;
-      }
-      const c = "color: " + this.color;
-      args.splice(1, 0, c, "color: inherit");
-      let index = 0;
-      let lastC = 0;
-      args[0].replace(/%[a-zA-Z%]/g, (match) => {
-        if (match === "%%") {
-          return;
-        }
-        index++;
-        if (match === "%c") {
-          lastC = index;
-        }
-      });
-      args.splice(lastC, 0, c);
-    }
-    exports.log = console.debug || console.log || (() => {
-    });
-    function save(namespaces) {
-      try {
-        if (namespaces) {
-          exports.storage.setItem("debug", namespaces);
-        } else {
-          exports.storage.removeItem("debug");
-        }
-      } catch (error51) {
-      }
-    }
-    function load() {
-      let r;
-      try {
-        r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
-      } catch (error51) {
-      }
-      if (!r && typeof process !== "undefined" && "env" in process) {
-        r = process.env.DEBUG;
-      }
-      return r;
-    }
-    function localstorage() {
-      try {
-        return localStorage;
-      } catch (error51) {
-      }
-    }
-    module.exports = require_common2()(exports);
-    var { formatters } = module.exports;
-    formatters.j = function(v) {
-      try {
-        return JSON.stringify(v);
-      } catch (error51) {
-        return "[UnexpectedJSONParseError]: " + error51.message;
-      }
-    };
-  }
-});
-
-// node_modules/debug/src/node.js
-var require_node2 = __commonJS({
-  "node_modules/debug/src/node.js"(exports, module) {
-    var tty = __require("tty");
-    var util = __require("util");
-    exports.init = init;
-    exports.log = log;
-    exports.formatArgs = formatArgs;
-    exports.save = save;
-    exports.load = load;
-    exports.useColors = useColors;
-    exports.destroy = util.deprecate(
-      () => {
-      },
-      "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`."
-    );
-    exports.colors = [6, 2, 3, 4, 5, 1];
-    try {
-      const supportsColor = __require("supports-color");
-      if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
-        exports.colors = [
-          20,
-          21,
-          26,
-          27,
-          32,
-          33,
-          38,
-          39,
-          40,
-          41,
-          42,
-          43,
-          44,
-          45,
-          56,
-          57,
-          62,
-          63,
-          68,
-          69,
-          74,
-          75,
-          76,
-          77,
-          78,
-          79,
-          80,
-          81,
-          92,
-          93,
-          98,
-          99,
-          112,
-          113,
-          128,
-          129,
-          134,
-          135,
-          148,
-          149,
-          160,
-          161,
-          162,
-          163,
-          164,
-          165,
-          166,
-          167,
-          168,
-          169,
-          170,
-          171,
-          172,
-          173,
-          178,
-          179,
-          184,
-          185,
-          196,
-          197,
-          198,
-          199,
-          200,
-          201,
-          202,
-          203,
-          204,
-          205,
-          206,
-          207,
-          208,
-          209,
-          214,
-          215,
-          220,
-          221
-        ];
-      }
-    } catch (error51) {
-    }
-    exports.inspectOpts = Object.keys(process.env).filter((key) => {
-      return /^debug_/i.test(key);
-    }).reduce((obj, key) => {
-      const prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
-        return k.toUpperCase();
-      });
-      let val = process.env[key];
-      if (/^(yes|on|true|enabled)$/i.test(val)) {
-        val = true;
-      } else if (/^(no|off|false|disabled)$/i.test(val)) {
-        val = false;
-      } else if (val === "null") {
-        val = null;
-      } else {
-        val = Number(val);
-      }
-      obj[prop] = val;
-      return obj;
-    }, {});
-    function useColors() {
-      return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(process.stderr.fd);
-    }
-    function formatArgs(args) {
-      const { namespace: name, useColors: useColors2 } = this;
-      if (useColors2) {
-        const c = this.color;
-        const colorCode = "\x1B[3" + (c < 8 ? c : "8;5;" + c);
-        const prefix = `  ${colorCode};1m${name} \x1B[0m`;
-        args[0] = prefix + args[0].split("\n").join("\n" + prefix);
-        args.push(colorCode + "m+" + module.exports.humanize(this.diff) + "\x1B[0m");
-      } else {
-        args[0] = getDate() + name + " " + args[0];
-      }
-    }
-    function getDate() {
-      if (exports.inspectOpts.hideDate) {
-        return "";
-      }
-      return (/* @__PURE__ */ new Date()).toISOString() + " ";
-    }
-    function log(...args) {
-      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
-    }
-    function save(namespaces) {
-      if (namespaces) {
-        process.env.DEBUG = namespaces;
-      } else {
-        delete process.env.DEBUG;
-      }
-    }
-    function load() {
-      return process.env.DEBUG;
-    }
-    function init(debug) {
-      debug.inspectOpts = {};
-      const keys = Object.keys(exports.inspectOpts);
-      for (let i = 0; i < keys.length; i++) {
-        debug.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
-      }
-    }
-    module.exports = require_common2()(exports);
-    var { formatters } = module.exports;
-    formatters.o = function(v) {
-      this.inspectOpts.colors = this.useColors;
-      return util.inspect(v, this.inspectOpts).split("\n").map((str) => str.trim()).join(" ");
-    };
-    formatters.O = function(v) {
-      this.inspectOpts.colors = this.useColors;
-      return util.inspect(v, this.inspectOpts);
-    };
-  }
-});
-
-// node_modules/debug/src/index.js
-var require_src = __commonJS({
-  "node_modules/debug/src/index.js"(exports, module) {
-    if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
-      module.exports = require_browser();
-    } else {
-      module.exports = require_node2();
-    }
-  }
-});
-
-// node_modules/wrappy/wrappy.js
-var require_wrappy = __commonJS({
-  "node_modules/wrappy/wrappy.js"(exports, module) {
-    module.exports = wrappy;
-    function wrappy(fn, cb) {
-      if (fn && cb) return wrappy(fn)(cb);
-      if (typeof fn !== "function")
-        throw new TypeError("need wrapper function");
-      Object.keys(fn).forEach(function(k) {
-        wrapper[k] = fn[k];
-      });
-      return wrapper;
-      function wrapper() {
-        var args = new Array(arguments.length);
-        for (var i = 0; i < args.length; i++) {
-          args[i] = arguments[i];
-        }
-        var ret = fn.apply(this, args);
-        var cb2 = args[args.length - 1];
-        if (typeof ret === "function" && ret !== cb2) {
-          Object.keys(cb2).forEach(function(k) {
-            ret[k] = cb2[k];
-          });
-        }
-        return ret;
-      }
-    }
-  }
-});
-
-// node_modules/once/once.js
-var require_once = __commonJS({
-  "node_modules/once/once.js"(exports, module) {
-    var wrappy = require_wrappy();
-    module.exports = wrappy(once);
-    module.exports.strict = wrappy(onceStrict);
-    once.proto = once(function() {
-      Object.defineProperty(Function.prototype, "once", {
-        value: function() {
-          return once(this);
-        },
-        configurable: true
-      });
-      Object.defineProperty(Function.prototype, "onceStrict", {
-        value: function() {
-          return onceStrict(this);
-        },
-        configurable: true
-      });
-    });
-    function once(fn) {
-      var f = function() {
-        if (f.called) return f.value;
-        f.called = true;
-        return f.value = fn.apply(this, arguments);
-      };
-      f.called = false;
-      return f;
-    }
-    function onceStrict(fn) {
-      var f = function() {
-        if (f.called)
-          throw new Error(f.onceError);
-        f.called = true;
-        return f.value = fn.apply(this, arguments);
-      };
-      var name = fn.name || "Function wrapped with `once`";
-      f.onceError = name + " shouldn't be called more than once";
-      f.called = false;
-      return f;
-    }
-  }
-});
-
-// node_modules/end-of-stream/index.js
-var require_end_of_stream = __commonJS({
-  "node_modules/end-of-stream/index.js"(exports, module) {
-    var once = require_once();
-    var noop = function() {
-    };
-    var qnt = global.Bare ? queueMicrotask : process.nextTick.bind(process);
-    var isRequest = function(stream) {
-      return stream.setHeader && typeof stream.abort === "function";
-    };
-    var isChildProcess = function(stream) {
-      return stream.stdio && Array.isArray(stream.stdio) && stream.stdio.length === 3;
-    };
-    var eos = function(stream, opts, callback) {
-      if (typeof opts === "function") return eos(stream, null, opts);
-      if (!opts) opts = {};
-      callback = once(callback || noop);
-      var ws = stream._writableState;
-      var rs = stream._readableState;
-      var readable = opts.readable || opts.readable !== false && stream.readable;
-      var writable = opts.writable || opts.writable !== false && stream.writable;
-      var cancelled = false;
-      var onlegacyfinish = function() {
-        if (!stream.writable) onfinish();
-      };
-      var onfinish = function() {
-        writable = false;
-        if (!readable) callback.call(stream);
-      };
-      var onend = function() {
-        readable = false;
-        if (!writable) callback.call(stream);
-      };
-      var onexit = function(exitCode) {
-        callback.call(stream, exitCode ? new Error("exited with error code: " + exitCode) : null);
-      };
-      var onerror = function(err) {
-        callback.call(stream, err);
-      };
-      var onclose = function() {
-        qnt(onclosenexttick);
-      };
-      var onclosenexttick = function() {
-        if (cancelled) return;
-        if (readable && !(rs && (rs.ended && !rs.destroyed))) return callback.call(stream, new Error("premature close"));
-        if (writable && !(ws && (ws.ended && !ws.destroyed))) return callback.call(stream, new Error("premature close"));
-      };
-      var onrequest = function() {
-        stream.req.on("finish", onfinish);
-      };
-      if (isRequest(stream)) {
-        stream.on("complete", onfinish);
-        stream.on("abort", onclose);
-        if (stream.req) onrequest();
-        else stream.on("request", onrequest);
-      } else if (writable && !ws) {
-        stream.on("end", onlegacyfinish);
-        stream.on("close", onlegacyfinish);
-      }
-      if (isChildProcess(stream)) stream.on("exit", onexit);
-      stream.on("end", onend);
-      stream.on("finish", onfinish);
-      if (opts.error !== false) stream.on("error", onerror);
-      stream.on("close", onclose);
-      return function() {
-        cancelled = true;
-        stream.removeListener("complete", onfinish);
-        stream.removeListener("abort", onclose);
-        stream.removeListener("request", onrequest);
-        if (stream.req) stream.req.removeListener("finish", onfinish);
-        stream.removeListener("end", onlegacyfinish);
-        stream.removeListener("close", onlegacyfinish);
-        stream.removeListener("finish", onfinish);
-        stream.removeListener("exit", onexit);
-        stream.removeListener("end", onend);
-        stream.removeListener("error", onerror);
-        stream.removeListener("close", onclose);
-      };
-    };
-    module.exports = eos;
-  }
-});
-
-// node_modules/pump/index.js
-var require_pump = __commonJS({
-  "node_modules/pump/index.js"(exports, module) {
-    var once = require_once();
-    var eos = require_end_of_stream();
-    var fs;
-    try {
-      fs = __require("fs");
-    } catch (e) {
-    }
-    var noop = function() {
-    };
-    var ancient = typeof process === "undefined" ? false : /^v?\.0/.test(process.version);
-    var isFn = function(fn) {
-      return typeof fn === "function";
-    };
-    var isFS = function(stream) {
-      if (!ancient) return false;
-      if (!fs) return false;
-      return (stream instanceof (fs.ReadStream || noop) || stream instanceof (fs.WriteStream || noop)) && isFn(stream.close);
-    };
-    var isRequest = function(stream) {
-      return stream.setHeader && isFn(stream.abort);
-    };
-    var destroyer = function(stream, reading, writing, callback) {
-      callback = once(callback);
-      var closed = false;
-      stream.on("close", function() {
-        closed = true;
-      });
-      eos(stream, { readable: reading, writable: writing }, function(err) {
-        if (err) return callback(err);
-        closed = true;
-        callback();
-      });
-      var destroyed = false;
-      return function(err) {
-        if (closed) return;
-        if (destroyed) return;
-        destroyed = true;
-        if (isFS(stream)) return stream.close(noop);
-        if (isRequest(stream)) return stream.abort();
-        if (isFn(stream.destroy)) return stream.destroy();
-        callback(err || new Error("stream was destroyed"));
-      };
-    };
-    var call = function(fn) {
-      fn();
-    };
-    var pipe2 = function(from, to) {
-      return from.pipe(to);
-    };
-    var pump = function() {
-      var streams = Array.prototype.slice.call(arguments);
-      var callback = isFn(streams[streams.length - 1] || noop) && streams.pop() || noop;
-      if (Array.isArray(streams[0])) streams = streams[0];
-      if (streams.length < 2) throw new Error("pump requires two streams per minimum");
-      var error51;
-      var destroys = streams.map(function(stream, i) {
-        var reading = i < streams.length - 1;
-        var writing = i > 0;
-        return destroyer(stream, reading, writing, function(err) {
-          if (!error51) error51 = err;
-          if (err) destroys.forEach(call);
-          if (reading) return;
-          destroys.forEach(call);
-          callback(error51);
-        });
-      });
-      return streams.reduce(pipe2);
-    };
-    module.exports = pump;
-  }
-});
-
-// node_modules/get-stream/buffer-stream.js
-var require_buffer_stream = __commonJS({
-  "node_modules/get-stream/buffer-stream.js"(exports, module) {
-    "use strict";
-    var { PassThrough: PassThroughStream } = __require("stream");
-    module.exports = (options) => {
-      options = { ...options };
-      const { array: array2 } = options;
-      let { encoding } = options;
-      const isBuffer = encoding === "buffer";
-      let objectMode = false;
-      if (array2) {
-        objectMode = !(encoding || isBuffer);
-      } else {
-        encoding = encoding || "utf8";
-      }
-      if (isBuffer) {
-        encoding = null;
-      }
-      const stream = new PassThroughStream({ objectMode });
-      if (encoding) {
-        stream.setEncoding(encoding);
-      }
-      let length = 0;
-      const chunks = [];
-      stream.on("data", (chunk) => {
-        chunks.push(chunk);
-        if (objectMode) {
-          length = chunks.length;
-        } else {
-          length += chunk.length;
-        }
-      });
-      stream.getBufferedValue = () => {
-        if (array2) {
-          return chunks;
-        }
-        return isBuffer ? Buffer.concat(chunks, length) : chunks.join("");
-      };
-      stream.getBufferedLength = () => length;
-      return stream;
-    };
-  }
-});
-
-// node_modules/get-stream/index.js
-var require_get_stream = __commonJS({
-  "node_modules/get-stream/index.js"(exports, module) {
-    "use strict";
-    var { constants: BufferConstants } = __require("buffer");
-    var pump = require_pump();
-    var bufferStream = require_buffer_stream();
-    var MaxBufferError = class extends Error {
-      constructor() {
-        super("maxBuffer exceeded");
-        this.name = "MaxBufferError";
-      }
-    };
-    async function getStream(inputStream, options) {
-      if (!inputStream) {
-        return Promise.reject(new Error("Expected a stream"));
-      }
-      options = {
-        maxBuffer: Infinity,
-        ...options
-      };
-      const { maxBuffer } = options;
-      let stream;
-      await new Promise((resolve, reject) => {
-        const rejectPromise = (error51) => {
-          if (error51 && stream.getBufferedLength() <= BufferConstants.MAX_LENGTH) {
-            error51.bufferedData = stream.getBufferedValue();
-          }
-          reject(error51);
-        };
-        stream = pump(inputStream, bufferStream(options), (error51) => {
-          if (error51) {
-            rejectPromise(error51);
-            return;
-          }
-          resolve();
-        });
-        stream.on("data", () => {
-          if (stream.getBufferedLength() > maxBuffer) {
-            rejectPromise(new MaxBufferError());
-          }
-        });
-      });
-      return stream.getBufferedValue();
-    }
-    module.exports = getStream;
-    module.exports.default = getStream;
-    module.exports.buffer = (stream, options) => getStream(stream, { ...options, encoding: "buffer" });
-    module.exports.array = (stream, options) => getStream(stream, { ...options, array: true });
-    module.exports.MaxBufferError = MaxBufferError;
-  }
-});
-
-// node_modules/pend/index.js
-var require_pend = __commonJS({
-  "node_modules/pend/index.js"(exports, module) {
-    module.exports = Pend;
-    function Pend() {
-      this.pending = 0;
-      this.max = Infinity;
-      this.listeners = [];
-      this.waiting = [];
-      this.error = null;
-    }
-    Pend.prototype.go = function(fn) {
-      if (this.pending < this.max) {
-        pendGo(this, fn);
-      } else {
-        this.waiting.push(fn);
-      }
-    };
-    Pend.prototype.wait = function(cb) {
-      if (this.pending === 0) {
-        cb(this.error);
-      } else {
-        this.listeners.push(cb);
-      }
-    };
-    Pend.prototype.hold = function() {
-      return pendHold(this);
-    };
-    function pendHold(self2) {
-      self2.pending += 1;
-      var called = false;
-      return onCb;
-      function onCb(err) {
-        if (called) throw new Error("callback called twice");
-        called = true;
-        self2.error = self2.error || err;
-        self2.pending -= 1;
-        if (self2.waiting.length > 0 && self2.pending < self2.max) {
-          pendGo(self2, self2.waiting.shift());
-        } else if (self2.pending === 0) {
-          var listeners = self2.listeners;
-          self2.listeners = [];
-          listeners.forEach(cbListener);
-        }
-      }
-      function cbListener(listener) {
-        listener(self2.error);
-      }
-    }
-    function pendGo(self2, fn) {
-      fn(pendHold(self2));
-    }
-  }
-});
-
-// node_modules/fd-slicer/index.js
-var require_fd_slicer = __commonJS({
-  "node_modules/fd-slicer/index.js"(exports) {
-    var fs = __require("fs");
-    var util = __require("util");
-    var stream = __require("stream");
-    var Readable = stream.Readable;
-    var Writable = stream.Writable;
-    var PassThrough = stream.PassThrough;
-    var Pend = require_pend();
-    var EventEmitter = __require("events").EventEmitter;
-    exports.createFromBuffer = createFromBuffer;
-    exports.createFromFd = createFromFd;
-    exports.BufferSlicer = BufferSlicer;
-    exports.FdSlicer = FdSlicer;
-    util.inherits(FdSlicer, EventEmitter);
-    function FdSlicer(fd, options) {
-      options = options || {};
-      EventEmitter.call(this);
-      this.fd = fd;
-      this.pend = new Pend();
-      this.pend.max = 1;
-      this.refCount = 0;
-      this.autoClose = !!options.autoClose;
-    }
-    FdSlicer.prototype.read = function(buffer, offset, length, position, callback) {
-      var self2 = this;
-      self2.pend.go(function(cb) {
-        fs.read(self2.fd, buffer, offset, length, position, function(err, bytesRead, buffer2) {
-          cb();
-          callback(err, bytesRead, buffer2);
-        });
-      });
-    };
-    FdSlicer.prototype.write = function(buffer, offset, length, position, callback) {
-      var self2 = this;
-      self2.pend.go(function(cb) {
-        fs.write(self2.fd, buffer, offset, length, position, function(err, written, buffer2) {
-          cb();
-          callback(err, written, buffer2);
-        });
-      });
-    };
-    FdSlicer.prototype.createReadStream = function(options) {
-      return new ReadStream(this, options);
-    };
-    FdSlicer.prototype.createWriteStream = function(options) {
-      return new WriteStream(this, options);
-    };
-    FdSlicer.prototype.ref = function() {
-      this.refCount += 1;
-    };
-    FdSlicer.prototype.unref = function() {
-      var self2 = this;
-      self2.refCount -= 1;
-      if (self2.refCount > 0) return;
-      if (self2.refCount < 0) throw new Error("invalid unref");
-      if (self2.autoClose) {
-        fs.close(self2.fd, onCloseDone);
-      }
-      function onCloseDone(err) {
-        if (err) {
-          self2.emit("error", err);
-        } else {
-          self2.emit("close");
-        }
-      }
-    };
-    util.inherits(ReadStream, Readable);
-    function ReadStream(context, options) {
-      options = options || {};
-      Readable.call(this, options);
-      this.context = context;
-      this.context.ref();
-      this.start = options.start || 0;
-      this.endOffset = options.end;
-      this.pos = this.start;
-      this.destroyed = false;
-    }
-    ReadStream.prototype._read = function(n) {
-      var self2 = this;
-      if (self2.destroyed) return;
-      var toRead = Math.min(self2._readableState.highWaterMark, n);
-      if (self2.endOffset != null) {
-        toRead = Math.min(toRead, self2.endOffset - self2.pos);
-      }
-      if (toRead <= 0) {
-        self2.destroyed = true;
-        self2.push(null);
-        self2.context.unref();
-        return;
-      }
-      self2.context.pend.go(function(cb) {
-        if (self2.destroyed) return cb();
-        var buffer = new Buffer(toRead);
-        fs.read(self2.context.fd, buffer, 0, toRead, self2.pos, function(err, bytesRead) {
-          if (err) {
-            self2.destroy(err);
-          } else if (bytesRead === 0) {
-            self2.destroyed = true;
-            self2.push(null);
-            self2.context.unref();
-          } else {
-            self2.pos += bytesRead;
-            self2.push(buffer.slice(0, bytesRead));
-          }
-          cb();
-        });
-      });
-    };
-    ReadStream.prototype.destroy = function(err) {
-      if (this.destroyed) return;
-      err = err || new Error("stream destroyed");
-      this.destroyed = true;
-      this.emit("error", err);
-      this.context.unref();
-    };
-    util.inherits(WriteStream, Writable);
-    function WriteStream(context, options) {
-      options = options || {};
-      Writable.call(this, options);
-      this.context = context;
-      this.context.ref();
-      this.start = options.start || 0;
-      this.endOffset = options.end == null ? Infinity : +options.end;
-      this.bytesWritten = 0;
-      this.pos = this.start;
-      this.destroyed = false;
-      this.on("finish", this.destroy.bind(this));
-    }
-    WriteStream.prototype._write = function(buffer, encoding, callback) {
-      var self2 = this;
-      if (self2.destroyed) return;
-      if (self2.pos + buffer.length > self2.endOffset) {
-        var err = new Error("maximum file length exceeded");
-        err.code = "ETOOBIG";
-        self2.destroy();
-        callback(err);
-        return;
-      }
-      self2.context.pend.go(function(cb) {
-        if (self2.destroyed) return cb();
-        fs.write(self2.context.fd, buffer, 0, buffer.length, self2.pos, function(err2, bytes) {
-          if (err2) {
-            self2.destroy();
-            cb();
-            callback(err2);
-          } else {
-            self2.bytesWritten += bytes;
-            self2.pos += bytes;
-            self2.emit("progress");
-            cb();
-            callback();
-          }
-        });
-      });
-    };
-    WriteStream.prototype.destroy = function() {
-      if (this.destroyed) return;
-      this.destroyed = true;
-      this.context.unref();
-    };
-    util.inherits(BufferSlicer, EventEmitter);
-    function BufferSlicer(buffer, options) {
-      EventEmitter.call(this);
-      options = options || {};
-      this.refCount = 0;
-      this.buffer = buffer;
-      this.maxChunkSize = options.maxChunkSize || Number.MAX_SAFE_INTEGER;
-    }
-    BufferSlicer.prototype.read = function(buffer, offset, length, position, callback) {
-      var end = position + length;
-      var delta = end - this.buffer.length;
-      var written = delta > 0 ? delta : length;
-      this.buffer.copy(buffer, offset, position, end);
-      setImmediate(function() {
-        callback(null, written);
-      });
-    };
-    BufferSlicer.prototype.write = function(buffer, offset, length, position, callback) {
-      buffer.copy(this.buffer, position, offset, offset + length);
-      setImmediate(function() {
-        callback(null, length, buffer);
-      });
-    };
-    BufferSlicer.prototype.createReadStream = function(options) {
-      options = options || {};
-      var readStream = new PassThrough(options);
-      readStream.destroyed = false;
-      readStream.start = options.start || 0;
-      readStream.endOffset = options.end;
-      readStream.pos = readStream.endOffset || this.buffer.length;
-      var entireSlice = this.buffer.slice(readStream.start, readStream.pos);
-      var offset = 0;
-      while (true) {
-        var nextOffset = offset + this.maxChunkSize;
-        if (nextOffset >= entireSlice.length) {
-          if (offset < entireSlice.length) {
-            readStream.write(entireSlice.slice(offset, entireSlice.length));
-          }
-          break;
-        }
-        readStream.write(entireSlice.slice(offset, nextOffset));
-        offset = nextOffset;
-      }
-      readStream.end();
-      readStream.destroy = function() {
-        readStream.destroyed = true;
-      };
-      return readStream;
-    };
-    BufferSlicer.prototype.createWriteStream = function(options) {
-      var bufferSlicer = this;
-      options = options || {};
-      var writeStream = new Writable(options);
-      writeStream.start = options.start || 0;
-      writeStream.endOffset = options.end == null ? this.buffer.length : +options.end;
-      writeStream.bytesWritten = 0;
-      writeStream.pos = writeStream.start;
-      writeStream.destroyed = false;
-      writeStream._write = function(buffer, encoding, callback) {
-        if (writeStream.destroyed) return;
-        var end = writeStream.pos + buffer.length;
-        if (end > writeStream.endOffset) {
-          var err = new Error("maximum file length exceeded");
-          err.code = "ETOOBIG";
-          writeStream.destroyed = true;
-          callback(err);
-          return;
-        }
-        buffer.copy(bufferSlicer.buffer, writeStream.pos, 0, buffer.length);
-        writeStream.bytesWritten += buffer.length;
-        writeStream.pos = end;
-        writeStream.emit("progress");
-        callback();
-      };
-      writeStream.destroy = function() {
-        writeStream.destroyed = true;
-      };
-      return writeStream;
-    };
-    BufferSlicer.prototype.ref = function() {
-      this.refCount += 1;
-    };
-    BufferSlicer.prototype.unref = function() {
-      this.refCount -= 1;
-      if (this.refCount < 0) {
-        throw new Error("invalid unref");
-      }
-    };
-    function createFromBuffer(buffer, options) {
-      return new BufferSlicer(buffer, options);
-    }
-    function createFromFd(fd, options) {
-      return new FdSlicer(fd, options);
-    }
-  }
-});
-
-// node_modules/buffer-crc32/index.js
-var require_buffer_crc32 = __commonJS({
-  "node_modules/buffer-crc32/index.js"(exports, module) {
-    var Buffer2 = __require("buffer").Buffer;
-    var CRC_TABLE = [
-      0,
-      1996959894,
-      3993919788,
-      2567524794,
-      124634137,
-      1886057615,
-      3915621685,
-      2657392035,
-      249268274,
-      2044508324,
-      3772115230,
-      2547177864,
-      162941995,
-      2125561021,
-      3887607047,
-      2428444049,
-      498536548,
-      1789927666,
-      4089016648,
-      2227061214,
-      450548861,
-      1843258603,
-      4107580753,
-      2211677639,
-      325883990,
-      1684777152,
-      4251122042,
-      2321926636,
-      335633487,
-      1661365465,
-      4195302755,
-      2366115317,
-      997073096,
-      1281953886,
-      3579855332,
-      2724688242,
-      1006888145,
-      1258607687,
-      3524101629,
-      2768942443,
-      901097722,
-      1119000684,
-      3686517206,
-      2898065728,
-      853044451,
-      1172266101,
-      3705015759,
-      2882616665,
-      651767980,
-      1373503546,
-      3369554304,
-      3218104598,
-      565507253,
-      1454621731,
-      3485111705,
-      3099436303,
-      671266974,
-      1594198024,
-      3322730930,
-      2970347812,
-      795835527,
-      1483230225,
-      3244367275,
-      3060149565,
-      1994146192,
-      31158534,
-      2563907772,
-      4023717930,
-      1907459465,
-      112637215,
-      2680153253,
-      3904427059,
-      2013776290,
-      251722036,
-      2517215374,
-      3775830040,
-      2137656763,
-      141376813,
-      2439277719,
-      3865271297,
-      1802195444,
-      476864866,
-      2238001368,
-      4066508878,
-      1812370925,
-      453092731,
-      2181625025,
-      4111451223,
-      1706088902,
-      314042704,
-      2344532202,
-      4240017532,
-      1658658271,
-      366619977,
-      2362670323,
-      4224994405,
-      1303535960,
-      984961486,
-      2747007092,
-      3569037538,
-      1256170817,
-      1037604311,
-      2765210733,
-      3554079995,
-      1131014506,
-      879679996,
-      2909243462,
-      3663771856,
-      1141124467,
-      855842277,
-      2852801631,
-      3708648649,
-      1342533948,
-      654459306,
-      3188396048,
-      3373015174,
-      1466479909,
-      544179635,
-      3110523913,
-      3462522015,
-      1591671054,
-      702138776,
-      2966460450,
-      3352799412,
-      1504918807,
-      783551873,
-      3082640443,
-      3233442989,
-      3988292384,
-      2596254646,
-      62317068,
-      1957810842,
-      3939845945,
-      2647816111,
-      81470997,
-      1943803523,
-      3814918930,
-      2489596804,
-      225274430,
-      2053790376,
-      3826175755,
-      2466906013,
-      167816743,
-      2097651377,
-      4027552580,
-      2265490386,
-      503444072,
-      1762050814,
-      4150417245,
-      2154129355,
-      426522225,
-      1852507879,
-      4275313526,
-      2312317920,
-      282753626,
-      1742555852,
-      4189708143,
-      2394877945,
-      397917763,
-      1622183637,
-      3604390888,
-      2714866558,
-      953729732,
-      1340076626,
-      3518719985,
-      2797360999,
-      1068828381,
-      1219638859,
-      3624741850,
-      2936675148,
-      906185462,
-      1090812512,
-      3747672003,
-      2825379669,
-      829329135,
-      1181335161,
-      3412177804,
-      3160834842,
-      628085408,
-      1382605366,
-      3423369109,
-      3138078467,
-      570562233,
-      1426400815,
-      3317316542,
-      2998733608,
-      733239954,
-      1555261956,
-      3268935591,
-      3050360625,
-      752459403,
-      1541320221,
-      2607071920,
-      3965973030,
-      1969922972,
-      40735498,
-      2617837225,
-      3943577151,
-      1913087877,
-      83908371,
-      2512341634,
-      3803740692,
-      2075208622,
-      213261112,
-      2463272603,
-      3855990285,
-      2094854071,
-      198958881,
-      2262029012,
-      4057260610,
-      1759359992,
-      534414190,
-      2176718541,
-      4139329115,
-      1873836001,
-      414664567,
-      2282248934,
-      4279200368,
-      1711684554,
-      285281116,
-      2405801727,
-      4167216745,
-      1634467795,
-      376229701,
-      2685067896,
-      3608007406,
-      1308918612,
-      956543938,
-      2808555105,
-      3495958263,
-      1231636301,
-      1047427035,
-      2932959818,
-      3654703836,
-      1088359270,
-      936918e3,
-      2847714899,
-      3736837829,
-      1202900863,
-      817233897,
-      3183342108,
-      3401237130,
-      1404277552,
-      615818150,
-      3134207493,
-      3453421203,
-      1423857449,
-      601450431,
-      3009837614,
-      3294710456,
-      1567103746,
-      711928724,
-      3020668471,
-      3272380065,
-      1510334235,
-      755167117
-    ];
-    if (typeof Int32Array !== "undefined") {
-      CRC_TABLE = new Int32Array(CRC_TABLE);
-    }
-    function ensureBuffer(input) {
-      if (Buffer2.isBuffer(input)) {
-        return input;
-      }
-      var hasNewBufferAPI = typeof Buffer2.alloc === "function" && typeof Buffer2.from === "function";
-      if (typeof input === "number") {
-        return hasNewBufferAPI ? Buffer2.alloc(input) : new Buffer2(input);
-      } else if (typeof input === "string") {
-        return hasNewBufferAPI ? Buffer2.from(input) : new Buffer2(input);
-      } else {
-        throw new Error("input must be buffer, number, or string, received " + typeof input);
-      }
-    }
-    function bufferizeInt(num) {
-      var tmp = ensureBuffer(4);
-      tmp.writeInt32BE(num, 0);
-      return tmp;
-    }
-    function _crc32(buf, previous) {
-      buf = ensureBuffer(buf);
-      if (Buffer2.isBuffer(previous)) {
-        previous = previous.readUInt32BE(0);
-      }
-      var crc = ~~previous ^ -1;
-      for (var n = 0; n < buf.length; n++) {
-        crc = CRC_TABLE[(crc ^ buf[n]) & 255] ^ crc >>> 8;
-      }
-      return crc ^ -1;
-    }
-    function crc32() {
-      return bufferizeInt(_crc32.apply(null, arguments));
-    }
-    crc32.signed = function() {
-      return _crc32.apply(null, arguments);
-    };
-    crc32.unsigned = function() {
-      return _crc32.apply(null, arguments) >>> 0;
-    };
-    module.exports = crc32;
-  }
-});
-
-// node_modules/yauzl/index.js
-var require_yauzl = __commonJS({
-  "node_modules/yauzl/index.js"(exports) {
-    var fs = __require("fs");
-    var zlib = __require("zlib");
-    var fd_slicer = require_fd_slicer();
-    var crc32 = require_buffer_crc32();
-    var util = __require("util");
-    var EventEmitter = __require("events").EventEmitter;
-    var Transform = __require("stream").Transform;
-    var PassThrough = __require("stream").PassThrough;
-    var Writable = __require("stream").Writable;
-    exports.open = open;
-    exports.fromFd = fromFd;
-    exports.fromBuffer = fromBuffer;
-    exports.fromRandomAccessReader = fromRandomAccessReader;
-    exports.dosDateTimeToDate = dosDateTimeToDate;
-    exports.validateFileName = validateFileName;
-    exports.ZipFile = ZipFile;
-    exports.Entry = Entry;
-    exports.RandomAccessReader = RandomAccessReader;
-    function open(path10, options, callback) {
-      if (typeof options === "function") {
-        callback = options;
-        options = null;
-      }
-      if (options == null) options = {};
-      if (options.autoClose == null) options.autoClose = true;
-      if (options.lazyEntries == null) options.lazyEntries = false;
-      if (options.decodeStrings == null) options.decodeStrings = true;
-      if (options.validateEntrySizes == null) options.validateEntrySizes = true;
-      if (options.strictFileNames == null) options.strictFileNames = false;
-      if (callback == null) callback = defaultCallback;
-      fs.open(path10, "r", function(err, fd) {
-        if (err) return callback(err);
-        fromFd(fd, options, function(err2, zipfile) {
-          if (err2) fs.close(fd, defaultCallback);
-          callback(err2, zipfile);
-        });
-      });
-    }
-    function fromFd(fd, options, callback) {
-      if (typeof options === "function") {
-        callback = options;
-        options = null;
-      }
-      if (options == null) options = {};
-      if (options.autoClose == null) options.autoClose = false;
-      if (options.lazyEntries == null) options.lazyEntries = false;
-      if (options.decodeStrings == null) options.decodeStrings = true;
-      if (options.validateEntrySizes == null) options.validateEntrySizes = true;
-      if (options.strictFileNames == null) options.strictFileNames = false;
-      if (callback == null) callback = defaultCallback;
-      fs.fstat(fd, function(err, stats) {
-        if (err) return callback(err);
-        var reader = fd_slicer.createFromFd(fd, { autoClose: true });
-        fromRandomAccessReader(reader, stats.size, options, callback);
-      });
-    }
-    function fromBuffer(buffer, options, callback) {
-      if (typeof options === "function") {
-        callback = options;
-        options = null;
-      }
-      if (options == null) options = {};
-      options.autoClose = false;
-      if (options.lazyEntries == null) options.lazyEntries = false;
-      if (options.decodeStrings == null) options.decodeStrings = true;
-      if (options.validateEntrySizes == null) options.validateEntrySizes = true;
-      if (options.strictFileNames == null) options.strictFileNames = false;
-      var reader = fd_slicer.createFromBuffer(buffer, { maxChunkSize: 65536 });
-      fromRandomAccessReader(reader, buffer.length, options, callback);
-    }
-    function fromRandomAccessReader(reader, totalSize, options, callback) {
-      if (typeof options === "function") {
-        callback = options;
-        options = null;
-      }
-      if (options == null) options = {};
-      if (options.autoClose == null) options.autoClose = true;
-      if (options.lazyEntries == null) options.lazyEntries = false;
-      if (options.decodeStrings == null) options.decodeStrings = true;
-      var decodeStrings = !!options.decodeStrings;
-      if (options.validateEntrySizes == null) options.validateEntrySizes = true;
-      if (options.strictFileNames == null) options.strictFileNames = false;
-      if (callback == null) callback = defaultCallback;
-      if (typeof totalSize !== "number") throw new Error("expected totalSize parameter to be a number");
-      if (totalSize > Number.MAX_SAFE_INTEGER) {
-        throw new Error("zip file too large. only file sizes up to 2^52 are supported due to JavaScript's Number type being an IEEE 754 double.");
-      }
-      reader.ref();
-      var eocdrWithoutCommentSize = 22;
-      var maxCommentSize = 65535;
-      var bufferSize = Math.min(eocdrWithoutCommentSize + maxCommentSize, totalSize);
-      var buffer = newBuffer(bufferSize);
-      var bufferReadStart = totalSize - buffer.length;
-      readAndAssertNoEof(reader, buffer, 0, bufferSize, bufferReadStart, function(err) {
-        if (err) return callback(err);
-        for (var i = bufferSize - eocdrWithoutCommentSize; i >= 0; i -= 1) {
-          if (buffer.readUInt32LE(i) !== 101010256) continue;
-          var eocdrBuffer = buffer.slice(i);
-          var diskNumber = eocdrBuffer.readUInt16LE(4);
-          if (diskNumber !== 0) {
-            return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
-          }
-          var entryCount = eocdrBuffer.readUInt16LE(10);
-          var centralDirectoryOffset = eocdrBuffer.readUInt32LE(16);
-          var commentLength = eocdrBuffer.readUInt16LE(20);
-          var expectedCommentLength = eocdrBuffer.length - eocdrWithoutCommentSize;
-          if (commentLength !== expectedCommentLength) {
-            return callback(new Error("invalid comment length. expected: " + expectedCommentLength + ". found: " + commentLength));
-          }
-          var comment = decodeStrings ? decodeBuffer(eocdrBuffer, 22, eocdrBuffer.length, false) : eocdrBuffer.slice(22);
-          if (!(entryCount === 65535 || centralDirectoryOffset === 4294967295)) {
-            return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options.autoClose, options.lazyEntries, decodeStrings, options.validateEntrySizes, options.strictFileNames));
-          }
-          var zip64EocdlBuffer = newBuffer(20);
-          var zip64EocdlOffset = bufferReadStart + i - zip64EocdlBuffer.length;
-          readAndAssertNoEof(reader, zip64EocdlBuffer, 0, zip64EocdlBuffer.length, zip64EocdlOffset, function(err2) {
-            if (err2) return callback(err2);
-            if (zip64EocdlBuffer.readUInt32LE(0) !== 117853008) {
-              return callback(new Error("invalid zip64 end of central directory locator signature"));
-            }
-            var zip64EocdrOffset = readUInt64LE(zip64EocdlBuffer, 8);
-            var zip64EocdrBuffer = newBuffer(56);
-            readAndAssertNoEof(reader, zip64EocdrBuffer, 0, zip64EocdrBuffer.length, zip64EocdrOffset, function(err3) {
-              if (err3) return callback(err3);
-              if (zip64EocdrBuffer.readUInt32LE(0) !== 101075792) {
-                return callback(new Error("invalid zip64 end of central directory record signature"));
-              }
-              entryCount = readUInt64LE(zip64EocdrBuffer, 32);
-              centralDirectoryOffset = readUInt64LE(zip64EocdrBuffer, 48);
-              return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options.autoClose, options.lazyEntries, decodeStrings, options.validateEntrySizes, options.strictFileNames));
-            });
-          });
-          return;
-        }
-        callback(new Error("end of central directory record signature not found"));
-      });
-    }
-    util.inherits(ZipFile, EventEmitter);
-    function ZipFile(reader, centralDirectoryOffset, fileSize, entryCount, comment, autoClose, lazyEntries, decodeStrings, validateEntrySizes, strictFileNames) {
-      var self2 = this;
-      EventEmitter.call(self2);
-      self2.reader = reader;
-      self2.reader.on("error", function(err) {
-        emitError(self2, err);
-      });
-      self2.reader.once("close", function() {
-        self2.emit("close");
-      });
-      self2.readEntryCursor = centralDirectoryOffset;
-      self2.fileSize = fileSize;
-      self2.entryCount = entryCount;
-      self2.comment = comment;
-      self2.entriesRead = 0;
-      self2.autoClose = !!autoClose;
-      self2.lazyEntries = !!lazyEntries;
-      self2.decodeStrings = !!decodeStrings;
-      self2.validateEntrySizes = !!validateEntrySizes;
-      self2.strictFileNames = !!strictFileNames;
-      self2.isOpen = true;
-      self2.emittedError = false;
-      if (!self2.lazyEntries) self2._readEntry();
-    }
-    ZipFile.prototype.close = function() {
-      if (!this.isOpen) return;
-      this.isOpen = false;
-      this.reader.unref();
-    };
-    function emitErrorAndAutoClose(self2, err) {
-      if (self2.autoClose) self2.close();
-      emitError(self2, err);
-    }
-    function emitError(self2, err) {
-      if (self2.emittedError) return;
-      self2.emittedError = true;
-      self2.emit("error", err);
-    }
-    ZipFile.prototype.readEntry = function() {
-      if (!this.lazyEntries) throw new Error("readEntry() called without lazyEntries:true");
-      this._readEntry();
-    };
-    ZipFile.prototype._readEntry = function() {
-      var self2 = this;
-      if (self2.entryCount === self2.entriesRead) {
-        setImmediate(function() {
-          if (self2.autoClose) self2.close();
-          if (self2.emittedError) return;
-          self2.emit("end");
-        });
-        return;
-      }
-      if (self2.emittedError) return;
-      var buffer = newBuffer(46);
-      readAndAssertNoEof(self2.reader, buffer, 0, buffer.length, self2.readEntryCursor, function(err) {
-        if (err) return emitErrorAndAutoClose(self2, err);
-        if (self2.emittedError) return;
-        var entry = new Entry();
-        var signature = buffer.readUInt32LE(0);
-        if (signature !== 33639248) return emitErrorAndAutoClose(self2, new Error("invalid central directory file header signature: 0x" + signature.toString(16)));
-        entry.versionMadeBy = buffer.readUInt16LE(4);
-        entry.versionNeededToExtract = buffer.readUInt16LE(6);
-        entry.generalPurposeBitFlag = buffer.readUInt16LE(8);
-        entry.compressionMethod = buffer.readUInt16LE(10);
-        entry.lastModFileTime = buffer.readUInt16LE(12);
-        entry.lastModFileDate = buffer.readUInt16LE(14);
-        entry.crc32 = buffer.readUInt32LE(16);
-        entry.compressedSize = buffer.readUInt32LE(20);
-        entry.uncompressedSize = buffer.readUInt32LE(24);
-        entry.fileNameLength = buffer.readUInt16LE(28);
-        entry.extraFieldLength = buffer.readUInt16LE(30);
-        entry.fileCommentLength = buffer.readUInt16LE(32);
-        entry.internalFileAttributes = buffer.readUInt16LE(36);
-        entry.externalFileAttributes = buffer.readUInt32LE(38);
-        entry.relativeOffsetOfLocalHeader = buffer.readUInt32LE(42);
-        if (entry.generalPurposeBitFlag & 64) return emitErrorAndAutoClose(self2, new Error("strong encryption is not supported"));
-        self2.readEntryCursor += 46;
-        buffer = newBuffer(entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
-        readAndAssertNoEof(self2.reader, buffer, 0, buffer.length, self2.readEntryCursor, function(err2) {
-          if (err2) return emitErrorAndAutoClose(self2, err2);
-          if (self2.emittedError) return;
-          var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
-          entry.fileName = self2.decodeStrings ? decodeBuffer(buffer, 0, entry.fileNameLength, isUtf8) : buffer.slice(0, entry.fileNameLength);
-          var fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
-          var extraFieldBuffer = buffer.slice(entry.fileNameLength, fileCommentStart);
-          entry.extraFields = [];
-          var i = 0;
-          while (i < extraFieldBuffer.length - 3) {
-            var headerId = extraFieldBuffer.readUInt16LE(i + 0);
-            var dataSize = extraFieldBuffer.readUInt16LE(i + 2);
-            var dataStart = i + 4;
-            var dataEnd = dataStart + dataSize;
-            if (dataEnd > extraFieldBuffer.length) return emitErrorAndAutoClose(self2, new Error("extra field length exceeds extra field buffer size"));
-            var dataBuffer = newBuffer(dataSize);
-            extraFieldBuffer.copy(dataBuffer, 0, dataStart, dataEnd);
-            entry.extraFields.push({
-              id: headerId,
-              data: dataBuffer
-            });
-            i = dataEnd;
-          }
-          entry.fileComment = self2.decodeStrings ? decodeBuffer(buffer, fileCommentStart, fileCommentStart + entry.fileCommentLength, isUtf8) : buffer.slice(fileCommentStart, fileCommentStart + entry.fileCommentLength);
-          entry.comment = entry.fileComment;
-          self2.readEntryCursor += buffer.length;
-          self2.entriesRead += 1;
-          if (entry.uncompressedSize === 4294967295 || entry.compressedSize === 4294967295 || entry.relativeOffsetOfLocalHeader === 4294967295) {
-            var zip64EiefBuffer = null;
-            for (var i = 0; i < entry.extraFields.length; i++) {
-              var extraField = entry.extraFields[i];
-              if (extraField.id === 1) {
-                zip64EiefBuffer = extraField.data;
-                break;
-              }
-            }
-            if (zip64EiefBuffer == null) {
-              return emitErrorAndAutoClose(self2, new Error("expected zip64 extended information extra field"));
-            }
-            var index = 0;
-            if (entry.uncompressedSize === 4294967295) {
-              if (index + 8 > zip64EiefBuffer.length) {
-                return emitErrorAndAutoClose(self2, new Error("zip64 extended information extra field does not include uncompressed size"));
-              }
-              entry.uncompressedSize = readUInt64LE(zip64EiefBuffer, index);
-              index += 8;
-            }
-            if (entry.compressedSize === 4294967295) {
-              if (index + 8 > zip64EiefBuffer.length) {
-                return emitErrorAndAutoClose(self2, new Error("zip64 extended information extra field does not include compressed size"));
-              }
-              entry.compressedSize = readUInt64LE(zip64EiefBuffer, index);
-              index += 8;
-            }
-            if (entry.relativeOffsetOfLocalHeader === 4294967295) {
-              if (index + 8 > zip64EiefBuffer.length) {
-                return emitErrorAndAutoClose(self2, new Error("zip64 extended information extra field does not include relative header offset"));
-              }
-              entry.relativeOffsetOfLocalHeader = readUInt64LE(zip64EiefBuffer, index);
-              index += 8;
-            }
-          }
-          if (self2.decodeStrings) {
-            for (var i = 0; i < entry.extraFields.length; i++) {
-              var extraField = entry.extraFields[i];
-              if (extraField.id === 28789) {
-                if (extraField.data.length < 6) {
-                  continue;
-                }
-                if (extraField.data.readUInt8(0) !== 1) {
-                  continue;
-                }
-                var oldNameCrc32 = extraField.data.readUInt32LE(1);
-                if (crc32.unsigned(buffer.slice(0, entry.fileNameLength)) !== oldNameCrc32) {
-                  continue;
-                }
-                entry.fileName = decodeBuffer(extraField.data, 5, extraField.data.length, true);
-                break;
-              }
-            }
-          }
-          if (self2.validateEntrySizes && entry.compressionMethod === 0) {
-            var expectedCompressedSize = entry.uncompressedSize;
-            if (entry.isEncrypted()) {
-              expectedCompressedSize += 12;
-            }
-            if (entry.compressedSize !== expectedCompressedSize) {
-              var msg = "compressed/uncompressed size mismatch for stored file: " + entry.compressedSize + " != " + entry.uncompressedSize;
-              return emitErrorAndAutoClose(self2, new Error(msg));
-            }
-          }
-          if (self2.decodeStrings) {
-            if (!self2.strictFileNames) {
-              entry.fileName = entry.fileName.replace(/\\/g, "/");
-            }
-            var errorMessage = validateFileName(entry.fileName, self2.validateFileNameOptions);
-            if (errorMessage != null) return emitErrorAndAutoClose(self2, new Error(errorMessage));
-          }
-          self2.emit("entry", entry);
-          if (!self2.lazyEntries) self2._readEntry();
-        });
-      });
-    };
-    ZipFile.prototype.openReadStream = function(entry, options, callback) {
-      var self2 = this;
-      var relativeStart = 0;
-      var relativeEnd = entry.compressedSize;
-      if (callback == null) {
-        callback = options;
-        options = {};
-      } else {
-        if (options.decrypt != null) {
-          if (!entry.isEncrypted()) {
-            throw new Error("options.decrypt can only be specified for encrypted entries");
-          }
-          if (options.decrypt !== false) throw new Error("invalid options.decrypt value: " + options.decrypt);
-          if (entry.isCompressed()) {
-            if (options.decompress !== false) throw new Error("entry is encrypted and compressed, and options.decompress !== false");
-          }
-        }
-        if (options.decompress != null) {
-          if (!entry.isCompressed()) {
-            throw new Error("options.decompress can only be specified for compressed entries");
-          }
-          if (!(options.decompress === false || options.decompress === true)) {
-            throw new Error("invalid options.decompress value: " + options.decompress);
-          }
-        }
-        if (options.start != null || options.end != null) {
-          if (entry.isCompressed() && options.decompress !== false) {
-            throw new Error("start/end range not allowed for compressed entry without options.decompress === false");
-          }
-          if (entry.isEncrypted() && options.decrypt !== false) {
-            throw new Error("start/end range not allowed for encrypted entry without options.decrypt === false");
-          }
-        }
-        if (options.start != null) {
-          relativeStart = options.start;
-          if (relativeStart < 0) throw new Error("options.start < 0");
-          if (relativeStart > entry.compressedSize) throw new Error("options.start > entry.compressedSize");
-        }
-        if (options.end != null) {
-          relativeEnd = options.end;
-          if (relativeEnd < 0) throw new Error("options.end < 0");
-          if (relativeEnd > entry.compressedSize) throw new Error("options.end > entry.compressedSize");
-          if (relativeEnd < relativeStart) throw new Error("options.end < options.start");
-        }
-      }
-      if (!self2.isOpen) return callback(new Error("closed"));
-      if (entry.isEncrypted()) {
-        if (options.decrypt !== false) return callback(new Error("entry is encrypted, and options.decrypt !== false"));
-      }
-      self2.reader.ref();
-      var buffer = newBuffer(30);
-      readAndAssertNoEof(self2.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader, function(err) {
-        try {
-          if (err) return callback(err);
-          var signature = buffer.readUInt32LE(0);
-          if (signature !== 67324752) {
-            return callback(new Error("invalid local file header signature: 0x" + signature.toString(16)));
-          }
-          var fileNameLength = buffer.readUInt16LE(26);
-          var extraFieldLength = buffer.readUInt16LE(28);
-          var localFileHeaderEnd = entry.relativeOffsetOfLocalHeader + buffer.length + fileNameLength + extraFieldLength;
-          var decompress;
-          if (entry.compressionMethod === 0) {
-            decompress = false;
-          } else if (entry.compressionMethod === 8) {
-            decompress = options.decompress != null ? options.decompress : true;
-          } else {
-            return callback(new Error("unsupported compression method: " + entry.compressionMethod));
-          }
-          var fileDataStart = localFileHeaderEnd;
-          var fileDataEnd = fileDataStart + entry.compressedSize;
-          if (entry.compressedSize !== 0) {
-            if (fileDataEnd > self2.fileSize) {
-              return callback(new Error("file data overflows file bounds: " + fileDataStart + " + " + entry.compressedSize + " > " + self2.fileSize));
-            }
-          }
-          var readStream = self2.reader.createReadStream({
-            start: fileDataStart + relativeStart,
-            end: fileDataStart + relativeEnd
-          });
-          var endpointStream = readStream;
-          if (decompress) {
-            var destroyed = false;
-            var inflateFilter = zlib.createInflateRaw();
-            readStream.on("error", function(err2) {
-              setImmediate(function() {
-                if (!destroyed) inflateFilter.emit("error", err2);
-              });
-            });
-            readStream.pipe(inflateFilter);
-            if (self2.validateEntrySizes) {
-              endpointStream = new AssertByteCountStream(entry.uncompressedSize);
-              inflateFilter.on("error", function(err2) {
-                setImmediate(function() {
-                  if (!destroyed) endpointStream.emit("error", err2);
-                });
-              });
-              inflateFilter.pipe(endpointStream);
-            } else {
-              endpointStream = inflateFilter;
-            }
-            endpointStream.destroy = function() {
-              destroyed = true;
-              if (inflateFilter !== endpointStream) inflateFilter.unpipe(endpointStream);
-              readStream.unpipe(inflateFilter);
-              readStream.destroy();
-            };
-          }
-          callback(null, endpointStream);
-        } finally {
-          self2.reader.unref();
-        }
-      });
-    };
-    function Entry() {
-    }
-    Entry.prototype.getLastModDate = function() {
-      return dosDateTimeToDate(this.lastModFileDate, this.lastModFileTime);
-    };
-    Entry.prototype.isEncrypted = function() {
-      return (this.generalPurposeBitFlag & 1) !== 0;
-    };
-    Entry.prototype.isCompressed = function() {
-      return this.compressionMethod === 8;
-    };
-    function dosDateTimeToDate(date5, time3) {
-      var day = date5 & 31;
-      var month = (date5 >> 5 & 15) - 1;
-      var year = (date5 >> 9 & 127) + 1980;
-      var millisecond = 0;
-      var second = (time3 & 31) * 2;
-      var minute = time3 >> 5 & 63;
-      var hour = time3 >> 11 & 31;
-      return new Date(year, month, day, hour, minute, second, millisecond);
-    }
-    function validateFileName(fileName) {
-      if (fileName.indexOf("\\") !== -1) {
-        return "invalid characters in fileName: " + fileName;
-      }
-      if (/^[a-zA-Z]:/.test(fileName) || /^\//.test(fileName)) {
-        return "absolute path: " + fileName;
-      }
-      if (fileName.split("/").indexOf("..") !== -1) {
-        return "invalid relative path: " + fileName;
-      }
-      return null;
-    }
-    function readAndAssertNoEof(reader, buffer, offset, length, position, callback) {
-      if (length === 0) {
-        return setImmediate(function() {
-          callback(null, newBuffer(0));
-        });
-      }
-      reader.read(buffer, offset, length, position, function(err, bytesRead) {
-        if (err) return callback(err);
-        if (bytesRead < length) {
-          return callback(new Error("unexpected EOF"));
-        }
-        callback();
-      });
-    }
-    util.inherits(AssertByteCountStream, Transform);
-    function AssertByteCountStream(byteCount) {
-      Transform.call(this);
-      this.actualByteCount = 0;
-      this.expectedByteCount = byteCount;
-    }
-    AssertByteCountStream.prototype._transform = function(chunk, encoding, cb) {
-      this.actualByteCount += chunk.length;
-      if (this.actualByteCount > this.expectedByteCount) {
-        var msg = "too many bytes in the stream. expected " + this.expectedByteCount + ". got at least " + this.actualByteCount;
-        return cb(new Error(msg));
-      }
-      cb(null, chunk);
-    };
-    AssertByteCountStream.prototype._flush = function(cb) {
-      if (this.actualByteCount < this.expectedByteCount) {
-        var msg = "not enough bytes in the stream. expected " + this.expectedByteCount + ". got only " + this.actualByteCount;
-        return cb(new Error(msg));
-      }
-      cb();
-    };
-    util.inherits(RandomAccessReader, EventEmitter);
-    function RandomAccessReader() {
-      EventEmitter.call(this);
-      this.refCount = 0;
-    }
-    RandomAccessReader.prototype.ref = function() {
-      this.refCount += 1;
-    };
-    RandomAccessReader.prototype.unref = function() {
-      var self2 = this;
-      self2.refCount -= 1;
-      if (self2.refCount > 0) return;
-      if (self2.refCount < 0) throw new Error("invalid unref");
-      self2.close(onCloseDone);
-      function onCloseDone(err) {
-        if (err) return self2.emit("error", err);
-        self2.emit("close");
-      }
-    };
-    RandomAccessReader.prototype.createReadStream = function(options) {
-      var start = options.start;
-      var end = options.end;
-      if (start === end) {
-        var emptyStream = new PassThrough();
-        setImmediate(function() {
-          emptyStream.end();
-        });
-        return emptyStream;
-      }
-      var stream = this._readStreamForRange(start, end);
-      var destroyed = false;
-      var refUnrefFilter = new RefUnrefFilter(this);
-      stream.on("error", function(err) {
-        setImmediate(function() {
-          if (!destroyed) refUnrefFilter.emit("error", err);
-        });
-      });
-      refUnrefFilter.destroy = function() {
-        stream.unpipe(refUnrefFilter);
-        refUnrefFilter.unref();
-        stream.destroy();
-      };
-      var byteCounter = new AssertByteCountStream(end - start);
-      refUnrefFilter.on("error", function(err) {
-        setImmediate(function() {
-          if (!destroyed) byteCounter.emit("error", err);
-        });
-      });
-      byteCounter.destroy = function() {
-        destroyed = true;
-        refUnrefFilter.unpipe(byteCounter);
-        refUnrefFilter.destroy();
-      };
-      return stream.pipe(refUnrefFilter).pipe(byteCounter);
-    };
-    RandomAccessReader.prototype._readStreamForRange = function(start, end) {
-      throw new Error("not implemented");
-    };
-    RandomAccessReader.prototype.read = function(buffer, offset, length, position, callback) {
-      var readStream = this.createReadStream({ start: position, end: position + length });
-      var writeStream = new Writable();
-      var written = 0;
-      writeStream._write = function(chunk, encoding, cb) {
-        chunk.copy(buffer, offset + written, 0, chunk.length);
-        written += chunk.length;
-        cb();
-      };
-      writeStream.on("finish", callback);
-      readStream.on("error", function(error51) {
-        callback(error51);
-      });
-      readStream.pipe(writeStream);
-    };
-    RandomAccessReader.prototype.close = function(callback) {
-      setImmediate(callback);
-    };
-    util.inherits(RefUnrefFilter, PassThrough);
-    function RefUnrefFilter(context) {
-      PassThrough.call(this);
-      this.context = context;
-      this.context.ref();
-      this.unreffedYet = false;
-    }
-    RefUnrefFilter.prototype._flush = function(cb) {
-      this.unref();
-      cb();
-    };
-    RefUnrefFilter.prototype.unref = function(cb) {
-      if (this.unreffedYet) return;
-      this.unreffedYet = true;
-      this.context.unref();
-    };
-    var cp437 = "\0\u263A\u263B\u2665\u2666\u2663\u2660\u2022\u25D8\u25CB\u25D9\u2642\u2640\u266A\u266B\u263C\u25BA\u25C4\u2195\u203C\xB6\xA7\u25AC\u21A8\u2191\u2193\u2192\u2190\u221F\u2194\u25B2\u25BC !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2302\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xA2\xA3\xA5\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0";
-    function decodeBuffer(buffer, start, end, isUtf8) {
-      if (isUtf8) {
-        return buffer.toString("utf8", start, end);
-      } else {
-        var result = "";
-        for (var i = start; i < end; i++) {
-          result += cp437[buffer[i]];
-        }
-        return result;
-      }
-    }
-    function readUInt64LE(buffer, offset) {
-      var lower32 = buffer.readUInt32LE(offset);
-      var upper32 = buffer.readUInt32LE(offset + 4);
-      return upper32 * 4294967296 + lower32;
-    }
-    var newBuffer;
-    if (typeof Buffer.allocUnsafe === "function") {
-      newBuffer = function(len) {
-        return Buffer.allocUnsafe(len);
-      };
-    } else {
-      newBuffer = function(len) {
-        return new Buffer(len);
-      };
-    }
-    function defaultCallback(err) {
-      if (err) throw err;
-    }
-  }
-});
-
-// node_modules/extract-zip/index.js
-var require_extract_zip = __commonJS({
-  "node_modules/extract-zip/index.js"(exports, module) {
-    var debug = require_src()("extract-zip");
-    var { createWriteStream, promises: fs } = __require("fs");
-    var getStream = require_get_stream();
-    var path10 = __require("path");
-    var { promisify } = __require("util");
-    var stream = __require("stream");
-    var yauzl = require_yauzl();
-    var openZip = promisify(yauzl.open);
-    var pipeline = promisify(stream.pipeline);
-    var Extractor = class {
-      constructor(zipPath, opts) {
-        this.zipPath = zipPath;
-        this.opts = opts;
-      }
-      async extract() {
-        debug("opening", this.zipPath, "with opts", this.opts);
-        this.zipfile = await openZip(this.zipPath, { lazyEntries: true });
-        this.canceled = false;
-        return new Promise((resolve, reject) => {
-          this.zipfile.on("error", (err) => {
-            this.canceled = true;
-            reject(err);
-          });
-          this.zipfile.readEntry();
-          this.zipfile.on("close", () => {
-            if (!this.canceled) {
-              debug("zip extraction complete");
-              resolve();
-            }
-          });
-          this.zipfile.on("entry", async (entry) => {
-            if (this.canceled) {
-              debug("skipping entry", entry.fileName, { cancelled: this.canceled });
-              return;
-            }
-            debug("zipfile entry", entry.fileName);
-            if (entry.fileName.startsWith("__MACOSX/")) {
-              this.zipfile.readEntry();
-              return;
-            }
-            const destDir = path10.dirname(path10.join(this.opts.dir, entry.fileName));
-            try {
-              await fs.mkdir(destDir, { recursive: true });
-              const canonicalDestDir = await fs.realpath(destDir);
-              const relativeDestDir = path10.relative(this.opts.dir, canonicalDestDir);
-              if (relativeDestDir.split(path10.sep).includes("..")) {
-                throw new Error(`Out of bound path "${canonicalDestDir}" found while processing file ${entry.fileName}`);
-              }
-              await this.extractEntry(entry);
-              debug("finished processing", entry.fileName);
-              this.zipfile.readEntry();
-            } catch (err) {
-              this.canceled = true;
-              this.zipfile.close();
-              reject(err);
-            }
-          });
-        });
-      }
-      async extractEntry(entry) {
-        if (this.canceled) {
-          debug("skipping entry extraction", entry.fileName, { cancelled: this.canceled });
-          return;
-        }
-        if (this.opts.onEntry) {
-          this.opts.onEntry(entry, this.zipfile);
-        }
-        const dest = path10.join(this.opts.dir, entry.fileName);
-        const mode = entry.externalFileAttributes >> 16 & 65535;
-        const IFMT = 61440;
-        const IFDIR = 16384;
-        const IFLNK = 40960;
-        const symlink = (mode & IFMT) === IFLNK;
-        let isDir = (mode & IFMT) === IFDIR;
-        if (!isDir && entry.fileName.endsWith("/")) {
-          isDir = true;
-        }
-        const madeBy = entry.versionMadeBy >> 8;
-        if (!isDir) isDir = madeBy === 0 && entry.externalFileAttributes === 16;
-        debug("extracting entry", { filename: entry.fileName, isDir, isSymlink: symlink });
-        const procMode = this.getExtractedMode(mode, isDir) & 511;
-        const destDir = isDir ? dest : path10.dirname(dest);
-        const mkdirOptions = { recursive: true };
-        if (isDir) {
-          mkdirOptions.mode = procMode;
-        }
-        debug("mkdir", { dir: destDir, ...mkdirOptions });
-        await fs.mkdir(destDir, mkdirOptions);
-        if (isDir) return;
-        debug("opening read stream", dest);
-        const readStream = await promisify(this.zipfile.openReadStream.bind(this.zipfile))(entry);
-        if (symlink) {
-          const link = await getStream(readStream);
-          debug("creating symlink", link, dest);
-          await fs.symlink(link, dest);
-        } else {
-          await pipeline(readStream, createWriteStream(dest, { mode: procMode }));
-        }
-      }
-      getExtractedMode(entryMode, isDir) {
-        let mode = entryMode;
-        if (mode === 0) {
-          if (isDir) {
-            if (this.opts.defaultDirMode) {
-              mode = parseInt(this.opts.defaultDirMode, 10);
-            }
-            if (!mode) {
-              mode = 493;
-            }
-          } else {
-            if (this.opts.defaultFileMode) {
-              mode = parseInt(this.opts.defaultFileMode, 10);
-            }
-            if (!mode) {
-              mode = 420;
-            }
-          }
-        }
-        return mode;
-      }
-    };
-    module.exports = async function(zipPath, opts) {
-      debug("creating target directory", opts.dir);
-      if (!path10.isAbsolute(opts.dir)) {
-        throw new Error("Target directory is expected to be absolute");
-      }
-      await fs.mkdir(opts.dir, { recursive: true });
-      opts.dir = await fs.realpath(opts.dir);
-      return new Extractor(zipPath, opts).extract();
-    };
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/jszip-helper.js
-var require_jszip_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/jszip-helper.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v });
-    }) : function(o, v) {
-      o["default"] = v;
-    });
-    var __importStar = exports && exports.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.compressFolder = void 0;
-    var fs_1 = __importStar(__require("fs"));
-    var path_1 = __importDefault(__require("path"));
-    var jszip_1 = __importDefault(require_lib3());
-    var getFilePathsRecursively = (dir) => __awaiter(void 0, void 0, void 0, function* () {
-      const list = yield fs_1.promises.readdir(dir);
-      const statPromises = list.map((file2) => __awaiter(void 0, void 0, void 0, function* () {
-        const fullPath = path_1.default.resolve(dir, file2);
-        const stat = yield fs_1.promises.stat(fullPath);
-        if (stat && stat.isDirectory()) {
-          return getFilePathsRecursively(fullPath);
-        }
-        return fullPath;
-      }));
-      return (yield Promise.all(statPromises)).flat(Infinity);
-    });
-    var createZipFromFolder = (dir) => __awaiter(void 0, void 0, void 0, function* () {
-      const absRoot = path_1.default.resolve(dir);
-      const filePaths = yield getFilePathsRecursively(dir);
-      return filePaths.reduce((z2, filePath) => {
-        const relative = filePath.replace(absRoot, "");
-        const zipFolder = path_1.default.dirname(relative).split(path_1.default.sep).reduce((zf, dirName) => zf.folder(dirName), z2);
-        zipFolder.file(path_1.default.basename(filePath), fs_1.default.createReadStream(filePath));
-        return z2;
-      }, new jszip_1.default());
-    });
-    var compressFolder = (srcDir, destFile, options) => __awaiter(void 0, void 0, void 0, function* () {
-      const start = Date.now();
-      try {
-        const zip = yield createZipFromFolder(srcDir);
-        zip.generateNodeStream(Object.assign({ streamFiles: true }, options)).pipe(fs_1.default.createWriteStream(destFile)).on("error", (err) => console.error("Error writing file", err.stack)).on("finish", () => console.log("Zip written successfully:", Date.now() - start, "ms"));
-      } catch (ex) {
-        console.error("Error creating zip", ex);
-      }
-    });
-    exports.compressFolder = compressFolder;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/archive/archive-fs.js
-var require_archive_fs = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/archive/archive-fs.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var archive_1 = __importDefault(require_archive());
-    var fs_1 = __require("fs");
-    var jszip_1 = __importDefault(require_lib3());
-    var archive_jszip_1 = __importDefault(require_archive_jszip());
-    var file_helper_1 = require_file_helper();
-    var extract_zip_1 = __importDefault(require_extract_zip());
-    var jszip_helper_1 = require_jszip_helper();
-    var ArchiveFs = class extends archive_1.default {
-      constructor(filename, params) {
-        super(filename, params);
-        this.dir = void 0;
-      }
-      initialize() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setPaths();
-          yield this.assertDirs();
-          yield this.extractFile(this.filename);
-          if (!this.params.name) {
-            yield this.prepareWorkDir(this.filename);
-            this.isRoot = true;
-          }
-          this.archive = true;
-          return this;
-        });
-      }
-      setPaths() {
-        this.dir = this.params.baseDir + "/";
-        this.templatesDir = this.dir + "templates/";
-        this.outputDir = this.dir + "output/";
-        this.templateDir = void 0;
-        this.workDir = this.outputDir + this.params.workDir + "/";
-      }
-      assertDirs() {
-        return __awaiter(this, void 0, void 0, function* () {
-          (0, file_helper_1.makeDirIfNotExists)(this.dir);
-          (0, file_helper_1.makeDirIfNotExists)(this.templatesDir);
-          (0, file_helper_1.makeDirIfNotExists)(this.outputDir);
-          (0, file_helper_1.makeDirIfNotExists)(this.workDir);
-        });
-      }
-      extractFile(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetDir = this.getTemplateDir(file2);
-          if ((0, file_helper_1.exists)(targetDir)) {
-            return;
-          }
-          yield (0, extract_zip_1.default)(file2, { dir: targetDir }).catch((err) => {
-            throw err;
-          });
-        });
-      }
-      getTemplateDir(file2) {
-        const info = file_helper_1.FileHelper.getFileInfo(file2);
-        this.templateDir = this.templatesDir + info.base + "/";
-        return this.templateDir;
-      }
-      prepareWorkDir(templateDir) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.cleanupWorkDir();
-          const fromTemplate = this.getTemplateDir(templateDir);
-          yield (0, file_helper_1.copyDir)(fromTemplate, this.workDir);
-        });
-      }
-      fileExists(file2) {
-        return (0, file_helper_1.exists)(this.getPath(file2));
-      }
-      folder(dir) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const path10 = this.getPath(dir);
-          const files = [];
-          if (!(0, file_helper_1.exists)(path10)) {
-            return files;
-          }
-          let entries = yield fs_1.promises.readdir(path10, { withFileTypes: true });
-          for (let entry of entries) {
-            if (!entry.isDirectory()) {
-              files.push({
-                name: dir + "/" + entry.name,
-                relativePath: entry.name
-              });
-            }
-          }
-          return files;
-        });
-      }
-      read(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.archive) {
-            yield this.initialize();
-          }
-          const path10 = this.getPath(file2);
-          return yield fs_1.promises.readFile(path10);
-        });
-      }
-      getPath(file2) {
-        if (this.isRoot) {
-          return this.workDir + file2;
-        }
-        return this.templateDir + file2;
-      }
-      write(file2, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const filename = this.workDir + file2;
-          (0, file_helper_1.ensureDirectoryExistence)(filename);
-          yield fs_1.promises.writeFile(filename, data);
-          return this;
-        });
-      }
-      remove(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const path10 = this.getPath(file2);
-          if ((0, file_helper_1.exists)(path10)) {
-            yield fs_1.promises.unlink(path10);
-          }
-        });
-      }
-      output(location, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.writeBuffer(this);
-          this.setOptions(params);
-          if ((0, file_helper_1.exists)(location)) {
-            yield fs_1.promises.rm(location);
-          }
-          yield (0, jszip_helper_1.compressFolder)(this.workDir, location, this.options);
-          if (this.params.cleanupWorkDir === true) {
-            yield this.cleanupWorkDir();
-          }
-        });
-      }
-      cleanupWorkDir() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!(0, file_helper_1.exists)(this.workDir)) {
-            return;
-          }
-          yield fs_1.promises.rm(this.workDir, { recursive: true, force: true });
-        });
-      }
-      readXml(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const isBuffered = this.fromBuffer(file2);
-          if (!isBuffered) {
-            const buffer = yield this.read(file2);
-            if (!buffer) {
-              throw "no buffer: " + file2;
-            }
-            const xmlString = buffer.toString();
-            const XmlDocument = this.parseXml(xmlString);
-            this.toBuffer(file2, XmlDocument);
-            return XmlDocument;
-          } else {
-            return isBuffered.content;
-          }
-        });
-      }
-      writeXml(file2, XmlDocument) {
-        this.toBuffer(file2, XmlDocument);
-      }
-      /**
-       * Used for worksheets only
-       **/
-      extract(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contents = yield this.read(file2);
-          const zip = new jszip_1.default();
-          const newArchive = new archive_jszip_1.default(file2, this.params);
-          newArchive.archive = yield zip.loadAsync(contents);
-          return newArchive;
-        });
-      }
-    };
-    exports.default = ArchiveFs;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/file-helper.js
-var require_file_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/file-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ensureDirectoryExistence = exports.copyDir = exports.makeDir = exports.makeDirIfNotExists = exports.exists = exports.FileHelper = void 0;
-    var fs_1 = __importDefault(__require("fs"));
-    var fs_2 = __require("fs");
-    var path_1 = __importDefault(__require("path"));
-    var content_tracker_1 = require_content_tracker();
-    var archive_jszip_1 = __importDefault(require_archive_jszip());
-    var archive_fs_1 = __importDefault(require_archive_fs());
-    var FileHelper = class _FileHelper {
-      static importArchive(file2, params) {
-        if (typeof file2 !== "object") {
-          if (!fs_1.default.existsSync(file2)) {
-            throw new Error("File not found: " + file2);
-          }
-          switch (params.mode) {
-            case "jszip":
-              return new archive_jszip_1.default(file2, params);
-            case "fs":
-              return new archive_fs_1.default(file2, params);
-          }
-        } else {
-          return new archive_jszip_1.default(file2, params);
-        }
-      }
-      static removeFromDirectory(archive, dir, cb) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const removed = [];
-          const files = yield archive.folder(dir);
-          for (const file2 of files) {
-            if (cb(file2)) {
-              yield archive.remove(file2.name);
-              removed.push(file2.name);
-            }
-          }
-          return removed;
-        });
-      }
-      static getFileExtension(filename) {
-        return path_1.default.extname(filename).replace(".", "");
-      }
-      static getFileInfo(filename) {
-        return {
-          base: path_1.default.basename(filename),
-          dir: path_1.default.dirname(filename),
-          isDir: filename[filename.length - 1] === "/",
-          extension: path_1.default.extname(filename).replace(".", "")
-        };
-      }
-      static check(archive, file2) {
-        _FileHelper.isArchive(archive);
-        return _FileHelper.fileExistsInArchive(archive, file2);
-      }
-      static isArchive(archive) {
-        if (archive === void 0) {
-          throw new Error("Archive is invalid or empty.");
-        }
-      }
-      static fileExistsInArchive(archive, file2) {
-        return archive.fileExists(file2);
-      }
-      static zipCopyWithRelations(parentClass, type, sourceNumber, targetNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const typePlural = type + "s";
-          yield _FileHelper.zipCopyByIndex(parentClass, `ppt/${typePlural}/${type}`, sourceNumber, targetNumber);
-          yield _FileHelper.zipCopyByIndex(parentClass, `ppt/${typePlural}/_rels/${type}`, sourceNumber, targetNumber, ".xml.rels");
-        });
-      }
-      static zipCopyByIndex(parentClass, prefix, sourceId, targetId, suffix) {
-        return __awaiter(this, void 0, void 0, function* () {
-          suffix = suffix || ".xml";
-          return _FileHelper.zipCopy(parentClass.sourceArchive, `${prefix}${sourceId}${suffix}`, parentClass.targetArchive, `${prefix}${targetId}${suffix}`);
-        });
-      }
-      /**
-       * Copies a file from one archive to another. The new file can have a different name to the origin.
-       * @param {IArchive} sourceArchive - Source archive
-       * @param {string} sourceFile - file path and name inside source archive
-       * @param {IArchive} targetArchive - Target archive
-       * @param {string} targetFile - file path and name inside target archive
-       * @return {IArchive} targetArchive as an instance of IArchive
-       */
-      static zipCopy(sourceArchive, sourceFile, targetArchive, targetFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          _FileHelper.check(sourceArchive, sourceFile);
-          content_tracker_1.contentTracker.trackFile(targetFile);
-          const content = yield sourceArchive.read(sourceFile, "nodebuffer").catch((e) => {
-            throw e;
-          });
-          return targetArchive.write(targetFile || sourceFile, content);
-        });
-      }
-    };
-    exports.FileHelper = FileHelper;
-    var exists = (dir) => {
-      return fs_1.default.existsSync(dir);
-    };
-    exports.exists = exists;
-    var makeDirIfNotExists = (dir) => {
-      if (!(0, exports.exists)(dir)) {
-        (0, exports.makeDir)(dir);
-      }
-    };
-    exports.makeDirIfNotExists = makeDirIfNotExists;
-    var makeDir = (dir) => {
-      try {
-        if (!fs_1.default.existsSync(dir)) {
-          fs_1.default.mkdirSync(dir);
-        }
-      } catch (err) {
-        throw err;
-      }
-    };
-    exports.makeDir = makeDir;
-    var copyDir = (src, dest) => __awaiter(void 0, void 0, void 0, function* () {
-      yield fs_2.promises.mkdir(dest, { recursive: true });
-      let entries = yield fs_2.promises.readdir(src, { withFileTypes: true });
-      for (let entry of entries) {
-        let srcPath = path_1.default.join(src, entry.name);
-        let destPath = path_1.default.join(dest, entry.name);
-        entry.isDirectory() ? yield (0, exports.copyDir)(srcPath, destPath) : yield fs_2.promises.copyFile(srcPath, destPath);
-      }
-    });
-    exports.copyDir = copyDir;
-    var ensureDirectoryExistence = (filePath) => {
-      const dirname = path_1.default.dirname(filePath);
-      if (fs_1.default.existsSync(dirname)) {
-        return true;
-      }
-      (0, exports.ensureDirectoryExistence)(dirname);
-      fs_1.default.mkdirSync(dirname);
-    };
-    exports.ensureDirectoryExistence = ensureDirectoryExistence;
   }
 });
 
@@ -20333,8 +18321,7 @@ var require_xml_relationship_helper = __commonJS({
           this.archive = archive;
           this.file = file2;
           this.path = path10 + "/";
-          const fileProxy = yield this.archive;
-          this.xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(fileProxy, this.path + this.file);
+          this.xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, this.path + this.file);
           yield this.readTargets();
           if (prefix) {
             return this.getTargetsByPrefix(prefix);
@@ -20411,7 +18398,7 @@ var require_xml_relationship_helper = __commonJS({
                 const buf = (0, crypto_1.randomBytes)(5).toString("hex");
                 const targetSuffix = "-" + buf + "." + target.filenameExt;
                 yield file_helper_1.FileHelper.zipCopy(sourceArchive, targetPath, this.archive, targetPath + targetSuffix);
-                xmlTarget.setAttribute("Target", targetFile + targetSuffix);
+                xmlTarget.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(targetFile + targetSuffix));
                 yield xml_helper_1.XmlHelper.appendImageExtensionToContentType(this.archive, target.filenameExt);
               }
             }
@@ -20444,7 +18431,7 @@ var require_xml_relationship_helper = __commonJS({
           filenameBase,
           getTargetValue: () => target.element.getAttribute("Target"),
           updateTargetValue: (newTarget) => {
-            target.element.setAttribute("Target", newTarget);
+            target.element.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
           },
           updateId: (newId) => {
             target.element.setAttribute("Id", newId);
@@ -20464,7 +18451,7 @@ var require_xml_relationship_helper = __commonJS({
           prefix,
           subtype,
           updateTargetIndex: (newIndex) => {
-            target.element.setAttribute("Target", `${prefix}${newIndex}.xml`);
+            target.element.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(`${prefix}${newIndex}.xml`));
           }
         });
       }
@@ -20487,1105 +18474,6 @@ var require_xml_relationship_helper = __commonJS({
       }
     };
     exports.XmlRelationshipHelper = XmlRelationshipHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/hyperlink-processor.js
-var require_hyperlink_processor = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/hyperlink-processor.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.HyperlinkProcessor = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var general_helper_1 = require_general_helper();
-    var HyperlinkProcessor = class {
-      /**
-       * Finds all hyperlink elements within a given element
-       */
-      static findHyperlinks(element) {
-        const hyperlinks = [];
-        try {
-          const shapeProps = element.getElementsByTagName("p:cNvPr");
-          for (let i = 0; i < shapeProps.length; i++) {
-            const prop = shapeProps[i];
-            const shapeHyperlinks = prop.getElementsByTagName(this.HYPERLINK_TAG);
-            for (let j = 0; j < shapeHyperlinks.length; j++) {
-              hyperlinks.push(shapeHyperlinks[j]);
-            }
-          }
-          const allHyperlinks = element.getElementsByTagName(this.HYPERLINK_TAG);
-          for (let i = 0; i < allHyperlinks.length; i++) {
-            const hlink = allHyperlinks[i];
-            const parent = hlink.parentNode;
-            if (parent && parent.nodeName === "a:rPr") {
-              if (!hyperlinks.includes(hlink)) {
-                hyperlinks.push(hlink);
-              }
-            }
-          }
-        } catch (error51) {
-          general_helper_1.Logger.log(`Error finding hyperlinks: ${error51}`, 1);
-        }
-        return hyperlinks;
-      }
-      /**
-       * Checks if an element contains hyperlinks
-       */
-      static hasHyperlinks(element) {
-        return this.findHyperlinks(element).length > 0;
-      }
-      /**
-       * Checks if an element contains multiple hyperlinks
-       */
-      static hasMultipleHyperlinks(element) {
-        return this.findHyperlinks(element).length > 1;
-      }
-      /**
-       * Determines if an element should be processed as a hyperlink element
-       * @param element - Element to analyze
-       * @returns True if element should be processed as hyperlink
-       */
-      static shouldProcessAsHyperlink(element) {
-        const hyperlinks = this.findHyperlinks(element);
-        return hyperlinks.length === 1;
-      }
-      /**
-       * Gets the primary hyperlink target from an element
-       * @param element - Element to analyze
-       * @returns Target information or null if no hyperlink found
-       */
-      static getPrimaryHyperlinkTarget(element) {
-        try {
-          const hyperlinks = this.findHyperlinks(element);
-          if (hyperlinks.length === 0) {
-            return null;
-          }
-          const firstHyperlink = hyperlinks[0];
-          const rId = firstHyperlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
-          if (!rId) {
-            return null;
-          }
-          return {
-            rId,
-            type: "hyperlink"
-          };
-        } catch (error51) {
-          general_helper_1.Logger.log(`Error getting primary hyperlink target: ${error51}`, 1);
-          return null;
-        }
-      }
-      /**
-       * Extracts hyperlink relationship IDs from an element
-       * @param element - The XML element to extract from
-       * @returns Array of relationship IDs
-       */
-      static extractHyperlinkRelationshipIds(element) {
-        const hyperlinks = this.findHyperlinks(element);
-        return hyperlinks.map((hlink) => hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE)).filter((rId) => rId !== null);
-      }
-      /**
-       * Updates hyperlink relationship IDs in an element
-       */
-      static updateHyperlinkRelationshipIds(element, relationshipMap) {
-        try {
-          const hyperlinks = this.findHyperlinks(element);
-          hyperlinks.forEach((hlink) => {
-            const currentRId = hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
-            if (currentRId && relationshipMap.has(currentRId)) {
-              const newRId = relationshipMap.get(currentRId);
-              if (newRId) {
-                hlink.setAttribute(this.RELATIONSHIP_ATTRIBUTE, newRId);
-              }
-            }
-          });
-        } catch (error51) {
-          general_helper_1.Logger.log(`Error updating hyperlink relationship IDs: ${error51}`, 1);
-        }
-      }
-      /**
-       * Processes hyperlinks for single-hyperlink elements
-       */
-      static processSingleHyperlink(element, newRid) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const hyperlinks = this.findHyperlinks(element);
-          if (hyperlinks.length !== 1) {
-            general_helper_1.Logger.log(`Expected single hyperlink, found ${hyperlinks.length}`, 1);
-            return;
-          }
-          const hyperlink = hyperlinks[0];
-          hyperlink.setAttribute(this.RELATIONSHIP_ATTRIBUTE, newRid);
-        });
-      }
-      /**
-       * Copies multiple hyperlinks from source to target slide
-       */
-      static copyMultipleHyperlinks(element, sourceArchive, sourceSlideNumber, targetArchive, targetSlideRelFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.hasHyperlinks(element)) {
-            return;
-          }
-          const hyperlinkRIds = this.extractHyperlinkRelationshipIds(element);
-          if (hyperlinkRIds.length === 0) {
-            return;
-          }
-          const sourceRelPath = `ppt/slides/_rels/slide${sourceSlideNumber}.xml.rels`;
-          const sourceRelDoc = yield xml_helper_1.XmlHelper.getXmlFromArchive(sourceArchive, sourceRelPath);
-          if (!sourceRelDoc) {
-            general_helper_1.Logger.log(`Source relationships not found: ${sourceRelPath}`, 1);
-            return;
-          }
-          const sourceRelationships = sourceRelDoc.getElementsByTagName("Relationship");
-          const targetRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(targetArchive, targetSlideRelFile);
-          if (!targetRelXml) {
-            general_helper_1.Logger.log(`Target relationships not found: ${targetSlideRelFile}`, 1);
-            return;
-          }
-          const relationshipMap = /* @__PURE__ */ new Map();
-          const processedTargets = /* @__PURE__ */ new Set();
-          for (let i = 0; i < hyperlinkRIds.length; i++) {
-            const rId = hyperlinkRIds[i];
-            let sourceRel = null;
-            for (let j = 0; j < sourceRelationships.length; j++) {
-              if (sourceRelationships[j].getAttribute("Id") === rId) {
-                sourceRel = sourceRelationships[j];
-                break;
-              }
-            }
-            if (sourceRel) {
-              const relType = sourceRel.getAttribute("Type");
-              const target = sourceRel.getAttribute("Target");
-              const targetMode = sourceRel.getAttribute("TargetMode");
-              if (relType && target) {
-                const relationshipKey = `${relType}:${target}:${targetMode || ""}`;
-                let newRId;
-                if (processedTargets.has(relationshipKey)) {
-                  const existingRels = targetRelXml.getElementsByTagName("Relationship");
-                  for (let k = 0; k < existingRels.length; k++) {
-                    const existingRel = existingRels[k];
-                    if (existingRel.getAttribute("Type") === relType && existingRel.getAttribute("Target") === target && existingRel.getAttribute("TargetMode") === targetMode) {
-                      newRId = existingRel.getAttribute("Id") || "";
-                      break;
-                    }
-                  }
-                } else {
-                  newRId = yield xml_helper_1.XmlHelper.getNextRelId(targetArchive, targetSlideRelFile);
-                  const newRelationship = targetRelXml.createElement("Relationship");
-                  newRelationship.setAttribute("Id", newRId);
-                  newRelationship.setAttribute("Type", relType);
-                  newRelationship.setAttribute("Target", target);
-                  if (targetMode) {
-                    newRelationship.setAttribute("TargetMode", targetMode);
-                  }
-                  targetRelXml.documentElement.appendChild(newRelationship);
-                  processedTargets.add(relationshipKey);
-                }
-                relationshipMap.set(rId, newRId);
-              }
-            }
-          }
-          this.updateHyperlinkRelationshipIds(element, relationshipMap);
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(targetArchive, targetSlideRelFile, targetRelXml);
-        });
-      }
-    };
-    exports.HyperlinkProcessor = HyperlinkProcessor;
-    HyperlinkProcessor.HYPERLINK_TAG = "a:hlinkClick";
-    HyperlinkProcessor.RELATIONSHIP_ATTRIBUTE = "r:id";
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/shape.js
-var require_shape = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/shape.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Shape = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var general_helper_1 = require_general_helper();
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var content_type_map_1 = require_content_type_map();
-    var Shape = class {
-      constructor(shape, targetType) {
-        this.shape = shape;
-        this.mode = shape.mode;
-        this.name = shape.name;
-        this.targetType = targetType;
-        this.sourceArchive = shape.sourceArchive;
-        this.sourceSlideNumber = shape.sourceSlideNumber;
-        this.sourceSlideFile = `ppt/slides/slide${this.sourceSlideNumber}.xml`;
-        this.sourceElement = shape.sourceElement;
-        this.hasCreationId = shape.hasCreationId;
-        this.callbacks = general_helper_1.GeneralHelper.arrayify(shape.callback);
-        this.contentTypeMap = content_type_map_1.ContentTypeMap;
-        if (shape.target) {
-          this.sourceNumber = shape.target.number;
-          this.sourceRid = shape.target.rId;
-          this.subtype = shape.target.subtype;
-          this.target = shape.target;
-        }
-      }
-      setTarget(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetType = this.targetType;
-          this.targetTemplate = targetTemplate;
-          this.targetArchive = yield this.targetTemplate.archive;
-          this.targetSlideNumber = targetSlideNumber;
-          this.targetSlideFile = `ppt/${targetType}s/${targetType}${this.targetSlideNumber}.xml`;
-          this.targetSlideRelFile = `ppt/${targetType}s/_rels/${targetType}${this.targetSlideNumber}.xml.rels`;
-        });
-      }
-      setTargetElement() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetElement = this.sourceElement.cloneNode(true);
-        });
-      }
-      appendToSlideTree() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideFile);
-          targetSlideXml.getElementsByTagName("p:spTree")[0].appendChild(this.targetElement);
-          if (this.relRootTag === "a:hlinkClick") {
-            yield this.processHyperlinks();
-          }
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideFile, targetSlideXml);
-        });
-      }
-      /**
-       * Process hyperlinks in the element
-       */
-      processHyperlinks() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.targetElement || !this.createdRid)
-            return;
-          yield hyperlink_processor_1.HyperlinkProcessor.processSingleHyperlink(this.targetElement, this.createdRid);
-        });
-      }
-      replaceIntoSlideTree() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.modifySlideTree(true);
-        });
-      }
-      removeFromSlideTree() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.modifySlideTree(false);
-        });
-      }
-      modifySlideTree(insertBefore) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const archive = this.targetArchive;
-          const slideFile = this.targetSlideFile;
-          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slideFile);
-          const findMethod = this.hasCreationId ? "findByCreationId" : "findByName";
-          const selector = this.hasCreationId ? this.name : this.shape.selector.name;
-          const sourceElementOnTargetSlide = yield xml_helper_1.XmlHelper[findMethod](targetSlideXml, selector, this.shape.selector.nameIdx);
-          if (!(sourceElementOnTargetSlide === null || sourceElementOnTargetSlide === void 0 ? void 0 : sourceElementOnTargetSlide.parentNode)) {
-            console.error(`Can't modify slide tree for ${this.name}`);
-            return;
-          }
-          if (insertBefore === true && this.targetElement) {
-            sourceElementOnTargetSlide.parentNode.insertBefore(this.targetElement, sourceElementOnTargetSlide);
-          }
-          sourceElementOnTargetSlide.parentNode.removeChild(sourceElementOnTargetSlide);
-          if (this.relRootTag === "a:hlinkClick") {
-            yield this.processHyperlinks();
-          }
-          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slideFile, targetSlideXml);
-        });
-      }
-      updateElementsRelId(cb) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideFile);
-          const targetElements = yield this.getElementsByRid(targetSlideXml, this.sourceRid);
-          targetElements.forEach((targetElement) => {
-            if (cb && typeof cb === "function") {
-              cb(targetElement);
-            } else {
-              this.relParent(targetElement).getElementsByTagName(this.relRootTag)[0].setAttribute(this.relAttribute, this.createdRid);
-            }
-          });
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideFile, targetSlideXml);
-        });
-      }
-      /*
-       * This will find all elements with a matching rId on a
-       * <p:cSld>, including related images at <p:bg> and <p:spTree>.
-       */
-      getElementsByRid(slideXml, rId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourceList = slideXml.getElementsByTagName("p:cSld")[0].getElementsByTagName(this.relRootTag);
-          return xml_helper_1.XmlHelper.findByAttributeValue(sourceList, this.relAttribute, rId);
-        });
-      }
-      updateTargetElementRelId() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetElement.getElementsByTagName(this.relRootTag).item(0).setAttribute(this.relAttribute, this.createdRid);
-        });
-      }
-      applyCallbacks(callbacks, element, relation) {
-        callbacks.forEach((callback) => {
-          if (typeof callback === "function") {
-            try {
-              callback(element, relation);
-            } catch (e) {
-              console.warn(e);
-            }
-          }
-        });
-      }
-      applyChartCallbacks(callbacks, element, chart, workbook) {
-        callbacks.forEach((callback) => {
-          if (typeof callback === "function") {
-            try {
-              callback(element, chart, workbook);
-            } catch (e) {
-              console.warn(e);
-            }
-          }
-        });
-      }
-      appendImageExtensionToContentType(extension) {
-        return xml_helper_1.XmlHelper.appendImageExtensionToContentType(this.targetArchive, extension);
-      }
-    };
-    exports.Shape = Shape;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/chart.js
-var require_chart = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/chart.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Chart = void 0;
-    var file_helper_1 = require_file_helper();
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var path_1 = __importDefault(__require("path"));
-    var content_tracker_1 = require_content_tracker();
-    var general_helper_1 = require_general_helper();
-    var Chart = class extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-        this.relRootTag = this.subtype === "chart" ? "c:chart" : "cx:chart";
-        this.relAttribute = "r:id";
-        this.relParent = this.subtype === "chart" ? (element) => element.parentNode.parentNode.parentNode : (element) => element.parentNode.parentNode.parentNode.parentNode.parentNode;
-        this.wbEmbeddingsPath = `../embeddings/`;
-        this.wbExtension = ".xlsx";
-        this.relTypeChartColorStyle = "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
-        this.relTypeChartStyle = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
-        this.relTypeChartImage = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
-        this.relTypeChartThemeOverride = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
-        this.relTypeChartUserShapes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
-        this.styleRelationFiles = {};
-        this.hasWorkbook = true;
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.clone();
-          yield this.replaceIntoSlideTree();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.clone();
-          yield this.appendToSlideTree();
-          return this;
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.updateElementsRelId();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          this.targetNumber = this.targetTemplate.incrementCounter("charts");
-          this.wbRelsPath = `ppt/charts/_rels/${this.subtype}${this.sourceNumber}.xml.rels`;
-          yield this.copyFiles();
-          yield this.copyChartStyleFiles();
-          yield this.appendTypes();
-          yield this.appendToSlideRels();
-        });
-      }
-      clone() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTargetElement();
-          yield this.modifyChartData();
-          yield this.updateTargetElementRelId();
-        });
-      }
-      modifyChartData() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.hasWorkbook) {
-            return;
-          }
-          const chartXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, `ppt/charts/${this.subtype}${this.targetNumber}.xml`);
-          const workbook = yield this.readWorkbook();
-          this.applyChartCallbacks(this.callbacks, this.targetElement, chartXml, workbook);
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, `ppt/charts/${this.subtype}${this.targetNumber}.xml`, chartXml);
-          yield this.writeWorkbook(workbook);
-        });
-      }
-      readWorkbook() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const workbookFilename = `ppt/embeddings/${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`;
-          const archive = yield this.targetArchive.extract(workbookFilename);
-          const sheet = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/worksheets/sheet1.xml");
-          const table = file_helper_1.FileHelper.fileExistsInArchive(archive, "xl/tables/table1.xml") ? yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/tables/table1.xml") : void 0;
-          const sharedStrings = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/sharedStrings.xml");
-          return {
-            archive,
-            sheet,
-            sharedStrings,
-            table
-          };
-        });
-      }
-      writeWorkbook(workbook) {
-        return __awaiter(this, void 0, void 0, function* () {
-          xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/worksheets/sheet1.xml", workbook.sheet);
-          if (workbook.table) {
-            xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/tables/table1.xml", workbook.table);
-          }
-          xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/sharedStrings.xml", workbook.sharedStrings);
-          const worksheet = yield workbook.archive.getContent({});
-          yield this.targetArchive.write(`ppt/embeddings/${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`, worksheet);
-        });
-      }
-      copyFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.copyChartFiles();
-          this.worksheetFilePrefix = yield this.getWorksheetFilePrefix(this.wbRelsPath);
-          if (this.hasWorkbook) {
-            const worksheets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.sourceArchive, this.wbRelsPath, `${this.wbEmbeddingsPath}${this.worksheetFilePrefix}`);
-            const worksheet = worksheets[0];
-            this.sourceWorksheet = worksheet.number === 0 ? "" : worksheet.number;
-            this.targetWorksheet = "-created-" + this.targetNumber;
-            yield this.copyWorksheetFile();
-          } else {
-            (0, general_helper_1.log)("Chart has no worksheet: " + this.wbRelsPath, 2);
-          }
-          yield this.editTargetWorksheetRel();
-        });
-      }
-      getWorksheetFilePrefix(targetRelFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relationTargets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.sourceArchive, targetRelFile, this.wbEmbeddingsPath);
-          if (!relationTargets[0]) {
-            this.hasWorkbook = false;
-            return "";
-          }
-          return relationTargets[0].filenameBase;
-        });
-      }
-      appendTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.appendChartExtensionToContentType();
-          yield this.appendChartUserShapesToContentType();
-          yield this.appendChartToContentType();
-          yield this.appendColorToContentType();
-          yield this.appendStyleToContentType();
-          yield this.appendThemeOverrideToContentType();
-        });
-      }
-      copyChartFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.subtype}${this.sourceNumber}.xml`, this.targetArchive, `ppt/charts/${this.subtype}${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/_rels/${this.subtype}${this.sourceNumber}.xml.rels`, this.targetArchive, `ppt/charts/_rels/${this.subtype}${this.targetNumber}.xml.rels`);
-        });
-      }
-      copyChartStyleFiles() {
-        var _a3, _b, _c, _d;
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.getChartStyles();
-          if ((_a3 = this.styleRelationFiles.relTypeChartStyle) === null || _a3 === void 0 ? void 0 : _a3.length) {
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.styleRelationFiles.relTypeChartStyle[0]}`, this.targetArchive, `ppt/charts/style${this.targetNumber}.xml`);
-          }
-          if ((_b = this.styleRelationFiles.relTypeChartColorStyle) === null || _b === void 0 ? void 0 : _b.length) {
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.styleRelationFiles.relTypeChartColorStyle[0]}`, this.targetArchive, `ppt/charts/colors${this.targetNumber}.xml`);
-          }
-          if (this.styleRelationFiles.relTypeChartImage) {
-            for (const relTypeChartImage of this.styleRelationFiles.relTypeChartImage) {
-              const imageInfo = this.getTargetChartImageUri(relTypeChartImage);
-              yield this.appendImageExtensionToContentType(imageInfo.extension);
-              yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, imageInfo.source, this.targetArchive, imageInfo.target);
-            }
-          }
-          if ((_c = this.styleRelationFiles.relTypeChartUserShapes) === null || _c === void 0 ? void 0 : _c.length) {
-            const sourceFile = this.styleRelationFiles.relTypeChartUserShapes[0].replace("../drawings/", "");
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/drawings/${sourceFile}`, this.targetArchive, `ppt/drawings/drawing${this.targetNumber}.xml`);
-          }
-          if ((_d = this.styleRelationFiles.relTypeChartThemeOverride) === null || _d === void 0 ? void 0 : _d.length) {
-            const sourceFile = this.styleRelationFiles.relTypeChartThemeOverride[0].replace("../theme/", "");
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/theme/${sourceFile}`, this.targetArchive, `ppt/theme/themeOverride${this.targetNumber}.xml`);
-          }
-        });
-      }
-      getChartStyles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const styleTypes = [
-            "relTypeChartStyle",
-            "relTypeChartColorStyle",
-            "relTypeChartImage",
-            "relTypeChartThemeOverride",
-            "relTypeChartUserShapes"
-          ];
-          for (const i in styleTypes) {
-            const styleType = styleTypes[i];
-            const styleRelation = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(this.sourceArchive, this.wbRelsPath, this[styleType]);
-            this.styleRelationFiles[styleType] = this.styleRelationFiles[styleType] || [];
-            if (styleRelation.length) {
-              styleRelation.forEach((styleRelation2) => {
-                this.styleRelationFiles[styleType].push(styleRelation2.file);
-              });
-            }
-          }
-        });
-      }
-      appendToSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-          const type = this.subtype === "chart" ? "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" : "http://schemas.microsoft.com/office/2014/relationships/chartEx";
-          const attributes = {
-            Id: this.createdRid,
-            Type: type,
-            Target: `../charts/${this.subtype}${this.targetNumber}.xml`
-          };
-          return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, this.targetSlideRelFile, attributes));
-        });
-      }
-      editTargetWorksheetRel() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/charts/_rels/${this.subtype}${this.targetNumber}.xml.rels`;
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
-          const relations = relXml.getElementsByTagName("Relationship");
-          Object.keys(relations).map((key) => relations[key]).filter((element) => element.getAttribute).forEach((element) => {
-            const type = element.getAttribute("Type");
-            switch (type) {
-              case "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package":
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `${this.wbEmbeddingsPath}${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
-                break;
-              case this.relTypeChartColorStyle:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `colors${this.targetNumber}.xml`);
-                break;
-              case this.relTypeChartStyle:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `style${this.targetNumber}.xml`);
-                break;
-              case this.relTypeChartImage:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", this.getTargetChartImageUri(element.getAttribute("Target")).rel);
-                break;
-              case this.relTypeChartThemeOverride:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `../theme/themeOverride${this.targetNumber}.xml`);
-                break;
-              case this.relTypeChartUserShapes:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `../drawings/drawing${this.targetNumber}.xml`);
-                break;
-            }
-            content_tracker_1.contentTracker.trackRelation(targetRelFile, {
-              Id: element.getAttribute("Id"),
-              Target: element.getAttribute("Target"),
-              Type: element.getAttribute("Type")
-            });
-          });
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
-        });
-      }
-      updateTargetWorksheetRelation(targetRelFile, element, attribute, value) {
-        element.setAttribute(attribute, value);
-      }
-      getTargetChartImageUri(origin) {
-        const file2 = origin.replace("../media/", "");
-        const extension = path_1.default.extname(file2).replace(".", "");
-        return {
-          source: `ppt/media/${file2}`,
-          target: `ppt/media/${file2}-chart-${this.targetNumber}.${extension}`,
-          rel: `../media/${file2}-chart-${this.targetNumber}.${extension}`,
-          extension
-        };
-      }
-      copyWorksheetFile() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourceFile = `ppt/embeddings/${this.worksheetFilePrefix}${this.sourceWorksheet}${this.wbExtension}`;
-          const targetFile = `ppt/embeddings/${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`;
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourceFile, this.targetArchive, targetFile).catch((e) => {
-            (0, general_helper_1.log)(e, 2);
-          });
-        });
-      }
-      appendChartExtensionToContentType() {
-        return xml_helper_1.XmlHelper.appendIf(Object.assign(Object.assign({}, xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          Extension: `xlsx`,
-          ContentType: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-        })), { tag: "Default", clause: (xml) => !xml_helper_1.XmlHelper.findByAttribute(xml, "Default", "Extension", "xlsx") }));
-      }
-      appendChartToContentType() {
-        const contentType = this.subtype === "chart" ? "application/vnd.openxmlformats-officedocument.drawingml.chart+xml" : "application/vnd.ms-office.chartex+xml";
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/charts/${this.subtype}${this.targetNumber}.xml`,
-          ContentType: contentType
-        }));
-      }
-      appendColorToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/charts/colors${this.targetNumber}.xml`,
-          ContentType: `application/vnd.ms-office.chartcolorstyle+xml`
-        }));
-      }
-      appendStyleToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/charts/style${this.targetNumber}.xml`,
-          ContentType: `application/vnd.ms-office.chartstyle+xml`
-        }));
-      }
-      appendThemeOverrideToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/theme/themeOverride${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.themeOverride+xml`
-        }));
-      }
-      appendChartUserShapesToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/drawings/drawing${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml`
-        }));
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(archive, relsPath, [
-            "../charts/chart",
-            "../charts/chartEx"
-          ]);
-        });
-      }
-    };
-    exports.Chart = Chart;
-  }
-});
-
-// node_modules/pptx-automizer/dist/enums/element-type.js
-var require_element_type = __commonJS({
-  "node_modules/pptx-automizer/dist/enums/element-type.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ElementSubtype = exports.ElementType = void 0;
-    var ElementType;
-    (function(ElementType2) {
-      ElementType2["Chart"] = "Chart";
-      ElementType2["Image"] = "Image";
-      ElementType2["Diagram"] = "Diagram";
-      ElementType2["Shape"] = "Generic";
-      ElementType2["OLEObject"] = "OLEObject";
-      ElementType2["Hyperlink"] = "Hyperlink";
-    })(ElementType = exports.ElementType || (exports.ElementType = {}));
-    var ElementSubtype;
-    (function(ElementSubtype2) {
-      ElementSubtype2["chart"] = "chart";
-      ElementSubtype2["chartEx"] = "chartEx";
-      ElementSubtype2["oleObject"] = "oleObject";
-      ElementSubtype2["hyperlink"] = "hyperlink";
-    })(ElementSubtype = exports.ElementSubtype || (exports.ElementSubtype = {}));
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/image.js
-var require_image = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/image.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Image = void 0;
-    var file_helper_1 = require_file_helper();
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var element_type_1 = require_element_type();
-    var constants_1 = require_constants2();
-    var Image2 = class _Image extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-        this.sourceFile = shape.target.file.replace("../media/", "");
-        this.extension = file_helper_1.FileHelper.getFileExtension(this.sourceFile);
-        this.relAttribute = "r:embed";
-        this.relType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
-        if (!shape.sourceMode && this.extension === "svg") {
-          shape.sourceMode = "image:svg";
-        }
-        switch (shape.sourceMode) {
-          case "image:svg":
-            this.relRootTag = constants_1.TargetByRelIdMap["image:svg"].relRootTag;
-            this.relParent = (element) => element.parentNode;
-            break;
-          case "image:media":
-          case "image:audioFile":
-          case "image:videoFile":
-            this.relRootTag = constants_1.TargetByRelIdMap[shape.sourceMode].relRootTag;
-            this.relAttribute = constants_1.TargetByRelIdMap[shape.sourceMode].relAttribute;
-            this.relType = constants_1.TargetByRelIdMap[shape.sourceMode].relType;
-            this.relParent = (element) => element.parentNode;
-            break;
-          default:
-            this.relRootTag = "a:blip";
-            this.relParent = (element) => element.parentNode.parentNode;
-            break;
-        }
-      }
-      /*
-       * It is necessary to update existing rIds for all
-       * unmodified images on an added slide at first.
-       */
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.updateElementsRelId();
-          return this;
-        });
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.updateTargetElementRelId();
-          yield this.processImageRelations(targetTemplate, targetSlideNumber);
-          this.applyImageCallbacks();
-          yield this.replaceIntoSlideTree();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.updateTargetElementRelId();
-          yield this.processImageRelations(targetTemplate, targetSlideNumber);
-          this.applyImageCallbacks();
-          yield this.appendToSlideTree();
-          return this;
-        });
-      }
-      /**
-       * For audio/video and svg, some more relations need to be handled.
-       */
-      processImageRelations(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.hasSvgBlipRelation()) {
-            yield this.processRelatedContent(targetTemplate, targetSlideNumber, "image:svg");
-          }
-          if (this.hasAudioRelation()) {
-            yield this.processRelatedMediaContent(targetTemplate, targetSlideNumber, "image:audioFile");
-          }
-          if (this.hasVideoRelation()) {
-            yield this.processRelatedMediaContent(targetTemplate, targetSlideNumber, "image:videoFile");
-          }
-        });
-      }
-      processRelatedMediaContent(targetTemplate, targetSlideNumber, sourceMode) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.processRelatedContent(targetTemplate, targetSlideNumber, "image:media");
-          yield this.processRelatedContent(targetTemplate, targetSlideNumber, sourceMode);
-        });
-      }
-      processRelatedContent(targetTemplate, targetSlideNumber, sourceMode) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relsPath = `ppt/slides/_rels/slide${this.sourceSlideNumber}.xml.rels`;
-          const target = yield xml_helper_1.XmlHelper.getTargetByRelId(this.sourceArchive, relsPath, this.targetElement, sourceMode);
-          yield new _Image({
-            mode: "append",
-            target,
-            sourceArchive: this.sourceArchive,
-            sourceSlideNumber: this.sourceSlideNumber,
-            type: element_type_1.ElementType.Image,
-            sourceMode
-          }, this.targetType).modifyMediaRelation(targetTemplate, targetSlideNumber, this.targetElement);
-        });
-      }
-      modifyMediaRelation(targetTemplate, targetSlideNumber, targetElement) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          this.targetElement = targetElement;
-          yield this.updateTargetElementRelId();
-          return this;
-        });
-      }
-      /*
-       * Apply all ShapeModificationCallbacks to target element.
-       * Third argument this.createdRelation is necessery to directly
-       * manipulate relation Target and change the image.
-       */
-      applyImageCallbacks() {
-        this.applyCallbacks(this.callbacks, this.targetElement, this.createdRelation);
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          this.targetNumber = this.targetTemplate.incrementCounter("images");
-          this.targetFile = this.getTargetFileName();
-          yield this.copyFiles();
-          yield this.appendTypes();
-          yield this.appendToSlideRels();
-        });
-      }
-      copyFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/media/${this.sourceFile}`, this.targetArchive, `ppt/media/${this.targetFile}`);
-        });
-      }
-      getTargetFileName() {
-        const targetFileType = this.target.file.includes("media") ? "media" : "image";
-        return targetFileType + this.targetNumber + "." + this.extension;
-      }
-      appendTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.appendImageExtensionToContentType(this.extension);
-        });
-      }
-      /**
-       * ToDo: This will always append a new relation, and never replace an
-       * existing relation. At the end of creation process, unused relations will
-       * remain existing in the .xml.rels file. PowerPoint will not complain, but
-       * integrity checks will not be valid by this.
-       */
-      appendToSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, targetRelFile);
-          const targetFileName = this.getTargetFileName();
-          const attributes = {
-            Id: this.createdRid,
-            Type: this.relType,
-            Target: `../media/${targetFileName}`
-          };
-          this.createdRelation = yield xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, targetRelFile, attributes));
-        });
-      }
-      hasSvgBlipRelation() {
-        return this.targetElement.getElementsByTagName("asvg:svgBlip").length > 0;
-      }
-      hasAudioRelation() {
-        return this.targetElement.getElementsByTagName("a:audioFile").length > 0;
-      }
-      hasVideoRelation() {
-        return this.targetElement.getElementsByTagName("a:videoFile").length > 0;
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, relsPath, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
-        });
-      }
-    };
-    exports.Image = Image2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/generic.js
-var require_generic = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/generic.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.GenericShape = void 0;
-    var shape_1 = require_shape();
-    var xml_helper_1 = require_xml_helper();
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var GenericShape = class extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.replaceIntoSlideTree();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.appendToSlideTree();
-          yield this.copyHyperlinkRelationships(targetSlideNumber);
-          return this;
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          const slideRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
-          this.applyCallbacks(this.callbacks, this.targetElement, slideRelXml.documentElement);
-        });
-      }
-      /**
-       * Copy hyperlink relationships from source slide to target slide
-       */
-      copyHyperlinkRelationships(targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.targetElement)
-            return;
-          yield hyperlink_processor_1.HyperlinkProcessor.copyMultipleHyperlinks(this.targetElement, this.sourceArchive, this.sourceSlideNumber, this.targetArchive, this.targetSlideRelFile);
-        });
-      }
-    };
-    exports.GenericShape = GenericShape;
   }
 });
 
@@ -21866,8 +18754,9 @@ var require_xml_placeholder_helper = __commonJS({
         });
       }
       static updatePlaceholderParams(tag2, ph, layoutPlaceholder) {
-        if (layoutPlaceholder[tag2]) {
-          ph.setAttribute(tag2, String(layoutPlaceholder[tag2]));
+        const value = layoutPlaceholder[tag2];
+        if (value) {
+          ph.setAttribute(tag2, String(value));
         } else {
           ph.removeAttribute(tag2);
         }
@@ -22042,10 +18931,12 @@ var require_xml_template_helper = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.XmlTemplateHelper = void 0;
+    var logger_1 = require_logger();
     var xml_helper_1 = require_xml_helper();
     var xml_relationship_helper_1 = require_xml_relationship_helper();
     var xml_slide_helper_1 = require_xml_slide_helper();
     var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
+    var ppt_paths_1 = require_ppt_paths();
     var XmlTemplateHelper = class _XmlTemplateHelper {
       constructor(archive) {
         this.relType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
@@ -22059,12 +18950,13 @@ var require_xml_template_helper = __commonJS({
         return __awaiter(this, void 0, void 0, function* () {
           const archive = this.archive;
           const relationships = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, this.path, this.relType);
+          const slideRels = yield this.filterVisibleSlides(relationships);
           const creationIds = [];
-          for (const slideRel of relationships) {
+          for (const slideRel of slideRels) {
             try {
               const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "ppt/" + slideRel.file);
               if (!slideXml) {
-                console.warn(`slideXml is undefined for file ${slideRel.file}`);
+                logger_1.log.warn(`slideXml is undefined for file ${slideRel.file}`);
                 continue;
               }
               const number4 = this.parseSlideRelFile(slideRel.file);
@@ -22074,7 +18966,7 @@ var require_xml_template_helper = __commonJS({
               });
               const creationIdSlide = slideHelper.getSlideCreationId();
               if (!creationIdSlide) {
-                console.warn(`No creationId found in ${slideRel.file}`);
+                logger_1.log.warn(`No creationId found in ${slideRel.file}`);
               }
               const slideInfo = yield this.getSlideInfo(slideXml, archive, slideRel.file);
               creationIds.push({
@@ -22084,10 +18976,49 @@ var require_xml_template_helper = __commonJS({
                 info: slideInfo
               });
             } catch (err) {
-              console.error(`An error occurred while processing ${slideRel.file}:`, err);
+              logger_1.log.error(`An error occurred while processing ${slideRel.file}:`, err);
             }
           }
-          return creationIds.sort((slideA, slideB) => slideA.number < slideB.number ? -1 : 1);
+          return creationIds;
+        });
+      }
+      /**
+       * A .pptx can contain slide parts that are not part of the presentation:
+       * both PowerPoint and automizer's `removeExistingSlides` only drop the
+       * entries from `p:sldIdLst` in `ppt/presentation.xml`, while the slide part
+       * and its relationship remain in the archive. Listing slides by relationship
+       * alone would therefore also return these invisible leftovers (see #166).
+       *
+       * `p:sldIdLst` is the authoritative list: it contains the visible slides, in
+       * presentation order. It is used to filter and sort the incoming slide
+       * relationships; if it cannot be read (or is empty), all slide relationships
+       * are returned, sorted by slide number.
+       *
+       * @param relationships All slide targets of ppt/_rels/presentation.xml.rels
+       * @returns The visible slide targets, in presentation order
+       */
+      filterVisibleSlides(relationships) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const byNumber = () => [...relationships].sort((relA, relB) => this.parseSlideRelFile(relA.file) < this.parseSlideRelFile(relB.file) ? -1 : 1);
+          if (!this.archive.fileExists(ppt_paths_1.PptPaths.presentation)) {
+            return byNumber();
+          }
+          const presentationXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, ppt_paths_1.PptPaths.presentation);
+          const slideIds = presentationXml === null || presentationXml === void 0 ? void 0 : presentationXml.getElementsByTagName("p:sldId");
+          if (!(slideIds === null || slideIds === void 0 ? void 0 : slideIds.length)) {
+            return byNumber();
+          }
+          const visibleSlides = [];
+          for (let i = 0; i < slideIds.length; i++) {
+            const rId = slideIds[i].getAttribute("r:id");
+            const slideRel = relationships.find((relation) => relation.rId === rId);
+            if (!slideRel) {
+              logger_1.log.warn(`No slide relationship found for ${rId} in p:sldIdLst`);
+              continue;
+            }
+            visibleSlides.push(slideRel);
+          }
+          return visibleSlides;
         });
       }
       parseSlideRelFile(slideRelFile) {
@@ -22130,7 +19061,7 @@ var require_xml_template_helper = __commonJS({
               }
             }
           } catch (error51) {
-            console.error(`Error getting slide layout information: ${error51.message}`);
+            logger_1.log.error(`Error getting slide layout information: ${error51.message}`);
           }
         });
       }
@@ -22206,7 +19137,8 @@ var require_xml_template_helper = __commonJS({
             const archive = this.archive;
             const xmlRelationshipHelper = new xml_relationship_helper_1.XmlRelationshipHelper();
             const allSlides = yield xmlRelationshipHelper.initialize(archive, "presentation.xml.rels", "ppt/_rels", "slides/slide");
-            const slideNumbers = allSlides.map((slide) => slide.number);
+            const visibleSlides = yield this.filterVisibleSlides(allSlides);
+            const slideNumbers = visibleSlides.map((slide) => slide.number);
             slideNumbers.sort((a, b) => a - b);
             return slideNumbers;
           } catch (error51) {
@@ -22255,6 +19187,7 @@ var require_xml_slide_helper = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.XmlSlideHelper = exports.mapUriType = exports.nsMain = void 0;
+    var logger_1 = require_logger();
     var xml_helper_1 = require_xml_helper();
     var xml_template_helper_1 = require_xml_template_helper();
     var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
@@ -22286,7 +19219,7 @@ var require_xml_slide_helper = __commonJS({
             }
             return null;
           } catch (error51) {
-            console.warn(`Error while fetching XML from path ${path10}: ${error51}`);
+            logger_1.log.warn(`Error while fetching XML from path ${path10}: ${error51}`);
             return null;
           }
         });
@@ -22338,7 +19271,7 @@ var require_xml_slide_helper = __commonJS({
             elementInfo.push(_XmlSlideHelper.getElementInfo(shapeNode, layoutPlaceholders));
           });
         } catch (error51) {
-          console.error(error51);
+          logger_1.log.error(error51);
           throw new Error(`Failed to retrieve elements: ${error51.message}`);
         }
         return elementInfo;
@@ -22352,7 +19285,7 @@ var require_xml_slide_helper = __commonJS({
         try {
           elementIds.push(...this.getAllElements(["sp"]).filter((element) => element.hasTextBody).map((element) => useCreationIds ? element.id : element.name));
         } catch (error51) {
-          console.error(error51);
+          logger_1.log.error(error51);
           throw new Error(`Failed to retrieve text element IDs: ${error51.message}`);
         }
         return elementIds;
@@ -22506,8 +19439,7 @@ var require_xml_slide_helper = __commonJS({
             "isNumbered",
             "numberingType",
             "bullet",
-            "startAt",
-            "breaks"
+            "startAt"
           ];
           for (const key of propertyKeys) {
             if (paragraph[key] !== void 0) {
@@ -22666,7 +19598,7 @@ var require_xml_slide_helper = __commonJS({
             if (dimensions)
               return dimensions;
           } catch (error51) {
-            console.error(`Error while fetching slide dimensions: ${error51}`);
+            logger_1.log.error(`Error while fetching slide dimensions: ${error51}`);
             throw error51;
           }
         });
@@ -22816,7 +19748,7 @@ var require_xml_slide_helper = __commonJS({
       const info = [];
       const rows = element.getElementsByTagName("a:tr");
       if (!rows) {
-        console.error("Can't find a table row.");
+        logger_1.log.error("Can't find a table row.");
         return info;
       }
       for (let r = 0; r < rows.length; r++) {
@@ -22848,9 +19780,9 @@ var require_xml_slide_helper = __commonJS({
   }
 });
 
-// node_modules/pptx-automizer/dist/shapes/ole.js
-var require_ole = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/ole.js"(exports) {
+// node_modules/pptx-automizer/dist/classes/content-type-registry.js
+var require_content_type_registry = __commonJS({
+  "node_modules/pptx-automizer/dist/classes/content-type-registry.js"(exports) {
     "use strict";
     var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
@@ -22879,247 +19811,439 @@ var require_ole = __commonJS({
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
     };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ContentTypeRegistry = void 0;
+    var ppt_paths_1 = require_ppt_paths();
+    var xml_helper_1 = require_xml_helper();
+    var nextRelIdByRelsDoc = /* @__PURE__ */ new WeakMap();
+    var listElementsByPresentationDoc = /* @__PURE__ */ new WeakMap();
+    var ContentTypeRegistry = class {
+      constructor(host) {
+        this.host = host;
+      }
+      /**
+       * Registers the host's target part (slide, slideMaster or slideLayout)
+       * with the presentation.
+       */
+      addToPresentation() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const relId = yield this.getNextPresentationRelId(host.targetArchive);
+          yield this.appendToSlideRel(host.targetArchive, relId, host.targetNumber);
+          if (host.targetType === "slide") {
+            yield this.appendToSlideList(host.targetArchive, relId);
+          } else if (host.targetType === "slideMaster") {
+            yield this.appendToSlideMasterList(host.targetArchive, relId);
+          } else if (host.targetType === "slideLayout") {
+          }
+          yield this.appendToContentType(host.targetArchive, host.targetNumber);
+        });
+      }
+      /**
+       * Cached equivalent of `XmlHelper.getNextRelId` for
+       * `ppt/_rels/presentation.xml.rels`: the max-rId scan runs once per parsed
+       * document, afterwards ids are incremented locally (the scan is O(n) in
+       * appended slides, so rescanning per append made large decks O(n²)).
+       */
+      getNextPresentationRelId(rootArchive) {
+        return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
+          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(rootArchive, ppt_paths_1.PptPaths.presentationRels);
+          const max = (_a3 = nextRelIdByRelsDoc.get(xml)) !== null && _a3 !== void 0 ? _a3 : xml_helper_1.XmlHelper.getMaxId(xml.documentElement.childNodes, "Id");
+          const next = max + 1;
+          nextRelIdByRelsDoc.set(xml, next);
+          return `rId${next}-created`;
+        });
+      }
+      /**
+       * Cached lookup of a list element of `ppt/presentation.xml`
+       * (`p:sldIdLst` / `p:sldMasterIdLst`). xmldom's live
+       * `getElementsByTagName` re-walks the whole document on every access.
+       */
+      getPresentationListElement(xml, tag2) {
+        let byTag = listElementsByPresentationDoc.get(xml);
+        if (!byTag) {
+          byTag = /* @__PURE__ */ new Map();
+          listElementsByPresentationDoc.set(xml, byTag);
+        }
+        let element = byTag.get(tag2);
+        if (!element || !element.parentNode) {
+          element = xml.getElementsByTagName(tag2)[0];
+          if (element) {
+            byTag.set(tag2, element);
+          } else {
+            byTag.delete(tag2);
+          }
+        }
+        return element;
+      }
+      appendToSlideRel(rootArchive, relId, slideCount) {
+        const targetType = this.host.targetType;
+        return xml_helper_1.XmlHelper.append({
+          archive: rootArchive,
+          file: ppt_paths_1.PptPaths.presentationRels,
+          // `Relationships` is the document element of a .rels part.
+          parent: (xml) => xml.documentElement,
+          tag: "Relationship",
+          attributes: {
+            Id: relId,
+            Type: `http://schemas.openxmlformats.org/officeDocument/2006/relationships/${targetType}`,
+            Target: `${targetType}s/${targetType}${slideCount}.xml`
+          }
+        });
+      }
+      /**
+       * Appends a new slide to slide list in presentation.xml.
+       * If rootArchive has no slides, a new node will be created.
+       * "id"-attribute of 'p:sldId'-element must be greater than 255.
+       */
+      appendToSlideList(rootArchive, relId) {
+        return xml_helper_1.XmlHelper.append({
+          archive: rootArchive,
+          file: ppt_paths_1.PptPaths.presentation,
+          assert: (xml) => __awaiter(this, void 0, void 0, function* () {
+            if (!this.getPresentationListElement(xml, "p:sldIdLst")) {
+              xml_helper_1.XmlHelper.insertAfter(xml.createElement("p:sldIdLst"), this.getPresentationListElement(xml, "p:sldMasterIdLst"));
+            }
+          }),
+          parent: (xml) => this.getPresentationListElement(xml, "p:sldIdLst"),
+          tag: "p:sldId",
+          attributes: {
+            "r:id": relId
+          }
+        });
+      }
+      /**
+       * Appends a new slideMaster to the master list in presentation.xml.
+       */
+      appendToSlideMasterList(rootArchive, relId) {
+        return xml_helper_1.XmlHelper.append({
+          archive: rootArchive,
+          file: ppt_paths_1.PptPaths.presentation,
+          parent: (xml) => this.getPresentationListElement(xml, "p:sldMasterIdLst"),
+          tag: "p:sldMasterId",
+          attributes: {
+            "r:id": relId
+          }
+        });
+      }
+      appendToContentType(rootArchive, count) {
+        const targetType = this.host.targetType;
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(rootArchive, {
+          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.part(targetType, count)),
+          ContentType: `application/vnd.openxmlformats-officedocument.presentationml.${targetType}+xml`
+        }));
+      }
+      appendNotesToContentType(slideCount) {
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.host.targetArchive, {
+          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.notesSlide(slideCount)),
+          ContentType: `application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml`
+        }));
+      }
+      appendThemeToContentType(themeCount) {
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.host.targetArchive, {
+          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.theme(themeCount)),
+          ContentType: `application/vnd.openxmlformats-officedocument.theme+xml`
+        }));
+      }
+    };
+    exports.ContentTypeRegistry = ContentTypeRegistry;
+  }
+});
+
+// node_modules/pptx-automizer/dist/enums/element-type.js
+var require_element_type = __commonJS({
+  "node_modules/pptx-automizer/dist/enums/element-type.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ElementSubtype = exports.ElementType = void 0;
+    var ElementType;
+    (function(ElementType2) {
+      ElementType2["Chart"] = "Chart";
+      ElementType2["Image"] = "Image";
+      ElementType2["Diagram"] = "Diagram";
+      ElementType2["Shape"] = "Generic";
+      ElementType2["OLEObject"] = "OLEObject";
+      ElementType2["Hyperlink"] = "Hyperlink";
+    })(ElementType || (exports.ElementType = ElementType = {}));
+    var ElementSubtype;
+    (function(ElementSubtype2) {
+      ElementSubtype2["chart"] = "chart";
+      ElementSubtype2["chartEx"] = "chartEx";
+      ElementSubtype2["oleObject"] = "oleObject";
+      ElementSubtype2["hyperlink"] = "hyperlink";
+    })(ElementSubtype || (exports.ElementSubtype = ElementSubtype = {}));
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/hyperlink-processor.js
+var require_hyperlink_processor = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/hyperlink-processor.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
     };
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.OLEObject = void 0;
-    var file_helper_1 = require_file_helper();
+    exports.HyperlinkProcessor = void 0;
     var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var path_1 = __importDefault(__require("path"));
-    var OLEObject = class _OLEObject extends shape_1.Shape {
-      constructor(shape, targetType, sourceArchive) {
-        var _a3;
-        super(shape, targetType);
-        this.sourceArchive = sourceArchive;
-        this.oleObjectPath = `ppt/embeddings/${this.sourceRid}${this.getFileExtension((_a3 = shape.target) === null || _a3 === void 0 ? void 0 : _a3.file)}`;
-        this.relRootTag = "p:oleObj";
-        this.relAttribute = "r:id";
+    var logger_1 = require_logger();
+    var HyperlinkProcessor = class {
+      static isHyperlinkRelType(relType) {
+        return this.HYPERLINK_REL_TYPES.includes(relType);
       }
-      getFileExtension(file2) {
-        if (!file2)
-          return ".bin";
-        const ext = path_1.default.extname(file2).toLowerCase();
-        return [".bin", ".xls", ".xlsx", ".doc", ".docx", ".ppt", ".pptx"].includes(ext) ? ext : ".bin";
-      }
-      // NOTE: modify() and append() won't be implemented.
-      // TODO: remove is not currently properly implemented,
-      //  suggest we delete the file from the archive as well as removing the relationship.
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          yield this.removeOleObjectFile();
-          yield this.removeFromContentTypes();
-          yield this.removeFromSlideRels();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber, oleObjects) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          const allOleObjects = oleObjects || (yield _OLEObject.getAllOnSlide(this.sourceArchive, this.targetSlideRelFile));
-          const oleObject = allOleObjects.find((obj) => obj.rId === this.sourceRid);
-          if (!oleObject) {
-            throw new Error(`OLE object with rId ${this.sourceRid} not found.`);
-          }
-          const sourceFilePath = `ppt/embeddings/${oleObject.file.split("/").pop()}`;
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-          yield this.copyOleObjectFile(sourceFilePath);
-          yield this.appendToContentTypes();
-          yield this.updateSlideRels();
-          yield this.updateSlideXml();
-        });
-      }
-      copyOleObjectFile(sourceFilePath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const fileExtension = this.getFileExtension(sourceFilePath);
-          const targetFileName = `ppt/embeddings/oleObject${this.createdRid}${fileExtension}`;
-          try {
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourceFilePath, this.targetArchive, targetFileName);
-          } catch (error51) {
-            console.error("Error copying OLE object file:", error51);
-            throw error51;
-          }
-        });
-      }
-      appendToContentTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesPath = "[Content_Types].xml";
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, contentTypesPath);
-          const types = contentTypesXml.getElementsByTagName("Types")[0];
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const partName = `/ppt/embeddings/oleObject${this.createdRid}${fileExtension}`;
-          const existingOverride = Array.from(types.getElementsByTagName("Override")).find((override) => override.getAttribute("PartName") === partName);
-          if (!existingOverride) {
-            const newOverride = contentTypesXml.createElement("Override");
-            newOverride.setAttribute("PartName", partName);
-            newOverride.setAttribute("ContentType", this.getContentType(fileExtension));
-            types.appendChild(newOverride);
-            yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, contentTypesPath, contentTypesXml);
-          }
-        });
-      }
-      updateSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
-          const relationships = relXml.getElementsByTagName("Relationship");
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const newTarget = `../embeddings/oleObject${this.createdRid}${fileExtension}`;
-          let relationshipUpdated = false;
-          for (let i = 0; i < relationships.length; i++) {
-            if (relationships[i].getAttribute("Id") === this.sourceRid) {
-              relationships[i].setAttribute("Id", this.createdRid);
-              relationships[i].setAttribute("Target", newTarget);
-              relationshipUpdated = true;
-              break;
+      /**
+       * Finds all hyperlink elements within a given element
+       */
+      static findHyperlinks(element) {
+        const hyperlinks = [];
+        try {
+          const shapeProps = element.getElementsByTagName("p:cNvPr");
+          for (let i = 0; i < shapeProps.length; i++) {
+            const prop = shapeProps[i];
+            const shapeHyperlinks = prop.getElementsByTagName(this.HYPERLINK_TAG);
+            for (let j = 0; j < shapeHyperlinks.length; j++) {
+              hyperlinks.push(shapeHyperlinks[j]);
             }
           }
-          if (!relationshipUpdated) {
-            const newRel = relXml.createElement("Relationship");
-            newRel.setAttribute("Id", this.createdRid);
-            newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject");
-            newRel.setAttribute("Target", newTarget);
-            relXml.documentElement.appendChild(newRel);
+          const allHyperlinks = element.getElementsByTagName(this.HYPERLINK_TAG);
+          for (let i = 0; i < allHyperlinks.length; i++) {
+            const hlink = allHyperlinks[i];
+            const parent = hlink.parentNode;
+            if (parent && parent.nodeName === "a:rPr") {
+              if (!hyperlinks.includes(hlink)) {
+                hyperlinks.push(hlink);
+              }
+            }
           }
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
-        });
+        } catch (error51) {
+          logger_1.log.warn(`Error finding hyperlinks: ${error51}`);
+        }
+        return hyperlinks;
       }
-      updateSlideXml() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideXmlPath = `ppt/slides/slide${this.targetSlideNumber}.xml`;
-          const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, slideXmlPath);
-          const oleObjs = Array.from(slideXml.getElementsByTagName("p:oleObj"));
-          oleObjs.forEach((oleObj) => {
-            if (oleObj.getAttribute("r:id") === this.sourceRid) {
-              oleObj.setAttribute("r:id", this.createdRid);
-              const oleObjPr = oleObj.getElementsByTagName("p:oleObjPr")[0];
-              if (oleObjPr) {
-                const links = Array.from(oleObjPr.getElementsByTagName("a:link"));
-                links.forEach((link) => {
-                  link.setAttribute("r:id", this.createdRid);
-                });
+      /**
+       * Checks if an element contains hyperlinks
+       */
+      static hasHyperlinks(element) {
+        return this.findHyperlinks(element).length > 0;
+      }
+      /**
+       * Checks if an element contains multiple hyperlinks
+       */
+      static hasMultipleHyperlinks(element) {
+        return this.findHyperlinks(element).length > 1;
+      }
+      /**
+       * Determines if an element should be processed as a hyperlink element
+       * @param element - Element to analyze
+       * @returns True if element should be processed as hyperlink
+       */
+      static shouldProcessAsHyperlink(element) {
+        const hyperlinks = this.findHyperlinks(element);
+        return hyperlinks.length === 1;
+      }
+      /**
+       * Gets the primary hyperlink target from an element
+       * @param element - Element to analyze
+       * @returns Target information or null if no hyperlink found
+       */
+      static getPrimaryHyperlinkTarget(element) {
+        try {
+          const hyperlinks = this.findHyperlinks(element);
+          if (hyperlinks.length === 0) {
+            return null;
+          }
+          const firstHyperlink = hyperlinks[0];
+          const rId = firstHyperlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
+          if (!rId) {
+            return null;
+          }
+          return {
+            rId,
+            type: "hyperlink"
+          };
+        } catch (error51) {
+          logger_1.log.warn(`Error getting primary hyperlink target: ${error51}`);
+          return null;
+        }
+      }
+      /**
+       * Extracts hyperlink relationship IDs from an element
+       * @param element - The XML element to extract from
+       * @returns Array of relationship IDs
+       */
+      static extractHyperlinkRelationshipIds(element) {
+        const hyperlinks = this.findHyperlinks(element);
+        return hyperlinks.map((hlink) => hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE)).filter((rId) => rId !== null);
+      }
+      /**
+       * Updates hyperlink relationship IDs in an element
+       */
+      static updateHyperlinkRelationshipIds(element, relationshipMap) {
+        try {
+          const hyperlinks = this.findHyperlinks(element);
+          hyperlinks.forEach((hlink) => {
+            const currentRId = hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
+            if (currentRId && relationshipMap.has(currentRId)) {
+              const newRId = relationshipMap.get(currentRId);
+              if (newRId) {
+                hlink.setAttribute(this.RELATIONSHIP_ATTRIBUTE, newRId);
               }
             }
           });
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, slideXmlPath, slideXml);
-        });
-      }
-      getContentType(fileExtension) {
-        const contentTypes = {
-          ".bin": "application/vnd.openxmlformats-officedocument.oleObject",
-          ".xls": "application/vnd.ms-excel",
-          ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          ".doc": "application/msword",
-          ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          ".ppt": "application/vnd.ms-powerpoint",
-          ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        };
-        return contentTypes[fileExtension.toLowerCase()] || "application/vnd.openxmlformats-officedocument.oleObject";
-      }
-      removeOleObjectFile() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const fileName = `ppt/embeddings/oleObject${this.createdRid}${fileExtension}`;
-          yield this.targetArchive.remove(fileName);
-        });
-      }
-      removeFromContentTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesPath = "[Content_Types].xml";
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, contentTypesPath);
-          const types = contentTypesXml.getElementsByTagName("Types")[0];
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const partName = `/ppt/embeddings/oleObject${this.createdRid}${fileExtension}`;
-          const overrideToRemove = Array.from(types.getElementsByTagName("Override")).find((override) => override.getAttribute("PartName") === partName);
-          if (overrideToRemove) {
-            types.removeChild(overrideToRemove);
-            yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, contentTypesPath, contentTypesXml);
-          }
-        });
-      }
-      removeFromSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
-          const relationships = relXml.getElementsByTagName("Relationship");
-          for (let i = 0; i < relationships.length; i++) {
-            if (relationships[i].getAttribute("Id") === this.createdRid) {
-              relationships[i].parentNode.removeChild(relationships[i]);
-              break;
-            }
-          }
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
-        });
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const oleObjectType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
-          return xml_helper_1.XmlHelper.getRelationshipItems(archive, relsPath, (element, rels) => {
-            const type = element.getAttribute("Type");
-            if (type === oleObjectType) {
-              rels.push({
-                rId: element.getAttribute("Id"),
-                type: element.getAttribute("Type"),
-                file: element.getAttribute("Target"),
-                element
-              });
-            }
-          });
-        });
-      }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber, oleObjects) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber, oleObjects);
-        });
-      }
-    };
-    exports.OLEObject = OLEObject;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-hyperlink-element.js
-var require_modify_hyperlink_element = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-hyperlink-element.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var HyperlinkElement = class {
-      constructor(doc, relId, isInternal) {
-        this.doc = doc;
-        this.relId = relId;
-        this.isInternal = isInternal;
-      }
-      createHlinkClick() {
-        const hlinkClick = this.doc.createElement("a:hlinkClick");
-        hlinkClick.setAttribute("r:id", this.relId);
-        hlinkClick.setAttribute("xmlns:r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
-        if (this.isInternal) {
-          hlinkClick.setAttribute("action", "ppaction://hlinksldjump");
-          hlinkClick.setAttribute("xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main");
-          hlinkClick.setAttribute("xmlns:p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
+        } catch (error51) {
+          logger_1.log.warn(`Error updating hyperlink relationship IDs: ${error51}`);
         }
-        return hlinkClick;
       }
-      createTextRun(text) {
-        const run = this.doc.createElement("a:r");
-        const rPr = this.doc.createElement("a:rPr");
-        const t = this.doc.createElement("a:t");
-        rPr.appendChild(this.createHlinkClick());
-        t.textContent = text;
-        run.appendChild(rPr);
-        run.appendChild(t);
-        return run;
+      /**
+       * Processes hyperlinks for single-hyperlink elements
+       */
+      static processSingleHyperlink(element, newRid) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const hyperlinks = this.findHyperlinks(element);
+          if (hyperlinks.length !== 1) {
+            logger_1.log.warn(`Expected single hyperlink, found ${hyperlinks.length}`);
+            return;
+          }
+          const hyperlink = hyperlinks[0];
+          hyperlink.setAttribute(this.RELATIONSHIP_ATTRIBUTE, newRid);
+        });
+      }
+      /**
+       * Copies multiple hyperlinks from source to target slide
+       */
+      static copyMultipleHyperlinks(element, sourceArchive, sourceSlideNumber, targetArchive, targetSlideRelFile, sourceElement) {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.hasHyperlinks(element)) {
+            return;
+          }
+          const hyperlinkRIds = this.extractHyperlinkRelationshipIds(element);
+          if (hyperlinkRIds.length === 0) {
+            return;
+          }
+          const importedRIds = new Set(sourceElement ? this.extractHyperlinkRelationshipIds(sourceElement) : hyperlinkRIds);
+          const sourceRelPath = `ppt/slides/_rels/slide${sourceSlideNumber}.xml.rels`;
+          const sourceRelDoc = yield xml_helper_1.XmlHelper.getXmlFromArchive(sourceArchive, sourceRelPath);
+          if (!sourceRelDoc) {
+            logger_1.log.warn(`Source relationships not found: ${sourceRelPath}`);
+            return;
+          }
+          const sourceRelationships = sourceRelDoc.getElementsByTagName("Relationship");
+          const targetRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(targetArchive, targetSlideRelFile);
+          if (!targetRelXml) {
+            logger_1.log.warn(`Target relationships not found: ${targetSlideRelFile}`);
+            return;
+          }
+          const relationshipMap = /* @__PURE__ */ new Map();
+          const processedTargets = /* @__PURE__ */ new Set();
+          for (let i = 0; i < hyperlinkRIds.length; i++) {
+            const rId = hyperlinkRIds[i];
+            if (!importedRIds.has(rId)) {
+              continue;
+            }
+            let sourceRel = null;
+            for (let j = 0; j < sourceRelationships.length; j++) {
+              if (sourceRelationships[j].getAttribute("Id") === rId) {
+                sourceRel = sourceRelationships[j];
+                break;
+              }
+            }
+            if (sourceRel) {
+              const relType = sourceRel.getAttribute("Type");
+              const target = sourceRel.getAttribute("Target");
+              const targetMode = sourceRel.getAttribute("TargetMode");
+              if (relType && target && this.isHyperlinkRelType(relType)) {
+                const relationshipKey = `${relType}:${target}:${targetMode || ""}`;
+                let newRId;
+                if (processedTargets.has(relationshipKey)) {
+                  const existingRels = targetRelXml.getElementsByTagName("Relationship");
+                  for (let k = 0; k < existingRels.length; k++) {
+                    const existingRel = existingRels[k];
+                    if (existingRel.getAttribute("Type") === relType && existingRel.getAttribute("Target") === target && existingRel.getAttribute("TargetMode") === targetMode) {
+                      newRId = existingRel.getAttribute("Id") || "";
+                      break;
+                    }
+                  }
+                } else {
+                  newRId = yield xml_helper_1.XmlHelper.getNextRelId(targetArchive, targetSlideRelFile);
+                  const newRelationship = targetRelXml.createElement("Relationship");
+                  newRelationship.setAttribute("Id", newRId);
+                  newRelationship.setAttribute("Type", relType);
+                  newRelationship.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(target));
+                  if (targetMode) {
+                    newRelationship.setAttribute("TargetMode", targetMode);
+                  }
+                  targetRelXml.documentElement.appendChild(newRelationship);
+                  processedTargets.add(relationshipKey);
+                }
+                relationshipMap.set(rId, newRId);
+              } else if (relType && !this.isHyperlinkRelType(relType)) {
+                logger_1.log.warn(`Hyperlink r:id="${rId}" resolves to a non-hyperlink relationship (${relType}) on source slide ${sourceSlideNumber} \u2014 not copied`);
+              }
+            }
+          }
+          const targetRelationships = targetRelXml.getElementsByTagName("Relationship");
+          const resolvesOnTarget = (rId) => {
+            for (let i = 0; i < targetRelationships.length; i++) {
+              if (targetRelationships[i].getAttribute("Id") === rId) {
+                return this.isHyperlinkRelType(targetRelationships[i].getAttribute("Type") || "");
+              }
+            }
+            return false;
+          };
+          this.findHyperlinks(element).forEach((hlink) => {
+            var _a3;
+            const rId = hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
+            if (!rId || relationshipMap.has(rId)) {
+              return;
+            }
+            if (!importedRIds.has(rId) && resolvesOnTarget(rId)) {
+              return;
+            }
+            logger_1.log.warn(`Dropping hyperlink with unresolvable r:id="${rId}"`);
+            (_a3 = hlink.parentNode) === null || _a3 === void 0 ? void 0 : _a3.removeChild(hlink);
+          });
+          this.updateHyperlinkRelationshipIds(element, relationshipMap);
+          yield xml_helper_1.XmlHelper.writeXmlToArchive(targetArchive, targetSlideRelFile, targetRelXml);
+        });
       }
     };
-    exports.default = HyperlinkElement;
+    exports.HyperlinkProcessor = HyperlinkProcessor;
+    HyperlinkProcessor.HYPERLINK_TAG = "a:hlinkClick";
+    HyperlinkProcessor.RELATIONSHIP_ATTRIBUTE = "r:id";
+    HyperlinkProcessor.HYPERLINK_REL_TYPES = [
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+    ];
   }
 });
 
-// node_modules/pptx-automizer/dist/helper/modify-hyperlink-helper.js
-var require_modify_hyperlink_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-hyperlink-helper.js"(exports) {
+// node_modules/pptx-automizer/dist/helper/shape-type-detector.js
+var require_shape_type_detector = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/shape-type-detector.js"(exports) {
     "use strict";
     var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
@@ -23148,167 +20272,285 @@ var require_modify_hyperlink_helper = __commonJS({
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
     };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    var _a3;
     Object.defineProperty(exports, "__esModule", { value: true });
-    var modify_hyperlink_element_1 = __importDefault(require_modify_hyperlink_element());
+    exports.shapeTypeDetectors = void 0;
+    exports.analyzeElement = analyzeElement;
+    var element_type_1 = require_element_type();
     var xml_helper_1 = require_xml_helper();
-    var general_helper_1 = require_general_helper();
-    var ModifyHyperlinkHelper = class {
-      static createRelationshipData(target, isInternal) {
-        if (isInternal) {
+    var hyperlink_processor_1 = require_hyperlink_processor();
+    var logger_1 = require_logger();
+    var containsTag = (tag2) => (element) => element.getElementsByTagName(tag2).length > 0;
+    exports.shapeTypeDetectors = [
+      {
+        match: containsTag("c:chart"),
+        type: element_type_1.ElementType.Chart,
+        relType: "chart"
+      },
+      {
+        match: containsTag("cx:chart"),
+        type: element_type_1.ElementType.Chart,
+        relType: "chartEx"
+      },
+      {
+        match: containsTag("p:nvPicPr"),
+        type: element_type_1.ElementType.Image,
+        relType: "image"
+      },
+      {
+        match: containsTag("dgm:relIds"),
+        type: element_type_1.ElementType.Diagram,
+        relType: "diagram"
+      },
+      {
+        match: containsTag("p:oleObj"),
+        type: element_type_1.ElementType.OLEObject,
+        relType: "oleObject"
+      },
+      {
+        match: (element) => hyperlink_processor_1.HyperlinkProcessor.hasHyperlinks(element),
+        type: element_type_1.ElementType.Hyperlink,
+        analyze: (element, sourceArchive, relsPath) => __awaiter(void 0, void 0, void 0, function* () {
+          if (hyperlink_processor_1.HyperlinkProcessor.hasMultipleHyperlinks(element)) {
+            return { type: element_type_1.ElementType.Shape };
+          }
+          try {
+            const target = yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, element, "hyperlink");
+            return {
+              type: element_type_1.ElementType.Hyperlink,
+              target,
+              element
+            };
+          } catch (error51) {
+            logger_1.log.warn("Error finding hyperlink target:", error51);
+            return { type: element_type_1.ElementType.Shape };
+          }
+        })
+      }
+    ];
+    function analyzeElement(sourceElement, sourceArchive, relsPath) {
+      return __awaiter(this, void 0, void 0, function* () {
+        for (const detector of exports.shapeTypeDetectors) {
+          if (!detector.match(sourceElement)) {
+            continue;
+          }
+          if (detector.analyze) {
+            return detector.analyze(sourceElement, sourceArchive, relsPath);
+          }
           return {
-            Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-            Target: `../slides/${target}`,
-            Id: ""
-            // Will be set later
+            type: detector.type,
+            target: detector.relType ? yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, detector.relType) : void 0
           };
         }
         return {
-          Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-          Target: target.toString(),
-          TargetMode: "External",
-          Id: ""
-          // Will be set later
+          type: element_type_1.ElementType.Shape
         };
-      }
-      static addRelationship(relation, relData) {
-        const relNodes = relation.getElementsByTagName("Relationship");
-        const maxId = xml_helper_1.XmlHelper.getMaxId(relNodes, "Id", true);
-        const newRelId = `rId${maxId}`;
-        const newRel = relation.ownerDocument.createElement("Relationship");
-        newRel.setAttribute("Id", newRelId);
-        Object.entries(relData).forEach(([key, value]) => {
-          if (value)
-            newRel.setAttribute(key, value);
-        });
-        relNodes.item(0).parentNode.appendChild(newRel);
-        return newRelId;
-      }
-      static addHyperlinkToTextRuns(element, hyperlinkElement) {
-        const textRuns = element.getElementsByTagName("a:r");
-        Array.from(textRuns).forEach((run) => {
-          let rPr = run.getElementsByTagName("a:rPr")[0];
-          if (!rPr) {
-            rPr = element.ownerDocument.createElement("a:rPr");
-            const textElement = run.getElementsByTagName("a:t")[0];
-            if (textElement) {
-              run.insertBefore(rPr, textElement);
-            } else {
-              run.appendChild(rPr);
-            }
-          }
-          rPr.appendChild(hyperlinkElement.createHlinkClick());
-        });
-      }
-      static addHyperlinkToParagraph(paragraph, hyperlinkElement) {
-        const existingText = paragraph.getElementsByTagName("a:t")[0];
-        const text = (existingText === null || existingText === void 0 ? void 0 : existingText.textContent) || "Hyperlink";
-        if (existingText === null || existingText === void 0 ? void 0 : existingText.parentNode) {
-          paragraph.removeChild(existingText.parentNode);
-        }
-        const run = hyperlinkElement.createTextRun(text);
-        paragraph.appendChild(run);
-      }
-      static createNewTextStructure(txBody, hyperlinkElement) {
-        const p = txBody.ownerDocument.createElement("a:p");
-        const run = hyperlinkElement.createTextRun("Hyperlink");
-        p.appendChild(run);
-        txBody.appendChild(p);
-      }
-    };
-    exports.default = ModifyHyperlinkHelper;
-    _a3 = ModifyHyperlinkHelper;
-    ModifyHyperlinkHelper.setHyperlinkTarget = (target, isExternal = true) => (element, relation) => __awaiter(void 0, void 0, void 0, function* () {
-      if (!element || !relation) {
-        general_helper_1.Logger.log("SetHyperlinkTarget: Missing element or relation", 2);
-        return;
-      }
-      const hlinkClicks = element.getElementsByTagName("a:hlinkClick");
-      if (hlinkClicks.length === 0) {
-        general_helper_1.Logger.log("No hyperlinks found to modify", 1);
-        return;
-      }
-      const existingRIds = Array.from(hlinkClicks).map((hlink) => hlink.getAttribute("r:id")).filter(Boolean);
-      if (existingRIds.length === 0) {
-        general_helper_1.Logger.log("No valid relationship IDs found in hyperlinks", 1);
-        return;
-      }
-      const relData = _a3.createRelationshipData(target, !isExternal);
-      const newRelId = _a3.addRelationship(relation, relData);
-      Array.from(hlinkClicks).forEach((hlink) => {
-        hlink.setAttribute("r:id", newRelId);
-        if (!isExternal) {
-          hlink.setAttribute("action", "ppaction://hlinksldjump");
-          hlink.setAttribute("xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main");
-          hlink.setAttribute("xmlns:p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
-        } else {
-          hlink.removeAttribute("action");
-        }
       });
-      const relationships = relation.getElementsByTagName("Relationship");
-      Array.from(relationships).forEach((rel) => {
-        const relId = rel.getAttribute("Id");
-        if (relId && existingRIds.includes(relId)) {
-          relation.removeChild(rel);
-        }
-      });
-      general_helper_1.Logger.log("SetHyperlinkTarget: Successfully updated hyperlink target", 2);
-    });
-    ModifyHyperlinkHelper.addHyperlink = (target, isInternalLink) => (element, relation) => {
-      if (!element || !relation)
-        return;
-      if (typeof target === "number") {
-        target = `slide${target}.xml`;
-        isInternalLink = true;
-      }
-      const relData = _a3.createRelationshipData(target, isInternalLink);
-      const newRelId = _a3.addRelationship(relation, relData);
-      const hasHlink = element.getElementsByTagName("a:hlinkClick");
-      if (hasHlink.item(0)) {
-        return;
-      }
-      const hyperlinkElement = new modify_hyperlink_element_1.default(element.ownerDocument, newRelId, isInternalLink);
-      const textRuns = element.getElementsByTagName("a:r");
-      if (textRuns.length > 0) {
-        _a3.addHyperlinkToTextRuns(element, hyperlinkElement);
-      } else {
-        const paragraphs = element.getElementsByTagName("a:p");
-        if (paragraphs.length > 0) {
-          _a3.addHyperlinkToParagraph(paragraphs[0], hyperlinkElement);
-        } else {
-          const txBody = element.getElementsByTagName("p:txBody")[0] || element.getElementsByTagName("a:txBody")[0];
-          if (txBody) {
-            _a3.createNewTextStructure(txBody, hyperlinkElement);
-          } else {
-            console.error("No suitable text element found to add hyperlink to");
-          }
-        }
-      }
-      general_helper_1.Logger.log("AddHyperlink: Successfully completed", 2);
-    };
-    ModifyHyperlinkHelper.removeHyperlink = () => (element, relation) => __awaiter(void 0, void 0, void 0, function* () {
-      if (!element)
-        return;
-      try {
-        const hlinkClicks = element.getElementsByTagName("a:hlinkClick");
-        Array.from(hlinkClicks).forEach((hlink) => {
-          var _b;
-          return (_b = hlink.parentNode) === null || _b === void 0 ? void 0 : _b.removeChild(hlink);
-        });
-        general_helper_1.Logger.log("RemoveHyperlink: Successfully completed", 2);
-      } catch (error51) {
-        console.error("Error in RemoveHyperlink:", error51);
-      }
-    });
+    }
   }
 });
 
-// node_modules/pptx-automizer/dist/shapes/hyperlink.js
-var require_hyperlink = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/hyperlink.js"(exports) {
+// node_modules/pptx-automizer/dist/classes/shape.js
+var require_shape = __commonJS({
+  "node_modules/pptx-automizer/dist/classes/shape.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Shape = void 0;
+    var xml_helper_1 = require_xml_helper();
+    var general_helper_1 = require_general_helper();
+    var ppt_paths_1 = require_ppt_paths();
+    var logger_1 = require_logger();
+    var errors_1 = require_errors2();
+    var hyperlink_processor_1 = require_hyperlink_processor();
+    var content_type_map_1 = require_content_type_map();
+    var Shape = class {
+      constructor(shape, targetType) {
+        this.shape = shape;
+        this.mode = shape.mode;
+        this.name = shape.name;
+        this.targetType = targetType;
+        this.sourceArchive = shape.sourceArchive;
+        this.sourceSlideNumber = shape.sourceSlideNumber;
+        this.sourceSlideFile = ppt_paths_1.PptPaths.slide(this.sourceSlideNumber);
+        this.sourceElement = shape.sourceElement;
+        this.hasCreationId = shape.hasCreationId;
+        this.callbacks = general_helper_1.GeneralHelper.arrayify(shape.callback);
+        this.contentTypeMap = content_type_map_1.ContentTypeMap;
+        if (shape.target) {
+          this.sourceNumber = shape.target.number;
+          this.sourceRid = shape.target.rId;
+          this.subtype = shape.target.subtype;
+          this.target = shape.target;
+        }
+      }
+      setTarget(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetType = this.targetType;
+          this.targetTemplate = targetTemplate;
+          this.targetArchive = this.targetTemplate.archive;
+          this.targetSlideNumber = targetSlideNumber;
+          this.targetSlideFile = ppt_paths_1.PptPaths.part(targetType, this.targetSlideNumber);
+          this.targetSlideRelFile = ppt_paths_1.PptPaths.partRels(targetType, this.targetSlideNumber);
+        });
+      }
+      setTargetElement() {
+        return __awaiter(this, void 0, void 0, function* () {
+          this.targetElement = this.sourceElement.cloneNode(true);
+        });
+      }
+      appendToSlideTree() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideFile);
+          targetSlideXml.getElementsByTagName("p:spTree")[0].appendChild(this.targetElement);
+          if (this.relRootTag === "a:hlinkClick") {
+            yield this.processHyperlinks();
+          }
+          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideFile, targetSlideXml);
+        });
+      }
+      /**
+       * Rewrites the single a:hlinkClick r:id of this element to createdRid.
+       * Only used on append: on modify, Hyperlink.modify() manages the existing
+       * relationship in place via editTargetHyperlinkRel(), and overwriting its
+       * r:id here would leave it without a matching relationship entry.
+       */
+      processHyperlinks() {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.targetElement || !this.createdRid)
+            return;
+          yield hyperlink_processor_1.HyperlinkProcessor.processSingleHyperlink(this.targetElement, this.createdRid);
+        });
+      }
+      replaceIntoSlideTree() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.modifySlideTree(true);
+        });
+      }
+      removeFromSlideTree() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.modifySlideTree(false);
+        });
+      }
+      modifySlideTree(insertBefore) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const archive = this.targetArchive;
+          const slideFile = this.targetSlideFile;
+          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slideFile);
+          const findMethod = this.hasCreationId ? "findByCreationId" : "findByName";
+          const selector = this.hasCreationId ? this.name : this.shape.selector.name;
+          const sourceElementOnTargetSlide = yield xml_helper_1.XmlHelper[findMethod](targetSlideXml, selector, this.shape.selector.nameIdx);
+          if (!(sourceElementOnTargetSlide === null || sourceElementOnTargetSlide === void 0 ? void 0 : sourceElementOnTargetSlide.parentNode)) {
+            logger_1.log.error(`Can't modify slide tree for ${this.name}`);
+            return;
+          }
+          if (insertBefore === true && this.targetElement) {
+            sourceElementOnTargetSlide.parentNode.insertBefore(this.targetElement, sourceElementOnTargetSlide);
+          }
+          sourceElementOnTargetSlide.parentNode.removeChild(sourceElementOnTargetSlide);
+          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slideFile, targetSlideXml);
+        });
+      }
+      updateElementsRelId(cb) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideFile);
+          const targetElements = yield this.getElementsByRid(targetSlideXml, this.sourceRid);
+          targetElements.forEach((targetElement) => {
+            if (cb && typeof cb === "function") {
+              cb(targetElement);
+            } else {
+              this.relParent(targetElement).getElementsByTagName(this.relRootTag)[0].setAttribute(this.relAttribute, this.createdRid);
+            }
+          });
+          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideFile, targetSlideXml);
+        });
+      }
+      /*
+       * This will find all elements with a matching rId on a
+       * <p:cSld>, including related images at <p:bg> and <p:spTree>.
+       */
+      getElementsByRid(slideXml, rId) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const sourceList = slideXml.getElementsByTagName("p:cSld")[0].getElementsByTagName(this.relRootTag);
+          return xml_helper_1.XmlHelper.findByAttributeValue(sourceList, this.relAttribute, rId);
+        });
+      }
+      updateTargetElementRelId() {
+        return __awaiter(this, void 0, void 0, function* () {
+          this.targetElement.getElementsByTagName(this.relRootTag).item(0).setAttribute(this.relAttribute, this.createdRid);
+        });
+      }
+      applyCallbacks(callbacks, element, relation) {
+        return __awaiter(this, void 0, void 0, function* () {
+          for (const callback of callbacks) {
+            if (typeof callback === "function") {
+              try {
+                yield callback(element, relation);
+              } catch (e) {
+                this.handleCallbackError(e);
+              }
+            }
+          }
+        });
+      }
+      applyChartCallbacks(callbacks, element, chart, workbook) {
+        callbacks.forEach((callback) => {
+          if (typeof callback === "function") {
+            try {
+              callback(element, chart, workbook);
+            } catch (e) {
+              this.handleCallbackError(e);
+            }
+          }
+        });
+      }
+      /**
+       * A throwing modification callback fails the run by default.
+       * With `AutomizerParams.continueOnError`, it is logged and skipped.
+       */
+      handleCallbackError(e) {
+        if (this.shape.continueOnError === true) {
+          logger_1.log.warn(`Modification callback failed on element "${this.name}" (${this.targetSlideFile}):`, e);
+          return;
+        }
+        throw new errors_1.CallbackError(this.name, this.targetSlideFile, e);
+      }
+      appendImageExtensionToContentType(extension) {
+        return xml_helper_1.XmlHelper.appendImageExtensionToContentType(this.targetArchive, extension);
+      }
+    };
+    exports.Shape = Shape;
+  }
+});
+
+// node_modules/pptx-automizer/dist/shapes/chart.js
+var require_chart = __commonJS({
+  "node_modules/pptx-automizer/dist/shapes/chart.js"(exports) {
     "use strict";
     var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
@@ -23341,133 +20583,347 @@ var require_hyperlink = __commonJS({
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Hyperlink = void 0;
+    exports.Chart = void 0;
+    var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
     var xml_helper_1 = require_xml_helper();
     var shape_1 = require_shape();
-    var modify_hyperlink_helper_1 = __importDefault(require_modify_hyperlink_helper());
-    var general_helper_1 = require_general_helper();
-    var Hyperlink = class extends shape_1.Shape {
-      constructor(shape, targetType, sourceArchive, hyperlinkType = "external", hyperlinkTarget) {
+    var path_1 = __importDefault(__require("path"));
+    var logger_1 = require_logger();
+    var Chart = class extends shape_1.Shape {
+      constructor(shape, targetType) {
         super(shape, targetType);
-        this.sourceArchive = sourceArchive;
-        this.hyperlinkType = hyperlinkType;
-        this.hyperlinkTarget = hyperlinkTarget || "";
-        this.relRootTag = "a:hlinkClick";
+        this.relRootTag = this.subtype === "chart" ? "c:chart" : "cx:chart";
         this.relAttribute = "r:id";
+        this.relParent = this.subtype === "chart" ? (element) => element.parentNode.parentNode.parentNode : (element) => element.parentNode.parentNode.parentNode.parentNode.parentNode;
+        this.wbEmbeddingsPath = `../embeddings/`;
+        this.wbExtension = ".xlsx";
+        this.relTypeChartColorStyle = "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
+        this.relTypeChartStyle = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
+        this.relTypeChartImage = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+        this.relTypeChartThemeOverride = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
+        this.relTypeChartUserShapes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
+        this.styleRelationFiles = {};
+        this.hasWorkbook = true;
       }
       modify(targetTemplate, targetSlideNumber) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.editTargetHyperlinkRel();
+          yield this.clone();
           yield this.replaceIntoSlideTree();
-          const slideRelXml = yield this.getRelationsElement();
-          this.applyCallbacks(this.callbacks, this.targetElement, slideRelXml);
           return this;
         });
       }
       append(targetTemplate, targetSlideNumber) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
+          yield this.clone();
           yield this.appendToSlideTree();
-          const slideRelXml = yield this.getRelationsElement();
-          modify_hyperlink_helper_1.default.addHyperlink(this.hyperlinkTarget, this.hyperlinkType === "internal")(this.targetElement, slideRelXml);
           return this;
         });
       }
       remove(targetTemplate, targetSlideNumber) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.prepare(targetTemplate, targetSlideNumber);
-          if (this.target && this.target.rId) {
-            this.sourceRid = this.target.rId;
-          }
-          const slideRelXml = yield this.getRelationsElement();
-          modify_hyperlink_helper_1.default.removeHyperlink()(this.targetElement, slideRelXml);
           yield this.removeFromSlideTree();
           return this;
         });
       }
-      getRelationsElement() {
+      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
         return __awaiter(this, void 0, void 0, function* () {
-          const slideRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
-          return slideRelXml.documentElement;
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.updateElementsRelId();
+          return this;
         });
       }
       prepare(targetTemplate, targetSlideNumber) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.setTarget(targetTemplate, targetSlideNumber);
-          if (!this.createdRid) {
-            const baseId = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-            this.createdRid = baseId.endsWith("-created") ? baseId.slice(0, -8) : baseId;
+          this.targetNumber = this.targetTemplate.incrementCounter("charts");
+          this.wbRelsPath = ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.sourceNumber);
+          yield this.copyFiles();
+          yield this.copyChartStyleFiles();
+          yield this.appendTypes();
+          yield this.appendToSlideRels();
+        });
+      }
+      clone() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.setTargetElement();
+          yield this.modifyChartData();
+          yield this.updateTargetElementRelId();
+        });
+      }
+      modifyChartData() {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.hasWorkbook) {
+            return;
           }
-          if (this.shape && this.shape.target && this.shape.target.rId) {
-            this.sourceRid = this.shape.target.rId;
+          const chartXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber));
+          const workbook = yield this.readWorkbook();
+          this.applyChartCallbacks(this.callbacks, this.targetElement, chartXml, workbook);
+          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber), chartXml);
+          yield this.writeWorkbook(workbook);
+        });
+      }
+      readWorkbook() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const workbookFilename = ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
+          const archive = yield this.targetArchive.extract(workbookFilename);
+          const sheet = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/worksheets/sheet1.xml");
+          const table = file_helper_1.FileHelper.fileExistsInArchive(archive, "xl/tables/table1.xml") ? yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/tables/table1.xml") : void 0;
+          const sharedStrings = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/sharedStrings.xml");
+          return {
+            archive,
+            sheet,
+            sharedStrings,
+            table
+          };
+        });
+      }
+      writeWorkbook(workbook) {
+        return __awaiter(this, void 0, void 0, function* () {
+          xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/worksheets/sheet1.xml", workbook.sheet);
+          if (workbook.table) {
+            xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/tables/table1.xml", workbook.table);
           }
-          if (!this.hyperlinkTarget && this.shape && this.shape.target && this.shape.target.file) {
-            this.hyperlinkTarget = this.shape.target.file;
-            this.hyperlinkType = this.determineHyperlinkType(this.shape.target);
+          xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/sharedStrings.xml", workbook.sharedStrings);
+          const worksheet = yield workbook.archive.getContent({});
+          yield this.targetArchive.write(ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`), worksheet);
+        });
+      }
+      copyFiles() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.copyChartFiles();
+          this.worksheetFilePrefix = yield this.getWorksheetFilePrefix(this.wbRelsPath);
+          if (this.hasWorkbook) {
+            const worksheets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.sourceArchive, this.wbRelsPath, `${this.wbEmbeddingsPath}${this.worksheetFilePrefix}`);
+            const worksheet = worksheets[0];
+            this.sourceWorksheet = worksheet.number === 0 ? "" : worksheet.number;
+            this.targetWorksheet = "-created-" + this.targetNumber;
+            yield this.copyWorksheetFile();
+          } else {
+            logger_1.log.info("Chart has no worksheet: " + this.wbRelsPath);
+          }
+          yield this.editTargetWorksheetRel();
+        });
+      }
+      getWorksheetFilePrefix(targetRelFile) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const relationTargets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.sourceArchive, targetRelFile, this.wbEmbeddingsPath);
+          if (!relationTargets[0]) {
+            this.hasWorkbook = false;
+            return "";
+          }
+          return relationTargets[0].filenameBase;
+        });
+      }
+      /**
+       * Registers the copied chart parts in `[Content_Types].xml`.
+       *
+       * All style parts are optional: `copyChartStyleFiles` copies colors, style,
+       * themeOverride and user shapes only if the source chart relates to them.
+       * An Override for a part that was never copied stays behind as a dangling
+       * entry — PowerPoint ignores it, but OPC validators report one warning per
+       * orphan. `prepare` runs `copyChartStyleFiles` first, so the relations are
+       * known here.
+       */
+      appendTypes() {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (this.hasWorkbook) {
+            yield this.appendChartExtensionToContentType();
+          }
+          yield this.appendChartToContentType();
+          if (this.hasStyleRelation("relTypeChartUserShapes")) {
+            yield this.appendChartUserShapesToContentType();
+          }
+          if (this.hasStyleRelation("relTypeChartColorStyle")) {
+            yield this.appendColorToContentType();
+          }
+          if (this.hasStyleRelation("relTypeChartStyle")) {
+            yield this.appendStyleToContentType();
+          }
+          if (this.hasStyleRelation("relTypeChartThemeOverride")) {
+            yield this.appendThemeOverrideToContentType();
           }
         });
       }
-      determineHyperlinkType(target) {
-        return target.isExternal || target.type === "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" ? "external" : "internal";
+      hasStyleRelation(styleType) {
+        var _a3;
+        return ((_a3 = this.styleRelationFiles[styleType]) === null || _a3 === void 0 ? void 0 : _a3.length) > 0;
       }
-      editTargetHyperlinkRel() {
+      copyChartFiles() {
         return __awaiter(this, void 0, void 0, function* () {
-          const isExternalLink = this.hyperlinkType === "external";
-          const rels = yield this.getRelationsElement();
-          modify_hyperlink_helper_1.default.setHyperlinkTarget(this.hyperlinkTarget, isExternalLink)(this.targetElement, rels);
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber));
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.targetNumber));
         });
       }
-      static getAllOnSlide(archive, relsPath) {
+      copyChartStyleFiles() {
         return __awaiter(this, void 0, void 0, function* () {
-          const hyperlinkRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
-          const slideRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
-          return xml_helper_1.XmlHelper.getRelationshipItems(archive, relsPath, (element, rels) => {
-            const type = element.getAttribute("Type");
-            if (type === hyperlinkRelType || type === slideRelType) {
-              rels.push({
-                rId: element.getAttribute("Id"),
-                type: element.getAttribute("Type"),
-                file: element.getAttribute("Target"),
-                filename: element.getAttribute("Target"),
-                element,
-                isExternal: element.getAttribute("TargetMode") === "External" || type === hyperlinkRelType
+          var _a3, _b, _c, _d;
+          yield this.getChartStyles();
+          if ((_a3 = this.styleRelationFiles.relTypeChartStyle) === null || _a3 === void 0 ? void 0 : _a3.length) {
+            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.styleRelationFiles.relTypeChartStyle[0]}`, this.targetArchive, ppt_paths_1.PptPaths.chartPart("style", this.targetNumber));
+          }
+          if ((_b = this.styleRelationFiles.relTypeChartColorStyle) === null || _b === void 0 ? void 0 : _b.length) {
+            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.styleRelationFiles.relTypeChartColorStyle[0]}`, this.targetArchive, ppt_paths_1.PptPaths.chartPart("colors", this.targetNumber));
+          }
+          if (this.styleRelationFiles.relTypeChartImage) {
+            for (const relTypeChartImage of this.styleRelationFiles.relTypeChartImage) {
+              const imageInfo = this.getTargetChartImageUri(relTypeChartImage);
+              yield this.appendImageExtensionToContentType(imageInfo.extension);
+              yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, imageInfo.source, this.targetArchive, imageInfo.target);
+            }
+          }
+          if ((_c = this.styleRelationFiles.relTypeChartUserShapes) === null || _c === void 0 ? void 0 : _c.length) {
+            const sourceFile = this.styleRelationFiles.relTypeChartUserShapes[0].replace("../drawings/", "");
+            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/drawings/${sourceFile}`, this.targetArchive, `ppt/drawings/drawing${this.targetNumber}.xml`);
+          }
+          if ((_d = this.styleRelationFiles.relTypeChartThemeOverride) === null || _d === void 0 ? void 0 : _d.length) {
+            const sourceFile = this.styleRelationFiles.relTypeChartThemeOverride[0].replace("../theme/", "");
+            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/theme/${sourceFile}`, this.targetArchive, `ppt/theme/themeOverride${this.targetNumber}.xml`);
+          }
+        });
+      }
+      getChartStyles() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const styleTypes = [
+            "relTypeChartStyle",
+            "relTypeChartColorStyle",
+            "relTypeChartImage",
+            "relTypeChartThemeOverride",
+            "relTypeChartUserShapes"
+          ];
+          for (const i in styleTypes) {
+            const styleType = styleTypes[i];
+            const styleRelation = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(this.sourceArchive, this.wbRelsPath, this[styleType]);
+            this.styleRelationFiles[styleType] = this.styleRelationFiles[styleType] || [];
+            if (styleRelation.length) {
+              styleRelation.forEach((styleRelation2) => {
+                this.styleRelationFiles[styleType].push(styleRelation2.file);
               });
             }
+          }
+        });
+      }
+      appendToSlideRels() {
+        return __awaiter(this, void 0, void 0, function* () {
+          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
+          const type = this.subtype === "chart" ? "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" : "http://schemas.microsoft.com/office/2014/relationships/chartEx";
+          const attributes = {
+            Id: this.createdRid,
+            Type: type,
+            Target: `../charts/${this.subtype}${this.targetNumber}.xml`
+          };
+          return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, this.targetSlideRelFile, attributes));
+        });
+      }
+      editTargetWorksheetRel() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetRelFile = ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.targetNumber);
+          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
+          const relations = relXml.getElementsByTagName("Relationship");
+          Object.keys(relations).map((key) => relations[Number(key)]).filter((element) => element && element.getAttribute).forEach((element) => {
+            var _a3;
+            const type = element.getAttribute("Type");
+            switch (type) {
+              case "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package":
+                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `${this.wbEmbeddingsPath}${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
+                break;
+              case this.relTypeChartColorStyle:
+                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `colors${this.targetNumber}.xml`);
+                break;
+              case this.relTypeChartStyle:
+                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `style${this.targetNumber}.xml`);
+                break;
+              case this.relTypeChartImage:
+                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", this.getTargetChartImageUri(element.getAttribute("Target")).rel);
+                break;
+              case this.relTypeChartThemeOverride:
+                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `../theme/themeOverride${this.targetNumber}.xml`);
+                break;
+              case this.relTypeChartUserShapes:
+                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `../drawings/drawing${this.targetNumber}.xml`);
+                break;
+            }
+            (_a3 = this.targetArchive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(targetRelFile, {
+              Id: element.getAttribute("Id"),
+              Target: element.getAttribute("Target"),
+              Type: element.getAttribute("Type")
+            });
+          });
+          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
+        });
+      }
+      updateTargetWorksheetRelation(targetRelFile, element, attribute, value) {
+        element.setAttribute(attribute, value);
+      }
+      getTargetChartImageUri(origin) {
+        const file2 = origin.replace("../media/", "");
+        const extension = path_1.default.extname(file2).replace(".", "");
+        return {
+          source: ppt_paths_1.PptPaths.media(file2),
+          target: ppt_paths_1.PptPaths.media(`${file2}-chart-${this.targetNumber}.${extension}`),
+          rel: `../media/${file2}-chart-${this.targetNumber}.${extension}`,
+          extension
+        };
+      }
+      copyWorksheetFile() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const sourceFile = ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.sourceWorksheet}${this.wbExtension}`);
+          const targetFile = ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourceFile, this.targetArchive, targetFile).catch((e) => {
+            logger_1.log.warn(e);
           });
         });
       }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.target || !this.target.rId) {
-            general_helper_1.Logger.log("modifyOnAddedSlide called on Hyperlink without a valid source target/rId.", 2);
-            return;
-          }
-          this.sourceRid = this.target.rId;
-          this.hyperlinkTarget = this.target.file;
-          this.hyperlinkType = this.determineHyperlinkType(this.target);
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.editTargetHyperlinkRel();
-        });
+      appendChartExtensionToContentType() {
+        return xml_helper_1.XmlHelper.appendIf(Object.assign(Object.assign({}, xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
+          Extension: `xlsx`,
+          ContentType: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+        })), { tag: "Default", clause: (xml) => !xml_helper_1.XmlHelper.findByAttribute(xml, "Default", "Extension", "xlsx") }));
       }
-      static addHyperlinkToShape(archive, slidePath, slideRelsPath, shapeId, hyperlinkTarget) {
+      appendChartToContentType() {
+        const contentType = this.subtype === "chart" ? "application/vnd.openxmlformats-officedocument.drawingml.chart+xml" : "application/vnd.ms-office.chartex+xml";
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
+          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber)),
+          ContentType: contentType
+        }));
+      }
+      appendColorToContentType() {
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
+          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.chartPart("colors", this.targetNumber)),
+          ContentType: `application/vnd.ms-office.chartcolorstyle+xml`
+        }));
+      }
+      appendStyleToContentType() {
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
+          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.chartPart("style", this.targetNumber)),
+          ContentType: `application/vnd.ms-office.chartstyle+xml`
+        }));
+      }
+      appendThemeOverrideToContentType() {
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
+          PartName: `/ppt/theme/themeOverride${this.targetNumber}.xml`,
+          ContentType: `application/vnd.openxmlformats-officedocument.themeOverride+xml`
+        }));
+      }
+      appendChartUserShapesToContentType() {
+        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
+          PartName: `/ppt/drawings/drawing${this.targetNumber}.xml`,
+          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml`
+        }));
+      }
+      static getAllOnSlide(archive, relsPath) {
         return __awaiter(this, void 0, void 0, function* () {
-          const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slidePath);
-          const shape = xml_helper_1.XmlHelper.isElementCreationId(shapeId) ? xml_helper_1.XmlHelper.findByCreationId(slideXml, shapeId) : xml_helper_1.XmlHelper.findByName(slideXml, shapeId);
-          if (!shape) {
-            throw new Error(`Shape with ID/name "${shapeId}" not found`);
-          }
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slideRelsPath);
-          modify_hyperlink_helper_1.default.addHyperlink(hyperlinkTarget, typeof hyperlinkTarget === "number")(shape, relXml.firstChild);
-          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slideRelsPath, relXml);
-          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slidePath, slideXml);
-          return yield xml_helper_1.XmlHelper.getNextRelId(archive, slideRelsPath);
+          return yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(archive, relsPath, [
+            "../charts/chart",
+            "../charts/chartEx"
+          ]);
         });
       }
     };
-    exports.Hyperlink = Hyperlink;
+    exports.Chart = Chart;
   }
 });
 
@@ -23569,7 +21025,7 @@ var require_diagram = __commonJS({
       clone() {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.setTargetElement();
-          this.applyCallbacks(this.callbacks, this.targetElement);
+          yield this.applyCallbacks(this.callbacks, this.targetElement);
         });
       }
       updateRelIds() {
@@ -23654,6 +21110,1735 @@ var require_diagram = __commonJS({
   }
 });
 
+// node_modules/pptx-automizer/dist/shapes/image.js
+var require_image = __commonJS({
+  "node_modules/pptx-automizer/dist/shapes/image.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Image = void 0;
+    var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
+    var xml_helper_1 = require_xml_helper();
+    var shape_1 = require_shape();
+    var element_type_1 = require_element_type();
+    var constants_1 = require_constants2();
+    var Image2 = class _Image extends shape_1.Shape {
+      constructor(shape, targetType) {
+        super(shape, targetType);
+        this.sourceFile = shape.target.file.replace("../media/", "");
+        this.extension = file_helper_1.FileHelper.getFileExtension(this.sourceFile);
+        this.relAttribute = "r:embed";
+        this.relType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+        if (!shape.sourceMode && this.extension === "svg") {
+          shape.sourceMode = "image:svg";
+        }
+        switch (shape.sourceMode) {
+          case "image:svg":
+            this.relRootTag = constants_1.TargetByRelIdMap["image:svg"].relRootTag;
+            this.relParent = (element) => element.parentNode;
+            break;
+          case "image:media":
+          case "image:audioFile":
+          case "image:videoFile":
+            this.relRootTag = constants_1.TargetByRelIdMap[shape.sourceMode].relRootTag;
+            this.relAttribute = constants_1.TargetByRelIdMap[shape.sourceMode].relAttribute;
+            this.relType = constants_1.TargetByRelIdMap[shape.sourceMode].relType;
+            this.relParent = (element) => element.parentNode;
+            break;
+          default:
+            this.relRootTag = "a:blip";
+            this.relParent = (element) => element.parentNode.parentNode;
+            break;
+        }
+      }
+      /*
+       * The copied slide already carries the source image relation; point its
+       * Target at the copied media file instead of appending a second relation.
+       * Appending would leave the source-named relation orphaned in the rels
+       * file, and PowerPoint asks to repair the file when such a Target does
+       * not exist in the output archive.
+       */
+      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.setTarget(targetTemplate, targetSlideNumber);
+          yield this.copyFiles();
+          yield this.appendTypes();
+          yield this.updateSlideRelTarget();
+          return this;
+        });
+      }
+      updateSlideRelTarget() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
+          const relations = relXml.getElementsByTagName("Relationship");
+          for (let i = 0; i < relations.length; i++) {
+            if (relations.item(i).getAttribute("Id") === this.sourceRid) {
+              relations.item(i).setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(`../media/${this.targetFile}`));
+              break;
+            }
+          }
+          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideRelFile, relXml);
+        });
+      }
+      modify(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.setTargetElement();
+          yield this.updateTargetElementRelId();
+          yield this.processImageRelations(targetTemplate, targetSlideNumber);
+          yield this.applyImageCallbacks();
+          yield this.replaceIntoSlideTree();
+          return this;
+        });
+      }
+      append(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.setTargetElement();
+          yield this.updateTargetElementRelId();
+          yield this.processImageRelations(targetTemplate, targetSlideNumber);
+          yield this.applyImageCallbacks();
+          yield this.appendToSlideTree();
+          return this;
+        });
+      }
+      /**
+       * For audio/video and svg, some more relations need to be handled.
+       */
+      processImageRelations(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (this.hasSvgBlipRelation()) {
+            yield this.processRelatedContent(targetTemplate, targetSlideNumber, "image:svg");
+          }
+          if (this.hasAudioRelation()) {
+            yield this.processRelatedMediaContent(targetTemplate, targetSlideNumber, "image:audioFile");
+          }
+          if (this.hasVideoRelation()) {
+            yield this.processRelatedMediaContent(targetTemplate, targetSlideNumber, "image:videoFile");
+          }
+        });
+      }
+      processRelatedMediaContent(targetTemplate, targetSlideNumber, sourceMode) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.processRelatedContent(targetTemplate, targetSlideNumber, "image:media");
+          yield this.processRelatedContent(targetTemplate, targetSlideNumber, sourceMode);
+        });
+      }
+      processRelatedContent(targetTemplate, targetSlideNumber, sourceMode) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const relsPath = ppt_paths_1.PptPaths.slideRels(this.sourceSlideNumber);
+          const target = yield xml_helper_1.XmlHelper.getTargetByRelId(this.sourceArchive, relsPath, this.targetElement, sourceMode);
+          yield new _Image({
+            mode: "append",
+            target,
+            sourceArchive: this.sourceArchive,
+            sourceSlideNumber: this.sourceSlideNumber,
+            type: element_type_1.ElementType.Image,
+            sourceMode
+          }, this.targetType).modifyMediaRelation(targetTemplate, targetSlideNumber, this.targetElement);
+        });
+      }
+      modifyMediaRelation(targetTemplate, targetSlideNumber, targetElement) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          this.targetElement = targetElement;
+          yield this.updateTargetElementRelId();
+          return this;
+        });
+      }
+      /*
+       * Apply all ShapeModificationCallbacks to target element.
+       * Third argument this.createdRelation is necessery to directly
+       * manipulate relation Target and change the image.
+       */
+      applyImageCallbacks() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.applyCallbacks(this.callbacks, this.targetElement, this.createdRelation);
+        });
+      }
+      remove(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.removeFromSlideTree();
+          return this;
+        });
+      }
+      prepare(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.setTarget(targetTemplate, targetSlideNumber);
+          yield this.copyFiles();
+          yield this.appendTypes();
+          yield this.appendToSlideRels();
+        });
+      }
+      /**
+       * Add the source media file to the output archive - unless an identical
+       * file is already there. Re-using it keeps the output small; the relation
+       * created by appendToSlideRels() is specific to this shape either way.
+       */
+      copyFiles() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const sourcePath = ppt_paths_1.PptPaths.media(this.sourceFile);
+          const content = yield this.sourceArchive.read(sourcePath, "nodebuffer");
+          const existingFile = yield this.targetTemplate.mediaDeduplicator.find(content);
+          if (existingFile) {
+            this.targetFile = existingFile;
+            return;
+          }
+          this.targetNumber = this.targetTemplate.incrementCounter("images");
+          this.targetFile = this.getTargetFileName();
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourcePath, this.targetArchive, ppt_paths_1.PptPaths.media(this.targetFile));
+          this.targetTemplate.mediaDeduplicator.add(content, this.targetFile);
+        });
+      }
+      getTargetFileName() {
+        const targetFileType = this.target.file.includes("media") ? "media" : "image";
+        return targetFileType + this.targetNumber + "." + this.extension;
+      }
+      appendTypes() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.appendImageExtensionToContentType(this.extension);
+        });
+      }
+      /**
+       * ToDo: This will always append a new relation, and never replace an
+       * existing relation. At the end of creation process, unused relations will
+       * remain existing in the .xml.rels file. PowerPoint will not complain, but
+       * integrity checks will not be valid by this.
+       */
+      appendToSlideRels() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
+          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, targetRelFile);
+          const attributes = {
+            Id: this.createdRid,
+            Type: this.relType,
+            Target: `../media/${this.targetFile}`
+          };
+          this.createdRelation = yield xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, targetRelFile, attributes));
+        });
+      }
+      hasSvgBlipRelation() {
+        return this.targetElement.getElementsByTagName("asvg:svgBlip").length > 0;
+      }
+      hasAudioRelation() {
+        return this.targetElement.getElementsByTagName("a:audioFile").length > 0;
+      }
+      hasVideoRelation() {
+        return this.targetElement.getElementsByTagName("a:videoFile").length > 0;
+      }
+      static getAllOnSlide(archive, relsPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+          return yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, relsPath, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
+        });
+      }
+    };
+    exports.Image = Image2;
+  }
+});
+
+// node_modules/pptx-automizer/dist/shapes/generic.js
+var require_generic = __commonJS({
+  "node_modules/pptx-automizer/dist/shapes/generic.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.GenericShape = void 0;
+    var shape_1 = require_shape();
+    var xml_helper_1 = require_xml_helper();
+    var hyperlink_processor_1 = require_hyperlink_processor();
+    var image_1 = require_image();
+    var element_type_1 = require_element_type();
+    var ppt_paths_1 = require_ppt_paths();
+    var logger_1 = require_logger();
+    var GenericShape = class extends shape_1.Shape {
+      constructor(shape, targetType) {
+        super(shape, targetType);
+      }
+      modify(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.replaceIntoSlideTree();
+          return this;
+        });
+      }
+      append(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.appendToSlideTree();
+          yield this.copyHyperlinkRelationships(targetSlideNumber);
+          yield this.copyImageRelationships(targetTemplate, targetSlideNumber);
+          return this;
+        });
+      }
+      remove(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.removeFromSlideTree();
+          return this;
+        });
+      }
+      prepare(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.setTarget(targetTemplate, targetSlideNumber);
+          yield this.setTargetElement();
+          const slideRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
+          yield this.applyCallbacks(this.callbacks, this.targetElement, slideRelXml.documentElement);
+        });
+      }
+      /**
+       * Copy hyperlink relationships from source slide to target slide
+       */
+      copyHyperlinkRelationships(_targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.targetElement)
+            return;
+          yield hyperlink_processor_1.HyperlinkProcessor.copyMultipleHyperlinks(
+            this.targetElement,
+            this.sourceArchive,
+            this.sourceSlideNumber,
+            this.targetArchive,
+            this.targetSlideRelFile,
+            // The unmutated source element separates imported hyperlink ids (to
+            // resolve against the source rels) from ids added by modification
+            // callbacks during prepare(), whose rels already live on the target.
+            this.sourceElement
+          );
+        });
+      }
+      /**
+       * Copy image relations from source slide to target slide.
+       *
+       * A generic shape can be filled with an image (`a:blipFill` inside
+       * `p:spPr`), and a group shape can contain any number of pictures. None of
+       * these are `p:pic` elements, so the Image shape class never sees them and
+       * their media files and relations would be missing on the target slide.
+       */
+      copyImageRelationships(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.targetElement)
+            return;
+          const blips = [
+            ...Array.from(this.targetElement.getElementsByTagName("a:blip")),
+            // An svg blip is nested inside the a:blip holding its png fallback and
+            // requires a relation of its own.
+            ...Array.from(this.targetElement.getElementsByTagName("asvg:svgBlip"))
+          ].filter((blip) => blip.getAttribute("r:embed"));
+          if (!blips.length)
+            return;
+          const sourceImages = yield image_1.Image.getAllOnSlide(this.sourceArchive, ppt_paths_1.PptPaths.slideRels(this.sourceSlideNumber));
+          for (const blip of blips) {
+            const sourceRid = blip.getAttribute("r:embed");
+            const target = sourceImages.find((image2) => image2.rId === sourceRid);
+            if (!target) {
+              logger_1.log.warn(`Can't find image relation ${sourceRid} of ${this.name} on slide ${this.sourceSlideNumber}`);
+              continue;
+            }
+            const image = new image_1.Image({
+              mode: "append",
+              target,
+              sourceArchive: this.sourceArchive,
+              sourceSlideNumber: this.sourceSlideNumber,
+              type: element_type_1.ElementType.Image
+            }, this.targetType);
+            yield image.prepare(targetTemplate, targetSlideNumber);
+            blip.setAttribute("r:embed", image.createdRid);
+          }
+        });
+      }
+    };
+    exports.GenericShape = GenericShape;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/modify-hyperlink-element.js
+var require_modify_hyperlink_element = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/modify-hyperlink-element.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var xml_helper_1 = require_xml_helper();
+    var HyperlinkElement = class {
+      constructor(doc, relId, isInternal) {
+        this.doc = doc;
+        this.relId = relId;
+        this.isInternal = isInternal;
+      }
+      createHlinkClick() {
+        const hlinkClick = this.doc.createElement("a:hlinkClick");
+        hlinkClick.setAttribute("r:id", this.relId);
+        hlinkClick.setAttribute("xmlns:r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+        if (this.isInternal) {
+          hlinkClick.setAttribute("action", "ppaction://hlinksldjump");
+          hlinkClick.setAttribute("xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main");
+          hlinkClick.setAttribute("xmlns:p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
+        }
+        return hlinkClick;
+      }
+      createTextRun(text) {
+        const run = this.doc.createElement("a:r");
+        const rPr = this.doc.createElement("a:rPr");
+        const t = this.doc.createElement("a:t");
+        rPr.appendChild(this.createHlinkClick());
+        t.textContent = xml_helper_1.XmlHelper.sanitizeText(text);
+        run.appendChild(rPr);
+        run.appendChild(t);
+        return run;
+      }
+    };
+    exports.default = HyperlinkElement;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/modify-hyperlink-helper.js
+var require_modify_hyperlink_helper = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/modify-hyperlink-helper.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    var _a3;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var modify_hyperlink_element_1 = __importDefault(require_modify_hyperlink_element());
+    var hyperlink_processor_1 = require_hyperlink_processor();
+    var xml_helper_1 = require_xml_helper();
+    var logger_1 = require_logger();
+    var ModifyHyperlinkHelper = class {
+      static createRelationshipData(target, isInternal) {
+        if (isInternal) {
+          return {
+            Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+            Target: `../slides/${target}`,
+            Id: ""
+            // Will be set later
+          };
+        }
+        return {
+          Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+          Target: target.toString(),
+          TargetMode: "External",
+          Id: ""
+          // Will be set later
+        };
+      }
+      static addRelationship(relation, relData, relId) {
+        const relNodes = relation.getElementsByTagName("Relationship");
+        const newRelId = relId || `rId${xml_helper_1.XmlHelper.getMaxId(relNodes, "Id", true)}`;
+        const newRel = relation.ownerDocument.createElement("Relationship");
+        newRel.setAttribute("Id", newRelId);
+        Object.entries(relData).forEach(([key, value]) => {
+          if (value)
+            newRel.setAttribute(key, value);
+        });
+        relNodes.item(0).parentNode.appendChild(newRel);
+        return newRelId;
+      }
+      /**
+       * Returns the <Relationship> entry backing a relationship id, if any.
+       */
+      static getRelationshipById(relation, relId) {
+        const relNodes = relation.getElementsByTagName("Relationship");
+        return Array.from(relNodes).find((rel) => rel.getAttribute("Id") === relId) || null;
+      }
+      /**
+       * Checks if a relationship id is referenced by a hyperlink outside of the
+       * given element, e.g. by another shape on the same slide.
+       */
+      static isRelIdUsedElsewhere(element, relId) {
+        const slideXml = element.ownerDocument;
+        if (!slideXml)
+          return false;
+        return Array.from(slideXml.getElementsByTagName("a:hlinkClick")).some((hlink) => hlink.getAttribute("r:id") === relId && !element.contains(hlink));
+      }
+      static addHyperlinkToTextRuns(element, hyperlinkElement) {
+        const textRuns = element.getElementsByTagName("a:r");
+        Array.from(textRuns).forEach((run) => {
+          let rPr = run.getElementsByTagName("a:rPr")[0];
+          if (!rPr) {
+            rPr = element.ownerDocument.createElement("a:rPr");
+            const textElement = run.getElementsByTagName("a:t")[0];
+            if (textElement) {
+              run.insertBefore(rPr, textElement);
+            } else {
+              run.appendChild(rPr);
+            }
+          }
+          rPr.appendChild(hyperlinkElement.createHlinkClick());
+        });
+      }
+      static addHyperlinkToParagraph(paragraph, hyperlinkElement) {
+        const existingText = paragraph.getElementsByTagName("a:t")[0];
+        const text = (existingText === null || existingText === void 0 ? void 0 : existingText.textContent) || "Hyperlink";
+        if (existingText === null || existingText === void 0 ? void 0 : existingText.parentNode) {
+          paragraph.removeChild(existingText.parentNode);
+        }
+        const run = hyperlinkElement.createTextRun(text);
+        paragraph.appendChild(run);
+      }
+      static createNewTextStructure(txBody, hyperlinkElement) {
+        const p = txBody.ownerDocument.createElement("a:p");
+        const run = hyperlinkElement.createTextRun("Hyperlink");
+        p.appendChild(run);
+        txBody.appendChild(p);
+      }
+    };
+    _a3 = ModifyHyperlinkHelper;
+    ModifyHyperlinkHelper.setHyperlinkTarget = (target, isExternal = true) => (element, relation) => __awaiter(void 0, void 0, void 0, function* () {
+      if (!element || !relation) {
+        logger_1.log.debug("SetHyperlinkTarget: Missing element or relation");
+        return;
+      }
+      const hlinkClicks = element.getElementsByTagName("a:hlinkClick");
+      if (hlinkClicks.length === 0) {
+        logger_1.log.warn("No hyperlinks found to modify");
+        return;
+      }
+      const existingRIds = Array.from(hlinkClicks).map((hlink) => hlink.getAttribute("r:id")).filter(Boolean);
+      if (existingRIds.length === 0) {
+        logger_1.log.warn("No valid relationship IDs found in hyperlinks");
+        return;
+      }
+      const relData = _a3.createRelationshipData(target, !isExternal);
+      const newRelId = _a3.addRelationship(relation, relData);
+      Array.from(hlinkClicks).forEach((hlink) => {
+        hlink.setAttribute("r:id", newRelId);
+        if (!isExternal) {
+          hlink.setAttribute("action", "ppaction://hlinksldjump");
+          hlink.setAttribute("xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main");
+          hlink.setAttribute("xmlns:p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
+        } else {
+          hlink.removeAttribute("action");
+        }
+      });
+      const relationships = relation.getElementsByTagName("Relationship");
+      Array.from(relationships).forEach((rel) => {
+        const relId = rel.getAttribute("Id");
+        if (relId && existingRIds.includes(relId) && !_a3.isRelIdUsedElsewhere(element, relId)) {
+          relation.removeChild(rel);
+        }
+      });
+      logger_1.log.debug("SetHyperlinkTarget: Successfully updated hyperlink target");
+    });
+    ModifyHyperlinkHelper.addHyperlink = (target, isInternalLink) => (element, relation) => {
+      if (!element || !relation)
+        return;
+      if (typeof target === "number") {
+        target = `slide${target}.xml`;
+        isInternalLink = true;
+      }
+      const existingHlink = element.getElementsByTagName("a:hlinkClick").item(0);
+      if (existingHlink) {
+        const existingRid = existingHlink.getAttribute("r:id");
+        if (!existingRid) {
+          return;
+        }
+        const existingRel = _a3.getRelationshipById(relation, existingRid);
+        if (existingRel && hyperlink_processor_1.HyperlinkProcessor.isHyperlinkRelType(existingRel.getAttribute("Type") || "")) {
+          return;
+        }
+        if (existingRel) {
+          const relData3 = _a3.createRelationshipData(target, isInternalLink);
+          const freshRelId = _a3.addRelationship(relation, relData3);
+          Array.from(element.getElementsByTagName("a:hlinkClick")).forEach((hlink) => {
+            if (hlink.getAttribute("r:id") === existingRid) {
+              hlink.setAttribute("r:id", freshRelId);
+            }
+          });
+          logger_1.log.debug("AddHyperlink: existing r:id collided with a non-hyperlink relationship, assigned a fresh id");
+          return;
+        }
+        const relData2 = _a3.createRelationshipData(target, isInternalLink);
+        _a3.addRelationship(relation, relData2, existingRid);
+        logger_1.log.debug("AddHyperlink: Created missing relationship for existing hyperlink");
+        return;
+      }
+      const relData = _a3.createRelationshipData(target, isInternalLink);
+      const newRelId = _a3.addRelationship(relation, relData);
+      const hyperlinkElement = new modify_hyperlink_element_1.default(element.ownerDocument, newRelId, isInternalLink);
+      const textRuns = element.getElementsByTagName("a:r");
+      if (textRuns.length > 0) {
+        _a3.addHyperlinkToTextRuns(element, hyperlinkElement);
+      } else {
+        const paragraphs = element.getElementsByTagName("a:p");
+        if (paragraphs.length > 0) {
+          _a3.addHyperlinkToParagraph(paragraphs[0], hyperlinkElement);
+        } else {
+          const txBody = element.getElementsByTagName("p:txBody")[0] || element.getElementsByTagName("a:txBody")[0];
+          if (txBody) {
+            _a3.createNewTextStructure(txBody, hyperlinkElement);
+          } else {
+            logger_1.log.error("No suitable text element found to add hyperlink to");
+          }
+        }
+      }
+      logger_1.log.debug("AddHyperlink: Successfully completed");
+    };
+    ModifyHyperlinkHelper.removeHyperlink = () => (element, _relation) => __awaiter(void 0, void 0, void 0, function* () {
+      if (!element)
+        return;
+      try {
+        const hlinkClicks = element.getElementsByTagName("a:hlinkClick");
+        Array.from(hlinkClicks).forEach((hlink) => {
+          var _b;
+          return (_b = hlink.parentNode) === null || _b === void 0 ? void 0 : _b.removeChild(hlink);
+        });
+        logger_1.log.debug("RemoveHyperlink: Successfully completed");
+      } catch (error51) {
+        logger_1.log.error("Error in RemoveHyperlink:", error51);
+      }
+    });
+    exports.default = ModifyHyperlinkHelper;
+  }
+});
+
+// node_modules/pptx-automizer/dist/shapes/hyperlink.js
+var require_hyperlink = __commonJS({
+  "node_modules/pptx-automizer/dist/shapes/hyperlink.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Hyperlink = void 0;
+    var xml_helper_1 = require_xml_helper();
+    var shape_1 = require_shape();
+    var modify_hyperlink_helper_1 = __importDefault(require_modify_hyperlink_helper());
+    var logger_1 = require_logger();
+    var HYPERLINK_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+    var SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+    var basename = (target) => target.split("/").pop();
+    var Hyperlink = class extends shape_1.Shape {
+      constructor(shape, targetType, sourceArchive, hyperlinkType = "external", hyperlinkTarget) {
+        super(shape, targetType);
+        this.sourceArchive = sourceArchive;
+        this.hyperlinkType = hyperlinkType;
+        this.hyperlinkTarget = hyperlinkTarget || "";
+        this.relRootTag = "a:hlinkClick";
+        this.relAttribute = "r:id";
+      }
+      modify(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.setTargetElement();
+          yield this.editTargetHyperlinkRel();
+          yield this.replaceIntoSlideTree();
+          const slideRelXml = yield this.getRelationsElement();
+          yield this.applyCallbacks(this.callbacks, this.targetElement, slideRelXml);
+          return this;
+        });
+      }
+      append(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.setTargetElement();
+          yield this.appendToSlideTree();
+          const slideRelXml = yield this.getRelationsElement();
+          modify_hyperlink_helper_1.default.addHyperlink(this.hyperlinkTarget, this.hyperlinkType === "internal")(this.targetElement, slideRelXml);
+          return this;
+        });
+      }
+      remove(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          if (this.target && this.target.rId) {
+            this.sourceRid = this.target.rId;
+          }
+          const slideRelXml = yield this.getRelationsElement();
+          modify_hyperlink_helper_1.default.removeHyperlink()(this.targetElement, slideRelXml);
+          yield this.removeFromSlideTree();
+          return this;
+        });
+      }
+      getRelationsElement() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const slideRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
+          return slideRelXml.documentElement;
+        });
+      }
+      prepare(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.setTarget(targetTemplate, targetSlideNumber);
+          if (!this.createdRid) {
+            const baseId = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
+            this.createdRid = baseId.endsWith("-created") ? baseId.slice(0, -8) : baseId;
+          }
+          if (this.shape && this.shape.target && this.shape.target.rId) {
+            this.sourceRid = this.shape.target.rId;
+          }
+          if (!this.hyperlinkTarget && this.shape && this.shape.target && this.shape.target.file) {
+            this.hyperlinkTarget = this.shape.target.file;
+            this.hyperlinkType = this.determineHyperlinkType(this.shape.target);
+          }
+        });
+      }
+      determineHyperlinkType(target) {
+        return target.isExternal || target.type === HYPERLINK_REL_TYPE ? "external" : "internal";
+      }
+      editTargetHyperlinkRel() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const isExternalLink = this.hyperlinkType === "external";
+          const rels = yield this.getRelationsElement();
+          if (this.hyperlinkRelIsUpToDate(rels)) {
+            return;
+          }
+          modify_hyperlink_helper_1.default.setHyperlinkTarget(this.hyperlinkTarget, isExternalLink)(this.targetElement, rels);
+        });
+      }
+      /**
+       * Checks whether the relationship referenced by the target element already
+       * points to the required hyperlink target.
+       */
+      hyperlinkRelIsUpToDate(rels) {
+        var _a3;
+        const hlinkClick = (_a3 = this.targetElement) === null || _a3 === void 0 ? void 0 : _a3.getElementsByTagName("a:hlinkClick").item(0);
+        const rId = hlinkClick === null || hlinkClick === void 0 ? void 0 : hlinkClick.getAttribute("r:id");
+        if (!rId || !this.hyperlinkTarget) {
+          return false;
+        }
+        const existingRel = xml_helper_1.XmlHelper.findByAttributeValue(rels.getElementsByTagName("Relationship"), "Id", rId)[0];
+        if (!existingRel) {
+          return false;
+        }
+        const isExternalLink = this.hyperlinkType === "external";
+        if (existingRel.getAttribute("Type") !== this.relationTypeUrl()) {
+          return false;
+        }
+        const existingTarget = existingRel.getAttribute("Target") || "";
+        return isExternalLink ? existingTarget === this.hyperlinkTarget : (
+          // Internal targets are stored either as `slide2.xml` or as
+          // `../slides/slide2.xml`, both resolving to the same slide.
+          basename(existingTarget) === basename(this.hyperlinkTarget)
+        );
+      }
+      relationTypeUrl() {
+        return this.hyperlinkType === "external" ? HYPERLINK_REL_TYPE : SLIDE_REL_TYPE;
+      }
+      static getAllOnSlide(archive, relsPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+          return xml_helper_1.XmlHelper.getRelationshipItems(archive, relsPath, (element, rels) => {
+            const type = element.getAttribute("Type");
+            if (type === HYPERLINK_REL_TYPE || type === SLIDE_REL_TYPE) {
+              rels.push({
+                rId: element.getAttribute("Id"),
+                type: element.getAttribute("Type"),
+                file: element.getAttribute("Target"),
+                filename: element.getAttribute("Target"),
+                element,
+                isExternal: element.getAttribute("TargetMode") === "External" || type === HYPERLINK_REL_TYPE
+              });
+            }
+          });
+        });
+      }
+      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.target || !this.target.rId) {
+            logger_1.log.debug("modifyOnAddedSlide called on Hyperlink without a valid source target/rId.");
+            return;
+          }
+          this.sourceRid = this.target.rId;
+          this.hyperlinkTarget = this.target.file;
+          this.hyperlinkType = this.determineHyperlinkType(this.target);
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.editTargetHyperlinkRel();
+        });
+      }
+      static addHyperlinkToShape(archive, slidePath, slideRelsPath, shapeId, hyperlinkTarget) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slidePath);
+          const shape = xml_helper_1.XmlHelper.isElementCreationId(shapeId) ? xml_helper_1.XmlHelper.findByCreationId(slideXml, shapeId) : xml_helper_1.XmlHelper.findByName(slideXml, shapeId);
+          if (!shape) {
+            throw new Error(`Shape with ID/name "${shapeId}" not found`);
+          }
+          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slideRelsPath);
+          modify_hyperlink_helper_1.default.addHyperlink(hyperlinkTarget, typeof hyperlinkTarget === "number")(shape, relXml.firstChild);
+          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slideRelsPath, relXml);
+          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slidePath, slideXml);
+          return yield xml_helper_1.XmlHelper.getNextRelId(archive, slideRelsPath);
+        });
+      }
+    };
+    exports.Hyperlink = Hyperlink;
+  }
+});
+
+// node_modules/pptx-automizer/dist/shapes/ole.js
+var require_ole = __commonJS({
+  "node_modules/pptx-automizer/dist/shapes/ole.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OLEObject = void 0;
+    var logger_1 = require_logger();
+    var errors_1 = require_errors2();
+    var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
+    var xml_helper_1 = require_xml_helper();
+    var shape_1 = require_shape();
+    var path_1 = __importDefault(__require("path"));
+    var OLEObject = class _OLEObject extends shape_1.Shape {
+      constructor(shape, targetType, sourceArchive) {
+        var _a3;
+        super(shape, targetType);
+        this.sourceArchive = sourceArchive;
+        this.oleObjectPath = ppt_paths_1.PptPaths.embedding(`${this.sourceRid}${this.getFileExtension((_a3 = shape.target) === null || _a3 === void 0 ? void 0 : _a3.file)}`);
+        this.relRootTag = "p:oleObj";
+        this.relAttribute = "r:id";
+      }
+      getFileExtension(file2) {
+        if (!file2)
+          return ".bin";
+        const ext = path_1.default.extname(file2).toLowerCase();
+        return [".bin", ".xls", ".xlsx", ".doc", ".docx", ".ppt", ".pptx"].includes(ext) ? ext : ".bin";
+      }
+      /**
+       * Appending OLE objects is not supported; only remove() is implemented.
+       */
+      append() {
+        return __awaiter(this, void 0, void 0, function* () {
+          throw new errors_1.AutomizerError("OLE objects cannot be appended to a slide; only remove() is supported.");
+        });
+      }
+      /**
+       * Modifying OLE objects is not supported; only remove() is implemented.
+       */
+      modify() {
+        return __awaiter(this, void 0, void 0, function* () {
+          throw new errors_1.AutomizerError("OLE objects cannot be modified; only remove() is supported.");
+        });
+      }
+      // TODO: remove is not currently properly implemented,
+      //  suggest we delete the file from the archive as well as removing the relationship.
+      remove(targetTemplate, targetSlideNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber);
+          yield this.removeFromSlideTree();
+          yield this.removeOleObjectFile();
+          yield this.removeFromContentTypes();
+          yield this.removeFromSlideRels();
+          return this;
+        });
+      }
+      prepare(targetTemplate, targetSlideNumber, oleObjects) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.setTarget(targetTemplate, targetSlideNumber);
+          const allOleObjects = oleObjects || (yield _OLEObject.getAllOnSlide(this.sourceArchive, this.targetSlideRelFile));
+          const oleObject = allOleObjects.find((obj) => obj.rId === this.sourceRid);
+          if (!oleObject) {
+            throw new Error(`OLE object with rId ${this.sourceRid} not found.`);
+          }
+          const sourceFilePath = ppt_paths_1.PptPaths.embedding(oleObject.file.split("/").pop());
+          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
+          yield this.copyOleObjectFile(sourceFilePath);
+          yield this.appendToContentTypes();
+          yield this.updateSlideRels();
+          yield this.updateSlideXml();
+        });
+      }
+      copyOleObjectFile(sourceFilePath) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const fileExtension = this.getFileExtension(sourceFilePath);
+          const targetFileName = ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`);
+          try {
+            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourceFilePath, this.targetArchive, targetFileName);
+          } catch (error51) {
+            logger_1.log.error("Error copying OLE object file:", error51);
+            throw error51;
+          }
+        });
+      }
+      appendToContentTypes() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const contentTypesPath = "[Content_Types].xml";
+          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, contentTypesPath);
+          const types = contentTypesXml.getElementsByTagName("Types")[0];
+          const fileExtension = this.getFileExtension(this.oleObjectPath);
+          const partName = ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`));
+          const existingOverride = Array.from(types.getElementsByTagName("Override")).find((override) => override.getAttribute("PartName") === partName);
+          if (!existingOverride) {
+            const newOverride = contentTypesXml.createElement("Override");
+            newOverride.setAttribute("PartName", partName);
+            newOverride.setAttribute("ContentType", this.getContentType(fileExtension));
+            types.appendChild(newOverride);
+            yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, contentTypesPath, contentTypesXml);
+          }
+        });
+      }
+      updateSlideRels() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
+          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
+          const relationships = relXml.getElementsByTagName("Relationship");
+          const fileExtension = this.getFileExtension(this.oleObjectPath);
+          const newTarget = `../embeddings/oleObject${this.createdRid}${fileExtension}`;
+          let relationshipUpdated = false;
+          for (let i = 0; i < relationships.length; i++) {
+            if (relationships[i].getAttribute("Id") === this.sourceRid) {
+              relationships[i].setAttribute("Id", this.createdRid);
+              relationships[i].setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
+              relationshipUpdated = true;
+              break;
+            }
+          }
+          if (!relationshipUpdated) {
+            const newRel = relXml.createElement("Relationship");
+            newRel.setAttribute("Id", this.createdRid);
+            newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject");
+            newRel.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
+            relXml.documentElement.appendChild(newRel);
+          }
+          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
+        });
+      }
+      updateSlideXml() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const slideXmlPath = this.targetSlideFile;
+          const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, slideXmlPath);
+          const oleObjs = Array.from(slideXml.getElementsByTagName("p:oleObj"));
+          oleObjs.forEach((oleObj) => {
+            if (oleObj.getAttribute("r:id") === this.sourceRid) {
+              oleObj.setAttribute("r:id", this.createdRid);
+              const oleObjPr = oleObj.getElementsByTagName("p:oleObjPr")[0];
+              if (oleObjPr) {
+                const links = Array.from(oleObjPr.getElementsByTagName("a:link"));
+                links.forEach((link) => {
+                  link.setAttribute("r:id", this.createdRid);
+                });
+              }
+            }
+          });
+          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, slideXmlPath, slideXml);
+        });
+      }
+      getContentType(fileExtension) {
+        const contentTypes = {
+          ".bin": "application/vnd.openxmlformats-officedocument.oleObject",
+          ".xls": "application/vnd.ms-excel",
+          ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          ".doc": "application/msword",
+          ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ".ppt": "application/vnd.ms-powerpoint",
+          ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        };
+        return contentTypes[fileExtension.toLowerCase()] || "application/vnd.openxmlformats-officedocument.oleObject";
+      }
+      removeOleObjectFile() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const fileExtension = this.getFileExtension(this.oleObjectPath);
+          const fileName = ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`);
+          yield this.targetArchive.remove(fileName);
+        });
+      }
+      removeFromContentTypes() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const contentTypesPath = "[Content_Types].xml";
+          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, contentTypesPath);
+          const types = contentTypesXml.getElementsByTagName("Types")[0];
+          const fileExtension = this.getFileExtension(this.oleObjectPath);
+          const partName = ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`));
+          const overrideToRemove = Array.from(types.getElementsByTagName("Override")).find((override) => override.getAttribute("PartName") === partName);
+          if (overrideToRemove) {
+            types.removeChild(overrideToRemove);
+            yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, contentTypesPath, contentTypesXml);
+          }
+        });
+      }
+      removeFromSlideRels() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
+          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
+          const relationships = relXml.getElementsByTagName("Relationship");
+          for (let i = 0; i < relationships.length; i++) {
+            if (relationships[i].getAttribute("Id") === this.createdRid) {
+              relationships[i].parentNode.removeChild(relationships[i]);
+              break;
+            }
+          }
+          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
+        });
+      }
+      static getAllOnSlide(archive, relsPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const oleObjectType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
+          return xml_helper_1.XmlHelper.getRelationshipItems(archive, relsPath, (element, rels) => {
+            const type = element.getAttribute("Type");
+            if (type === oleObjectType) {
+              rels.push({
+                rId: element.getAttribute("Id"),
+                type: element.getAttribute("Type"),
+                file: element.getAttribute("Target"),
+                element
+              });
+            }
+          });
+        });
+      }
+      modifyOnAddedSlide(targetTemplate, targetSlideNumber, oleObjects) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.prepare(targetTemplate, targetSlideNumber, oleObjects);
+        });
+      }
+    };
+    exports.OLEObject = OLEObject;
+  }
+});
+
+// node_modules/pptx-automizer/dist/classes/element-importer.js
+var require_element_importer = __commonJS({
+  "node_modules/pptx-automizer/dist/classes/element-importer.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ElementImporter = void 0;
+    var errors_1 = require_errors2();
+    var logger_1 = require_logger();
+    var general_helper_1 = require_general_helper();
+    var ppt_paths_1 = require_ppt_paths();
+    var shape_type_detector_1 = require_shape_type_detector();
+    var xml_helper_1 = require_xml_helper();
+    var xml_slide_helper_1 = require_xml_slide_helper();
+    var element_type_1 = require_element_type();
+    var chart_1 = require_chart();
+    var diagram_1 = require_diagram();
+    var generic_1 = require_generic();
+    var hyperlink_1 = require_hyperlink();
+    var image_1 = require_image();
+    var ole_1 = require_ole();
+    var ElementImporter = class {
+      constructor(host) {
+        this.host = host;
+        this.queue = [];
+      }
+      /**
+       * Queue an element action; executed on `automizer.write()`.
+       */
+      add(presName, slideNumber, selector, mode, callback) {
+        this.queue.push({
+          presName,
+          slideNumber,
+          selector,
+          mode,
+          callback
+        });
+      }
+      /**
+       * Import all queued elements, merging multiple modifications
+       * of the same source element.
+       */
+      importSelected() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const importElements = yield this.getUniqueImportedElements();
+          for (const element of importElements) {
+            const info = element.info;
+            const shape = info ? this.createShape(info) : void 0;
+            if (!shape) {
+              continue;
+            }
+            yield this.runAction(shape, info.mode);
+          }
+        });
+      }
+      /**
+       * Processes and updates the list of imported elements by ensuring their
+       * uniqueness based on a generated hash. If duplicate elements are found,
+       * their callbacks are merged.
+       */
+      getUniqueImportedElements() {
+        return __awaiter(this, void 0, void 0, function* () {
+          for (const element of this.queue) {
+            const info = yield this.getElementInfo(element);
+            if (!info) {
+              continue;
+            }
+            if (element.mode === "append") {
+              element.info = info;
+              continue;
+            }
+            const selector = xml_slide_helper_1.XmlSlideHelper.getSelector(info.sourceElement);
+            const eleHash = JSON.stringify(selector);
+            const alreadyImported = this.queue.find((ele) => {
+              var _a3;
+              return ((_a3 = ele.info) === null || _a3 === void 0 ? void 0 : _a3.hash) === eleHash;
+            });
+            if (alreadyImported) {
+              const existingCallbacks = general_helper_1.GeneralHelper.arrayify(element.callback);
+              const pushCallbacks = general_helper_1.GeneralHelper.arrayify(alreadyImported.info.callback);
+              alreadyImported.info.callback = [
+                ...existingCallbacks,
+                ...pushCallbacks
+              ];
+            } else {
+              info.hash = eleHash;
+              element.info = info;
+            }
+          }
+          return this.queue.filter((ele) => {
+            return ele.info;
+          });
+        });
+      }
+      /**
+       * Instantiates the shape class matching the analyzed element type.
+       * Returns undefined for elements that cannot be dispatched
+       * (e.g. a hyperlink without a resolved target).
+       */
+      createShape(info) {
+        const targetType = this.host.targetType;
+        switch (info.type) {
+          case element_type_1.ElementType.Chart:
+            return new chart_1.Chart(info, targetType);
+          case element_type_1.ElementType.Image:
+            return new image_1.Image(info, targetType);
+          case element_type_1.ElementType.Shape:
+            return new generic_1.GenericShape(info, targetType);
+          case element_type_1.ElementType.Diagram:
+            return new diagram_1.Diagram(info, targetType);
+          case element_type_1.ElementType.OLEObject:
+            return new ole_1.OLEObject(info, targetType, this.host.sourceArchive);
+          case element_type_1.ElementType.Hyperlink:
+            if (!info.target) {
+              return void 0;
+            }
+            return new hyperlink_1.Hyperlink(info, targetType, this.host.sourceArchive, info.target.isExternal ? "external" : "internal", info.target.file);
+          default:
+            return void 0;
+        }
+      }
+      runAction(shape, mode) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targetTemplate = this.host.targetTemplate;
+          const targetNumber = this.host.targetNumber;
+          switch (mode) {
+            case "append":
+              yield shape.append(targetTemplate, targetNumber);
+              break;
+            case "modify":
+              yield shape.modify(targetTemplate, targetNumber);
+              break;
+            case "remove":
+              yield shape.remove(targetTemplate, targetNumber);
+              break;
+          }
+        });
+      }
+      /**
+       * Resolves a queued import to its source element and analyzed type.
+       */
+      getElementInfo(importElement) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const template = host.root.getTemplate(importElement.presName);
+          const slideNumber = importElement.mode === "append" ? host.getSlideNumber(template, importElement.slideNumber) : importElement.slideNumber;
+          let currentMode = "slideToSlide";
+          if (host.targetType === "slideMaster") {
+            if (importElement.mode === "append") {
+              currentMode = "slideToMaster";
+            } else {
+              currentMode = "onMaster";
+            }
+          }
+          const sourcePath = currentMode === "onMaster" ? ppt_paths_1.PptPaths.slideMaster(slideNumber) : ppt_paths_1.PptPaths.slide(slideNumber);
+          const sourceRelPath = currentMode === "onMaster" ? ppt_paths_1.PptPaths.slideMasterRels(slideNumber) : ppt_paths_1.PptPaths.slideRels(slideNumber);
+          const sourceArchive = template.archive;
+          const useCreationIds = template.useCreationIds === true && template.creationIds !== void 0;
+          const { sourceElement, selector, mode } = yield this.findElementOnSlide(importElement.selector, sourceArchive, sourcePath, useCreationIds);
+          if (!sourceElement) {
+            const message = `Can't find element on slide ${slideNumber} in ${importElement.presName} (selector: ${JSON.stringify(importElement.selector)})`;
+            if (host.presentation.params.continueOnError === true) {
+              logger_1.log.warn(message);
+              return;
+            }
+            throw new errors_1.ElementNotFoundError(message, {
+              selector: typeof importElement.selector === "string" ? importElement.selector : JSON.stringify(importElement.selector),
+              file: sourcePath
+            });
+          }
+          const appendElementParams = yield (0, shape_type_detector_1.analyzeElement)(sourceElement, sourceArchive, sourceRelPath);
+          return {
+            mode: importElement.mode,
+            name: selector,
+            selector: xml_slide_helper_1.XmlSlideHelper.getSelector(sourceElement),
+            hasCreationId: mode === "findByElementCreationId",
+            sourceArchive,
+            sourceSlideNumber: slideNumber,
+            sourceElement,
+            callback: importElement.callback,
+            target: appendElementParams.target,
+            type: appendElementParams.type,
+            continueOnError: host.presentation.params.continueOnError === true
+          };
+        });
+      }
+      /**
+       * Finds an element on a source slide by creationId and/or name.
+       */
+      findElementOnSlide(selector, sourceArchive, sourcePath, useCreationIds) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const strategies = [];
+          if (typeof selector === "string") {
+            if (useCreationIds) {
+              strategies.push({
+                mode: "findByElementCreationId",
+                selector
+              });
+            }
+            strategies.push({
+              mode: "findByElementName",
+              selector
+            });
+          } else {
+            if (selector.creationId) {
+              strategies.push({
+                mode: "findByElementCreationId",
+                selector: selector.creationId
+              });
+            }
+            strategies.push({
+              mode: "findByElementName",
+              selector: selector.name,
+              nameIdx: selector.nameIdx
+            });
+          }
+          for (const findElement of strategies) {
+            const mode = findElement.mode;
+            const sourceElement = yield xml_helper_1.XmlHelper[mode](sourceArchive, sourcePath, findElement.selector, findElement.nameIdx);
+            if (sourceElement) {
+              return { sourceElement, selector: findElement.selector, mode };
+            }
+          }
+          return { sourceElement: void 0, selector: JSON.stringify(selector) };
+        });
+      }
+    };
+    exports.ElementImporter = ElementImporter;
+  }
+});
+
+// node_modules/pptx-automizer/dist/classes/placeholder-normalizer.js
+var require_placeholder_normalizer = __commonJS({
+  "node_modules/pptx-automizer/dist/classes/placeholder-normalizer.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PlaceholderNormalizer = void 0;
+    var logger_1 = require_logger();
+    var xml_helper_1 = require_xml_helper();
+    var PlaceholderNormalizer = class {
+      constructor(host) {
+        this.host = host;
+      }
+      /**
+       * Removes all unsupported tags from slide xml and (with
+       * `params.cleanupPlaceholders`) normalizes placeholder shapes.
+       * E.g. added relations & tags by Thinkcell cannot be processed
+       * by pptx-automizer at the moment.
+       */
+      cleanSlide(targetPath, sourcePlaceholderTypes) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.host.targetArchive, targetPath);
+          if (this.host.cleanupPlaceholders && sourcePlaceholderTypes) {
+            this.removeDuplicatePlaceholders(xml, sourcePlaceholderTypes);
+            this.normalizePlaceholderShapes(xml, sourcePlaceholderTypes);
+          }
+          this.removeUnsupportedTags(xml);
+          xml_helper_1.XmlHelper.writeXmlToArchive(this.host.targetArchive, targetPath, xml);
+        });
+      }
+      /**
+       * Collects the placeholders present on the target slide.
+       */
+      parsePlaceholders() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.host.targetArchive, this.host.targetPath);
+          const placeholderTypes = [];
+          const placeholders = xml.getElementsByTagName("p:ph");
+          xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
+            placeholderTypes.push({
+              type: placeholder.getAttribute("type"),
+              id: placeholder.getAttribute("id"),
+              xml: placeholder
+            });
+          });
+          return placeholderTypes;
+        });
+      }
+      /**
+       * If you insert a placeholder shape on a target slide with an empty
+       * placeholder of the same type, we need to remove the existing
+       * placeholder.
+       */
+      removeDuplicatePlaceholders(xml, sourcePlaceholderTypes) {
+        const placeholders = xml.getElementsByTagName("p:ph");
+        const usedTypes = {};
+        xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
+          const type = placeholder.getAttribute("type");
+          usedTypes[type] = usedTypes[type] || 0;
+          usedTypes[type]++;
+        });
+        for (const usedType in usedTypes) {
+          const count = usedTypes[usedType];
+          if (count > 1) {
+            const removePlaceholders = sourcePlaceholderTypes.filter((sourcePlaceholder) => sourcePlaceholder.type === usedType);
+            removePlaceholders.forEach((removePlaceholder) => {
+              const parentShapeTag = "p:sp";
+              const parentShape = xml_helper_1.XmlHelper.getClosestParent(parentShapeTag, removePlaceholder.xml);
+              if (parentShape) {
+                xml_helper_1.XmlHelper.remove(parentShape);
+              }
+            });
+          }
+        }
+      }
+      /**
+       * If a placeholder shape was inserted on a slide without a corresponding
+       * placeholder, powerPoint will usually smash the shape's formatting.
+       * This function removes the placeholder tag.
+       */
+      normalizePlaceholderShapes(xml, sourcePlaceholderTypes) {
+        const placeholders = xml.getElementsByTagName("p:ph");
+        xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
+          const usedType = placeholder.getAttribute("type");
+          const existingPlaceholder = sourcePlaceholderTypes.find((sourcePlaceholder) => sourcePlaceholder.type === usedType);
+          if (!existingPlaceholder) {
+            xml_helper_1.XmlHelper.remove(placeholder);
+          }
+        });
+      }
+      /**
+       * Removes unsupported tags and (optionally) their now-empty parents.
+       * Parents will be removed only if they become empty AND are NOT `p:nvPr`.
+       */
+      removeUnsupportedTags(xml) {
+        this.host.unsupportedTags.forEach((tag2) => {
+          const drop = xml_helper_1.XmlHelper.collectionToArray(xml.getElementsByTagName(tag2));
+          if (drop.length > 0) {
+            logger_1.log.debug("Cleaning unsupported tag " + tag2);
+            const parents = /* @__PURE__ */ new Set();
+            for (const item of drop) {
+              const parent = item.parentNode;
+              if (parent) {
+                parents.add(parent);
+              }
+            }
+            drop.forEach((item) => xml_helper_1.XmlHelper.remove(item));
+            parents.forEach((parent) => {
+              if (parent.childNodes.length === 0 && parent.nodeName !== "p:nvPr") {
+                xml_helper_1.XmlHelper.remove(parent);
+              }
+            });
+          }
+        });
+      }
+    };
+    exports.PlaceholderNormalizer = PlaceholderNormalizer;
+  }
+});
+
+// node_modules/pptx-automizer/dist/classes/related-content-copier.js
+var require_related_content_copier = __commonJS({
+  "node_modules/pptx-automizer/dist/classes/related-content-copier.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RelatedContentCopier = void 0;
+    var chart_1 = require_chart();
+    var diagram_1 = require_diagram();
+    var hyperlink_1 = require_hyperlink();
+    var image_1 = require_image();
+    var ole_1 = require_ole();
+    var RelatedContentCopier = class {
+      constructor(host) {
+        this.host = host;
+      }
+      copy() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.copyCharts();
+          yield this.copyImages();
+          yield this.copyDiagrams();
+          yield this.copyOleObjects();
+          yield this.copyHyperlinks();
+        });
+      }
+      copyCharts() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const charts = yield chart_1.Chart.getAllOnSlide(host.sourceArchive, host.relsPath);
+          for (const chart of charts) {
+            yield new chart_1.Chart({
+              mode: "append",
+              target: chart,
+              sourceArchive: host.sourceArchive,
+              sourceSlideNumber: host.sourceNumber
+            }, host.targetType).modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
+          }
+        });
+      }
+      copyImages() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const images = yield image_1.Image.getAllOnSlide(host.sourceArchive, host.relsPath);
+          for (const image of images) {
+            yield new image_1.Image({
+              mode: "append",
+              target: image,
+              sourceArchive: host.sourceArchive,
+              sourceSlideNumber: host.sourceNumber
+            }, host.targetType).modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
+          }
+        });
+      }
+      copyDiagrams() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const diagrams = yield diagram_1.Diagram.getAllOnSlide(host.sourceArchive, host.relsPath);
+          for (const diagram of diagrams) {
+            yield new diagram_1.Diagram({
+              mode: "append",
+              target: diagram,
+              sourceArchive: host.sourceArchive,
+              sourceSlideNumber: host.sourceNumber
+            }, host.targetType).modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
+          }
+        });
+      }
+      copyOleObjects() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const oleObjects = yield ole_1.OLEObject.getAllOnSlide(host.sourceArchive, host.relsPath);
+          for (const oleObject of oleObjects) {
+            yield new ole_1.OLEObject({
+              mode: "append",
+              target: oleObject,
+              sourceArchive: host.sourceArchive,
+              sourceSlideNumber: host.sourceNumber
+            }, host.targetType, host.sourceArchive).modifyOnAddedSlide(host.targetTemplate, host.targetNumber, oleObjects);
+          }
+        });
+      }
+      copyHyperlinks() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const hyperlinks = yield hyperlink_1.Hyperlink.getAllOnSlide(host.sourceArchive, host.relsPath);
+          for (const hyperlink of hyperlinks) {
+            const hyperlinkInstance = new hyperlink_1.Hyperlink({
+              mode: "append",
+              target: hyperlink,
+              sourceArchive: host.sourceArchive,
+              sourceSlideNumber: host.sourceNumber,
+              sourceRid: hyperlink.rId
+            }, host.targetType, host.sourceArchive, hyperlink.isExternal ? "external" : "internal", hyperlink.file);
+            hyperlinkInstance.target = hyperlink;
+            yield hyperlinkInstance.modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
+          }
+        });
+      }
+    };
+    exports.RelatedContentCopier = RelatedContentCopier;
+  }
+});
+
+// node_modules/pptx-automizer/dist/classes/slide-notes-copier.js
+var require_slide_notes_copier = __commonJS({
+  "node_modules/pptx-automizer/dist/classes/slide-notes-copier.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SlideNotesCopier = void 0;
+    var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
+    var xml_helper_1 = require_xml_helper();
+    var SlideNotesCopier = class {
+      constructor(host) {
+        this.host = host;
+      }
+      /**
+       * Copy the source slide's notes (if present) to the target slide,
+       * remap the mutual relationships and register the content type.
+       */
+      copySlideNotes() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const sourceNotesNumber = yield this.getSlideNoteSourceNumber();
+          if (sourceNotesNumber) {
+            yield this.copySlideNoteFiles(sourceNotesNumber);
+            yield this.updateSlideNoteFile(sourceNotesNumber);
+            yield this.host.contentTypes.appendNotesToContentType(this.host.targetNumber);
+          }
+        });
+      }
+      /**
+       * Find the proper enumeration of the source notesSlide xml file.
+       */
+      getSlideNoteSourceNumber() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          const targets = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(host.sourceArchive, ppt_paths_1.PptPaths.slideRels(host.sourceNumber), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide");
+          if (targets.length) {
+            const targetNumber = targets[0].file.replace("../notesSlides/notesSlide", "").replace(".xml", "");
+            return Number(targetNumber);
+          }
+        });
+      }
+      copySlideNoteFiles(sourceNotesNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          yield file_helper_1.FileHelper.zipCopy(host.sourceArchive, ppt_paths_1.PptPaths.notesSlide(sourceNotesNumber), host.targetArchive, ppt_paths_1.PptPaths.notesSlide(host.targetNumber));
+          yield file_helper_1.FileHelper.zipCopy(host.sourceArchive, ppt_paths_1.PptPaths.notesSlideRels(sourceNotesNumber), host.targetArchive, ppt_paths_1.PptPaths.notesSlideRels(host.targetNumber));
+        });
+      }
+      /**
+       * Point the copied notesSlide at the target slide and vice versa.
+       */
+      updateSlideNoteFile(sourceNotesNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const host = this.host;
+          yield xml_helper_1.XmlHelper.replaceAttribute(host.targetArchive, ppt_paths_1.PptPaths.notesSlideRels(host.targetNumber), "Relationship", "Target", ppt_paths_1.PptPaths.relative.slide(host.sourceNumber), ppt_paths_1.PptPaths.relative.slide(host.targetNumber));
+          yield xml_helper_1.XmlHelper.replaceAttribute(host.targetArchive, ppt_paths_1.PptPaths.slideRels(host.targetNumber), "Relationship", "Target", ppt_paths_1.PptPaths.relative.notesSlide(sourceNotesNumber), ppt_paths_1.PptPaths.relative.notesSlide(host.targetNumber));
+        });
+      }
+    };
+    exports.SlideNotesCopier = SlideNotesCopier;
+  }
+});
+
 // node_modules/pptx-automizer/dist/classes/has-shapes.js
 var require_has_shapes = __commonJS({
   "node_modules/pptx-automizer/dist/classes/has-shapes.js"(exports) {
@@ -23686,19 +22871,16 @@ var require_has_shapes = __commonJS({
       });
     };
     Object.defineProperty(exports, "__esModule", { value: true });
+    var errors_1 = require_errors2();
     var xml_relationship_helper_1 = require_xml_relationship_helper();
     var xml_helper_1 = require_xml_helper();
-    var file_helper_1 = require_file_helper();
-    var chart_1 = require_chart();
-    var image_1 = require_image();
-    var element_type_1 = require_element_type();
-    var generic_1 = require_generic();
+    var ppt_paths_1 = require_ppt_paths();
     var xml_slide_helper_1 = require_xml_slide_helper();
-    var ole_1 = require_ole();
-    var hyperlink_1 = require_hyperlink();
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var diagram_1 = require_diagram();
-    var general_helper_1 = require_general_helper();
+    var content_type_registry_1 = require_content_type_registry();
+    var element_importer_1 = require_element_importer();
+    var placeholder_normalizer_1 = require_placeholder_normalizer();
+    var related_content_copier_1 = require_related_content_copier();
+    var slide_notes_copier_1 = require_slide_notes_copier();
     var HasShapes = class {
       constructor(params) {
         this.unsupportedTags = [
@@ -23720,12 +22902,23 @@ var require_has_shapes = __commonJS({
         this.preparations = [];
         this.modifications = [];
         this.relModifications = [];
-        this.importElements = [];
         this.generateElements = [];
         this.presentation = params.presentation;
         this.status = params.presentation.status;
         this.content = params.presentation.content;
         this.cleanupPlaceholders = params.presentation.params.cleanupPlaceholders;
+        this.elementImporter = new element_importer_1.ElementImporter(this);
+        this.relatedContent = new related_content_copier_1.RelatedContentCopier(this);
+        this.notes = new slide_notes_copier_1.SlideNotesCopier(this);
+        this.placeholderNormalizer = new placeholder_normalizer_1.PlaceholderNormalizer(this);
+        this.contentTypes = new content_type_registry_1.ContentTypeRegistry(this);
+      }
+      /**
+       * Queued element imports/modifications/removals of this slide.
+       * @internal
+       */
+      get importElements() {
+        return this.elementImporter.queue;
       }
       /**
        * Asynchronously retrieves all text element IDs from the slide.
@@ -23828,9 +23021,7 @@ var require_has_shapes = __commonJS({
        * Depending on the shape type (e.g. chart or table), different arguments will be passed to the callback.
        */
       modifyElement(selector, callback) {
-        const presName = this.sourceTemplate.name;
-        const slideNumber = this.sourceNumber;
-        this.addElementToModificationsList(presName, slideNumber, selector, "modify", callback);
+        this.elementImporter.add(this.sourceTemplate.name, this.sourceNumber, selector, "modify", callback);
         return this;
       }
       generate(generate, objectName) {
@@ -23853,7 +23044,7 @@ var require_has_shapes = __commonJS({
        * Depending on the shape type (e.g. chart or table), different arguments will be passed to the callback.
        */
       addElement(presName, slideNumber, selector, callback) {
-        this.addElementToModificationsList(presName, slideNumber, selector, "append", callback);
+        this.elementImporter.add(presName, slideNumber, selector, "append", callback);
         return this;
       }
       /**
@@ -23861,29 +23052,8 @@ var require_has_shapes = __commonJS({
        * @param {string} selector - Element's name on the slide.
        */
       removeElement(selector) {
-        const presName = this.sourceTemplate.name;
-        const slideNumber = this.sourceNumber;
-        this.addElementToModificationsList(presName, slideNumber, selector, "remove", void 0);
+        this.elementImporter.add(this.sourceTemplate.name, this.sourceNumber, selector, "remove", void 0);
         return this;
-      }
-      /**
-       * Adds element to modifications list
-       * @internal
-       * @param presName
-       * @param slideNumber
-       * @param selector
-       * @param mode
-       * @param [callback]
-       * @returns element to modifications list
-       */
-      addElementToModificationsList(presName, slideNumber, selector, mode, callback) {
-        this.importElements.push({
-          presName,
-          slideNumber,
-          selector,
-          mode,
-          callback
-        });
       }
       /**
        * ToDo: Implement creationIds as well for slideMasters
@@ -23900,46 +23070,9 @@ var require_has_shapes = __commonJS({
           if (matchCreationId) {
             return matchCreationId.number;
           }
-          throw "Could not find slide number for creationId: " + slideIdentifier + "@" + template.name;
+          throw new errors_1.SlideNotFoundError("Could not find slide number for creationId: " + slideIdentifier + "@" + template.name, { slideIdentifier, templateName: template.name });
         }
         return slideIdentifier;
-      }
-      /**
-       * Processes and updates the list of imported elements by ensuring their uniqueness based on a generated hash.
-       * If duplicate elements are found, their callbacks are merged.
-       *
-       * @return {Promise<void>} Resolves when the process of identifying and updating unique imported elements is complete.
-       */
-      getUniqueImportedElements() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const element of this.importElements) {
-            const info = yield this.getElementInfo(element);
-            if (element.mode === "append") {
-              element.info = info;
-              continue;
-            }
-            const selector = xml_slide_helper_1.XmlSlideHelper.getSelector(info.sourceElement);
-            const eleHash = JSON.stringify(selector);
-            const alreadyImported = this.importElements.find((ele) => {
-              var _a3;
-              return ((_a3 = ele.info) === null || _a3 === void 0 ? void 0 : _a3.hash) === eleHash;
-            });
-            if (alreadyImported) {
-              const existingCallbacks = general_helper_1.GeneralHelper.arrayify(element.callback);
-              const pushCallbacks = general_helper_1.GeneralHelper.arrayify(alreadyImported.info.callback);
-              alreadyImported.info.callback = [
-                ...existingCallbacks,
-                ...pushCallbacks
-              ];
-            } else {
-              info.hash = eleHash;
-              element.info = info;
-            }
-          }
-          return this.importElements.filter((ele) => {
-            return ele.info;
-          });
-        });
       }
       /**
        * Imported selected elements while merging multiple element modifications
@@ -23947,120 +23080,7 @@ var require_has_shapes = __commonJS({
        */
       importedSelectedElements() {
         return __awaiter(this, void 0, void 0, function* () {
-          const importElements = yield this.getUniqueImportedElements();
-          for (const element of importElements) {
-            const info = element.info;
-            switch (info === null || info === void 0 ? void 0 : info.type) {
-              case element_type_1.ElementType.Chart:
-                yield new chart_1.Chart(info, this.targetType)[info.mode](this.targetTemplate, this.targetNumber, this.targetType);
-                break;
-              case element_type_1.ElementType.Image:
-                yield new image_1.Image(info, this.targetType)[info.mode](this.targetTemplate, this.targetNumber, this.targetType);
-                break;
-              case element_type_1.ElementType.Shape:
-                yield new generic_1.GenericShape(info, this.targetType)[info.mode](this.targetTemplate, this.targetNumber, this.targetType);
-                break;
-              case element_type_1.ElementType.Diagram:
-                yield new diagram_1.Diagram(info, this.targetType)[info.mode](this.targetTemplate, this.targetNumber, this.targetType);
-                break;
-              case element_type_1.ElementType.OLEObject:
-                yield new ole_1.OLEObject(info, this.targetType, this.sourceArchive)[info.mode](this.targetTemplate, this.targetNumber, this.targetType);
-                break;
-              case element_type_1.ElementType.Hyperlink:
-                if (info.target) {
-                  yield new hyperlink_1.Hyperlink(info, this.targetType, this.sourceArchive, info.target.isExternal ? "external" : "internal", info.target.file)[info.mode](this.targetTemplate, this.targetNumber);
-                }
-                break;
-              default:
-                break;
-            }
-          }
-        });
-      }
-      /**
-       * Gets element info
-       * @internal
-       * @param importElement
-       * @returns element info
-       */
-      getElementInfo(importElement) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const template = this.root.getTemplate(importElement.presName);
-          const slideNumber = importElement.mode === "append" ? this.getSlideNumber(template, importElement.slideNumber) : importElement.slideNumber;
-          let currentMode = "slideToSlide";
-          if (this.targetType === "slideMaster") {
-            if (importElement.mode === "append") {
-              currentMode = "slideToMaster";
-            } else {
-              currentMode = "onMaster";
-            }
-          }
-          const sourcePath = currentMode === "onMaster" ? `ppt/slideMasters/slideMaster${slideNumber}.xml` : `ppt/slides/slide${slideNumber}.xml`;
-          const sourceRelPath = currentMode === "onMaster" ? `ppt/slideMasters/_rels/slideMaster${slideNumber}.xml.rels` : `ppt/slides/_rels/slide${slideNumber}.xml.rels`;
-          const sourceArchive = yield template.archive;
-          const useCreationIds = template.useCreationIds === true && template.creationIds !== void 0;
-          const { sourceElement, selector, mode } = yield this.findElementOnSlide(importElement.selector, sourceArchive, sourcePath, useCreationIds);
-          if (!sourceElement) {
-            console.error(`Can't find element on slide ${slideNumber} in ${importElement.presName}: `);
-            console.log(importElement);
-            return;
-          }
-          const appendElementParams = yield this.analyzeElement(sourceElement, sourceArchive, sourceRelPath);
-          return {
-            mode: importElement.mode,
-            name: selector,
-            selector: xml_slide_helper_1.XmlSlideHelper.getSelector(sourceElement),
-            hasCreationId: mode === "findByElementCreationId",
-            sourceArchive,
-            sourceSlideNumber: slideNumber,
-            sourceElement,
-            callback: importElement.callback,
-            target: appendElementParams.target,
-            type: appendElementParams.type
-          };
-        });
-      }
-      /**
-       * @param selector
-       * @param sourceArchive
-       * @param sourcePath
-       * @param useCreationIds
-       */
-      findElementOnSlide(selector, sourceArchive, sourcePath, useCreationIds) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const strategies = [];
-          if (typeof selector === "string") {
-            if (useCreationIds) {
-              strategies.push({
-                mode: "findByElementCreationId",
-                selector
-              });
-            }
-            strategies.push({
-              mode: "findByElementName",
-              selector
-            });
-          } else {
-            if (selector.creationId) {
-              strategies.push({
-                mode: "findByElementCreationId",
-                selector: selector.creationId
-              });
-            }
-            strategies.push({
-              mode: "findByElementName",
-              selector: selector.name,
-              nameIdx: selector.nameIdx
-            });
-          }
-          for (const findElement of strategies) {
-            const mode = findElement.mode;
-            const sourceElement = yield xml_helper_1.XmlHelper[mode](sourceArchive, sourcePath, findElement.selector, findElement.nameIdx);
-            if (sourceElement) {
-              return { sourceElement, selector: findElement.selector, mode };
-            }
-          }
-          return { sourceElement: void 0, selector: JSON.stringify(selector) };
+          yield this.elementImporter.importSelected();
         });
       }
       checkIntegrity(info, assert2) {
@@ -24078,146 +23098,8 @@ var require_has_shapes = __commonJS({
        */
       addToPresentation() {
         return __awaiter(this, void 0, void 0, function* () {
-          const relId = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, "ppt/_rels/presentation.xml.rels");
-          yield this.appendToSlideRel(this.targetArchive, relId, this.targetNumber);
-          if (this.targetType === "slide") {
-            yield this.appendToSlideList(this.targetArchive, relId);
-          } else if (this.targetType === "slideMaster") {
-            yield this.appendToSlideMasterList(this.targetArchive, relId);
-          } else if (this.targetType === "slideLayout") {
-          }
-          yield this.appendToContentType(this.targetArchive, this.targetNumber);
+          yield this.contentTypes.addToPresentation();
         });
-      }
-      /**
-       * Appends to slide rel
-       * @internal
-       * @param rootArchive
-       * @param relId
-       * @param slideCount
-       * @returns to slide rel
-       */
-      appendToSlideRel(rootArchive, relId, slideCount) {
-        return xml_helper_1.XmlHelper.append({
-          archive: rootArchive,
-          file: `ppt/_rels/presentation.xml.rels`,
-          parent: (xml) => xml.getElementsByTagName("Relationships")[0],
-          tag: "Relationship",
-          attributes: {
-            Id: relId,
-            Type: `http://schemas.openxmlformats.org/officeDocument/2006/relationships/${this.targetType}`,
-            Target: `${this.targetType}s/${this.targetType}${slideCount}.xml`
-          }
-        });
-      }
-      /**
-       * Appends a new slide to slide list in presentation.xml.
-       * If rootArchive has no slides, a new node will be created.
-       * "id"-attribute of 'p:sldId'-element must be greater than 255.
-       * @internal
-       * @param rootArchive
-       * @param relId
-       * @returns to slide list
-       */
-      appendToSlideList(rootArchive, relId) {
-        return xml_helper_1.XmlHelper.append({
-          archive: rootArchive,
-          file: `ppt/presentation.xml`,
-          assert: (xml) => __awaiter(this, void 0, void 0, function* () {
-            if (xml.getElementsByTagName("p:sldIdLst").length === 0) {
-              xml_helper_1.XmlHelper.insertAfter(xml.createElement("p:sldIdLst"), xml.getElementsByTagName("p:sldMasterIdLst")[0]);
-            }
-          }),
-          parent: (xml) => xml.getElementsByTagName("p:sldIdLst")[0],
-          tag: "p:sldId",
-          attributes: {
-            "r:id": relId
-          }
-        });
-      }
-      /**
-       * Appends a new slide to slide list in presentation.xml.
-       * If rootArchive has no slides, a new node will be created.
-       * "id"-attribute of 'p:sldId'-element must be greater than 255.
-       * @internal
-       * @param rootArchive
-       * @param relId
-       * @returns to slide list
-       */
-      appendToSlideMasterList(rootArchive, relId) {
-        return xml_helper_1.XmlHelper.append({
-          archive: rootArchive,
-          file: `ppt/presentation.xml`,
-          parent: (xml) => xml.getElementsByTagName("p:sldMasterIdLst")[0],
-          tag: "p:sldMasterId",
-          attributes: {
-            "r:id": relId
-          }
-        });
-      }
-      /**
-       * Appends slide to content type
-       * @internal
-       * @param rootArchive
-       * @param slideCount
-       * @returns slide to content type
-       */
-      appendToContentType(rootArchive, count) {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(rootArchive, {
-          PartName: `/ppt/${this.targetType}s/${this.targetType}${count}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.presentationml.${this.targetType}+xml`
-        }));
-      }
-      /**
-       * slideNote numbers differ from slide numbers if presentation
-       * contains slides without notes. We need to find out
-       * the proper enumeration of slideNote xml files.
-       * @internal
-       * @returns slide note file number
-       */
-      getSlideNoteSourceNumber() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targets = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(this.sourceArchive, `ppt/slides/_rels/slide${this.sourceNumber}.xml.rels`, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide");
-          if (targets.length) {
-            const targetNumber = targets[0].file.replace("../notesSlides/notesSlide", "").replace(".xml", "");
-            return Number(targetNumber);
-          }
-        });
-      }
-      /**
-       * Copys slide note files
-       * @internal
-       * @returns slide note files
-       */
-      copySlideNoteFiles(sourceNotesNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/notesSlides/notesSlide${sourceNotesNumber}.xml`, this.targetArchive, `ppt/notesSlides/notesSlide${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/notesSlides/_rels/notesSlide${sourceNotesNumber}.xml.rels`, this.targetArchive, `ppt/notesSlides/_rels/notesSlide${this.targetNumber}.xml.rels`);
-        });
-      }
-      /**
-       * Updates slide note file
-       * @internal
-       * @returns slide note file
-       */
-      updateSlideNoteFile(sourceNotesNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield xml_helper_1.XmlHelper.replaceAttribute(this.targetArchive, `ppt/notesSlides/_rels/notesSlide${this.targetNumber}.xml.rels`, "Relationship", "Target", `../slides/slide${this.sourceNumber}.xml`, `../slides/slide${this.targetNumber}.xml`);
-          yield xml_helper_1.XmlHelper.replaceAttribute(this.targetArchive, `ppt/slides/_rels/slide${this.targetNumber}.xml.rels`, "Relationship", "Target", `../notesSlides/notesSlide${sourceNotesNumber}.xml`, `../notesSlides/notesSlide${this.targetNumber}.xml`);
-        });
-      }
-      /**
-       * Appends notes to content type
-       * @internal
-       * @param rootArchive
-       * @param slideCount
-       * @returns notes to content type
-       */
-      appendNotesToContentType(rootArchive, slideCount) {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(rootArchive, {
-          PartName: `/ppt/notesSlides/notesSlide${slideCount}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml`
-        }));
       }
       /**
        * Copys related content
@@ -24226,126 +23108,7 @@ var require_has_shapes = __commonJS({
        */
       copyRelatedContent() {
         return __awaiter(this, void 0, void 0, function* () {
-          const charts = yield chart_1.Chart.getAllOnSlide(this.sourceArchive, this.relsPath);
-          for (const chart of charts) {
-            yield new chart_1.Chart({
-              mode: "append",
-              target: chart,
-              sourceArchive: this.sourceArchive,
-              sourceSlideNumber: this.sourceNumber
-            }, this.targetType).modifyOnAddedSlide(this.targetTemplate, this.targetNumber);
-          }
-          const images = yield image_1.Image.getAllOnSlide(this.sourceArchive, this.relsPath);
-          for (const image of images) {
-            yield new image_1.Image({
-              mode: "append",
-              target: image,
-              sourceArchive: this.sourceArchive,
-              sourceSlideNumber: this.sourceNumber
-            }, this.targetType).modifyOnAddedSlide(this.targetTemplate, this.targetNumber);
-          }
-          const diagrams = yield diagram_1.Diagram.getAllOnSlide(this.sourceArchive, this.relsPath);
-          for (const diagram of diagrams) {
-            yield new diagram_1.Diagram({
-              mode: "append",
-              target: diagram,
-              sourceArchive: this.sourceArchive,
-              sourceSlideNumber: this.sourceNumber
-            }, this.targetType).modifyOnAddedSlide(this.targetTemplate, this.targetNumber);
-          }
-          const oleObjects = yield ole_1.OLEObject.getAllOnSlide(this.sourceArchive, this.relsPath);
-          for (const oleObject of oleObjects) {
-            yield new ole_1.OLEObject({
-              mode: "append",
-              target: oleObject,
-              sourceArchive: this.sourceArchive,
-              sourceSlideNumber: this.sourceNumber
-            }, this.targetType, this.sourceArchive).modifyOnAddedSlide(this.targetTemplate, this.targetNumber, oleObjects);
-          }
-          const hyperlinks = yield hyperlink_1.Hyperlink.getAllOnSlide(this.sourceArchive, this.relsPath);
-          for (const hyperlink of hyperlinks) {
-            const hyperlinkInstance = new hyperlink_1.Hyperlink({
-              mode: "append",
-              target: hyperlink,
-              sourceArchive: this.sourceArchive,
-              sourceSlideNumber: this.sourceNumber,
-              sourceRid: hyperlink.rId
-            }, this.targetType, this.sourceArchive, hyperlink.isExternal ? "external" : "internal", hyperlink.file);
-            hyperlinkInstance.target = hyperlink;
-            yield hyperlinkInstance.modifyOnAddedSlide(this.targetTemplate, this.targetNumber);
-          }
-        });
-      }
-      /**
-       * Analyzes element
-       * @internal
-       * @param sourceElement
-       * @param sourceArchive
-       * @param slideNumber
-       * @returns element
-       */
-      analyzeElement(sourceElement, sourceArchive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const isChart = sourceElement.getElementsByTagName("c:chart");
-          if (isChart.length) {
-            const target = yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, "chart");
-            return {
-              type: element_type_1.ElementType.Chart,
-              target
-            };
-          }
-          const isChartEx = sourceElement.getElementsByTagName("cx:chart");
-          if (isChartEx.length) {
-            const target = yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, "chartEx");
-            return {
-              type: element_type_1.ElementType.Chart,
-              target
-            };
-          }
-          const isImage = sourceElement.getElementsByTagName("p:nvPicPr");
-          if (isImage.length) {
-            return {
-              type: element_type_1.ElementType.Image,
-              target: yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, "image")
-            };
-          }
-          const isDiagram = sourceElement.getElementsByTagName("dgm:relIds");
-          if (isDiagram.length) {
-            return {
-              type: element_type_1.ElementType.Diagram,
-              target: yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, "diagram")
-            };
-          }
-          const isOLEObject = sourceElement.getElementsByTagName("p:oleObj");
-          if (isOLEObject.length) {
-            const target = yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, "oleObject");
-            return {
-              type: element_type_1.ElementType.OLEObject,
-              target
-            };
-          }
-          const hasHyperlink = hyperlink_processor_1.HyperlinkProcessor.hasHyperlinks(sourceElement);
-          if (hasHyperlink) {
-            try {
-              if (hyperlink_processor_1.HyperlinkProcessor.hasMultipleHyperlinks(sourceElement)) {
-                return {
-                  type: element_type_1.ElementType.Shape
-                };
-              } else {
-                const target = yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, "hyperlink");
-                return {
-                  type: element_type_1.ElementType.Hyperlink,
-                  target,
-                  element: sourceElement
-                };
-              }
-            } catch (error51) {
-              console.warn("Error finding hyperlink target:", error51);
-            }
-          }
-          return {
-            type: element_type_1.ElementType.Shape
-          };
+          yield this.relatedContent.copy();
         });
       }
       /**
@@ -24385,90 +23148,17 @@ var require_has_shapes = __commonJS({
        */
       applyRelModifications() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield xml_helper_1.XmlHelper.modifyXmlInArchive(this.targetArchive, `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetNumber}.xml.rels`, this.relModifications);
+          yield xml_helper_1.XmlHelper.modifyXmlInArchive(this.targetArchive, ppt_paths_1.PptPaths.partRels(this.targetType, this.targetNumber), this.relModifications);
         });
       }
       /**
-       * Removes all unsupported tags from slide xml.
-       * E.g. added relations & tags by Thinkcell cannot
-       * be processed by pptx-automizer at the moment.
+       * Removes all unsupported tags from slide xml and (optionally)
+       * normalizes placeholder shapes.
        * @internal
        */
       cleanSlide(targetPath, sourcePlaceholderTypes) {
         return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetPath);
-          if (this.cleanupPlaceholders && sourcePlaceholderTypes) {
-            this.removeDuplicatePlaceholders(xml, sourcePlaceholderTypes);
-            this.normalizePlaceholderShapes(xml, sourcePlaceholderTypes);
-          }
-          this.unsupportedTags.forEach((tag2) => {
-            const drop = xml.getElementsByTagName(tag2);
-            const length = drop.length;
-            if (length && length > 0) {
-              console.log("Cleaning unsupported tag " + tag2);
-              const parents = [];
-              for (let i = 0; i < drop.length; i++) {
-                const parent = drop[i].parentNode;
-                if (parent && !parents.includes(parent)) {
-                  parents.push(parent);
-                }
-              }
-              xml_helper_1.XmlHelper.sliceCollection(drop, 0);
-              parents.forEach((parent) => {
-                if (parent.childNodes.length === 0) {
-                  xml_helper_1.XmlHelper.remove(parent);
-                }
-              });
-            }
-          });
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetPath, xml);
-        });
-      }
-      /**
-       * If you insert a placeholder shape on a target slide with an empty
-       * placeholder of the same type, we need to remove the existing
-       * placeholder.
-       *
-       * @param xml
-       * @param sourcePlaceholderTypes
-       */
-      removeDuplicatePlaceholders(xml, sourcePlaceholderTypes) {
-        const placeholders = xml.getElementsByTagName("p:ph");
-        const usedTypes = {};
-        xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
-          const type = placeholder.getAttribute("type");
-          usedTypes[type] = usedTypes[type] || 0;
-          usedTypes[type]++;
-        });
-        for (const usedType in usedTypes) {
-          const count = usedTypes[usedType];
-          if (count > 1) {
-            const removePlaceholders = sourcePlaceholderTypes.filter((sourcePlaceholder) => sourcePlaceholder.type === usedType);
-            removePlaceholders.forEach((removePlaceholder) => {
-              const parentShapeTag = "p:sp";
-              const parentShape = xml_helper_1.XmlHelper.getClosestParent(parentShapeTag, removePlaceholder.xml);
-              if (parentShape) {
-                xml_helper_1.XmlHelper.remove(parentShape);
-              }
-            });
-          }
-        }
-      }
-      /**
-       * If a placeholder shape was inserted on a slide without a corresponding
-       * placeholder, powerPoint will usually smash the shape's formatting.
-       * This function removes the placeholder tag.
-       * @param xml
-       * @param sourcePlaceholderTypes
-       */
-      normalizePlaceholderShapes(xml, sourcePlaceholderTypes) {
-        const placeholders = xml.getElementsByTagName("p:ph");
-        xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
-          const usedType = placeholder.getAttribute("type");
-          const existingPlaceholder = sourcePlaceholderTypes.find((sourcePlaceholder) => sourcePlaceholder.type === usedType);
-          if (!existingPlaceholder) {
-            xml_helper_1.XmlHelper.remove(placeholder);
-          }
+          yield this.placeholderNormalizer.cleanSlide(targetPath, sourcePlaceholderTypes);
         });
       }
       /**
@@ -24489,17 +23179,21 @@ var require_has_shapes = __commonJS({
       }
       parsePlaceholders() {
         return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetPath);
-          const placeholderTypes = [];
-          const placeholders = xml.getElementsByTagName("p:ph");
-          xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
-            placeholderTypes.push({
-              type: placeholder.getAttribute("type"),
-              id: placeholder.getAttribute("id"),
-              xml: placeholder
-            });
-          });
-          return placeholderTypes;
+          return this.placeholderNormalizer.parsePlaceholders();
+        });
+      }
+      /**
+       * Flushes this part's finished target XML (and its rels) out of the
+       * archive's DOM buffer. Called as the last step of append(): keeping every
+       * appended slide's parsed DOM alive made memory grow with deck size
+       * (~8 MB per large slide). Anything reading the part afterwards
+       * (e.g. `cleanup` at write time) re-parses it from the archive.
+       * @internal
+       */
+      flushTargetXml() {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.targetArchive.flushXml(this.targetPath);
+          yield this.targetArchive.flushXml(this.targetRelsPath);
         });
       }
     };
@@ -24544,18 +23238,19 @@ var require_layout = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Layout = void 0;
     var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
     var xml_helper_1 = require_xml_helper();
     var xml_relationship_helper_1 = require_xml_relationship_helper();
     var has_shapes_1 = __importDefault(require_has_shapes());
-    var general_helper_1 = require_general_helper();
+    var logger_1 = require_logger();
     var Layout = class extends has_shapes_1.default {
       constructor(params) {
         super(params);
         this.targetType = "slideLayout";
         this.sourceNumber = Number(params.sourceIdentifier);
         this.targetMaster = params.targetMaster;
-        this.sourcePath = `ppt/slideLayouts/slideLayout${this.sourceNumber}.xml`;
-        this.relsPath = `ppt/slideLayouts/_rels/slideLayout${this.sourceNumber}.xml.rels`;
+        this.sourcePath = ppt_paths_1.PptPaths.slideLayout(this.sourceNumber);
+        this.relsPath = ppt_paths_1.PptPaths.slideLayoutRels(this.sourceNumber);
       }
       /**
        * Appends slideLayout
@@ -24566,12 +23261,12 @@ var require_layout = __commonJS({
       append(targetTemplate) {
         return __awaiter(this, void 0, void 0, function* () {
           this.targetTemplate = targetTemplate;
-          this.targetArchive = yield targetTemplate.archive;
+          this.targetArchive = targetTemplate.archive;
           this.targetNumber = targetTemplate.incrementCounter("layouts");
-          this.targetPath = `ppt/slideLayouts/slideLayout${this.targetNumber}.xml`;
-          this.targetRelsPath = `ppt/slideLayouts/_rels/slideLayout${this.targetNumber}.xml.rels`;
-          this.sourceArchive = yield this.sourceTemplate.archive;
-          (0, general_helper_1.log)("Importing slideLayout " + this.targetNumber, 2);
+          this.targetPath = ppt_paths_1.PptPaths.slideLayout(this.targetNumber);
+          this.targetRelsPath = ppt_paths_1.PptPaths.slideLayoutRels(this.targetNumber);
+          this.sourceArchive = this.sourceTemplate.archive;
+          logger_1.log.info("Importing slideLayout " + this.targetNumber);
           yield this.copySlideLayoutFiles();
           yield this.copyRelatedContent();
           yield this.addToPresentation();
@@ -24579,6 +23274,7 @@ var require_layout = __commonJS({
           yield this.cleanSlide(this.targetPath);
           yield this.cleanRelations(this.targetRelsPath);
           yield this.checkIntegrity(true, true);
+          yield this.flushTargetXml();
         });
       }
       /**
@@ -24587,8 +23283,8 @@ var require_layout = __commonJS({
        */
       copySlideLayoutFiles() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/slideLayouts/slideLayout${this.sourceNumber}.xml`, this.targetArchive, `ppt/slideLayouts/slideLayout${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/slideLayouts/_rels/slideLayout${this.sourceNumber}.xml.rels`, this.targetArchive, `ppt/slideLayouts/_rels/slideLayout${this.targetNumber}.xml.rels`);
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideLayout(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideLayout(this.targetNumber));
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideLayoutRels(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideLayoutRels(this.targetNumber));
         });
       }
       updateRelation() {
@@ -24598,9 +23294,9 @@ var require_layout = __commonJS({
         });
       }
       getName() {
-        var _a3;
         return __awaiter(this, void 0, void 0, function* () {
-          const slideLayoutXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.sourceArchive, `ppt/slideLayouts/slideLayout${this.sourceNumber}.xml`);
+          var _a3;
+          const slideLayoutXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.sourceArchive, ppt_paths_1.PptPaths.slideLayout(this.sourceNumber));
           const layout = (_a3 = slideLayoutXml.getElementsByTagName("p:cSld")) === null || _a3 === void 0 ? void 0 : _a3.item(0);
           if (layout) {
             const name = layout.getAttribute("name");
@@ -24650,19 +23346,20 @@ var require_master = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Master = void 0;
     var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
     var xml_helper_1 = require_xml_helper();
     var xml_relationship_helper_1 = require_xml_relationship_helper();
     var has_shapes_1 = __importDefault(require_has_shapes());
     var layout_1 = require_layout();
-    var general_helper_1 = require_general_helper();
+    var logger_1 = require_logger();
     var Master = class _Master extends has_shapes_1.default {
       constructor(params) {
         super(params);
         this.targetType = "slideMaster";
         this.sourceNumber = Number(params.sourceIdentifier);
         this.key = _Master.getKey(this.sourceNumber, params.template.name);
-        this.sourcePath = `ppt/slideMasters/slideMaster${this.sourceNumber}.xml`;
-        this.relsPath = `ppt/slideMasters/_rels/slideMaster${this.sourceNumber}.xml.rels`;
+        this.sourcePath = ppt_paths_1.PptPaths.slideMaster(this.sourceNumber);
+        this.relsPath = ppt_paths_1.PptPaths.slideMasterRels(this.sourceNumber);
       }
       static getKey(slideLayoutNumber, templateName) {
         return slideLayoutNumber + "@" + templateName;
@@ -24676,12 +23373,12 @@ var require_master = __commonJS({
       append(targetTemplate) {
         return __awaiter(this, void 0, void 0, function* () {
           this.targetTemplate = targetTemplate;
-          this.targetArchive = yield targetTemplate.archive;
+          this.targetArchive = targetTemplate.archive;
           this.targetNumber = targetTemplate.incrementCounter("masters");
-          this.targetPath = `ppt/slideMasters/slideMaster${this.targetNumber}.xml`;
-          this.targetRelsPath = `ppt/slideMasters/_rels/slideMaster${this.targetNumber}.xml.rels`;
-          this.sourceArchive = yield this.sourceTemplate.archive;
-          (0, general_helper_1.log)("Importing slideMaster " + this.targetNumber, 2);
+          this.targetPath = ppt_paths_1.PptPaths.slideMaster(this.targetNumber);
+          this.targetRelsPath = ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber);
+          this.sourceArchive = this.sourceTemplate.archive;
+          logger_1.log.info("Importing slideMaster " + this.targetNumber);
           yield this.copySlideMasterFiles();
           yield this.copyRelatedLayouts();
           yield this.copyRelatedContent();
@@ -24696,6 +23393,7 @@ var require_master = __commonJS({
           const assert2 = this.targetTemplate.automizer.params.showIntegrityInfo;
           yield this.checkIntegrity(info, assert2);
           yield this.cleanSlide(this.targetPath);
+          yield this.flushTargetXml();
         });
       }
       copyRelatedLayouts() {
@@ -24718,16 +23416,16 @@ var require_master = __commonJS({
       }
       copyThemeFiles() {
         return __awaiter(this, void 0, void 0, function* () {
-          const targets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.targetArchive, `ppt/slideMasters/_rels/slideMaster${this.targetNumber}.xml.rels`, "../theme/theme");
+          const targets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.targetArchive, ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber), "../theme/theme");
           if (!targets.length) {
             return;
           }
           const themeTarget = targets[0];
           const themeSourceId = themeTarget.number;
           const themeTargetId = this.targetTemplate.incrementCounter("themes");
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/theme/theme${themeSourceId}.xml`, this.targetArchive, `ppt/theme/theme${themeTargetId}.xml`);
-          yield this.appendThemeToContentType(this.targetArchive, themeTargetId);
-          yield xml_helper_1.XmlHelper.replaceAttribute(this.targetArchive, `ppt/slideMasters/_rels/slideMaster${this.targetNumber}.xml.rels`, "Relationship", "Id", themeTarget.rId, `../theme/theme${themeTargetId}.xml`, "Target");
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.theme(themeSourceId), this.targetArchive, ppt_paths_1.PptPaths.theme(themeTargetId));
+          yield this.contentTypes.appendThemeToContentType(themeTargetId);
+          yield xml_helper_1.XmlHelper.replaceAttribute(this.targetArchive, ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber), "Relationship", "Id", themeTarget.rId, ppt_paths_1.PptPaths.relative.theme(themeTargetId), "Target");
         });
       }
       /**
@@ -24736,15 +23434,9 @@ var require_master = __commonJS({
        */
       copySlideMasterFiles() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/slideMasters/slideMaster${this.sourceNumber}.xml`, this.targetArchive, `ppt/slideMasters/slideMaster${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/slideMasters/_rels/slideMaster${this.sourceNumber}.xml.rels`, this.targetArchive, `ppt/slideMasters/_rels/slideMaster${this.targetNumber}.xml.rels`);
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideMaster(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideMaster(this.targetNumber));
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideMasterRels(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber));
         });
-      }
-      appendThemeToContentType(rootArchive, themeCount) {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(rootArchive, {
-          PartName: `/ppt/theme/theme${themeCount}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.theme+xml`
-        }));
       }
     };
     exports.Master = Master;
@@ -24785,26 +23477,30 @@ var require_modify_presentation_helper = __commonJS({
     var _a3;
     Object.defineProperty(exports, "__esModule", { value: true });
     var xml_helper_1 = require_xml_helper();
-    var content_tracker_1 = require_content_tracker();
+    var ppt_paths_1 = require_ppt_paths();
     var file_helper_1 = require_file_helper();
     var ModifyPresentationHelper = class {
       /**
-       * Tracker.files includes all files that have been
+       * The content tracker's files include all files that have been
        * copied to the root template by automizer. We remove all other files.
        */
       static removeUnusedFiles(xml, i, archive) {
         return __awaiter(this, void 0, void 0, function* () {
+          const tracker = archive.contentTracker;
+          if (!tracker) {
+            return;
+          }
           const skipDirs = [
             "ppt/slideMasters",
             "ppt/slideMasters/_rels",
             "ppt/slideLayouts",
             "ppt/slideLayouts/_rels"
           ];
-          for (const dir in content_tracker_1.contentTracker.files) {
+          for (const dir in tracker.files) {
             if (skipDirs.includes(dir)) {
               continue;
             }
-            const requiredFiles = content_tracker_1.contentTracker.files[dir];
+            const requiredFiles = tracker.files[dir];
             yield file_helper_1.FileHelper.removeFromDirectory(archive, dir, (file2) => {
               return !requiredFiles.includes(file2.relativePath);
             });
@@ -24832,12 +23528,16 @@ var require_modify_presentation_helper = __commonJS({
       }
       static removedUnusedImages(xml, i, archive) {
         return __awaiter(this, void 0, void 0, function* () {
-          yield content_tracker_1.contentTracker.analyzeContents(archive);
+          const tracker = archive.contentTracker;
+          if (!tracker) {
+            return;
+          }
+          yield tracker.analyzeContents(archive);
           const extensions = ["jpg", "jpeg", "png", "gif", "svg", "emf"];
           const keepFiles = [];
-          yield content_tracker_1.contentTracker.collect("ppt/slides", "image", keepFiles);
-          yield content_tracker_1.contentTracker.collect("ppt/slideMasters", "image", keepFiles);
-          yield content_tracker_1.contentTracker.collect("ppt/slideLayouts", "image", keepFiles);
+          yield tracker.collect("ppt/slides", "image", keepFiles);
+          yield tracker.collect("ppt/slideMasters", "image", keepFiles);
+          yield tracker.collect("ppt/slideLayouts", "image", keepFiles);
           yield file_helper_1.FileHelper.removeFromDirectory(archive, "ppt/media", (file2) => {
             const info = file_helper_1.FileHelper.getFileInfo(file2.name);
             return extensions.includes(info.extension.toLowerCase()) && !keepFiles.includes(info.base);
@@ -24845,7 +23545,6 @@ var require_modify_presentation_helper = __commonJS({
         });
       }
     };
-    exports.default = ModifyPresentationHelper;
     _a3 = ModifyPresentationHelper;
     ModifyPresentationHelper.getSlidesCollection = (xml) => {
       return xml.getElementsByTagName("p:sldId");
@@ -24854,12 +23553,12 @@ var require_modify_presentation_helper = __commonJS({
       return xml.getElementsByTagName("p:sldMasterId");
     };
     ModifyPresentationHelper.sortSlides = (order) => (xml) => {
-      const slides = ModifyPresentationHelper.getSlidesCollection(xml);
+      const slides = _a3.getSlidesCollection(xml);
       order.map((index, i) => order[i]--);
       xml_helper_1.XmlHelper.sortCollection(slides, order);
     };
     ModifyPresentationHelper.removeSlides = (numbers) => (xml) => {
-      const slides = ModifyPresentationHelper.getSlidesCollection(xml);
+      const slides = _a3.getSlidesCollection(xml);
       numbers.map((index, i) => numbers[i]--);
       for (let i = 0; i <= slides.length; i++) {
         if (numbers.includes(i)) {
@@ -24868,14 +23567,14 @@ var require_modify_presentation_helper = __commonJS({
       }
     };
     ModifyPresentationHelper.normalizeSlideIds = (xml) => {
-      const slides = ModifyPresentationHelper.getSlidesCollection(xml);
+      const slides = _a3.getSlidesCollection(xml);
       const firstId = 256;
       xml_helper_1.XmlHelper.modifyCollection(slides, (slide, i) => {
         slide.setAttribute("id", String(firstId + i));
       });
     };
     ModifyPresentationHelper.normalizeSlideMasterIds = (xml, i, archive) => __awaiter(void 0, void 0, void 0, function* () {
-      const slides = ModifyPresentationHelper.getSlideMastersCollection(xml);
+      const slides = _a3.getSlideMastersCollection(xml);
       let currentId;
       yield xml_helper_1.XmlHelper.modifyCollectionAsync(slides, (slide, i2) => __awaiter(void 0, void 0, void 0, function* () {
         const masterId = i2 + 1;
@@ -24884,7 +23583,7 @@ var require_modify_presentation_helper = __commonJS({
         }
         slide.setAttribute("id", String(currentId));
         currentId++;
-        const slideMasterXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, `ppt/slideMasters/slideMaster${masterId}.xml`);
+        const slideMasterXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, ppt_paths_1.PptPaths.slideMaster(masterId));
         const slideLayouts = slideMasterXml.getElementsByTagName("p:sldLayoutId");
         xml_helper_1.XmlHelper.modifyCollection(slideLayouts, (slideLayout) => {
           slideLayout.setAttribute("id", String(currentId));
@@ -24892,6 +23591,7 @@ var require_modify_presentation_helper = __commonJS({
         });
       }));
     });
+    exports.default = ModifyPresentationHelper;
   }
 });
 
@@ -24932,7 +23632,9 @@ var require_slide = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Slide = void 0;
     var file_helper_1 = require_file_helper();
+    var ppt_paths_1 = require_ppt_paths();
     var general_helper_1 = require_general_helper();
+    var logger_1 = require_logger();
     var xml_relationship_helper_1 = require_xml_relationship_helper();
     var has_shapes_1 = __importDefault(require_has_shapes());
     var master_1 = require_master();
@@ -24943,8 +23645,8 @@ var require_slide = __commonJS({
         super(params);
         this.targetType = "slide";
         this.sourceNumber = this.getSlideNumber(params.template, params.slideIdentifier);
-        this.sourcePath = `ppt/slides/slide${this.sourceNumber}.xml`;
-        this.relsPath = `ppt/slides/_rels/slide${this.sourceNumber}.xml.rels`;
+        this.sourcePath = ppt_paths_1.PptPaths.slide(this.sourceNumber);
+        this.relsPath = ppt_paths_1.PptPaths.slideRels(this.sourceNumber);
       }
       /**
        * Appends slide
@@ -24955,21 +23657,16 @@ var require_slide = __commonJS({
       append(targetTemplate) {
         return __awaiter(this, void 0, void 0, function* () {
           this.targetTemplate = targetTemplate;
-          this.targetArchive = yield targetTemplate.archive;
+          this.targetArchive = targetTemplate.archive;
           this.targetNumber = targetTemplate.incrementCounter("slides");
-          this.targetPath = `ppt/slides/slide${this.targetNumber}.xml`;
-          this.targetRelsPath = `ppt/slides/_rels/slide${this.targetNumber}.xml.rels`;
-          this.sourceArchive = yield this.sourceTemplate.archive;
+          this.targetPath = ppt_paths_1.PptPaths.slide(this.targetNumber);
+          this.targetRelsPath = ppt_paths_1.PptPaths.slideRels(this.targetNumber);
+          this.sourceArchive = this.sourceTemplate.archive;
           this.status.info = "Appending slide " + this.targetNumber;
           yield this.copySlideFiles();
           yield this.copyRelatedContent();
           yield this.addToPresentation();
-          const sourceNotesNumber = yield this.getSlideNoteSourceNumber();
-          if (sourceNotesNumber) {
-            yield this.copySlideNoteFiles(sourceNotesNumber);
-            yield this.updateSlideNoteFile(sourceNotesNumber);
-            yield this.appendNotesToContentType(this.targetArchive, this.targetNumber);
-          }
+          yield this.notes.copySlideNotes();
           const placeholderTypes = yield this.parsePlaceholders();
           yield this.applyRelModifications();
           yield this.applyPreparations();
@@ -24981,7 +23678,23 @@ var require_slide = __commonJS({
           const assert2 = this.targetTemplate.automizer.params.showIntegrityInfo;
           yield this.checkIntegrity(info, assert2);
           yield this.cleanSlide(this.targetPath, placeholderTypes);
+          yield this.flushTargetXml();
           this.status.increment();
+        });
+      }
+      /**
+       * Additionally flushes the slide's copied notesSlide part, which shares
+       * the slide's target number.
+       * @internal
+       */
+      flushTargetXml() {
+        const _super = Object.create(null, {
+          flushTargetXml: { get: () => super.flushTargetXml }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+          yield _super.flushTargetXml.call(this);
+          yield this.targetArchive.flushXml(ppt_paths_1.PptPaths.notesSlide(this.targetNumber));
+          yield this.targetArchive.flushXml(ppt_paths_1.PptPaths.notesSlideRels(this.targetNumber));
         });
       }
       /**
@@ -25007,7 +23720,7 @@ var require_slide = __commonJS({
               slideLayouts[0].updateTargetIndex(targetLayoutId);
             }
           } else {
-            general_helper_1.Logger.log("Unable to use slide layout " + layoutId, 0);
+            logger_1.log.warn("Unable to use slide layout " + layoutId);
           }
         }));
         return this;
@@ -25058,7 +23771,7 @@ var require_slide = __commonJS({
           yield this.autoImportSourceSlideMaster(templateName, sourceLayoutId);
           const alreadyImported = this.targetTemplate.getNamedMappedContent("slideLayout", targetLayoutName);
           if (!alreadyImported) {
-            console.error('Could not find "' + targetLayoutName + '"@' + templateName + "@sourceLayoutId:" + sourceLayoutId);
+            logger_1.log.error('Could not find "' + targetLayoutName + '"@' + templateName + "@sourceLayoutId:" + sourceLayoutId);
           }
           return alreadyImported === null || alreadyImported === void 0 ? void 0 : alreadyImported.targetId;
         });
@@ -25103,8 +23816,8 @@ var require_slide = __commonJS({
        */
       copySlideFiles() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/slides/slide${this.sourceNumber}.xml`, this.targetArchive, `ppt/slides/slide${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/slides/_rels/slide${this.sourceNumber}.xml.rels`, this.targetArchive, `ppt/slides/_rels/slide${this.targetNumber}.xml.rels`);
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slide(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slide(this.targetNumber));
+          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideRels(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideRels(this.targetNumber));
         });
       }
       /**
@@ -25117,6 +23830,255 @@ var require_slide = __commonJS({
       }
     };
     exports.Slide = Slide;
+  }
+});
+
+// node_modules/pptx-automizer/dist/types/types.js
+var require_types = __commonJS({
+  "node_modules/pptx-automizer/dist/types/types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMediaBuffer = getMediaBuffer;
+    function getMediaBuffer(file2, fsReadFileSync) {
+      if (file2.source === "buffer") {
+        return file2.buffer;
+      }
+      return fsReadFileSync(file2.filepath);
+    }
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/content-tracker.js
+var require_content_tracker = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/content-tracker.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ContentTracker = void 0;
+    var file_helper_1 = require_file_helper();
+    var xml_helper_1 = require_xml_helper();
+    var constants_1 = require_constants2();
+    var ContentTracker = class {
+      constructor() {
+        this.files = {
+          "ppt/slideMasters": [],
+          "ppt/slideLayouts": [],
+          "ppt/slides": [],
+          "ppt/charts": [],
+          "ppt/embeddings": []
+        };
+        this.relations = {
+          // '.': [],
+          "ppt/slides/_rels": [],
+          "ppt/slideMasters/_rels": [],
+          "ppt/slideLayouts/_rels": [],
+          "ppt/charts/_rels": [],
+          "ppt/_rels": [],
+          ppt: []
+        };
+        this.relationTags = (0, constants_1.contentTrack)();
+      }
+      reset() {
+        [this.files, this.relations].forEach((section) => Object.keys(section).forEach((key) => {
+          section[key] = [];
+        }));
+        this.relationTags = (0, constants_1.contentTrack)();
+      }
+      trackFile(file2) {
+        const info = file_helper_1.FileHelper.getFileInfo(file2);
+        if (this.files[info.dir]) {
+          this.files[info.dir].push(info.base);
+        }
+      }
+      trackRelation(file2, attributes) {
+        const info = file_helper_1.FileHelper.getFileInfo(file2);
+        if (this.relations[info.dir]) {
+          this.relations[info.dir].push({
+            base: info.base,
+            attributes
+          });
+        }
+      }
+      analyzeContents(archive) {
+        return __awaiter(this, void 0, void 0, function* () {
+          this.setArchive(archive);
+          yield this.analyzeRelationships();
+          yield this.trackSlideMasters();
+          yield this.trackSlideLayouts();
+        });
+      }
+      setArchive(archive) {
+        this.archive = archive;
+      }
+      /**
+       * This will be replaced by future slideMaster handling.
+       */
+      trackSlideMasters() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const slideMasters = this.getRelationTag("ppt/presentation.xml").getTrackedRelations("slideMaster");
+          yield this.addAndAnalyze(slideMasters, "ppt/slideMasters");
+        });
+      }
+      trackSlideLayouts() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const usedSlideLayouts = this.getRelationTag("ppt/slideMasters").getTrackedRelations("slideLayout");
+          yield this.addAndAnalyze(usedSlideLayouts, "ppt/slideLayouts");
+        });
+      }
+      addAndAnalyze(trackedRelations, section) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const targets = yield this.getRelatedContents(trackedRelations);
+          targets.forEach((target) => {
+            this.trackFile(section + "/" + target.filename);
+          });
+          const relationTagInfo = this.getRelationTag(section);
+          yield this.analyzeRelationship(relationTagInfo);
+        });
+      }
+      getRelatedContents(trackedRelations) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const relatedContents = [];
+          for (const trackedRelation of trackedRelations) {
+            for (const target of trackedRelation.targets) {
+              const trackedRelationInfo = yield target.getRelatedContent();
+              if (!trackedRelationInfo)
+                continue;
+              relatedContents.push(trackedRelationInfo);
+            }
+          }
+          return relatedContents;
+        });
+      }
+      getRelationTag(source) {
+        return this.relationTags.find((relationTag) => relationTag.source === source);
+      }
+      analyzeRelationships() {
+        return __awaiter(this, void 0, void 0, function* () {
+          for (const relationTagInfo of this.relationTags) {
+            yield this.analyzeRelationship(relationTagInfo);
+          }
+        });
+      }
+      analyzeRelationship(relationTagInfo) {
+        return __awaiter(this, void 0, void 0, function* () {
+          relationTagInfo.getTrackedRelations = (role) => {
+            return relationTagInfo.tags.filter((tag2) => tag2.role === role);
+          };
+          for (const relationTag of relationTagInfo.tags) {
+            relationTag.targets = relationTag.targets || [];
+            if (relationTagInfo.isDir === true) {
+              const files = this.files[relationTagInfo.source] || [];
+              if (!files.length) {
+              }
+              for (const file2 of files) {
+                yield this.pushRelationTagTargets(relationTagInfo.source + "/" + file2, file2, relationTag, relationTagInfo);
+              }
+            } else {
+              const pathInfo = file_helper_1.FileHelper.getFileInfo(relationTagInfo.source);
+              yield this.pushRelationTagTargets(relationTagInfo.source, pathInfo.base, relationTag, relationTagInfo);
+            }
+          }
+        });
+      }
+      pushRelationTagTargets(file2, filename, relationTag, relationTagInfo) {
+        return __awaiter(this, void 0, void 0, function* () {
+          const attribute = relationTag.attribute || "r:id";
+          const addTargets = yield xml_helper_1.XmlHelper.getRelationshipItems(this.archive, file2, (element, rels) => {
+            const rId = element.getAttribute(attribute);
+            if (!rId)
+              return;
+            rels.push({
+              file: file2,
+              filename,
+              rId,
+              type: relationTag.type
+            });
+          }, relationTag.tag);
+          this.addCreatedRelationsFunctions(addTargets, this.relations[relationTagInfo.relationsKey], relationTagInfo);
+          relationTag.targets = [...relationTag.targets, ...addTargets];
+        });
+      }
+      addCreatedRelationsFunctions(addTargets, createdRelations, relationTagInfo) {
+        addTargets.forEach((addTarget) => {
+          addTarget.getCreatedContent = this.getCreatedContent(createdRelations, addTarget);
+          addTarget.getRelatedContent = this.addRelatedContent(relationTagInfo, addTarget);
+        });
+      }
+      getCreatedContent(createdRelations, addTarget) {
+        return () => {
+          return createdRelations.find((relation) => {
+            var _a3;
+            return relation.base === addTarget.filename + ".rels" && ((_a3 = relation.attributes) === null || _a3 === void 0 ? void 0 : _a3.Id) === addTarget.rId;
+          });
+        };
+      }
+      addRelatedContent(relationTagInfo, addTarget) {
+        return () => __awaiter(this, void 0, void 0, function* () {
+          if (addTarget.relatedContent)
+            return addTarget.relatedContent;
+          const relationsFile = relationTagInfo.isDir === true ? relationTagInfo.relationsKey + "/" + addTarget.filename + ".rels" : relationTagInfo.relationsKey;
+          const relationTarget = yield xml_helper_1.XmlHelper.getRelationshipItems(this.archive, relationsFile, (element, rels) => {
+            const rId = element.getAttribute("Id");
+            if (rId === addTarget.rId) {
+              const target = element.getAttribute("Target");
+              const targetMode = element.getAttribute("TargetMode");
+              const fileInfo = file_helper_1.FileHelper.getFileInfo(target);
+              if (targetMode !== "External") {
+                rels.push({
+                  file: target,
+                  filename: fileInfo.base,
+                  rId,
+                  type: element.getAttribute("Type")
+                });
+              }
+            }
+          });
+          addTarget.relatedContent = relationTarget.find((relationTarget2) => relationTarget2.rId === addTarget.rId);
+          return addTarget.relatedContent;
+        });
+      }
+      collect(section, role, collection) {
+        return __awaiter(this, void 0, void 0, function* () {
+          collection = collection || [];
+          const trackedRelationTag = this.getRelationTag(section);
+          const trackedRelations = trackedRelationTag.getTrackedRelations(role);
+          const relatedTargets = yield this.getRelatedContents(trackedRelations);
+          relatedTargets.forEach((relatedTarget) => collection.push(relatedTarget.filename));
+          return collection;
+        });
+      }
+      filterRelations(section, target) {
+        const relations = this.relations[section];
+        return relations.filter((rel) => rel.attributes.Target === target);
+      }
+    };
+    exports.ContentTracker = ContentTracker;
   }
 });
 
@@ -25162,6 +24124,14 @@ var require_count_helper = __commonJS({
       static increment(name, counters) {
         return _CountHelper.getCounterByName(name, counters)._increment();
       }
+      /**
+       * Lower a counter, e.g. after slides have been removed from the archive.
+       */
+      static decrement(name, counters, by = 1) {
+        const counter = _CountHelper.getCounterByName(name, counters);
+        counter.count = Math.max(0, counter.count - by);
+        return counter.count;
+      }
       static count(name, counters) {
         return _CountHelper.getCounterByName(name, counters).get();
       }
@@ -25181,7 +24151,7 @@ var require_count_helper = __commonJS({
       }
       set() {
         return __awaiter(this, void 0, void 0, function* () {
-          this.count = yield this.calculateCount(yield this.template.archive);
+          this.count = yield this.calculateCount(this.template.archive);
         });
       }
       get() {
@@ -25220,32 +24190,42 @@ var require_count_helper = __commonJS({
           return presentationXml.getElementsByTagName("p:sldMasterId").length;
         });
       }
-      static countLayouts(presentation) {
+      /**
+       * Counts the Override entries of [Content_Types].xml with the given
+       * ContentType.
+       */
+      static countContentTypeOverrides(presentation, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
           const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "[Content_Types].xml");
           const overrides = contentTypesXml.getElementsByTagName("Override");
-          return Object.keys(overrides).map((key) => overrides[key]).filter((o) => o.getAttribute && o.getAttribute("ContentType") === `application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml`).length;
+          let count = 0;
+          for (let i = 0; i < overrides.length; i++) {
+            if (((_a3 = overrides.item(i)) === null || _a3 === void 0 ? void 0 : _a3.getAttribute("ContentType")) === contentType) {
+              count++;
+            }
+          }
+          return count;
+        });
+      }
+      static countLayouts(presentation) {
+        return __awaiter(this, void 0, void 0, function* () {
+          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml");
         });
       }
       static countThemes(presentation) {
         return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "[Content_Types].xml");
-          const overrides = contentTypesXml.getElementsByTagName("Override");
-          return Object.keys(overrides).map((key) => overrides[key]).filter((o) => o.getAttribute && o.getAttribute("ContentType") === `application/vnd.openxmlformats-officedocument.theme+xml`).length;
+          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.theme+xml");
         });
       }
       static countCharts(presentation) {
         return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "[Content_Types].xml");
-          const overrides = contentTypesXml.getElementsByTagName("Override");
-          return Object.keys(overrides).map((key) => overrides[key]).filter((o) => o.getAttribute && o.getAttribute("ContentType") === `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`).length;
+          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.drawingml.chart+xml");
         });
       }
       static countOleObjects(presentation) {
         return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "[Content_Types].xml");
-          const overrides = contentTypesXml.getElementsByTagName("Override");
-          return Object.keys(overrides).map((key) => overrides[key]).filter((o) => o.getAttribute && o.getAttribute("ContentType") === `application/vnd.openxmlformats-officedocument.oleObject`).length;
+          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.oleObject");
         });
       }
       static countImages(presentation) {
@@ -25257,13 +24237,103 @@ var require_count_helper = __commonJS({
       }
       static countDiagrams(presentation) {
         return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "[Content_Types].xml");
-          const overrides = contentTypesXml.getElementsByTagName("Override");
-          return Object.keys(overrides).map((key) => overrides[key]).filter((o) => o.getAttribute && o.getAttribute("ContentType") === `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`).length;
+          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml");
         });
       }
     };
     exports.CountHelper = CountHelper;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/media-deduplicator.js
+var require_media_deduplicator = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/media-deduplicator.js"(exports) {
+    "use strict";
+    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+      function adopt(value) {
+        return value instanceof P ? value : new P(function(resolve) {
+          resolve(value);
+        });
+      }
+      return new (P || (P = Promise))(function(resolve, reject) {
+        function fulfilled(value) {
+          try {
+            step(generator.next(value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function rejected(value) {
+          try {
+            step(generator["throw"](value));
+          } catch (e) {
+            reject(e);
+          }
+        }
+        function step(result) {
+          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+        }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+      });
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MediaDeduplicator = void 0;
+    var crypto_1 = __require("crypto");
+    var ppt_paths_1 = require_ppt_paths();
+    var MediaDeduplicator = class _MediaDeduplicator {
+      constructor(archive) {
+        this.files = /* @__PURE__ */ new Map();
+        this.archive = archive;
+      }
+      /**
+       * Find a media file with identical contents in the output archive.
+       * @param content Contents of the media file about to be copied
+       * @returns Filename inside ppt/media, or undefined if it is a new file
+       */
+      find(content) {
+        return __awaiter(this, void 0, void 0, function* () {
+          yield this.indexExistingFiles();
+          return this.files.get(_MediaDeduplicator.checksum(content));
+        });
+      }
+      /**
+       * Add a media file that has been copied into the output archive.
+       */
+      add(content, filename) {
+        const checksum = _MediaDeduplicator.checksum(content);
+        if (!this.files.has(checksum)) {
+          this.files.set(checksum, filename);
+        }
+      }
+      /**
+       * Index the media files the output archive already contains, e.g. the ones
+       * coming with the root template. Runs on first use only.
+       */
+      indexExistingFiles() {
+        return __awaiter(this, void 0, void 0, function* () {
+          if (!this.indexed) {
+            this.indexed = this.readExistingFiles();
+          }
+          return this.indexed;
+        });
+      }
+      readExistingFiles() {
+        return __awaiter(this, void 0, void 0, function* () {
+          const mediaFiles = yield this.archive.folder(ppt_paths_1.PptPaths.mediaDir);
+          for (const mediaFile of mediaFiles) {
+            if (!mediaFile.relativePath || mediaFile.relativePath.endsWith("/")) {
+              continue;
+            }
+            const content = yield this.archive.read(mediaFile.name, "nodebuffer");
+            this.add(content, mediaFile.relativePath);
+          }
+        });
+      }
+      static checksum(content) {
+        return (0, crypto_1.createHash)("sha1").update(content).digest("hex");
+      }
+    };
+    exports.MediaDeduplicator = MediaDeduplicator;
   }
 });
 
@@ -30956,8 +30026,7 @@ var require_generate_pptxgenjs = __commonJS({
           };
         };
         this.getOptions = (options, objectName) => {
-          options = options || {};
-          return Object.assign(Object.assign({}, options), { objectName });
+          return Object.assign(Object.assign({}, options || {}), { objectName });
         };
         this.automizer = automizer;
         this.slides = slides;
@@ -31026,6 +30095,43 @@ var require_generate_pptxgenjs = __commonJS({
 var require_template = __commonJS({
   "node_modules/pptx-automizer/dist/classes/template.js"(exports) {
     "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o2) {
+          var ar = [];
+          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
+          return ar;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
     var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
         return value instanceof P ? value : new P(function(resolve) {
@@ -31053,61 +30159,42 @@ var require_template = __commonJS({
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
     };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Template = void 0;
+    exports.OutputTemplate = exports.SourceTemplate = exports.Template = void 0;
     var file_helper_1 = require_file_helper();
+    var content_tracker_1 = require_content_tracker();
     var count_helper_1 = require_count_helper();
     var xml_template_helper_1 = require_xml_template_helper();
     var xml_helper_1 = require_xml_helper();
-    var generate_pptxgenjs_1 = __importDefault(require_generate_pptxgenjs());
-    var Template = class _Template {
+    var ppt_paths_1 = require_ppt_paths();
+    var media_deduplicator_1 = require_media_deduplicator();
+    var Template = class {
       constructor(file2, params) {
-        this.contentMap = [];
-        this.mediaFiles = [];
         this.file = file2;
-        const archive = file_helper_1.FileHelper.importArchive(file2, params);
-        this.archive = archive;
+        this.archive = file_helper_1.FileHelper.importArchive(file2, params);
       }
+      /**
+       * Factory: `params.name` decides the role — a named template is a source
+       * template containing importable slides; an unnamed one is the root
+       * (output) template.
+       */
       static import(file2, params, automizer) {
-        let newTemplate;
         if (params.name) {
-          newTemplate = new _Template(file2, params);
-          newTemplate.name = params.name;
-        } else {
-          newTemplate = new _Template(file2, params);
-          newTemplate.automizer = automizer;
-          newTemplate.slides = [];
-          newTemplate.masters = [];
-          newTemplate.counter = [
-            new count_helper_1.CountHelper("slides", newTemplate),
-            new count_helper_1.CountHelper("charts", newTemplate),
-            new count_helper_1.CountHelper("images", newTemplate),
-            new count_helper_1.CountHelper("diagrams", newTemplate),
-            new count_helper_1.CountHelper("masters", newTemplate),
-            new count_helper_1.CountHelper("layouts", newTemplate),
-            new count_helper_1.CountHelper("themes", newTemplate),
-            new count_helper_1.CountHelper("oleObjects", newTemplate)
-          ];
+          return new SourceTemplate(file2, params);
         }
-        return newTemplate;
+        return new OutputTemplate(file2, params, automizer);
       }
-      mapContents(type, key, sourceId, targetId, name) {
-        this.contentMap.push({
-          type,
-          key,
-          sourceId,
-          targetId,
-          name
+      getSlideIdList() {
+        return __awaiter(this, void 0, void 0, function* () {
+          return xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, ppt_paths_1.PptPaths.presentation);
         });
       }
-      getNamedMappedContent(type, name) {
-        return this.contentMap.find((map2) => map2.type === type && map2.name === name);
-      }
-      getMappedContent(type, key, sourceId) {
-        return this.contentMap.find((map2) => map2.type === type && map2.key === key && map2.sourceId === sourceId);
+    };
+    exports.Template = Template;
+    var SourceTemplate = class extends Template {
+      constructor(file2, params) {
+        super(file2, params);
+        this.name = params.name;
       }
       /**
        * Returns the slide numbers of a given template as a sorted array of integers.
@@ -31126,11 +30213,50 @@ var require_template = __commonJS({
       }
       setCreationIds() {
         return __awaiter(this, void 0, void 0, function* () {
-          const archive = yield this.archive;
-          const xmlTemplateHelper = new xml_template_helper_1.XmlTemplateHelper(archive);
+          const xmlTemplateHelper = new xml_template_helper_1.XmlTemplateHelper(this.archive);
           this.creationIds = yield xmlTemplateHelper.getCreationIds();
           return this.creationIds;
         });
+      }
+    };
+    exports.SourceTemplate = SourceTemplate;
+    var OutputTemplate = class extends Template {
+      constructor(file2, params, automizer) {
+        var _a3;
+        super(file2, params);
+        this.slides = [];
+        this.masters = [];
+        this.contentMap = [];
+        this.mediaFiles = [];
+        this.automizer = automizer;
+        this.counter = [
+          new count_helper_1.CountHelper("slides", this),
+          new count_helper_1.CountHelper("charts", this),
+          new count_helper_1.CountHelper("images", this),
+          new count_helper_1.CountHelper("diagrams", this),
+          new count_helper_1.CountHelper("masters", this),
+          new count_helper_1.CountHelper("layouts", this),
+          new count_helper_1.CountHelper("themes", this),
+          new count_helper_1.CountHelper("oleObjects", this)
+        ];
+        this.content = (_a3 = automizer === null || automizer === void 0 ? void 0 : automizer.content) !== null && _a3 !== void 0 ? _a3 : new content_tracker_1.ContentTracker();
+        this.archive.contentTracker = this.content;
+        this.mediaDeduplicator = new media_deduplicator_1.MediaDeduplicator(this.archive);
+      }
+      mapContents(type, key, sourceId, targetId, name) {
+        this.contentMap.push({
+          type,
+          key,
+          sourceId,
+          targetId,
+          name
+        });
+      }
+      getNamedMappedContent(type, name) {
+        return this.contentMap.find((map2) => map2.type === type && map2.name === name);
+      }
+      getMappedContent(type, key, sourceId) {
+        return this.contentMap.find((map2) => map2.type === type && map2.key === key && map2.sourceId === sourceId);
       }
       appendMasterSlide(slideMaster) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -31172,21 +30298,48 @@ var require_template = __commonJS({
           }
         });
       }
+      /**
+       * Remove the slides that came with the root template from the presentation,
+       * keeping the slides added by automizer. Used by `removeExistingSlides`.
+       *
+       * Along with the `p:sldId` entries, the corresponding relationships in
+       * ppt/_rels/presentation.xml.rels are dropped: a slide part that is still
+       * related to the presentation counts as a slide for anything reading the
+       * output (including automizer's own `getInfo()`), even if it is not listed
+       * in `p:sldIdLst` (see #166). The slide parts themselves are removed by
+       * `ModifyPresentationHelper.removeUnusedFiles` if `cleanup` is enabled.
+       */
       truncate() {
         return __awaiter(this, void 0, void 0, function* () {
           if (this.existingSlides > 0) {
             const xml = yield this.getSlideIdList();
             const existingSlides = xml.getElementsByTagName("p:sldId");
+            const removedRelIds = [];
+            const removeCount = Math.min(this.existingSlides, existingSlides.length);
+            for (let i = 0; i < removeCount; i++) {
+              removedRelIds.push(existingSlides[i].getAttribute("r:id"));
+            }
             xml_helper_1.XmlHelper.sliceCollection(existingSlides, this.existingSlides, 0);
-            xml_helper_1.XmlHelper.writeXmlToArchive(yield this.archive, `ppt/presentation.xml`, xml);
+            xml_helper_1.XmlHelper.writeXmlToArchive(this.archive, ppt_paths_1.PptPaths.presentation, xml);
+            yield this.removeSlideRelations(removedRelIds);
+            count_helper_1.CountHelper.decrement("slides", this.counter, removeCount);
           }
         });
       }
-      getSlideIdList() {
+      /**
+       * Remove the given relationship ids from ppt/_rels/presentation.xml.rels.
+       */
+      removeSlideRelations(removedRelIds) {
         return __awaiter(this, void 0, void 0, function* () {
-          const archive = yield this.archive;
-          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, `ppt/presentation.xml`);
-          return xml;
+          if (!removedRelIds.length) {
+            return;
+          }
+          yield xml_helper_1.XmlHelper.removeIf({
+            archive: this.archive,
+            file: ppt_paths_1.PptPaths.presentationRels,
+            tag: "Relationship",
+            clause: (xml, element) => removedRelIds.includes(element.getAttribute("Id"))
+          });
         });
       }
       initializeCounter() {
@@ -31204,17 +30357,23 @@ var require_template = __commonJS({
       }
       runExternalGenerator() {
         return __awaiter(this, void 0, void 0, function* () {
-          this.generator = new generate_pptxgenjs_1.default(this.automizer, this.slides);
+          const requiresGenerator = this.slides.some((slide) => slide.getGeneratedElements().length > 0);
+          if (!requiresGenerator) {
+            return;
+          }
+          const { default: GeneratePptxGenJs } = yield Promise.resolve().then(() => __importStar(require_generate_pptxgenjs()));
+          this.generator = new GeneratePptxGenJs(this.automizer, this.slides);
           yield this.generator.generateSlides();
         });
       }
       cleanupExternalGenerator() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield this.generator.cleanup();
+          var _a3;
+          yield (_a3 = this.generator) === null || _a3 === void 0 ? void 0 : _a3.cleanup();
         });
       }
     };
-    exports.Template = Template;
+    exports.OutputTemplate = OutputTemplate;
   }
 });
 
@@ -31290,15 +30449,25 @@ var require_automizer = __commonJS({
     }) : function(o, v) {
       o["default"] = v;
     });
-    var __importStar = exports && exports.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
+    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o2) {
+          var ar = [];
+          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
+          return ar;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
     var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
         return value instanceof P ? value : new P(function(resolve) {
@@ -31331,34 +30500,53 @@ var require_automizer = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     var slide_1 = require_slide();
+    var types_1 = require_types();
     var template_1 = require_template();
     var general_helper_1 = require_general_helper();
+    var logger_1 = require_logger();
     var master_1 = require_master();
     var path_1 = __importDefault(__require("path"));
     var fs = __importStar(__require("fs"));
     var xml_helper_1 = require_xml_helper();
     var modify_presentation_helper_1 = __importDefault(require_modify_presentation_helper());
     var content_tracker_1 = require_content_tracker();
+    var content_type_map_1 = require_content_type_map();
+    var errors_1 = require_errors2();
     var slugify_1 = __importDefault(require_slugify());
+    var VALID_MEDIA_EXTENSIONS = Object.keys(content_type_map_1.ContentTypeMap);
+    function validateMediaExtension(extension, filename) {
+      if (!VALID_MEDIA_EXTENSIONS.includes(extension.toLowerCase())) {
+        throw new errors_1.AutomizerError(`Unsupported media extension '${extension}' for file '${filename}'. Supported extensions: ${VALID_MEDIA_EXTENSIONS.join(", ")}`);
+      }
+    }
+    function getValidatedExtension(filename) {
+      const extension = path_1.default.extname(filename).replace(".", "");
+      if (!extension) {
+        throw new errors_1.AutomizerError(`Filename must include extension: ${filename}. Example: 'logo.png'`);
+      }
+      validateMediaExtension(extension, filename);
+      return extension;
+    }
     var Automizer2 = class {
       /**
        * Creates an instance of `pptx-automizer`.
        * @param [params]
        */
       constructor(params) {
-        var _a3, _b, _c, _d, _e;
+        var _a3, _b, _c, _d, _f, _g, _h;
         this.templates = [];
         this.modifyPresentation = [];
         this.params = params;
+        this.logger = (_a3 = params.logger) !== null && _a3 !== void 0 ? _a3 : new logger_1.ConsoleLogger((_b = params.verbosity) !== null && _b !== void 0 ? _b : 1);
         this.templateDir = (params === null || params === void 0 ? void 0 : params.templateDir) ? params.templateDir + "/" : "";
         this.templateFallbackDir = (params === null || params === void 0 ? void 0 : params.templateFallbackDir) ? params.templateFallbackDir + "/" : "";
         this.outputDir = (params === null || params === void 0 ? void 0 : params.outputDir) ? params.outputDir + "/" : "";
         this.archiveParams = {
-          mode: ((_a3 = params === null || params === void 0 ? void 0 : params.archiveType) === null || _a3 === void 0 ? void 0 : _a3.mode) || "jszip",
-          baseDir: ((_b = params === null || params === void 0 ? void 0 : params.archiveType) === null || _b === void 0 ? void 0 : _b.baseDir) || __dirname + "/../cache",
-          workDir: ((_c = params === null || params === void 0 ? void 0 : params.archiveType) === null || _c === void 0 ? void 0 : _c.workDir) || "tmp",
-          cleanupWorkDir: (_d = params === null || params === void 0 ? void 0 : params.archiveType) === null || _d === void 0 ? void 0 : _d.cleanupWorkDir,
-          decodeText: (_e = params === null || params === void 0 ? void 0 : params.archiveType) === null || _e === void 0 ? void 0 : _e.decodeText
+          mode: ((_c = params === null || params === void 0 ? void 0 : params.archiveType) === null || _c === void 0 ? void 0 : _c.mode) || "jszip",
+          baseDir: ((_d = params === null || params === void 0 ? void 0 : params.archiveType) === null || _d === void 0 ? void 0 : _d.baseDir) || __dirname + "/../cache",
+          workDir: ((_f = params === null || params === void 0 ? void 0 : params.archiveType) === null || _f === void 0 ? void 0 : _f.workDir) || "tmp",
+          cleanupWorkDir: (_g = params === null || params === void 0 ? void 0 : params.archiveType) === null || _g === void 0 ? void 0 : _g.cleanupWorkDir,
+          decodeText: (_h = params === null || params === void 0 ? void 0 : params.archiveType) === null || _h === void 0 ? void 0 : _h.decodeText
         };
         this.timer = Date.now();
         this.setStatusTracker(params === null || params === void 0 ? void 0 : params.statusTracker);
@@ -31368,7 +30556,7 @@ var require_automizer = __commonJS({
           if (typeof file2 !== "object") {
             file2 = this.getLocation(file2, "template");
           }
-          this.rootTemplate = template_1.Template.import(file2, this.archiveParams, this);
+          this.rootTemplate = new template_1.OutputTemplate(file2, this.archiveParams, this);
         }
         if (params.presTemplates) {
           this.params.presTemplates.forEach((file2, i) => {
@@ -31380,17 +30568,13 @@ var require_automizer = __commonJS({
               name = `${i}.pptx`;
             }
             const archiveParams = Object.assign(Object.assign({}, this.archiveParams), { name });
-            const newTemplate = template_1.Template.import(file2, archiveParams);
-            this.templates.push(newTemplate);
+            this.templates.push(new template_1.SourceTemplate(file2, archiveParams));
           });
-        }
-        if (params.verbosity) {
-          general_helper_1.Logger.verbosity = params.verbosity;
         }
       }
       setStatusTracker(statusTracker) {
         const defaultStatusTracker = (status) => {
-          (0, general_helper_1.log)(status.info + " (" + status.share + "%)", 2);
+          this.logger.info(status.info + " (" + status.share + "%)");
         };
         this.status = {
           current: 0,
@@ -31412,8 +30596,8 @@ var require_automizer = __commonJS({
       
          */
       presentation() {
-        var _a3;
         return __awaiter(this, void 0, void 0, function* () {
+          var _a3;
           if (((_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.useCreationIds) === true) {
             yield this.setCreationIds();
           }
@@ -31462,10 +30646,10 @@ var require_automizer = __commonJS({
         }
         const importParams = Object.assign(Object.assign({}, this.archiveParams), { name });
         const newTemplate = template_1.Template.import(file2, importParams, this);
-        if (!this.isPresTemplate(newTemplate)) {
-          this.rootTemplate = newTemplate;
-        } else {
+        if (newTemplate instanceof template_1.SourceTemplate) {
           this.templates.push(newTemplate);
+        } else {
+          this.rootTemplate = newTemplate;
         }
         return this;
       }
@@ -31478,21 +30662,57 @@ var require_automizer = __commonJS({
       loadMedia(filename, dir, prefix) {
         const files = general_helper_1.GeneralHelper.arrayify(filename);
         if (!this.rootTemplate) {
-          throw "Can't load media, you need to load a root template first";
+          throw new errors_1.AutomizerError("Can't load media, you need to load a root template first");
         }
         files.forEach((file2) => {
           const directory = dir || this.params.mediaDir;
           const filepath = path_1.default.join(directory, file2);
-          const extension = path_1.default.extname(file2).replace(".", "");
+          const extension = getValidatedExtension(file2);
           try {
             fs.accessSync(filepath, fs.constants.F_OK);
-          } catch (e) {
-            throw `Can't load media: ${filepath} does not exist.`;
+          } catch (_e) {
+            throw new errors_1.AutomizerError(`Can't load media: ${filepath} does not exist.`);
           }
           this.rootTemplate.mediaFiles.push({
+            source: "path",
             file: file2,
             directory,
             filepath,
+            extension,
+            prefix
+          });
+        });
+        return this;
+      }
+      /**
+       * Load media files from buffers to output presentation.
+       * @returns Instance of Automizer
+       * @param filename Filename(s) to use (must include extension).
+       * @param buffer Buffer(s) containing the media data.
+       * @param prefix Optional prefix to prepend to filename in archive.
+       */
+      loadMediaBuffer(filename, buffer, prefix) {
+        const files = general_helper_1.GeneralHelper.arrayify(filename);
+        const buffers = general_helper_1.GeneralHelper.arrayify(buffer);
+        if (!this.rootTemplate) {
+          throw new errors_1.AutomizerError("Can't load media, you need to load a root template first");
+        }
+        if (files.length !== buffers.length) {
+          throw new errors_1.AutomizerError(`Mismatched arrays: ${files.length} filename(s) but ${buffers.length} buffer(s)`);
+        }
+        files.forEach((file2, index) => {
+          const buf = buffers[index];
+          if (!Buffer.isBuffer(buf)) {
+            throw new errors_1.AutomizerError(`Invalid buffer for file: ${file2}`);
+          }
+          if (buf.length === 0) {
+            throw new errors_1.AutomizerError(`Empty buffer provided for file: ${file2}`);
+          }
+          const extension = getValidatedExtension(file2);
+          this.rootTemplate.mediaFiles.push({
+            source: "buffer",
+            file: file2,
+            buffer: buf,
             extension,
             prefix
           });
@@ -31507,16 +30727,18 @@ var require_automizer = __commonJS({
        */
       setCreationIds() {
         return __awaiter(this, void 0, void 0, function* () {
-          const templateCreationId = [];
-          for (const template of this.templates) {
-            const creationIds = template.creationIds || (yield template.setCreationIds());
-            template.useCreationIds = this.params.useCreationIds;
-            templateCreationId.push({
-              name: template.name,
-              slides: creationIds
-            });
-          }
-          return templateCreationId;
+          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
+            const templateCreationId = [];
+            for (const template of this.templates) {
+              const creationIds = template.creationIds || (yield template.setCreationIds());
+              template.useCreationIds = this.params.useCreationIds;
+              templateCreationId.push({
+                name: template.name,
+                slides: creationIds
+              });
+            }
+            return templateCreationId;
+          }));
         });
       }
       /**
@@ -31544,14 +30766,6 @@ var require_automizer = __commonJS({
           };
           return info;
         });
-      }
-      /**
-       * Determines whether template is root or default template.
-       * @param template
-       * @returns pres template
-       */
-      isPresTemplate(template) {
-        return "name" in template;
       }
       /**
        * Add a slide from one of the imported templates by slide number or creationId.
@@ -31590,7 +30804,7 @@ var require_automizer = __commonJS({
       addMaster(name, sourceIdentifier, callback) {
         const key = sourceIdentifier + "@" + name;
         if (this.rootTemplate.masters.find((master) => master.key === key)) {
-          console.log("Already imported " + key);
+          this.logger.info("Already imported " + key);
           return this;
         }
         const template = this.getTemplate(name);
@@ -31626,20 +30840,22 @@ var require_automizer = __commonJS({
        */
       write(location) {
         return __awaiter(this, void 0, void 0, function* () {
-          yield this.finalizePresentation();
-          yield this.rootTemplate.archive.output(this.getLocation(location, "output"), this.params);
-          const duration3 = (Date.now() - this.timer) / 600;
-          return {
-            status: "finished",
-            duration: duration3,
-            file: location,
-            filename: path_1.default.basename(location),
-            templates: this.templates.length,
-            slides: this.rootTemplate.count("slides"),
-            charts: this.rootTemplate.count("charts"),
-            images: this.rootTemplate.count("images"),
-            masters: this.rootTemplate.count("masters")
-          };
+          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
+            yield this.finalizePresentation();
+            yield this.rootTemplate.archive.output(this.getLocation(location, "output"), this.params);
+            const duration3 = (Date.now() - this.timer) / 1e3;
+            return {
+              status: "finished",
+              duration: duration3,
+              file: location,
+              filename: path_1.default.basename(location),
+              templates: this.templates.length,
+              slides: this.rootTemplate.count("slides"),
+              charts: this.rootTemplate.count("charts"),
+              images: this.rootTemplate.count("images"),
+              masters: this.rootTemplate.count("masters")
+            };
+          }));
         });
       }
       /**
@@ -31649,11 +30865,13 @@ var require_automizer = __commonJS({
        */
       stream(generatorOptions) {
         return __awaiter(this, void 0, void 0, function* () {
-          yield this.finalizePresentation();
-          if (!this.rootTemplate.archive.stream) {
-            throw "Streaming is not implemented for current archive type";
-          }
-          return this.rootTemplate.archive.stream(this.params, generatorOptions);
+          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
+            yield this.finalizePresentation();
+            if (!this.rootTemplate.archive.stream) {
+              throw new errors_1.OutputError("Streaming is not implemented for current archive type");
+            }
+            return this.rootTemplate.archive.stream(this.params, generatorOptions);
+          }));
         });
       }
       /**
@@ -31662,21 +30880,25 @@ var require_automizer = __commonJS({
        */
       getJSZip() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield this.finalizePresentation();
-          if (!this.rootTemplate.archive.getFinalArchive) {
-            throw "GetFinalArchive is not implemented for current archive type";
-          }
-          return this.rootTemplate.archive.getFinalArchive();
+          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
+            yield this.finalizePresentation();
+            if (!this.rootTemplate.archive.getFinalArchive) {
+              throw new errors_1.OutputError("GetFinalArchive is not implemented for current archive type");
+            }
+            return this.rootTemplate.archive.getFinalArchive();
+          }));
         });
       }
       finalizePresentation() {
         return __awaiter(this, void 0, void 0, function* () {
-          yield this.writeMasterSlides();
-          yield this.writeSlides();
-          yield this.writeMediaFiles();
-          yield this.normalizePresentation();
-          yield this.applyModifyPresentationCallbacks();
-          content_tracker_1.contentTracker.reset();
+          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
+            yield this.writeMasterSlides();
+            yield this.writeSlides();
+            yield this.writeMediaFiles();
+            yield this.normalizePresentation();
+            yield this.applyModifyPresentationCallbacks();
+            this.content.reset();
+          }));
         });
       }
       /**
@@ -31713,7 +30935,7 @@ var require_automizer = __commonJS({
         return __awaiter(this, void 0, void 0, function* () {
           const mediaDir = "ppt/media/";
           for (const file2 of this.rootTemplate.mediaFiles) {
-            const data = fs.readFileSync(file2.filepath);
+            const data = (0, types_1.getMediaBuffer)(file2, fs.readFileSync);
             let archiveFilename = file2.file;
             if (file2.prefix) {
               archiveFilename = file2.prefix + file2.file;
@@ -31771,15 +30993,11 @@ var require_automizer = __commonJS({
             } else if (fs.existsSync(this.templateFallbackDir + location)) {
               return this.templateFallbackDir + location;
             } else {
-              if (typeof location === "string") {
-                (0, general_helper_1.log)('No file matches "' + location + '"', 0);
-              } else {
-                (0, general_helper_1.log)("Invalid filename", 0);
-              }
-              (0, general_helper_1.log)("@templateDir: " + this.templateDir, 2);
-              (0, general_helper_1.log)("@templateFallbackDir: " + this.templateFallbackDir, 2);
+              throw new errors_1.TemplateNotFoundError(location, [
+                this.templateDir,
+                this.templateFallbackDir
+              ]);
             }
-            break;
           case "output":
             return this.outputDir + location;
           default:
@@ -31796,11 +31014,10 @@ var require_modify_helper = __commonJS({
   "node_modules/pptx-automizer/dist/helper/modify-helper.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DxaToCm = exports.CmToDxa = void 0;
+    exports.EmuToPt = exports.PtToEmu = exports.DxaToCm = exports.CmToDxa = void 0;
     var xml_helper_1 = require_xml_helper();
     var ModifyHelper = class {
     };
-    exports.default = ModifyHelper;
     ModifyHelper.setAttribute = (tagName, attribute, value, count) => (element) => {
       const item = element.getElementsByTagName(tagName)[count || 0];
       if (item.setAttribute !== void 0) {
@@ -31813,6 +31030,7 @@ var require_modify_helper = __commonJS({
     ModifyHelper.dumpChart = (element, chart) => {
       xml_helper_1.XmlHelper.dump(chart);
     };
+    exports.default = ModifyHelper;
     var CmToDxa = (cm) => {
       return Math.round(cm * 36e4);
     };
@@ -31821,6 +31039,530 @@ var require_modify_helper = __commonJS({
       return dxa / 36e4;
     };
     exports.DxaToCm = DxaToCm;
+    var PtToEmu = (pt) => {
+      return Math.round(pt * 12700);
+    };
+    exports.PtToEmu = PtToEmu;
+    var EmuToPt = (emu) => {
+      return emu / 12700;
+    };
+    exports.EmuToPt = EmuToPt;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/xml/lnLRTB.js
+var require_lnLRTB = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/xml/lnLRTB.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.lnLRTB = void 0;
+    exports.lnLRTB = `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?> 
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:graphicFrame>
+        <a:graphic>
+          <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+            <a:tbl>
+              <a:tr h="370840">
+                <a:tc>
+                  <a:tcPr>
+                    <a:lnL w="35000" cap="flat" cmpd="sng" algn="ctr">
+                      <a:solidFill>
+                        <a:srgbClr val="aacc00" /> 
+                      </a:solidFill>
+                      <a:prstDash val="solid" /> 
+                      <a:round /> 
+                      <a:headEnd type="none" w="med" len="med" /> 
+                      <a:tailEnd type="none" w="med" len="med" /> 
+                    </a:lnL>
+                    <a:lnR w="35000" cap="flat" cmpd="sng" algn="ctr">
+                      <a:solidFill>
+                        <a:srgbClr val="aacc00" /> 
+                      </a:solidFill>
+                      <a:prstDash val="solid" /> 
+                      <a:round /> 
+                      <a:headEnd type="none" w="med" len="med" /> 
+                      <a:tailEnd type="none" w="med" len="med" /> 
+                    </a:lnR>
+                    <a:lnT w="35000" cap="flat" cmpd="sng" algn="ctr">
+                      <a:solidFill>
+                        <a:srgbClr val="aacc00" /> 
+                      </a:solidFill>
+                      <a:prstDash val="solid" /> 
+                      <a:round /> 
+                      <a:headEnd type="none" w="med" len="med" /> 
+                      <a:tailEnd type="none" w="med" len="med" /> 
+                    </a:lnT>
+                    <a:lnB w="35000" cap="flat" cmpd="sng" algn="ctr">
+                      <a:solidFill>
+                        <a:srgbClr val="aacc00" /> 
+                      </a:solidFill>
+                      <a:prstDash val="solid" /> 
+                      <a:round /> 
+                      <a:headEnd type="none" w="med" len="med" /> 
+                      <a:tailEnd type="none" w="med" len="med" /> 
+                    </a:lnB>
+                  </a:tcPr>
+                </a:tc>
+              </a:tr>
+            </a:tbl>
+          </a:graphicData>
+        </a:graphic>
+      </p:graphicFrame>
+    </p:spTree>
+  </p:cSld>
+</p:sld>
+`;
+  }
+});
+
+// node_modules/pptx-automizer/dist/helper/xml-elements.js
+var require_xml_elements = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/xml-elements.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.C_DLBLS_CHILD_ORDER = exports.A_SPPR_CHILD_ORDER = exports.C_DPT_CHILD_ORDER = exports.C_SER_CHILD_ORDER = void 0;
+    var xml_helper_1 = require_xml_helper();
+    var xmldom_1 = require_lib4();
+    var lnLRTB_1 = require_lnLRTB();
+    var LINE_FILL_TAGS = [
+      "a:noFill",
+      "a:solidFill",
+      "a:gradFill",
+      "a:pattFill"
+    ];
+    var LINE_DASH_TAGS = ["a:prstDash", "a:custDash"];
+    var LINE_AFTER_DASH_TAGS = [
+      "a:round",
+      "a:bevel",
+      "a:miter",
+      "a:headEnd",
+      "a:tailEnd",
+      "a:extLst"
+    ];
+    exports.C_SER_CHILD_ORDER = [
+      "c:idx",
+      "c:order",
+      "c:tx",
+      "c:spPr",
+      "c:invertIfNegative",
+      "c:pictureOptions",
+      "c:explosion",
+      "c:marker",
+      "c:dPt",
+      "c:dLbls",
+      "c:trendline",
+      "c:errBars",
+      "c:cat",
+      "c:val",
+      "c:xVal",
+      "c:yVal",
+      "c:smooth",
+      "c:shape",
+      "c:bubbleSize",
+      "c:bubble3D",
+      "c:extLst"
+    ];
+    exports.C_DPT_CHILD_ORDER = [
+      "c:idx",
+      "c:invertIfNegative",
+      "c:marker",
+      "c:bubble3D",
+      "c:explosion",
+      "c:spPr",
+      "c:pictureOptions",
+      "c:extLst"
+    ];
+    exports.A_SPPR_CHILD_ORDER = [
+      "a:xfrm",
+      "a:custGeom",
+      "a:prstGeom",
+      "a:noFill",
+      "a:solidFill",
+      "a:gradFill",
+      "a:blipFill",
+      "a:pattFill",
+      "a:grpFill",
+      "a:ln",
+      "a:effectLst",
+      "a:effectDag",
+      "a:scene3d",
+      "a:sp3d",
+      "a:extLst"
+    ];
+    exports.C_DLBLS_CHILD_ORDER = [
+      "c:dLbl",
+      "c:delete",
+      "c:numFmt",
+      "c:spPr",
+      "c:txPr",
+      "c:dLblPos",
+      "c:showLegendKey",
+      "c:showVal",
+      "c:showCatName",
+      "c:showSerName",
+      "c:showPercent",
+      "c:showBubbleSize",
+      "c:separator",
+      "c:showLeaderLines",
+      "c:leaderLines",
+      "c:extLst"
+    ];
+    var XmlElements = class {
+      constructor(element, params) {
+        this.element = element;
+        this.document = element.ownerDocument;
+        this.params = params;
+        this.defaultValues = {
+          color: "CCCCCC",
+          size: "1000"
+        };
+      }
+      text() {
+        const r = this.document.createElement("a:r");
+        r.appendChild(this.textRangeProps());
+        r.appendChild(this.textContent());
+        let paragraphProps = this.element.getElementsByTagName("a:pPr").item(0);
+        if (!paragraphProps) {
+          paragraphProps = this.paragraphProps();
+        }
+        xml_helper_1.XmlHelper.insertAfter(r, paragraphProps);
+        return this;
+      }
+      createTextBody() {
+        let txBody = this.element.getElementsByTagName("p:txBody")[0];
+        if (!txBody) {
+          txBody = this.document.createElement("p:txBody");
+          this.element.appendChild(txBody);
+          const bodyPr = this.document.createElement("a:bodyPr");
+          txBody.appendChild(bodyPr);
+          const lstStyle = this.document.createElement("a:lstStyle");
+          txBody.appendChild(lstStyle);
+          this.paragraphTemplate = this.document.createElement("a:p");
+          txBody.appendChild(this.paragraphTemplate);
+          this.runTemplate = this.document.createElement("a:r");
+          const rPr = this.document.createElement("a:rPr");
+          this.runTemplate.appendChild(rPr);
+        } else {
+          let bodyPr = txBody.getElementsByTagName("a:bodyPr")[0];
+          if (!bodyPr) {
+            bodyPr = this.document.createElement("a:bodyPr");
+            txBody.insertBefore(bodyPr, txBody.firstChild);
+          }
+          let lstStyle = txBody.getElementsByTagName("a:lstStyle")[0];
+          if (!lstStyle) {
+            lstStyle = this.document.createElement("a:lstStyle");
+            txBody.insertBefore(lstStyle, bodyPr.nextSibling);
+          }
+          const paragraphs = txBody.getElementsByTagName("a:p");
+          this.paragraphTemplate = paragraphs[0];
+          xml_helper_1.XmlHelper.sliceCollection(paragraphs, 0);
+          const runs = this.paragraphTemplate.getElementsByTagName("a:r");
+          if (runs.length > 0) {
+            this.runTemplate = runs[0];
+          } else {
+            this.runTemplate = this.document.createElement("a:r");
+            const rPr = this.document.createElement("a:rPr");
+            this.runTemplate.appendChild(rPr);
+          }
+        }
+        return txBody;
+      }
+      createBodyProperties(txBody) {
+        const bodyPr = this.document.createElement("a:bodyPr");
+        txBody.appendChild(bodyPr);
+        return bodyPr;
+      }
+      addBulletList(list) {
+        const txBody = this.createTextBody();
+        this.createBodyProperties(txBody);
+        this.processList(txBody, list, 0);
+      }
+      processList(txBody, items, level) {
+        items.forEach((item) => {
+          if (Array.isArray(item)) {
+            this.processList(txBody, item, level + 1);
+          } else {
+            const p = this.createParagraph(level);
+            const r = this.createTextRun(String(item));
+            p.appendChild(r);
+            txBody.appendChild(p);
+          }
+        });
+      }
+      createParagraph(level) {
+        const p = this.paragraphTemplate.cloneNode(true);
+        const pPr = p.getElementsByTagName("a:pPr")[0];
+        if (pPr) {
+          if (level > 0) {
+            pPr.setAttribute("lvl", String(level));
+            pPr.removeAttribute("indent");
+            pPr.removeAttribute("marL");
+          } else {
+            pPr.removeAttribute("lvl");
+          }
+        } else {
+          const newPPr = this.document.createElement("a:pPr");
+          if (level > 0) {
+            newPPr.setAttribute("lvl", String(level));
+          }
+          p.insertBefore(newPPr, p.firstChild);
+        }
+        const runs = p.getElementsByTagName("a:r");
+        xml_helper_1.XmlHelper.sliceCollection(runs, 0);
+        return p;
+      }
+      createTextRun(text) {
+        const r = this.runTemplate.cloneNode(true);
+        const t = r.getElementsByTagName("a:t")[0];
+        if (t) {
+          t.textContent = xml_helper_1.XmlHelper.sanitizeText(text);
+        } else {
+          const newT = this.document.createElement("a:t");
+          newT.textContent = xml_helper_1.XmlHelper.sanitizeText(text);
+          r.appendChild(newT);
+        }
+        return r;
+      }
+      paragraphProps() {
+        const p = this.element.getElementsByTagName("a:p").item(0);
+        p.appendChild(this.document.createElement("a:pPr"));
+        const paragraphRangeProps = this.element.getElementsByTagName("a:pPr").item(0);
+        const endParaRPr = this.element.getElementsByTagName("a:endParaRPr").item(0);
+        xml_helper_1.XmlHelper.moveChild(endParaRPr);
+        return paragraphRangeProps;
+      }
+      textRangeProps() {
+        const rPr = this.document.createElement("a:rPr");
+        const endParaRPr = this.element.getElementsByTagName("a:endParaRPr")[0];
+        rPr.setAttribute("lang", endParaRPr.getAttribute("lang"));
+        rPr.setAttribute("sz", endParaRPr.getAttribute("sz") || this.defaultValues.size);
+        rPr.appendChild(this.line());
+        rPr.appendChild(this.effectLst());
+        rPr.appendChild(this.lineTexture());
+        rPr.appendChild(this.fillTexture());
+        return rPr;
+      }
+      textContent() {
+        const t = this.document.createElement("a:t");
+        t.textContent = " ";
+        return t;
+      }
+      effectLst() {
+        return this.document.createElement("a:effectLst");
+      }
+      lineTexture() {
+        return this.document.createElement("a:uLnTx");
+      }
+      fillTexture() {
+        return this.document.createElement("a:uFillTx");
+      }
+      line() {
+        const ln = this.document.createElement("a:ln");
+        const noFill = this.document.createElement("a:noFill");
+        ln.appendChild(noFill);
+        return ln;
+      }
+      /**
+       * Create an <a:ln> shape outline from this.params.outline
+       */
+      outline() {
+        const ln = this.document.createElement("a:ln");
+        return this.applyOutline(ln);
+      }
+      /**
+       * Apply this.params.outline to an existing (or freshly created) <a:ln>.
+       * Only given properties are touched, the rest is left to the template.
+       * Insertion respects the schema sequence of CT_LineProperties:
+       * fill -> dash -> join -> head/tailEnd -> extLst
+       *
+       * @param ln - The <a:ln> element to update
+       */
+      applyOutline(ln) {
+        var _a3;
+        const outline = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.outline;
+        if (!outline)
+          return ln;
+        if (outline.weight !== void 0) {
+          ln.setAttribute("w", String(Math.round(outline.weight)));
+        }
+        if (outline.color) {
+          this.params.color = outline.color;
+          const solidFill = this.solidFill();
+          const currentFill = xml_helper_1.XmlHelper.getFirstDirectChild(ln, LINE_FILL_TAGS);
+          if (currentFill) {
+            ln.replaceChild(solidFill, currentFill);
+          } else {
+            ln.insertBefore(solidFill, ln.firstChild);
+          }
+        }
+        if (outline.type) {
+          const prstDash = this.prstDash();
+          prstDash.setAttribute("val", outline.type);
+          const currentDash = xml_helper_1.XmlHelper.getFirstDirectChild(ln, LINE_DASH_TAGS);
+          if (currentDash) {
+            ln.replaceChild(prstDash, currentDash);
+          } else {
+            const anchor = xml_helper_1.XmlHelper.getFirstDirectChild(ln, LINE_AFTER_DASH_TAGS);
+            if (anchor) {
+              ln.insertBefore(prstDash, anchor);
+            } else {
+              ln.appendChild(prstDash);
+            }
+          }
+        }
+        return ln;
+      }
+      solidFill() {
+        const solidFill = this.document.createElement("a:solidFill");
+        const colorType = this.colorType();
+        solidFill.appendChild(colorType);
+        return solidFill;
+      }
+      colorType() {
+        var _a3, _b;
+        const tag2 = "a:" + (((_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.color) === null || _b === void 0 ? void 0 : _b.type) || "srgbClr");
+        const colorType = this.document.createElement(tag2);
+        this.colorValue(colorType);
+        return colorType;
+      }
+      colorValue(colorType) {
+        var _a3, _b, _c, _d;
+        colorType.setAttribute("val", ((_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.color) === null || _b === void 0 ? void 0 : _b.value) || this.defaultValues.color);
+        if (((_d = (_c = this.params) === null || _c === void 0 ? void 0 : _c.color) === null || _d === void 0 ? void 0 : _d.alpha) !== void 0) {
+          const alpha = this.document.createElement("a:alpha");
+          const rawAlpha = Number(this.params.color.alpha);
+          let alphaVal;
+          if (rawAlpha > 0 && rawAlpha < 1) {
+            alphaVal = Math.round(rawAlpha * 1e5);
+          } else if (rawAlpha >= 1 && rawAlpha <= 100) {
+            alphaVal = Math.round(rawAlpha * 1e3);
+          } else {
+            alphaVal = Math.round(rawAlpha);
+          }
+          alpha.setAttribute("val", String(alphaVal));
+          colorType.appendChild(alpha);
+        }
+      }
+      /**
+       * A minimal <c:dPt> shell: `c:idx`, `c:invertIfNegative` and `c:bubble3D`
+       * (which PowerPoint always writes) and nothing else. A data point carries
+       * no formatting the caller did not ask for — modifications create `c:spPr`
+       * etc. on demand. `c:invertIfNegative` must be written explicitly: OOXML
+       * defaults the absent element to *true*, which makes PowerPoint invert the
+       * fill of negative-value bars (white with a border) — silently overriding
+       * the very fill the caller styled the point for. LibreOffice ignores the
+       * flag, so pixel-based golden decks cannot catch this.
+       */
+      buildDataPoint() {
+        const dPt = this.document.createElement("c:dPt");
+        dPt.appendChild(this.idx());
+        const invertIfNegative = this.document.createElement("c:invertIfNegative");
+        invertIfNegative.setAttribute("val", "0");
+        dPt.appendChild(invertIfNegative);
+        const bubble3D = this.document.createElement("c:bubble3D");
+        bubble3D.setAttribute("val", "0");
+        dPt.appendChild(bubble3D);
+        return dPt;
+      }
+      dataPoint() {
+        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, this.buildDataPoint(), exports.C_SER_CHILD_ORDER);
+        return this;
+      }
+      /**
+       * An empty <c:spPr> shell in schema position: all children of
+       * CT_ShapeProperties are optional, and an absent property inherits from the
+       * series/theme defaults. Fills, lines etc. are added by the modifications
+       * that asked for them — the former grey solidFill + <a:ln><a:noFill/>
+       * default erased the segments of line charts.
+       */
+      shapeProperties() {
+        const spPr = this.document.createElement("c:spPr");
+        const parentTag = this.element.nodeName;
+        const order = parentTag === "c:dPt" ? exports.C_DPT_CHILD_ORDER : exports.C_SER_CHILD_ORDER;
+        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, spPr, order);
+      }
+      /**
+       * A bare <a:ln> in schema position — no fabricated <a:noFill>. Border
+       * modifications fill it with the properties the caller asked for.
+       */
+      plainLine() {
+        const ln = this.document.createElement("a:ln");
+        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, ln, exports.A_SPPR_CHILD_ORDER);
+      }
+      idx() {
+        const idx = this.document.createElement("c:idx");
+        idx.setAttribute("val", String(0));
+        return idx;
+      }
+      cellBorder(tag2) {
+        const border = this.document.createElement(tag2);
+        border.appendChild(this.solidFill());
+        border.appendChild(this.prstDash());
+        border.appendChild(this.round());
+        border.appendChild(this.lineEnd("headEnd"));
+        border.appendChild(this.lineEnd("tailEnd"));
+        return this;
+      }
+      prstDash() {
+        const prstDash = this.document.createElement("a:prstDash");
+        prstDash.setAttribute("val", "solid");
+        return prstDash;
+      }
+      round() {
+        const round = this.document.createElement("a:round");
+        return round;
+      }
+      lineEnd(type) {
+        const lineEnd = this.document.createElement(type);
+        lineEnd.setAttribute("type", "none");
+        lineEnd.setAttribute("w", "med");
+        lineEnd.setAttribute("len", "med");
+        return lineEnd;
+      }
+      /**
+       * An empty <c:dLbls>: all children of CT_DLbls are optional, and every
+       * label property (visibility included) is inherited from the chart's
+       * defaults. No fabricated formatting, no forced `showVal`.
+       */
+      dataPointLabels() {
+        const dLbls = this.document.createElement("c:dLbls");
+        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, dLbls, exports.C_SER_CHILD_ORDER);
+      }
+      /**
+       * A minimal <c:dLbl> point override: `c:idx` plus an empty `c:txPr`
+       * scaffold so that text styling modifications have a target — without
+       * opinionated defaults (no size, no fill, no `showVal`).
+       */
+      buildDataPointLabel() {
+        const dLbl = this.document.createElement("c:dLbl");
+        dLbl.appendChild(this.idx());
+        const txPr = this.document.createElement("c:txPr");
+        txPr.appendChild(this.document.createElement("a:bodyPr"));
+        txPr.appendChild(this.document.createElement("a:lstStyle"));
+        const p = this.document.createElement("a:p");
+        const pPr = this.document.createElement("a:pPr");
+        pPr.appendChild(this.document.createElement("a:defRPr"));
+        p.appendChild(pPr);
+        const endParaRPr = this.document.createElement("a:endParaRPr");
+        endParaRPr.setAttribute("lang", "en-US");
+        p.appendChild(endParaRPr);
+        txPr.appendChild(p);
+        dLbl.appendChild(txPr);
+        return dLbl;
+      }
+      dataPointLabel() {
+        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, this.buildDataPointLabel(), exports.C_DLBLS_CHILD_ORDER);
+      }
+      tableCellBorder(tag2) {
+        const doc = new xmldom_1.DOMParser().parseFromString(lnLRTB_1.lnLRTB, "application/xml");
+        const ele = doc.getElementsByTagName(tag2)[0];
+        const firstChild = this.element.firstChild;
+        this.element.insertBefore(ele.cloneNode(true), firstChild);
+      }
+    };
+    exports.default = XmlElements;
   }
 });
 
@@ -33014,30 +32756,6 @@ var require_call_bind = __commonJS({
   }
 });
 
-// node_modules/es-abstract/helpers/callBind.js
-var require_callBind = __commonJS({
-  "node_modules/es-abstract/helpers/callBind.js"(exports, module) {
-    "use strict";
-    module.exports = require_call_bind();
-  }
-});
-
-// node_modules/es-abstract/2019/ToString.js
-var require_ToString = __commonJS({
-  "node_modules/es-abstract/2019/ToString.js"(exports, module) {
-    "use strict";
-    var GetIntrinsic = require_get_intrinsic();
-    var $String = GetIntrinsic("%String%");
-    var $TypeError = require_type();
-    module.exports = function ToString(argument) {
-      if (typeof argument === "symbol") {
-        throw new $TypeError("Cannot convert a Symbol value to a string");
-      }
-      return $String(argument);
-    };
-  }
-});
-
 // node_modules/call-bound/index.js
 var require_call_bound = __commonJS({
   "node_modules/call-bound/index.js"(exports, module) {
@@ -33061,11 +32779,693 @@ var require_call_bound = __commonJS({
   }
 });
 
-// node_modules/es-abstract/helpers/callBound.js
-var require_callBound = __commonJS({
-  "node_modules/es-abstract/helpers/callBound.js"(exports, module) {
+// node_modules/math-intrinsics/isFinite.js
+var require_isFinite = __commonJS({
+  "node_modules/math-intrinsics/isFinite.js"(exports, module) {
     "use strict";
-    module.exports = require_call_bound();
+    var $isNaN = require_isNaN();
+    module.exports = function isFinite2(x) {
+      return (typeof x === "number" || typeof x === "bigint") && !$isNaN(x) && x !== Infinity && x !== -Infinity;
+    };
+  }
+});
+
+// node_modules/math-intrinsics/isInteger.js
+var require_isInteger = __commonJS({
+  "node_modules/math-intrinsics/isInteger.js"(exports, module) {
+    "use strict";
+    var $abs = require_abs();
+    var $floor = require_floor();
+    var $isNaN = require_isNaN();
+    var $isFinite = require_isFinite();
+    module.exports = function isInteger(argument) {
+      if (typeof argument !== "number" || $isNaN(argument) || !$isFinite(argument)) {
+        return false;
+      }
+      var absValue = $abs(argument);
+      return $floor(absValue) === absValue;
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/Number/toString.js
+var require_toString = __commonJS({
+  "node_modules/es-abstract/2024/Number/toString.js"(exports, module) {
+    "use strict";
+    var $TypeError = require_type();
+    var callBound = require_call_bound();
+    var isInteger = require_isInteger();
+    var $numberToString = callBound("Number.prototype.toString");
+    module.exports = function NumberToString(x, radix) {
+      if (typeof x !== "number") {
+        throw new $TypeError("Assertion failed: `x` must be a Number");
+      }
+      if (!isInteger(radix) || radix < 2 || radix > 36) {
+        throw new $TypeError("Assertion failed: `radix` must be an integer >= 2 and <= 36");
+      }
+      return $numberToString(x, radix);
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/StringIndexOf.js
+var require_StringIndexOf = __commonJS({
+  "node_modules/es-abstract/2024/StringIndexOf.js"(exports, module) {
+    "use strict";
+    var callBound = require_call_bound();
+    var $TypeError = require_type();
+    var isInteger = require_isInteger();
+    var $slice = callBound("String.prototype.slice");
+    module.exports = function StringIndexOf(string4, searchValue, fromIndex) {
+      if (typeof string4 !== "string") {
+        throw new $TypeError("Assertion failed: `string` must be a String");
+      }
+      if (typeof searchValue !== "string") {
+        throw new $TypeError("Assertion failed: `searchValue` must be a String");
+      }
+      if (!isInteger(fromIndex) || fromIndex < 0) {
+        throw new $TypeError("Assertion failed: `fromIndex` must be a non-negative integer");
+      }
+      var len = string4.length;
+      if (searchValue === "" && fromIndex <= len) {
+        return fromIndex;
+      }
+      var searchLen = searchValue.length;
+      for (var i = fromIndex; i <= len - searchLen; i += 1) {
+        var candidate = $slice(string4, i, i + searchLen);
+        if (candidate === searchValue) {
+          return i;
+        }
+      }
+      return -1;
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/StringPad.js
+var require_StringPad = __commonJS({
+  "node_modules/es-abstract/2024/StringPad.js"(exports, module) {
+    "use strict";
+    var $TypeError = require_type();
+    var callBound = require_call_bound();
+    var isInteger = require_isInteger();
+    var $strSlice = callBound("String.prototype.slice");
+    module.exports = function StringPad(S, maxLength, fillString, placement) {
+      if (typeof S !== "string") {
+        throw new $TypeError("Assertion failed: `S` must be a String");
+      }
+      if (!isInteger(maxLength) || maxLength < 0) {
+        throw new $TypeError("Assertion failed: `maxLength` must be a non-negative integer");
+      }
+      if (typeof fillString !== "string") {
+        throw new $TypeError("Assertion failed: `fillString` must be a String");
+      }
+      if (placement !== "start" && placement !== "end" && placement !== "START" && placement !== "END") {
+        throw new $TypeError("Assertion failed: `placement` must be ~START~ or ~END~");
+      }
+      var stringLength = S.length;
+      if (maxLength <= stringLength) {
+        return S;
+      }
+      if (fillString === "") {
+        return S;
+      }
+      var fillLen = maxLength - stringLength;
+      var truncatedStringFiller = "";
+      while (truncatedStringFiller.length < fillLen) {
+        truncatedStringFiller += fillString;
+      }
+      truncatedStringFiller = $strSlice(truncatedStringFiller, 0, fillLen);
+      if (placement === "start" || placement === "START") {
+        return truncatedStringFiller + S;
+      }
+      return S + truncatedStringFiller;
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/UnicodeEscape.js
+var require_UnicodeEscape = __commonJS({
+  "node_modules/es-abstract/2024/UnicodeEscape.js"(exports, module) {
+    "use strict";
+    var $TypeError = require_type();
+    var callBound = require_call_bound();
+    var $charCodeAt = callBound("String.prototype.charCodeAt");
+    var $numberToString = callBound("Number.prototype.toString");
+    var $toLowerCase = callBound("String.prototype.toLowerCase");
+    var StringPad = require_StringPad();
+    module.exports = function UnicodeEscape(C) {
+      if (typeof C !== "string" || C.length !== 1) {
+        throw new $TypeError("Assertion failed: `C` must be a single code unit");
+      }
+      var n = $charCodeAt(C, 0);
+      if (n > 65535) {
+        throw new $TypeError("`Assertion failed: numeric value of `C` must be <= 0xFFFF");
+      }
+      return "\\u" + StringPad($toLowerCase($numberToString(n, 16)), 4, "0", "start");
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/floor.js
+var require_floor2 = __commonJS({
+  "node_modules/es-abstract/2024/floor.js"(exports, module) {
+    "use strict";
+    var $floor = require_floor();
+    module.exports = function floor(x) {
+      if (typeof x === "bigint") {
+        return x;
+      }
+      return $floor(x);
+    };
+  }
+});
+
+// node_modules/math-intrinsics/mod.js
+var require_mod = __commonJS({
+  "node_modules/math-intrinsics/mod.js"(exports, module) {
+    "use strict";
+    var $floor = require_floor();
+    module.exports = function mod(number4, modulo) {
+      var remain = number4 % modulo;
+      return $floor(remain >= 0 ? remain : remain + modulo);
+    };
+  }
+});
+
+// node_modules/es-abstract/helpers/mod.js
+var require_mod2 = __commonJS({
+  "node_modules/es-abstract/helpers/mod.js"(exports, module) {
+    "use strict";
+    module.exports = require_mod();
+  }
+});
+
+// node_modules/es-abstract/2024/modulo.js
+var require_modulo = __commonJS({
+  "node_modules/es-abstract/2024/modulo.js"(exports, module) {
+    "use strict";
+    var mod = require_mod2();
+    module.exports = function modulo(x, y) {
+      return mod(x, y);
+    };
+  }
+});
+
+// node_modules/es-abstract/helpers/isCodePoint.js
+var require_isCodePoint = __commonJS({
+  "node_modules/es-abstract/helpers/isCodePoint.js"(exports, module) {
+    "use strict";
+    module.exports = function isCodePoint(cp) {
+      return typeof cp === "number" && cp >= 0 && cp <= 1114111 && (cp | 0) === cp;
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/UTF16EncodeCodePoint.js
+var require_UTF16EncodeCodePoint = __commonJS({
+  "node_modules/es-abstract/2024/UTF16EncodeCodePoint.js"(exports, module) {
+    "use strict";
+    var GetIntrinsic = require_get_intrinsic();
+    var $TypeError = require_type();
+    var $fromCharCode = GetIntrinsic("%String.fromCharCode%");
+    var floor = require_floor2();
+    var modulo = require_modulo();
+    var isCodePoint = require_isCodePoint();
+    module.exports = function UTF16EncodeCodePoint(cp) {
+      if (!isCodePoint(cp)) {
+        throw new $TypeError("Assertion failed: `cp` must be >= 0 and <= 0x10FFFF");
+      }
+      if (cp <= 65535) {
+        return $fromCharCode(cp);
+      }
+      var cu1 = $fromCharCode(floor((cp - 65536) / 1024) + 55296);
+      var cu2 = $fromCharCode(modulo(cp - 65536, 1024) + 56320);
+      return cu1 + cu2;
+    };
+  }
+});
+
+// node_modules/es-abstract/helpers/isLeadingSurrogate.js
+var require_isLeadingSurrogate = __commonJS({
+  "node_modules/es-abstract/helpers/isLeadingSurrogate.js"(exports, module) {
+    "use strict";
+    module.exports = function isLeadingSurrogate(charCode) {
+      return typeof charCode === "number" && charCode >= 55296 && charCode <= 56319;
+    };
+  }
+});
+
+// node_modules/es-abstract/helpers/isTrailingSurrogate.js
+var require_isTrailingSurrogate = __commonJS({
+  "node_modules/es-abstract/helpers/isTrailingSurrogate.js"(exports, module) {
+    "use strict";
+    module.exports = function isTrailingSurrogate(charCode) {
+      return typeof charCode === "number" && charCode >= 56320 && charCode <= 57343;
+    };
+  }
+});
+
+// node_modules/is-callable/index.js
+var require_is_callable = __commonJS({
+  "node_modules/is-callable/index.js"(exports, module) {
+    "use strict";
+    var fnToStr = Function.prototype.toString;
+    var reflectApply = typeof Reflect === "object" && Reflect !== null && Reflect.apply;
+    var badArrayLike;
+    var isCallableMarker;
+    if (typeof reflectApply === "function" && typeof Object.defineProperty === "function") {
+      try {
+        badArrayLike = Object.defineProperty({}, "length", {
+          get: function() {
+            throw isCallableMarker;
+          }
+        });
+        isCallableMarker = {};
+        reflectApply(function() {
+          throw 42;
+        }, null, badArrayLike);
+      } catch (_) {
+        if (_ !== isCallableMarker) {
+          reflectApply = null;
+        }
+      }
+    } else {
+      reflectApply = null;
+    }
+    var constructorRegex = /^\s*class\b/;
+    var isES6ClassFn = function isES6ClassFunction(value) {
+      try {
+        var fnStr = fnToStr.call(value);
+        return constructorRegex.test(fnStr);
+      } catch (e) {
+        return false;
+      }
+    };
+    var tryFunctionObject = function tryFunctionToStr(value) {
+      try {
+        if (isES6ClassFn(value)) {
+          return false;
+        }
+        fnToStr.call(value);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
+    var toStr = Object.prototype.toString;
+    var objectClass = "[object Object]";
+    var fnClass = "[object Function]";
+    var genClass = "[object GeneratorFunction]";
+    var ddaClass = "[object HTMLAllCollection]";
+    var ddaClass2 = "[object HTML document.all class]";
+    var ddaClass3 = "[object HTMLCollection]";
+    var hasToStringTag = typeof Symbol === "function" && !!Symbol.toStringTag;
+    var isIE68 = !(0 in [,]);
+    var isDDA = function isDocumentDotAll() {
+      return false;
+    };
+    if (typeof document === "object") {
+      all = document.all;
+      if (toStr.call(all) === toStr.call(document.all)) {
+        isDDA = function isDocumentDotAll(value) {
+          if ((isIE68 || !value) && (typeof value === "undefined" || typeof value === "object")) {
+            try {
+              var str = toStr.call(value);
+              return (str === ddaClass || str === ddaClass2 || str === ddaClass3 || str === objectClass) && value("") == null;
+            } catch (e) {
+            }
+          }
+          return false;
+        };
+      }
+    }
+    var all;
+    module.exports = reflectApply ? function isCallable(value) {
+      if (isDDA(value)) {
+        return true;
+      }
+      if (!value) {
+        return false;
+      }
+      if (typeof value !== "function" && typeof value !== "object") {
+        return false;
+      }
+      try {
+        reflectApply(value, null, badArrayLike);
+      } catch (e) {
+        if (e !== isCallableMarker) {
+          return false;
+        }
+      }
+      return !isES6ClassFn(value) && tryFunctionObject(value);
+    } : function isCallable(value) {
+      if (isDDA(value)) {
+        return true;
+      }
+      if (!value) {
+        return false;
+      }
+      if (typeof value !== "function" && typeof value !== "object") {
+        return false;
+      }
+      if (hasToStringTag) {
+        return tryFunctionObject(value);
+      }
+      if (isES6ClassFn(value)) {
+        return false;
+      }
+      var strClass = toStr.call(value);
+      if (strClass !== fnClass && strClass !== genClass && !/^\[object HTML/.test(strClass)) {
+        return false;
+      }
+      return tryFunctionObject(value);
+    };
+  }
+});
+
+// node_modules/for-each/index.js
+var require_for_each = __commonJS({
+  "node_modules/for-each/index.js"(exports, module) {
+    "use strict";
+    var isCallable = require_is_callable();
+    var toStr = Object.prototype.toString;
+    var hasOwnProperty = Object.prototype.hasOwnProperty;
+    var forEachArray = function forEachArray2(array2, iterator, receiver) {
+      for (var i = 0, len = array2.length; i < len; i++) {
+        if (hasOwnProperty.call(array2, i)) {
+          if (receiver == null) {
+            iterator(array2[i], i, array2);
+          } else {
+            iterator.call(receiver, array2[i], i, array2);
+          }
+        }
+      }
+    };
+    var forEachString = function forEachString2(string4, iterator, receiver) {
+      for (var i = 0, len = string4.length; i < len; i++) {
+        if (receiver == null) {
+          iterator(string4.charAt(i), i, string4);
+        } else {
+          iterator.call(receiver, string4.charAt(i), i, string4);
+        }
+      }
+    };
+    var forEachObject = function forEachObject2(object2, iterator, receiver) {
+      for (var k in object2) {
+        if (hasOwnProperty.call(object2, k)) {
+          if (receiver == null) {
+            iterator(object2[k], k, object2);
+          } else {
+            iterator.call(receiver, object2[k], k, object2);
+          }
+        }
+      }
+    };
+    function isArray(x) {
+      return toStr.call(x) === "[object Array]";
+    }
+    module.exports = function forEach(list, iterator, thisArg) {
+      if (!isCallable(iterator)) {
+        throw new TypeError("iterator must be a function");
+      }
+      var receiver;
+      if (arguments.length >= 3) {
+        receiver = thisArg;
+      }
+      if (isArray(list)) {
+        forEachArray(list, iterator, receiver);
+      } else if (typeof list === "string") {
+        forEachString(list, iterator, receiver);
+      } else {
+        forEachObject(list, iterator, receiver);
+      }
+    };
+  }
+});
+
+// node_modules/has-tostringtag/shams.js
+var require_shams2 = __commonJS({
+  "node_modules/has-tostringtag/shams.js"(exports, module) {
+    "use strict";
+    var hasSymbols = require_shams();
+    module.exports = function hasToStringTagShams() {
+      return hasSymbols() && !!Symbol.toStringTag;
+    };
+  }
+});
+
+// node_modules/is-regex/index.js
+var require_is_regex = __commonJS({
+  "node_modules/is-regex/index.js"(exports, module) {
+    "use strict";
+    var callBound = require_call_bound();
+    var hasToStringTag = require_shams2()();
+    var hasOwn = require_hasown();
+    var gOPD = require_gopd();
+    var fn;
+    if (hasToStringTag) {
+      $exec = callBound("RegExp.prototype.exec");
+      isRegexMarker = {};
+      throwRegexMarker = function() {
+        throw isRegexMarker;
+      };
+      badStringifier = {
+        toString: throwRegexMarker,
+        valueOf: throwRegexMarker
+      };
+      if (typeof Symbol.toPrimitive === "symbol") {
+        badStringifier[Symbol.toPrimitive] = throwRegexMarker;
+      }
+      fn = function isRegex(value) {
+        if (!value || typeof value !== "object") {
+          return false;
+        }
+        var descriptor = (
+          /** @type {NonNullable<typeof gOPD>} */
+          gOPD(
+            /** @type {{ lastIndex?: unknown }} */
+            value,
+            "lastIndex"
+          )
+        );
+        var hasLastIndexDataProperty = descriptor && hasOwn(descriptor, "value");
+        if (!hasLastIndexDataProperty) {
+          return false;
+        }
+        try {
+          $exec(
+            value,
+            /** @type {string} */
+            /** @type {unknown} */
+            badStringifier
+          );
+        } catch (e) {
+          return e === isRegexMarker;
+        }
+      };
+    } else {
+      $toString = callBound("Object.prototype.toString");
+      regexClass = "[object RegExp]";
+      fn = function isRegex(value) {
+        if (!value || typeof value !== "object" && typeof value !== "function") {
+          return false;
+        }
+        return $toString(value) === regexClass;
+      };
+    }
+    var $exec;
+    var isRegexMarker;
+    var throwRegexMarker;
+    var badStringifier;
+    var $toString;
+    var regexClass;
+    module.exports = fn;
+  }
+});
+
+// node_modules/safe-regex-test/index.js
+var require_safe_regex_test = __commonJS({
+  "node_modules/safe-regex-test/index.js"(exports, module) {
+    "use strict";
+    var callBound = require_call_bound();
+    var isRegex = require_is_regex();
+    var $exec = callBound("RegExp.prototype.exec");
+    var $TypeError = require_type();
+    module.exports = function regexTester(regex) {
+      if (!isRegex(regex)) {
+        throw new $TypeError("`regex` must be a RegExp");
+      }
+      return function test(s) {
+        return $exec(regex, s) !== null;
+      };
+    };
+  }
+});
+
+// node_modules/regexp.escape/aos/EncodeForRegExpEscape.js
+var require_EncodeForRegExpEscape = __commonJS({
+  "node_modules/regexp.escape/aos/EncodeForRegExpEscape.js"(exports, module) {
+    "use strict";
+    var NumberToString = require_toString();
+    var StringIndexOf = require_StringIndexOf();
+    var StringPad = require_StringPad();
+    var UnicodeEscape = require_UnicodeEscape();
+    var UTF16EncodeCodePoint = require_UTF16EncodeCodePoint();
+    var isLeadingSurrogate = require_isLeadingSurrogate();
+    var isTrailingSurrogate = require_isTrailingSurrogate();
+    var $TypeError = require_type();
+    var isCodePoint = require_isCodePoint();
+    var forEach = require_for_each();
+    var regexTester = require_safe_regex_test();
+    var isWhiteSpace = regexTester(/^\s$/);
+    var isLineTerminator = regexTester(/^[\n\r\u2028\u2029]$/);
+    var syntaxCharacter = "^$\\.*+?()[]{}|";
+    var otherPunctuators = ",-=<>#&!%:;@~'`\"";
+    var table64 = {
+      "	": "t",
+      "\n": "n",
+      "\v": "v",
+      "\f": "f",
+      "\r": "r",
+      __proto__: null
+    };
+    module.exports = function EncodeForRegExpEscape(c) {
+      if (!isCodePoint(c)) {
+        throw new $TypeError("Assertion failed: `c` must be a valid Unicode code point");
+      }
+      var encoded = UTF16EncodeCodePoint(c);
+      if (StringIndexOf(syntaxCharacter, encoded, 0) > -1 || encoded === "/") {
+        return "\\" + encoded;
+      } else if (encoded in table64) {
+        return "\\" + table64[encoded];
+      }
+      if (StringIndexOf(otherPunctuators, encoded, 0) > -1 || isWhiteSpace(encoded) || isLineTerminator(encoded) || isLeadingSurrogate(c) || isTrailingSurrogate(c)) {
+        if (c < 255) {
+          var hex3 = NumberToString(c, 16);
+          return "\\x" + StringPad(hex3, 2, "0", "START");
+        }
+        var escaped = "";
+        var codeUnits = encoded;
+        forEach(codeUnits, function(cu) {
+          escaped += UnicodeEscape(cu);
+        });
+        return escaped;
+      }
+      return encoded;
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/UTF16SurrogatePairToCodePoint.js
+var require_UTF16SurrogatePairToCodePoint = __commonJS({
+  "node_modules/es-abstract/2024/UTF16SurrogatePairToCodePoint.js"(exports, module) {
+    "use strict";
+    var GetIntrinsic = require_get_intrinsic();
+    var $TypeError = require_type();
+    var $fromCharCode = GetIntrinsic("%String.fromCharCode%");
+    var isLeadingSurrogate = require_isLeadingSurrogate();
+    var isTrailingSurrogate = require_isTrailingSurrogate();
+    module.exports = function UTF16SurrogatePairToCodePoint(lead, trail) {
+      if (!isLeadingSurrogate(lead) || !isTrailingSurrogate(trail)) {
+        throw new $TypeError("Assertion failed: `lead` must be a leading surrogate char code, and `trail` must be a trailing surrogate char code");
+      }
+      return $fromCharCode(lead) + $fromCharCode(trail);
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/CodePointAt.js
+var require_CodePointAt = __commonJS({
+  "node_modules/es-abstract/2024/CodePointAt.js"(exports, module) {
+    "use strict";
+    var $TypeError = require_type();
+    var callBound = require_call_bound();
+    var isLeadingSurrogate = require_isLeadingSurrogate();
+    var isTrailingSurrogate = require_isTrailingSurrogate();
+    var UTF16SurrogatePairToCodePoint = require_UTF16SurrogatePairToCodePoint();
+    var $charAt = callBound("String.prototype.charAt");
+    var $charCodeAt = callBound("String.prototype.charCodeAt");
+    module.exports = function CodePointAt(string4, position) {
+      if (typeof string4 !== "string") {
+        throw new $TypeError("Assertion failed: `string` must be a String");
+      }
+      var size = string4.length;
+      if (position < 0 || position >= size) {
+        throw new $TypeError("Assertion failed: `position` must be >= 0, and < the length of `string`");
+      }
+      var first = $charCodeAt(string4, position);
+      var cp = $charAt(string4, position);
+      var firstIsLeading = isLeadingSurrogate(first);
+      var firstIsTrailing = isTrailingSurrogate(first);
+      if (!firstIsLeading && !firstIsTrailing) {
+        return {
+          "[[CodePoint]]": cp,
+          "[[CodeUnitCount]]": 1,
+          "[[IsUnpairedSurrogate]]": false
+        };
+      }
+      if (firstIsTrailing || position + 1 === size) {
+        return {
+          "[[CodePoint]]": cp,
+          "[[CodeUnitCount]]": 1,
+          "[[IsUnpairedSurrogate]]": true
+        };
+      }
+      var second = $charCodeAt(string4, position + 1);
+      if (!isTrailingSurrogate(second)) {
+        return {
+          "[[CodePoint]]": cp,
+          "[[CodeUnitCount]]": 1,
+          "[[IsUnpairedSurrogate]]": true
+        };
+      }
+      return {
+        "[[CodePoint]]": UTF16SurrogatePairToCodePoint(first, second),
+        "[[CodeUnitCount]]": 2,
+        "[[IsUnpairedSurrogate]]": false
+      };
+    };
+  }
+});
+
+// node_modules/es-abstract/2024/StringToCodePoints.js
+var require_StringToCodePoints = __commonJS({
+  "node_modules/es-abstract/2024/StringToCodePoints.js"(exports, module) {
+    "use strict";
+    var $TypeError = require_type();
+    var CodePointAt = require_CodePointAt();
+    module.exports = function StringToCodePoints(string4) {
+      if (typeof string4 !== "string") {
+        throw new $TypeError("Assertion failed: `string` must be a String");
+      }
+      var codePoints = [];
+      var size = string4.length;
+      var position = 0;
+      while (position < size) {
+        var cp = CodePointAt(string4, position);
+        codePoints[codePoints.length] = cp["[[CodePoint]]"];
+        position += cp["[[CodeUnitCount]]"];
+      }
+      return codePoints;
+    };
+  }
+});
+
+// node_modules/call-bind/callBound.js
+var require_callBound = __commonJS({
+  "node_modules/call-bind/callBound.js"(exports, module) {
+    "use strict";
+    var GetIntrinsic = require_get_intrinsic();
+    var callBind = require_call_bind();
+    var $indexOf = callBind(GetIntrinsic("String.prototype.indexOf"));
+    module.exports = function callBoundIntrinsic(name, allowMissing) {
+      var intrinsic = GetIntrinsic(name, !!allowMissing);
+      if (typeof intrinsic === "function" && $indexOf(name, ".prototype.") > -1) {
+        return callBind(intrinsic);
+      }
+      return intrinsic;
+    };
   }
 });
 
@@ -33073,12 +33473,41 @@ var require_callBound = __commonJS({
 var require_implementation3 = __commonJS({
   "node_modules/regexp.escape/implementation.js"(exports, module) {
     "use strict";
-    var ToString = require_ToString();
+    var EncodeForRegExpEscape = require_EncodeForRegExpEscape();
+    var NumberToString = require_toString();
+    var StringToCodePoints = require_StringToCodePoints();
+    var regexTester = require_safe_regex_test();
+    var forEach = require_for_each();
+    var $TypeError = require_type();
+    var isDecimalDigitOrASCIILetter = regexTester(/^[\da-zA-Z]$/);
     var callBound = require_callBound();
-    var $replace = callBound("String.prototype.replace");
-    var syntaxChars = /[\^$\\.*+?()[\]{}|]/g;
+    var $charCodeAt = callBound("String.prototype.charCodeAt");
+    var codePointStringToNum = function codePointStringToNumber(c) {
+      var first = $charCodeAt(c, 0);
+      if (first < 55296 || first > 56319 || c.length === 1) {
+        return first;
+      }
+      var second = $charCodeAt(c, 1);
+      if (second < 56320 || second > 57343) {
+        return first;
+      }
+      return (first - 55296) * 1024 + (second - 56320) + 65536;
+    };
     module.exports = function escape(S) {
-      return $replace(ToString(S), syntaxChars, "\\$&");
+      if (typeof S !== "string") {
+        throw new $TypeError("`S` must be a String");
+      }
+      var escaped = "";
+      var cpList = StringToCodePoints(S);
+      forEach(cpList, function(c) {
+        if (escaped === "" && isDecimalDigitOrASCIILetter(c)) {
+          var hex3 = NumberToString(codePointStringToNum(c), 16);
+          escaped += "\\x" + hex3;
+        } else {
+          escaped += EncodeForRegExpEscape(codePointStringToNum(c));
+        }
+      });
+      return escaped;
     };
   }
 });
@@ -33114,7 +33543,7 @@ var require_regexp = __commonJS({
   "node_modules/regexp.escape/index.js"(exports, module) {
     "use strict";
     var define2 = require_define_properties();
-    var callBind = require_callBind();
+    var callBind = require_call_bind();
     var implementation = require_implementation3();
     var getPolyfill = require_polyfill();
     var shim = require_shim();
@@ -33130,382 +33559,194 @@ var require_regexp = __commonJS({
   }
 });
 
-// node_modules/pptx-automizer/dist/helper/xml/dLbl.js
-var require_dLbl = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml/dLbl.js"(exports) {
+// node_modules/pptx-automizer/dist/helper/css-style-parser.js
+var require_css_style_parser = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/css-style-parser.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.dLblXml = void 0;
-    exports.dLblXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:c16r2="http://schemas.microsoft.com/office/drawing/2015/06/chart">
-    <c:chart>
-        <c:plotArea>
-            <c:barChart>
-                <c:ser>
-                    <c:dLbls>
-                        <c:dLbl>
-                            <c:idx val="0"/>
-                            <c:spPr>
-                                <a:noFill/>
-                                <a:ln>
-                                    <a:noFill/>
-                                </a:ln>
-                                <a:effectLst/>
-                            </c:spPr>
-                            <c:txPr>
-                                <a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" lIns="38100" tIns="19050" rIns="38100" bIns="19050" anchor="ctr" anchorCtr="1">
-                                    <a:spAutoFit/>
-                                </a:bodyPr>
-                                <a:lstStyle/>
-                                <a:p>
-                                    <a:pPr>
-                                        <a:defRPr sz="1400" b="0" i="0" u="none" strike="noStrike" kern="1200" baseline="0">
-                                            <a:solidFill>
-                                                <a:schemeClr val="accent1"/>
-                                            </a:solidFill>
-                                            <a:latin typeface="+mn-lt"/>
-                                            <a:ea typeface="+mn-ea"/>
-                                            <a:cs typeface="+mn-cs"/>
-                                        </a:defRPr>
-                                    </a:pPr>
-                                    <a:endParaRPr lang="en-US"/>
-                                </a:p>
-                            </c:txPr>
-                            <c:showLegendKey val="0"/>
-                            <c:showVal val="1"/>
-                            <c:showCatName val="0"/>
-                            <c:showSerName val="0"/>
-                            <c:showPercent val="0"/>
-                            <c:showBubbleSize val="0"/>
-                            <c:extLst>
-                                <c:ext uri="{C3380CC4-5D6E-409C-BE32-E72D297353CC}" xmlns:c16="http://schemas.microsoft.com/office/drawing/2014/chart">
-                                    <c16:uniqueId val="{00000001-04B4-49A4-AD60-4DBFE8A0F479}"/>
-                                </c:ext>
-                            </c:extLst>
-                        </c:dLbl>
-                    </c:dLbls>
-                </c:ser>
-            </c:barChart>
-        </c:plotArea>
-    </c:chart>
-</c:chartSpace>
-`;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml/lnLRTB.js
-var require_lnLRTB = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml/lnLRTB.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.lnLRTB = void 0;
-    exports.lnLRTB = `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?> 
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:spTree>
-      <p:graphicFrame>
-        <a:graphic>
-          <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
-            <a:tbl>
-              <a:tr h="370840">
-                <a:tc>
-                  <a:tcPr>
-                    <a:lnL w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnL>
-                    <a:lnR w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnR>
-                    <a:lnT w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnT>
-                    <a:lnB w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnB>
-                  </a:tcPr>
-                </a:tc>
-              </a:tr>
-            </a:tbl>
-          </a:graphicData>
-        </a:graphic>
-      </p:graphicFrame>
-    </p:spTree>
-  </p:cSld>
-</p:sld>
-`;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-elements.js
-var require_xml_elements = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-elements.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_helper_1 = require_xml_helper();
-    var xmldom_1 = require_lib4();
-    var dLbl_1 = require_dLbl();
-    var lnLRTB_1 = require_lnLRTB();
-    var XmlElements = class {
-      constructor(element, params) {
-        this.element = element;
-        this.document = element.ownerDocument;
-        this.params = params;
-        this.defaultValues = {
-          color: "CCCCCC",
-          size: "1000"
-        };
+    exports.parseCssTextAlign = exports.parseCssFontFamily = exports.parseCssTextDecoration = exports.parseCssFontStyle = exports.parseCssFontWeight = exports.parseCssFontSize = exports.normalizeCssColor = exports.parseInlineCss = void 0;
+    var PX_TO_PT = 0.75;
+    var NAMED_COLORS = {
+      aqua: "00FFFF",
+      black: "000000",
+      blue: "0000FF",
+      brown: "A52A2A",
+      cyan: "00FFFF",
+      darkblue: "00008B",
+      darkgray: "A9A9A9",
+      darkgreen: "006400",
+      darkgrey: "A9A9A9",
+      darkred: "8B0000",
+      fuchsia: "FF00FF",
+      gold: "FFD700",
+      gray: "808080",
+      green: "008000",
+      grey: "808080",
+      indigo: "4B0082",
+      lightblue: "ADD8E6",
+      lightgray: "D3D3D3",
+      lightgreen: "90EE90",
+      lightgrey: "D3D3D3",
+      lime: "00FF00",
+      magenta: "FF00FF",
+      maroon: "800000",
+      navy: "000080",
+      olive: "808000",
+      orange: "FFA500",
+      pink: "FFC0CB",
+      purple: "800080",
+      red: "FF0000",
+      silver: "C0C0C0",
+      teal: "008080",
+      turquoise: "40E0D0",
+      violet: "EE82EE",
+      white: "FFFFFF",
+      yellow: "FFFF00"
+    };
+    var parseInlineCss = (styleAttr) => {
+      const declarations = {};
+      if (!styleAttr) {
+        return declarations;
       }
-      text() {
-        const r = this.document.createElement("a:r");
-        r.appendChild(this.textRangeProps());
-        r.appendChild(this.textContent());
-        let paragraphProps = this.element.getElementsByTagName("a:pPr").item(0);
-        if (!paragraphProps) {
-          paragraphProps = this.paragraphProps();
+      styleAttr.split(";").forEach((declaration) => {
+        const separator = declaration.indexOf(":");
+        if (separator === -1) {
+          return;
         }
-        xml_helper_1.XmlHelper.insertAfter(r, paragraphProps);
-        return this;
-      }
-      createTextBody() {
-        let txBody = this.element.getElementsByTagName("p:txBody")[0];
-        if (!txBody) {
-          txBody = this.document.createElement("p:txBody");
-          this.element.appendChild(txBody);
-          const bodyPr = this.document.createElement("a:bodyPr");
-          txBody.appendChild(bodyPr);
-          const lstStyle = this.document.createElement("a:lstStyle");
-          txBody.appendChild(lstStyle);
-          this.paragraphTemplate = this.document.createElement("a:p");
-          txBody.appendChild(this.paragraphTemplate);
-          this.runTemplate = this.document.createElement("a:r");
-          const rPr = this.document.createElement("a:rPr");
-          this.runTemplate.appendChild(rPr);
-        } else {
-          let bodyPr = txBody.getElementsByTagName("a:bodyPr")[0];
-          if (!bodyPr) {
-            bodyPr = this.document.createElement("a:bodyPr");
-            txBody.insertBefore(bodyPr, txBody.firstChild);
-          }
-          let lstStyle = txBody.getElementsByTagName("a:lstStyle")[0];
-          if (!lstStyle) {
-            lstStyle = this.document.createElement("a:lstStyle");
-            txBody.insertBefore(lstStyle, bodyPr.nextSibling);
-          }
-          const paragraphs = txBody.getElementsByTagName("a:p");
-          this.paragraphTemplate = paragraphs[0];
-          xml_helper_1.XmlHelper.sliceCollection(paragraphs, 0);
-          const runs = this.paragraphTemplate.getElementsByTagName("a:r");
-          if (runs.length > 0) {
-            this.runTemplate = runs[0];
-          } else {
-            this.runTemplate = this.document.createElement("a:r");
-            const rPr = this.document.createElement("a:rPr");
-            this.runTemplate.appendChild(rPr);
-          }
+        const property = declaration.slice(0, separator).trim().toLowerCase();
+        const value = declaration.slice(separator + 1).trim();
+        if (property && value) {
+          declarations[property] = value;
         }
-        return txBody;
+      });
+      return declarations;
+    };
+    exports.parseInlineCss = parseInlineCss;
+    var normalizeCssColor = (input) => {
+      if (!input) {
+        return void 0;
       }
-      createBodyProperties(txBody) {
-        const bodyPr = this.document.createElement("a:bodyPr");
-        txBody.appendChild(bodyPr);
-        return bodyPr;
+      const value = input.trim().toLowerCase();
+      if (NAMED_COLORS[value]) {
+        return NAMED_COLORS[value];
       }
-      addBulletList(list) {
-        const txBody = this.createTextBody();
-        this.createBodyProperties(txBody);
-        this.processList(txBody, list, 0);
+      const hexMatch = value.match(/^#?([0-9a-f]{3,8})$/);
+      if (hexMatch) {
+        const hex3 = hexMatch[1];
+        if (hex3.length === 3 || hex3.length === 4) {
+          return hex3.slice(0, 3).split("").map((char) => char + char).join("").toUpperCase();
+        }
+        if (hex3.length === 6 || hex3.length === 8) {
+          return hex3.slice(0, 6).toUpperCase();
+        }
+        return void 0;
       }
-      processList(txBody, items, level) {
-        items.forEach((item) => {
-          if (Array.isArray(item)) {
-            this.processList(txBody, item, level + 1);
-          } else {
-            const p = this.createParagraph(level);
-            const r = this.createTextRun(String(item));
-            p.appendChild(r);
-            txBody.appendChild(p);
+      const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/);
+      if (rgbMatch) {
+        const parts = rgbMatch[1].split(/[,/\s]+/).map((part) => part.trim()).filter((part) => part !== "");
+        if (parts.length < 3) {
+          return void 0;
+        }
+        const channels = parts.slice(0, 3).map((part) => {
+          const numeric = parseFloat(part);
+          if (isNaN(numeric)) {
+            return NaN;
           }
+          const absolute = part.endsWith("%") ? numeric / 100 * 255 : numeric;
+          return Math.min(255, Math.max(0, Math.round(absolute)));
         });
-      }
-      createParagraph(level) {
-        const p = this.paragraphTemplate.cloneNode(true);
-        const pPr = p.getElementsByTagName("a:pPr")[0];
-        if (pPr) {
-          if (level > 0) {
-            pPr.setAttribute("lvl", String(level));
-            pPr.removeAttribute("indent");
-            pPr.removeAttribute("marL");
-          } else {
-            pPr.removeAttribute("lvl");
-          }
-        } else {
-          const newPPr = this.document.createElement("a:pPr");
-          if (level > 0) {
-            newPPr.setAttribute("lvl", String(level));
-          }
-          p.insertBefore(newPPr, p.firstChild);
+        if (channels.some((channel) => isNaN(channel))) {
+          return void 0;
         }
-        const runs = p.getElementsByTagName("a:r");
-        xml_helper_1.XmlHelper.sliceCollection(runs, 0);
-        return p;
+        return channels.map((channel) => channel.toString(16).padStart(2, "0")).join("").toUpperCase();
       }
-      createTextRun(text) {
-        const r = this.runTemplate.cloneNode(true);
-        const t = r.getElementsByTagName("a:t")[0];
-        if (t) {
-          t.textContent = text;
-        } else {
-          const newT = this.document.createElement("a:t");
-          newT.textContent = text;
-          r.appendChild(newT);
-        }
-        return r;
+      return void 0;
+    };
+    exports.normalizeCssColor = normalizeCssColor;
+    var parseCssFontSize = (input) => {
+      if (!input) {
+        return void 0;
       }
-      paragraphProps() {
-        const p = this.element.getElementsByTagName("a:p").item(0);
-        p.appendChild(this.document.createElement("a:pPr"));
-        const paragraphRangeProps = this.element.getElementsByTagName("a:pPr").item(0);
-        const endParaRPr = this.element.getElementsByTagName("a:endParaRPr").item(0);
-        xml_helper_1.XmlHelper.moveChild(endParaRPr);
-        return paragraphRangeProps;
+      const match = input.trim().toLowerCase().match(/^(-?[\d.]+)\s*(px|pt)?$/);
+      if (!match) {
+        return void 0;
       }
-      textRangeProps() {
-        const rPr = this.document.createElement("a:rPr");
-        const endParaRPr = this.element.getElementsByTagName("a:endParaRPr")[0];
-        rPr.setAttribute("lang", endParaRPr.getAttribute("lang"));
-        rPr.setAttribute("sz", endParaRPr.getAttribute("sz") || this.defaultValues.size);
-        rPr.appendChild(this.line());
-        rPr.appendChild(this.effectLst());
-        rPr.appendChild(this.lineTexture());
-        rPr.appendChild(this.fillTexture());
-        return rPr;
+      const numeric = parseFloat(match[1]);
+      if (isNaN(numeric) || numeric <= 0) {
+        return void 0;
       }
-      textContent() {
-        const t = this.document.createElement("a:t");
-        t.textContent = " ";
-        return t;
+      const points = match[2] === "pt" ? numeric : numeric * PX_TO_PT;
+      return Math.round(points * 100);
+    };
+    exports.parseCssFontSize = parseCssFontSize;
+    var parseCssFontWeight = (input) => {
+      const value = input.trim().toLowerCase();
+      if (value === "bold" || value === "bolder") {
+        return true;
       }
-      effectLst() {
-        return this.document.createElement("a:effectLst");
+      if (value === "normal" || value === "lighter") {
+        return false;
       }
-      lineTexture() {
-        return this.document.createElement("a:uLnTx");
+      const numeric = parseInt(value, 10);
+      if (isNaN(numeric)) {
+        return void 0;
       }
-      fillTexture() {
-        return this.document.createElement("a:uFillTx");
+      return numeric >= 600;
+    };
+    exports.parseCssFontWeight = parseCssFontWeight;
+    var parseCssFontStyle = (input) => {
+      const value = input.trim().toLowerCase();
+      if (value === "italic" || value === "oblique") {
+        return true;
       }
-      line() {
-        const ln = this.document.createElement("a:ln");
-        const noFill = this.document.createElement("a:noFill");
-        ln.appendChild(noFill);
-        return ln;
+      if (value === "normal") {
+        return false;
       }
-      solidFill() {
-        const solidFill = this.document.createElement("a:solidFill");
-        const colorType = this.colorType();
-        solidFill.appendChild(colorType);
-        return solidFill;
+      return void 0;
+    };
+    exports.parseCssFontStyle = parseCssFontStyle;
+    var parseCssTextDecoration = (input) => {
+      const value = input.trim().toLowerCase();
+      const result = {};
+      if (value.includes("none")) {
+        return { isUnderlined: false, isStrike: false };
       }
-      colorType() {
-        var _a3, _b;
-        const tag2 = "a:" + (((_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.color) === null || _b === void 0 ? void 0 : _b.type) || "srgbClr");
-        const colorType = this.document.createElement(tag2);
-        this.colorValue(colorType);
-        return colorType;
+      if (value.includes("underline")) {
+        result.isUnderlined = true;
       }
-      colorValue(colorType) {
-        var _a3, _b;
-        colorType.setAttribute("val", ((_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.color) === null || _b === void 0 ? void 0 : _b.value) || this.defaultValues.color);
+      if (value.includes("line-through")) {
+        result.isStrike = true;
       }
-      dataPoint() {
-        const dPt = this.document.createElement("c:dPt");
-        dPt.appendChild(this.idx());
-        dPt.appendChild(this.spPr());
-        const nextSibling = this.element.getElementsByTagName("c:cat")[0];
-        if (nextSibling) {
-          nextSibling.parentNode.insertBefore(dPt, nextSibling);
-        }
-        return this;
+      return result;
+    };
+    exports.parseCssTextDecoration = parseCssTextDecoration;
+    var parseCssFontFamily = (input) => {
+      var _a3;
+      const first = (_a3 = input.split(",")[0]) === null || _a3 === void 0 ? void 0 : _a3.trim();
+      if (!first) {
+        return void 0;
       }
-      spPr() {
-        const spPr = this.document.createElement("c:spPr");
-        spPr.appendChild(this.solidFill());
-        spPr.appendChild(this.line());
-        spPr.appendChild(this.effectLst());
-        return spPr;
-      }
-      idx() {
-        const idx = this.document.createElement("c:idx");
-        idx.setAttribute("val", String(0));
-        return idx;
-      }
-      cellBorder(tag2) {
-        const border = this.document.createElement(tag2);
-        border.appendChild(this.solidFill());
-        border.appendChild(this.prstDash());
-        border.appendChild(this.round());
-        border.appendChild(this.lineEnd("headEnd"));
-        border.appendChild(this.lineEnd("tailEnd"));
-        return this;
-      }
-      prstDash() {
-        const prstDash = this.document.createElement("a:prstDash");
-        prstDash.setAttribute("val", "solid");
-        return prstDash;
-      }
-      round() {
-        const round = this.document.createElement("a:round");
-        return round;
-      }
-      lineEnd(type) {
-        const lineEnd = this.document.createElement(type);
-        lineEnd.setAttribute("type", "none");
-        lineEnd.setAttribute("w", "med");
-        lineEnd.setAttribute("len", "med");
-        return lineEnd;
-      }
-      shapeProperties() {
-        const spPr = this.spPr();
-        this.element.appendChild(spPr);
-      }
-      dataPointLabel() {
-        const doc = new xmldom_1.DOMParser().parseFromString(dLbl_1.dLblXml, "application/xml");
-        const ele = doc.getElementsByTagName("c:dLbl")[0];
-        const firstChild = this.element.firstChild;
-        this.element.insertBefore(ele.cloneNode(true), firstChild);
-      }
-      tableCellBorder(tag2) {
-        const doc = new xmldom_1.DOMParser().parseFromString(lnLRTB_1.lnLRTB, "application/xml");
-        const ele = doc.getElementsByTagName(tag2)[0];
-        const firstChild = this.element.firstChild;
-        this.element.insertBefore(ele.cloneNode(true), firstChild);
+      const unquoted = first.replace(/^["']|["']$/g, "").trim();
+      return unquoted === "" ? void 0 : unquoted;
+    };
+    exports.parseCssFontFamily = parseCssFontFamily;
+    var parseCssTextAlign = (input) => {
+      switch (input.trim().toLowerCase()) {
+        case "left":
+        case "start":
+          return "l";
+        case "center":
+          return "ctr";
+        case "right":
+        case "end":
+          return "r";
+        case "justify":
+          return "just";
+        default:
+          return void 0;
       }
     };
-    exports.default = XmlElements;
+    exports.parseCssTextAlign = parseCssTextAlign;
   }
 });
 
@@ -33519,6 +33760,7 @@ var require_modify_color_helper = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var xml_elements_1 = __importDefault(require_xml_elements());
     var xml_helper_1 = require_xml_helper();
+    var css_style_parser_1 = require_css_style_parser();
     var ModifyColorHelper = class _ModifyColorHelper {
       /**
        * Check if the given element has a background which is non-transparent
@@ -33622,11 +33864,16 @@ var require_modify_color_helper = __commonJS({
       static isSchemeColorDark(schemeValue) {
         const darkSchemeColors = [
           "dk1",
+          // Dark 1 (usually black or very dark)
           "dk2",
+          // Dark 2 (usually dark blue)
           "accent1",
+          // Often darker colors
           "accent2",
           "accent4",
+          // Often purple/dark
           "tx1",
+          // Text 1 (usually dark)
           "tx2"
           // Text 2 (usually dark)
         ];
@@ -33649,7 +33896,6 @@ var require_modify_color_helper = __commonJS({
         return luminance < 0.5;
       }
     };
-    exports.default = ModifyColorHelper;
     ModifyColorHelper.solidFill = (color, index) => (element) => {
       if (!color || !color.type || (element === null || element === void 0 ? void 0 : element.getElementsByTagName) === void 0)
         return;
@@ -33681,14 +33927,14 @@ var require_modify_color_helper = __commonJS({
       }
     };
     ModifyColorHelper.normalizeColorObject = (color) => {
-      if (color.value.indexOf("#") === 0) {
-        color.value = color.value.replace("#", "");
+      if ((color === null || color === void 0 ? void 0 : color.value) === void 0 || color.type !== "srgbClr") {
+        return color;
       }
-      if (color.value.toLowerCase().indexOf("rgb(") === 0) {
-        color.value = "cccccc";
-      }
+      const normalized = (0, css_style_parser_1.normalizeCssColor)(String(color.value));
+      color.value = normalized !== null && normalized !== void 0 ? normalized : "CCCCCC";
       return color;
     };
+    exports.default = ModifyColorHelper;
   }
 });
 
@@ -33725,7 +33971,6 @@ var require_cell_id_helper = __commonJS({
         }
         this._nextId.push(0);
       }
-      // eslint-disable-next-line
       *[Symbol.iterator]() {
         while (true) {
           yield this.next();
@@ -33759,6 +34004,32 @@ var require_cell_id_helper = __commonJS({
         const colLetter = _CellIdHelper.increment(c);
         return `${colLetter}${r + 1}`;
       }
+      /**
+       * Extracts the zero-based column index from a cell address.
+       * e.g. "A1" => 0, "B12" => 1, "AA3" => 26
+       * Returns null if there are no leading letters to parse.
+       */
+      static getColumnIndex(address) {
+        const letters = address ? address.match(/^[A-Za-z]+/) : null;
+        if (!letters) {
+          return null;
+        }
+        const chars = letters[0].toUpperCase();
+        let index = 0;
+        for (let i = 0; i < chars.length; i++) {
+          index = index * 26 + (chars.charCodeAt(i) - 64);
+        }
+        return index - 1;
+      }
+      /**
+       * Extracts the row number from a cell address.
+       * e.g. "A1" => 1, "B12" => 12
+       * Returns null if there is no trailing number to parse.
+       */
+      static getRowNumber(address) {
+        const digits = address ? address.match(/\d+$/) : null;
+        return digits ? Number(digits[0]) : null;
+      }
     };
     exports.default = CellIdHelper;
   }
@@ -33768,15 +34039,54 @@ var require_cell_id_helper = __commonJS({
 var require_modify_xml_helper = __commonJS({
   "node_modules/pptx-automizer/dist/helper/modify-xml-helper.js"(exports) {
     "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o2) {
+          var ar = [];
+          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
+          return ar;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports, "__esModule", { value: true });
+    var errors_1 = require_errors2();
     var cell_id_helper_1 = __importDefault(require_cell_id_helper());
     var general_helper_1 = require_general_helper();
     var xml_helper_1 = require_xml_helper();
-    var xml_elements_1 = __importDefault(require_xml_elements());
-    var ModifyXmlHelper = class {
+    var xml_elements_1 = __importStar(require_xml_elements());
+    var logger_1 = require_logger();
+    var ModifyXmlHelper = class _ModifyXmlHelper {
       constructor(root) {
         this.root = root;
         this.templates = {};
@@ -33796,9 +34106,13 @@ var require_modify_xml_helper = __commonJS({
           }
           const index = modifier.index || 0;
           const isRequired = modifier.isRequired !== void 0 ? modifier.isRequired : true;
-          const element = this.assertElement(root.getElementsByTagName(tag2), index, tag2, root, modifier);
+          const element = modifier.matchIdx !== void 0 ? this.assertElementByIdx(tag2, root, modifier) : this.assertElement(root.getElementsByTagName(tag2), index, tag2, root, modifier);
           if (element === false) {
+            const target = modifier.matchIdx !== void 0 ? tag2 + "@c:idx:" + modifier.matchIdx : tag2 + "@index:" + index;
             if (isRequired === true) {
+              logger_1.log.warn("Could not assert required tag: " + target);
+            } else {
+              logger_1.log.debug("Skipped modification of absent optional tag: " + target);
             }
           } else {
             if (modifier.modify) {
@@ -33819,13 +34133,17 @@ var require_modify_xml_helper = __commonJS({
       }
       assertElement(collection, index, tag2, parent, modifier) {
         if (!collection[index]) {
+          if (modifier.isRequired === false) {
+            return false;
+          }
           if (collection[collection.length - 1] === void 0) {
             this.createElement(parent, tag2);
           } else {
             const lastSibling = collection[collection.length - 1];
             let sourceSibling = lastSibling;
-            if (modifier.fromIndex && collection.item(modifier.fromIndex)) {
-              sourceSibling = collection.item(modifier.fromIndex);
+            const template = this.getFromIndexTemplate(collection, tag2, parent, modifier);
+            if (template) {
+              sourceSibling = template;
             } else if (modifier.fromPrevious && collection.item(index - 1)) {
               sourceSibling = collection.item(index - 1);
             }
@@ -33843,6 +34161,102 @@ var require_modify_xml_helper = __commonJS({
         }
         return false;
       }
+      /**
+       * Resolve the target among a tag's elements by the value of their
+       * `<c:idx val="…"/>` child instead of by sibling position — the correct
+       * addressing for sparse chart collections (`c:dPt`, `c:dLbl`), where one
+       * element exists per *explicitly styled* point and `c:idx` names the
+       * category. See `Modification.matchIdx`.
+       *
+       * A missing element is created — cloned from the clean `fromIndex`
+       * template when given, built as a minimal shell otherwise — stamped with
+       * the requested idx and inserted so ascending `c:idx` order is kept.
+       */
+      assertElementByIdx(tag2, parent, modifier) {
+        const matchIdx = modifier.matchIdx;
+        const collection = parent.getElementsByTagName(tag2);
+        for (let i = 0; i < collection.length; i++) {
+          const element = collection.item(i);
+          if (_ModifyXmlHelper.getIdxValue(element) === matchIdx) {
+            return element;
+          }
+        }
+        if (modifier.isRequired === false) {
+          return false;
+        }
+        const template = this.getFromIndexTemplate(collection, tag2, parent, modifier);
+        const newElement = template ? template.cloneNode(true) : this.buildElement(parent, tag2);
+        if (!newElement) {
+          return false;
+        }
+        const idx = newElement.getElementsByTagName("c:idx").item(0);
+        if (!idx) {
+          return false;
+        }
+        idx.setAttribute("val", String(matchIdx));
+        const successor = Array.from(collection).find((sibling) => _ModifyXmlHelper.getIdxValue(sibling) > matchIdx);
+        if (successor) {
+          successor.parentNode.insertBefore(newElement, successor);
+        } else if (collection.length > 0) {
+          xml_helper_1.XmlHelper.insertAfter(newElement, collection.item(collection.length - 1));
+        } else {
+          const order = tag2 === "c:dLbl" ? xml_elements_1.C_DLBLS_CHILD_ORDER : xml_elements_1.C_SER_CHILD_ORDER;
+          xml_helper_1.XmlHelper.insertInSchemaOrder(parent, newElement, order);
+        }
+        return newElement;
+      }
+      static getIdxValue(element) {
+        const idx = element.getElementsByTagName("c:idx").item(0);
+        return idx ? Number(idx.getAttribute("val")) : NaN;
+      }
+      /**
+       * A clean clone of `collection[fromIndex]`, taken before that element got
+       * modified, so subsequent clones start from the original state. Cached per
+       * parent context: each c:dLbls within a different c:ser gets its own
+       * template.
+       */
+      getFromIndexTemplate(collection, tag2, parent, modifier) {
+        if (modifier.fromIndex === void 0 || modifier.fromIndex === null || !collection.item(modifier.fromIndex)) {
+          return null;
+        }
+        const parentId = parent.tagName || "root";
+        const parentIndex = this.getParentIndex(parent);
+        const fromIndexKey = parentId + "[" + parentIndex + "]:" + tag2 + ":fromIndex:" + modifier.fromIndex;
+        if (!this.templates[fromIndexKey]) {
+          this.templates[fromIndexKey] = collection.item(modifier.fromIndex).cloneNode(true);
+        }
+        return this.templates[fromIndexKey];
+      }
+      /**
+       * Index of `element` among all elements of its tag name in the whole
+       * document — a stable identifier for the template cache key, so equally
+       * named parents in different subtrees (e.g. the c:dLbls of each c:ser)
+       * do not collide.
+       */
+      getParentIndex(element) {
+        const scope = element.ownerDocument || element.parentNode;
+        if (!scope)
+          return 0;
+        const siblings = scope.getElementsByTagName(element.tagName);
+        for (let i = 0; i < siblings.length; i++) {
+          if (siblings[i] === element)
+            return i;
+        }
+        return 0;
+      }
+      /**
+       * Build a detached minimal element for `tag`, or null when the tag is not
+       * supported. Unlike `createElement`, insertion is left to the caller.
+       */
+      buildElement(parent, tag2) {
+        switch (tag2) {
+          case "c:dPt":
+            return new xml_elements_1.default(parent).buildDataPoint();
+          case "c:dLbl":
+            return new xml_elements_1.default(parent).buildDataPointLabel();
+        }
+        return null;
+      }
       createElement(parent, tag2) {
         switch (tag2) {
           case "a:t":
@@ -33853,6 +34267,12 @@ var require_modify_xml_helper = __commonJS({
             return true;
           case "c:spPr":
             new xml_elements_1.default(parent).shapeProperties();
+            return true;
+          case "a:ln":
+            new xml_elements_1.default(parent).plainLine();
+            return true;
+          case "c:dLbls":
+            new xml_elements_1.default(parent).dataPointLabels();
             return true;
           case "c:dLbl":
             new xml_elements_1.default(parent).dataPointLabel();
@@ -33867,7 +34287,6 @@ var require_modify_xml_helper = __commonJS({
         return false;
       }
     };
-    exports.default = ModifyXmlHelper;
     ModifyXmlHelper.getText = (element) => {
       return element.firstChild.textContent;
     };
@@ -33875,30 +34294,36 @@ var require_modify_xml_helper = __commonJS({
       const valueElement = element.getElementsByTagName("c:v");
       if (!valueElement.length) {
         xml_helper_1.XmlHelper.dump(element);
-        throw "Unable to set value @index: " + index;
+        throw new errors_1.ElementNotFoundError("Unable to set value @index: " + index, {
+          selector: "c:v"
+        });
       }
       if (!valueElement[0].firstChild) {
         return;
       }
-      valueElement[0].firstChild.textContent = String(value);
+      valueElement[0].firstChild.textContent = xml_helper_1.XmlHelper.sanitizeText(value);
       if (index !== void 0) {
         element.setAttribute("idx", String(index));
       }
     };
     ModifyXmlHelper.textContent = (value) => (element) => {
-      element.firstChild.textContent = String(value);
+      element.firstChild.textContent = xml_helper_1.XmlHelper.sanitizeText(value);
     };
     ModifyXmlHelper.attribute = (attribute, value) => (element) => {
       if (value != void 0)
-        element.setAttribute(attribute, String(value));
+        element.setAttribute(attribute, xml_helper_1.XmlHelper.sanitizeAttr(value));
+    };
+    ModifyXmlHelper.removeAttribute = (attribute) => (element) => {
+      element.removeAttribute(attribute);
     };
     ModifyXmlHelper.booleanAttribute = (attribute, state) => (element) => {
       element.setAttribute(attribute, state === true ? "1" : "0");
     };
     ModifyXmlHelper.range = (series, length) => (element) => {
       const range = element.firstChild.textContent;
-      element.firstChild.textContent = cell_id_helper_1.default.setRange(range, series, length);
+      element.firstChild.textContent = xml_helper_1.XmlHelper.sanitizeText(cell_id_helper_1.default.setRange(range, series, length));
     };
+    exports.default = ModifyXmlHelper;
   }
 });
 
@@ -33914,6 +34339,26 @@ var require_multitext_helper = __commonJS({
     var modify_text_helper_1 = __importDefault(require_modify_text_helper());
     var xml_helper_1 = require_xml_helper();
     var modify_hyperlink_element_1 = __importDefault(require_modify_hyperlink_element());
+    var PPR_CHILD_ORDER = [
+      "a:lnSpc",
+      "a:spcBef",
+      "a:spcAft",
+      "a:buClrTx",
+      "a:buClr",
+      "a:buSzTx",
+      "a:buSzPct",
+      "a:buSzPts",
+      "a:buFontTx",
+      "a:buFont",
+      "a:buNone",
+      "a:buAutoNum",
+      "a:buChar",
+      "a:tabLst",
+      "a:defRPr",
+      "a:extLst"
+    ];
+    var BULLET_INDENT = 228600;
+    var BULLET_FONT = "Arial";
     var MultiTextHelper = class {
       constructor(element, relationElement) {
         this.element = element;
@@ -33930,7 +34375,13 @@ var require_multitext_helper = __commonJS({
         this.createParagraphs(txBody, paragraphs, defaultStyle);
       }
       /**
-       * Extract default style from existing paragraphs
+       * Extract the fallback style from the existing text, so generated runs keep
+       * the template's look where the caller says nothing.
+       *
+       * Restricted to size and color on purpose: bold/italic of the template's
+       * first run are a property of *that* text, not of the shape, and inheriting
+       * them made every generated run bold as soon as the placeholder was
+       * (e.g. a title). Callers who want bold pass it in their TextStyle.
        */
       extractDefaultStyle(txBody) {
         const defaultStyle = {};
@@ -33960,30 +34411,38 @@ var require_multitext_helper = __commonJS({
                 }
               }
             }
-            const bold = rPr.getAttribute("b");
-            if (bold === "1") {
-              defaultStyle.isBold = true;
-            }
-            const italic = rPr.getAttribute("i");
-            if (italic === "1") {
-              defaultStyle.isItalics = true;
-            }
           }
         }
         return defaultStyle;
       }
       /**
        * Find or create the txBody element and ensure it has required child elements
+       *
+       * Notes:
+       * - Text boxes / shapes use `p:txBody`
+       * - Table cells (`a:tc`) use `a:txBody`
        */
       getOrCreateTxBody() {
-        let txBody = this.element.getElementsByTagName("p:txBody")[0];
+        let txBody = this.element.getElementsByTagName("p:txBody")[0] || this.element.getElementsByTagName("a:txBody")[0];
         if (!txBody) {
-          txBody = this.document.createElement("p:txBody");
+          const isTableCell = this.element.tagName === "a:tc";
+          txBody = this.document.createElement(isTableCell ? "a:txBody" : "p:txBody");
           this.element.appendChild(txBody);
-          const bodyPr = this.document.createElement("a:bodyPr");
-          txBody.appendChild(bodyPr);
-          const lstStyle = this.document.createElement("a:lstStyle");
-          txBody.appendChild(lstStyle);
+        }
+        let bodyPr = txBody.getElementsByTagName("a:bodyPr")[0];
+        if (!bodyPr) {
+          bodyPr = this.document.createElement("a:bodyPr");
+          txBody.insertBefore(bodyPr, txBody.firstChild);
+        }
+        let lstStyle = txBody.getElementsByTagName("a:lstStyle")[0];
+        if (!lstStyle) {
+          lstStyle = this.document.createElement("a:lstStyle");
+          const insertAfter = bodyPr.nextSibling;
+          if (insertAfter) {
+            txBody.insertBefore(lstStyle, insertAfter);
+          } else {
+            txBody.appendChild(lstStyle);
+          }
         }
         return txBody;
       }
@@ -34028,6 +34487,8 @@ var require_multitext_helper = __commonJS({
        * Apply paragraph styling properties
        */
       applyParagraphProperties(pPr, paragraphProps) {
+        var _a3;
+        const level = (_a3 = paragraphProps.level) !== null && _a3 !== void 0 ? _a3 : 0;
         if (paragraphProps.level !== void 0) {
           pPr.setAttribute("lvl", String(paragraphProps.level));
         }
@@ -34037,21 +34498,41 @@ var require_multitext_helper = __commonJS({
         }
         if (paragraphProps.indent !== void 0) {
           pPr.setAttribute("indent", String(paragraphProps.indent));
+        } else if (paragraphProps.bullet) {
+          pPr.setAttribute("indent", String(-BULLET_INDENT));
         }
         if (paragraphProps.marginLeft !== void 0) {
           pPr.setAttribute("marL", String(paragraphProps.marginLeft));
+        } else if (paragraphProps.bullet) {
+          pPr.setAttribute("marL", String((level + 1) * BULLET_INDENT));
         }
         this.applySpacingProperties(pPr, paragraphProps);
+        xml_helper_1.XmlHelper.sortChildrenBySchema(pPr, PPR_CHILD_ORDER);
       }
       /**
-       * Apply bullet configuration to paragraph properties
+       * Apply bullet configuration to paragraph properties.
+       *
+       * PPTX has no list object - a list item is a paragraph with bullet
+       * properties, either a literal glyph (`a:buChar`) or automatic numbering
+       * (`a:buAutoNum`).
        */
       applyBulletConfiguration(pPr, paragraphProps) {
         if (paragraphProps.bullet) {
+          if (paragraphProps.bulletType === "number") {
+            const buAutoNum = this.document.createElement("a:buAutoNum");
+            buAutoNum.setAttribute("type", paragraphProps.autoNumberType || "arabicPeriod");
+            pPr.appendChild(buAutoNum);
+            return;
+          }
+          const buFont = this.document.createElement("a:buFont");
+          buFont.setAttribute("typeface", BULLET_FONT);
+          pPr.appendChild(buFont);
           const buChar = this.document.createElement("a:buChar");
-          buChar.setAttribute("char", "\u2022");
+          buChar.setAttribute("char", paragraphProps.bulletChar || "\u2022");
           pPr.appendChild(buChar);
-        } else if (paragraphProps.level === 0 || paragraphProps.bullet === false) {
+          return;
+        }
+        if (paragraphProps.bullet === false || paragraphProps.level === 0) {
           const buNone = this.document.createElement("a:buNone");
           pPr.appendChild(buNone);
         }
@@ -34060,27 +34541,30 @@ var require_multitext_helper = __commonJS({
        * Apply spacing properties to paragraph properties
        */
       applySpacingProperties(pPr, paragraphProps) {
-        if (paragraphProps.lineSpacing !== void 0) {
-          const lnSpc = this.document.createElement("a:lnSpc");
-          const spcPts = this.document.createElement("a:spcPts");
-          spcPts.setAttribute("val", String(Math.round(paragraphProps.lineSpacing * 100)));
-          lnSpc.appendChild(spcPts);
-          pPr.appendChild(lnSpc);
+        this.appendSpacing(pPr, "a:lnSpc", paragraphProps.lineSpacing);
+        this.appendSpacing(pPr, "a:spcBef", paragraphProps.spaceBefore);
+        this.appendSpacing(pPr, "a:spcAft", paragraphProps.spaceAfter);
+      }
+      /**
+       * Append one spacing element (`a:lnSpc`/`a:spcBef`/`a:spcAft`). A plain
+       * number is absolute points (`a:spcPts`, 100ths of a point); `{ percent }`
+       * scales with the line height (`a:spcPct`, thousandths of a percent).
+       */
+      appendSpacing(pPr, tagName, spacing) {
+        if (spacing === void 0) {
+          return;
         }
-        if (paragraphProps.spaceBefore !== void 0) {
-          const spcBef = this.document.createElement("a:spcBef");
+        const wrapper = this.document.createElement(tagName);
+        if (typeof spacing === "number") {
           const spcPts = this.document.createElement("a:spcPts");
-          spcPts.setAttribute("val", String(Math.round(paragraphProps.spaceBefore * 100)));
-          spcBef.appendChild(spcPts);
-          pPr.appendChild(spcBef);
+          spcPts.setAttribute("val", String(Math.round(spacing * 100)));
+          wrapper.appendChild(spcPts);
+        } else {
+          const spcPct = this.document.createElement("a:spcPct");
+          spcPct.setAttribute("val", String(Math.round(spacing.percent * 1e3)));
+          wrapper.appendChild(spcPct);
         }
-        if (paragraphProps.spaceAfter !== void 0) {
-          const spcAft = this.document.createElement("a:spcAft");
-          const spcPts = this.document.createElement("a:spcPts");
-          spcPts.setAttribute("val", String(Math.round(paragraphProps.spaceAfter * 100)));
-          spcAft.appendChild(spcPts);
-          pPr.appendChild(spcAft);
-        }
+        pPr.appendChild(wrapper);
       }
       /**
        * Create text runs for a paragraph
@@ -34088,6 +34572,10 @@ var require_multitext_helper = __commonJS({
       createTextRuns(p, textRuns, defaultStyle = {}) {
         textRuns.forEach((run) => {
           const mergedStyle = this.mergeStyles(defaultStyle, run.style);
+          if (run.break) {
+            this.appendLineBreak(p, mergedStyle);
+            return;
+          }
           if ((mergedStyle === null || mergedStyle === void 0 ? void 0 : mergedStyle.hyperlink) && this.relationElement) {
             this.createHyperlinkTextRun(p, run.text || "", mergedStyle);
           } else {
@@ -34110,16 +34598,60 @@ var require_multitext_helper = __commonJS({
        * Create a regular text run without hyperlink
        */
       createRegularTextRun(p, text, style) {
-        const r = this.document.createElement("a:r");
-        p.appendChild(r);
+        this.forEachLine(p, text, style, (line) => {
+          const r = this.document.createElement("a:r");
+          p.appendChild(r);
+          const rPr = this.document.createElement("a:rPr");
+          r.appendChild(rPr);
+          this.applyRunStyle(rPr, style);
+          this.createTextElement(r, line);
+        });
+      }
+      /**
+       * Split text at soft line breaks and emit an `<a:br/>` between the segments.
+       *
+       * PPTX has no in-run line break: a soft break (Shift+Enter) is an `<a:br/>`
+       * element sitting *between* two `<a:r>` siblings. PowerPoint itself hands out
+       * U+000B (vertical tab) for such a break when text is read back from a shape,
+       * so `\v` is treated like `\n` here. A literal `\v` in `<a:t>` is not even
+       * valid XML 1.0 and used to produce a file PowerPoint offers to repair.
+       *
+       * Empty segments (consecutive breaks) do not get a run of their own — only
+       * text that was empty to begin with keeps its single empty run.
+       */
+      forEachLine(p, text, style, createRun) {
+        const lines = String(text !== null && text !== void 0 ? text : "").split(/\r\n|[\r\n\u000B]/);
+        lines.forEach((line, index) => {
+          if (index > 0) {
+            this.appendLineBreak(p, style);
+          }
+          if (line === "" && lines.length > 1) {
+            return;
+          }
+          createRun(line);
+        });
+      }
+      /**
+       * Append an `<a:br/>` carrying the surrounding run style, so the empty line
+       * keeps the font size (and therefore the line height) of its neighbours.
+       */
+      appendLineBreak(p, style) {
+        const br = this.document.createElement("a:br");
         const rPr = this.document.createElement("a:rPr");
-        r.appendChild(rPr);
-        if (style) {
-          const styleWithoutHyperlink = Object.assign({}, style);
-          delete styleWithoutHyperlink.hyperlink;
-          modify_text_helper_1.default.style(styleWithoutHyperlink)(rPr);
-        }
-        this.createTextElement(r, text);
+        br.appendChild(rPr);
+        this.applyRunStyle(rPr, style);
+        p.appendChild(br);
+      }
+      /**
+       * Apply a TextStyle to an `<a:rPr>`, ignoring the hyperlink part
+       * (hyperlinks are an element inside rPr, added by HyperlinkElement)
+       */
+      applyRunStyle(rPr, style) {
+        if (!style)
+          return;
+        const styleWithoutHyperlink = Object.assign({}, style);
+        delete styleWithoutHyperlink.hyperlink;
+        modify_text_helper_1.default.style(styleWithoutHyperlink)(rPr);
       }
       /**
        * Create a text element with the given content
@@ -34130,7 +34662,8 @@ var require_multitext_helper = __commonJS({
         if (text === "") {
           t.setAttribute("xml:space", "preserve");
         }
-        const textNode = this.document.createTextNode(text);
+        const sanitized = xml_helper_1.XmlHelper.sanitizeText(text);
+        const textNode = this.document.createTextNode(sanitized);
         t.appendChild(textNode);
       }
       /**
@@ -34151,16 +34684,14 @@ var require_multitext_helper = __commonJS({
         const relData = this.createRelationshipData(target, isInternal || false);
         const newRelId = this.addRelationship(this.relationElement, relData);
         const hyperlinkElement = new modify_hyperlink_element_1.default(this.document, newRelId, isInternal || false);
-        const r = hyperlinkElement.createTextRun(text);
-        if (style) {
+        this.forEachLine(p, text, style, (line) => {
+          const r = hyperlinkElement.createTextRun(line);
           const rPr = r.getElementsByTagName("a:rPr")[0];
           if (rPr) {
-            const styleWithoutHyperlink = Object.assign({}, style);
-            delete styleWithoutHyperlink.hyperlink;
-            modify_text_helper_1.default.style(styleWithoutHyperlink)(rPr);
+            this.applyRunStyle(rPr, style);
           }
-        }
-        p.appendChild(r);
+          p.appendChild(r);
+        });
       }
       /**
        * Create relationship data for hyperlink (reused from ModifyHyperlinkHelper)
@@ -34219,221 +34750,439 @@ var require_html_to_multitext_helper = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.HtmlToMultiTextHelper = void 0;
     var xmldom_1 = require_lib4();
-    var general_helper_1 = require_general_helper();
+    var logger_1 = require_logger();
+    var css_style_parser_1 = require_css_style_parser();
+    var PRESERVE_EMPTY_TAGS = ["p", "li", "h1", "h2", "h3", "h4", "h5", "h6"];
+    var INLINE_TAGS = [
+      "a",
+      "abbr",
+      "b",
+      "big",
+      "cite",
+      "code",
+      "del",
+      "em",
+      "font",
+      "i",
+      "ins",
+      "kbd",
+      "mark",
+      "q",
+      "s",
+      "samp",
+      "small",
+      "span",
+      "strike",
+      "strong",
+      "sub",
+      "sup",
+      "tt",
+      "u",
+      "var"
+    ];
+    var BLOCK_TAGS = [
+      "address",
+      "article",
+      "aside",
+      "blockquote",
+      "div",
+      "dd",
+      "dt",
+      "figcaption",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "header",
+      "footer",
+      "main",
+      "p",
+      "pre",
+      "section"
+    ];
+    var HEADING_SIZES = {
+      h1: 2400,
+      h2: 2e3,
+      h3: 1800,
+      h4: 1600,
+      h5: 1400,
+      h6: 1200
+    };
+    var MONOSPACE_FONT = "Consolas";
+    var MARGIN_TAGS = [
+      "p",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "blockquote",
+      "pre"
+    ];
+    var BLOCK_MARGIN_PERCENT = 100;
+    var AUTO_NUMBER_TYPES = [
+      "arabicPeriod",
+      "alphaLcPeriod",
+      "romanLcPeriod"
+    ];
     var HtmlToMultiTextHelper = class {
+      constructor() {
+        this.paragraphs = [];
+        this.blockMeta = [];
+        this.listCounter = 0;
+      }
       /**
-       * Converts HTML string to MultiTextParagraph array
+       * Converts an HTML string to a MultiTextParagraph array.
+       *
+       * The input contract is XHTML-ish markup as produced by WYSIWYG editors
+       * (CKEditor/TinyMCE): tags closed, attributes quoted. `@xmldom/xmldom` is an
+       * XML parser - real-world tag soup (unclosed `<br>`, bare `&nbsp;`) does not
+       * parse. Common editor quirks that *are* handled: sibling-nested lists
+       * (`<ul><li/><ul>…</ul></ul>`), block-inside-block, and inline styles on any
+       * element.
+       *
        * @param html HTML string to convert
        * @returns Array of MultiTextParagraph objects
        */
       run(html) {
-        const paragraphs = [];
-        const parser = new xmldom_1.DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
-        const currentBulletLevel = 0;
-        const bodyElement = doc.getElementsByTagName("body")[0];
-        if (bodyElement) {
-          Array.from(bodyElement.childNodes).forEach((node) => {
-            if (node.nodeType === xmldom_1.Node.ELEMENT_NODE) {
-              this.processNode(node, currentBulletLevel, paragraphs);
-            }
-          });
-        } else {
-          (0, general_helper_1.log)("You need to provide a <body> tag for HtmlToMultiText", 0);
+        this.paragraphs = [];
+        this.blockMeta = [];
+        this.listCounter = 0;
+        this.open = void 0;
+        const doc = new xmldom_1.DOMParser().parseFromString(html, "text/html");
+        const body = doc.getElementsByTagName("body")[0];
+        if (!body) {
+          logger_1.log.error("You need to provide a <body> tag for HtmlToMultiText");
+          return this.paragraphs;
         }
-        return paragraphs;
+        const rootBlock = { listTypes: [], blockStyle: {} };
+        this.walkChildren(body, rootBlock, {});
+        this.flush();
+        this.applyBlockMargins();
+        return this.paragraphs;
       }
       /**
-       * Processes an HTML node and converts it to MultiTextParagraph objects
+       * Single traversal pass. Two accumulators travel down the tree:
+       * `block` (list depth, alignment, block styling) and `inline` (character
+       * properties). Neither is ever mutated in place - each level gets its own
+       * copy, which is what makes both list-nesting shapes converge.
        */
-      processNode(node, level = 0, paragraphs, bulletLevel = { value: 0 }) {
-        const tagName = node.nodeName.toLowerCase();
-        switch (tagName) {
-          case "p":
-            this.processParagraph(node, paragraphs);
-            break;
-          case "ul":
-          case "ol":
-            this.processList(node, paragraphs, bulletLevel);
-            break;
-          case "li":
-            this.processListItem(node, level, paragraphs);
-            break;
-          default:
-            Array.from(node.childNodes).forEach((child) => {
-              this.processNode(child, level, paragraphs, bulletLevel);
-            });
-        }
-      }
-      /**
-       * Processes a paragraph element
-       */
-      processParagraph(node, paragraphs) {
-        const textRuns = this.createTextRuns(node);
-        if (textRuns.length === 0) {
-          textRuns.push({ text: "" });
-        }
-        paragraphs.push({
-          paragraph: {
-            level: 0,
-            bullet: false,
-            alignment: "l"
-          },
-          textRuns
-        });
-      }
-      /**
-       * Processes a list (ul/ol) element
-       */
-      processList(node, paragraphs, bulletLevel) {
-        bulletLevel.value++;
-        Array.from(node.childNodes).forEach((child) => {
-          this.processNode(child, bulletLevel.value, paragraphs, bulletLevel);
-        });
-        bulletLevel.value--;
-      }
-      /**
-       * Processes a list item element
-       */
-      processListItem(node, level, paragraphs) {
-        const textRuns = [];
-        Array.from(node.childNodes).forEach((child) => {
-          if (child.nodeType === xmldom_1.Node.ELEMENT_NODE && (child.nodeName.toLowerCase() === "ul" || child.nodeName.toLowerCase() === "ol")) {
-            return;
-          }
-          const result = this.processTextNode(child);
-          if (Array.isArray(result)) {
-            textRuns.push(...result.filter((run) => run.text));
-          } else if (result.text) {
-            textRuns.push(result);
-          }
-        });
-        if (textRuns.length === 0) {
-          textRuns.push({ text: "" });
-        }
-        paragraphs.push({
-          paragraph: {
-            level,
-            bullet: true,
-            alignment: "l"
-          },
-          textRuns
-        });
-        Array.from(node.childNodes).forEach((child) => {
-          if (child.nodeName.toLowerCase() === "ul" || child.nodeName.toLowerCase() === "ol") {
-            const bulletLevel = { value: level };
-            this.processNode(child, level + 1, paragraphs, bulletLevel);
-          }
-        });
-      }
-      /**
-       * Creates text runs from an element's child nodes
-       */
-      createTextRuns(node) {
-        const textRuns = [];
-        Array.from(node.childNodes).forEach((child) => {
-          const result = this.processTextNode(child);
-          if (Array.isArray(result)) {
-            textRuns.push(...result.filter((run) => run.text));
-          } else if (result.text) {
-            textRuns.push(result);
-          }
-        });
-        return textRuns;
-      }
-      /**
-       * Processes a text node and creates a TextRun or array of TextRuns
-       */
-      processTextNode(node, style = {}) {
+      walk(node, block, inline) {
         if (node.nodeType === xmldom_1.Node.TEXT_NODE) {
-          const text = node.textContent || "";
-          if (text.trim() === "") {
-            return { text, style };
-          }
-          return { text, style };
+          this.appendText(node.textContent || "", block, inline);
+          return;
         }
-        if (node.nodeType === xmldom_1.Node.ELEMENT_NODE) {
-          const element = node;
-          const newStyle = this.applyElementStyles(element, Object.assign({}, style));
-          if (element.childNodes.length === 0) {
-            return { text: element.textContent || "", style: newStyle };
-          }
-          return this.processElementWithChildren(element, newStyle);
+        if (node.nodeType !== xmldom_1.Node.ELEMENT_NODE) {
+          return;
         }
-        return { text: "" };
-      }
-      /**
-       * Applies styles based on the element type and attributes
-       */
-      applyElementStyles(element, style) {
-        const newStyle = Object.assign({}, style);
+        const element = node;
         const tagName = element.tagName.toLowerCase();
-        if (tagName === "strong" || tagName === "b") {
-          newStyle.isBold = true;
-        } else if (tagName === "em" || tagName === "i") {
-          newStyle.isItalics = true;
-        } else if (tagName === "ins") {
-          newStyle.isUnderlined = true;
-        } else if (tagName === "a") {
-          this.processHyperlink(element, newStyle);
-        } else if (tagName === "span") {
-          this.processSpanStyles(element, newStyle);
+        switch (true) {
+          case tagName === "br":
+            this.appendBreak(block, inline);
+            return;
+          case (tagName === "ul" || tagName === "ol"):
+            this.flush();
+            this.walkChildren(element, this.pushList(element, block, tagName), inline);
+            return;
+          case tagName === "li":
+          case BLOCK_TAGS.includes(tagName):
+            this.walkBlock(element, tagName, block, inline);
+            return;
+          case INLINE_TAGS.includes(tagName):
+            this.walkChildren(element, block, this.inlineStyleFor(element, tagName, inline));
+            return;
+          default:
+            this.walkChildren(element, block, inline);
         }
-        return newStyle;
       }
       /**
-       * Processes anchor element for hyperlinks
+       * A block element (incl. `<li>`) opens exactly one paragraph. If its children
+       * turn out to be blocks themselves, *they* become the paragraphs and this one
+       * stays empty - the innermost block wins, ancestors only contribute
+       * properties. Only a block that emitted nothing at all may end up as a
+       * deliberate blank line.
        */
-      processHyperlink(element, style) {
+      walkBlock(element, tagName, block, inline) {
+        this.flush();
+        const blockContext = this.blockContextFor(element, tagName, block);
+        const paragraphsBefore = this.paragraphs.length;
+        this.openParagraph(blockContext);
+        this.walkChildren(element, blockContext, inline);
+        const emittedNothing = this.paragraphs.length === paragraphsBefore;
+        this.flush(PRESERVE_EMPTY_TAGS.includes(tagName) && emittedNothing);
+      }
+      walkChildren(element, block, inline) {
+        Array.from(element.childNodes).forEach((child) => this.walk(child, block, inline));
+      }
+      /** Push one list level, taking the list type from the tag. */
+      pushList(element, block, tagName) {
+        const withCss = this.applyElementCss(element, block);
+        return Object.assign(Object.assign({}, withCss), {
+          listTypes: [...withCss.listTypes, tagName],
+          // A new top-level list gets its own identity; nested lists inherit it
+          listRoot: withCss.listTypes.length === 0 ? ++this.listCounter : withCss.listRoot
+        });
+      }
+      /** Block context of a non-list block element, incl. heading/pre styling. */
+      blockContextFor(element, tagName, block) {
+        const context = this.applyElementCss(element, block);
+        const blockStyle = Object.assign({}, context.blockStyle);
+        if (HEADING_SIZES[tagName]) {
+          blockStyle.size = HEADING_SIZES[tagName];
+          blockStyle.isBold = true;
+        }
+        if (tagName === "pre") {
+          blockStyle.fontFamily = MONOSPACE_FONT;
+        }
+        return Object.assign(Object.assign({}, context), { blockStyle, margin: context.margin || MARGIN_TAGS.includes(tagName) });
+      }
+      /** Merge an element's inline CSS into the block context (alignment, style). */
+      applyElementCss(element, block) {
+        const css = (0, css_style_parser_1.parseInlineCss)(element.getAttribute("style") || "");
+        if (Object.keys(css).length === 0) {
+          return block;
+        }
+        const alignment = css["text-align"] ? (0, css_style_parser_1.parseCssTextAlign)(css["text-align"]) : void 0;
+        return Object.assign(Object.assign({}, block), { alignment: alignment !== null && alignment !== void 0 ? alignment : block.alignment, blockStyle: this.cssToTextStyle(css, block.blockStyle) });
+      }
+      /** Character properties contributed by one inline element. */
+      inlineStyleFor(element, tagName, inline) {
+        const style = Object.assign({}, inline);
+        switch (tagName) {
+          case "strong":
+          case "b":
+            style.isBold = true;
+            break;
+          case "em":
+          case "i":
+          case "cite":
+          case "var":
+            style.isItalics = true;
+            break;
+          case "u":
+          case "ins":
+            style.isUnderlined = true;
+            break;
+          case "s":
+          case "strike":
+          case "del":
+            style.isStrike = true;
+            break;
+          case "sub":
+            style.isSubscript = true;
+            break;
+          case "sup":
+            style.isSuperscript = true;
+            break;
+          case "code":
+          case "kbd":
+          case "samp":
+          case "tt":
+            style.fontFamily = MONOSPACE_FONT;
+            break;
+          case "mark":
+            style.highlight = { type: "srgbClr", value: "FFFF00" };
+            break;
+          case "a":
+            this.applyHyperlink(element, style);
+            break;
+          case "font":
+            this.applyFontAttributes(element, style);
+            break;
+        }
+        return this.cssToTextStyle((0, css_style_parser_1.parseInlineCss)(element.getAttribute("style") || ""), style);
+      }
+      /** Map the supported CSS subset onto TextStyle. */
+      cssToTextStyle(css, base) {
+        var _a3, _b;
+        if (Object.keys(css).length === 0) {
+          return base;
+        }
+        const style = Object.assign({}, base);
+        const size = css["font-size"] ? (0, css_style_parser_1.parseCssFontSize)(css["font-size"]) : void 0;
+        if (size !== void 0) {
+          style.size = size;
+        }
+        const color = css["color"] ? (0, css_style_parser_1.normalizeCssColor)(css["color"]) : void 0;
+        if (color) {
+          style.color = { type: "srgbClr", value: color };
+        }
+        const highlight = css["background-color"] ? (0, css_style_parser_1.normalizeCssColor)(css["background-color"]) : void 0;
+        if (highlight) {
+          style.highlight = { type: "srgbClr", value: highlight };
+        }
+        const isBold = css["font-weight"] ? (0, css_style_parser_1.parseCssFontWeight)(css["font-weight"]) : void 0;
+        if (isBold !== void 0) {
+          style.isBold = isBold;
+        }
+        const isItalics = css["font-style"] ? (0, css_style_parser_1.parseCssFontStyle)(css["font-style"]) : void 0;
+        if (isItalics !== void 0) {
+          style.isItalics = isItalics;
+        }
+        const decoration = (_b = (_a3 = css["text-decoration"]) !== null && _a3 !== void 0 ? _a3 : css["text-decoration-line"]) !== null && _b !== void 0 ? _b : void 0;
+        if (decoration !== void 0) {
+          const { isUnderlined, isStrike } = (0, css_style_parser_1.parseCssTextDecoration)(decoration);
+          if (isUnderlined !== void 0) {
+            style.isUnderlined = isUnderlined;
+          }
+          if (isStrike !== void 0) {
+            style.isStrike = isStrike;
+          }
+        }
+        const fontFamily = css["font-family"] ? (0, css_style_parser_1.parseCssFontFamily)(css["font-family"]) : void 0;
+        if (fontFamily) {
+          style.fontFamily = fontFamily;
+        }
+        return style;
+      }
+      /**
+       * `<a href>`: a purely numeric href is treated as an internal slide number,
+       * anything else as an external target.
+       */
+      applyHyperlink(element, style) {
         const href = element.getAttribute("href");
         if (!href)
           return;
-        if (!isNaN(parseInt(href))) {
-          const slideNumber = parseInt(href);
+        if (/^\d+$/.test(href.trim())) {
           style.hyperlink = {
-            target: slideNumber,
+            target: parseInt(href, 10),
             isInternal: true
           };
-        } else {
-          style.hyperlink = {
-            target: href,
-            isInternal: false
-          };
-        }
-      }
-      /**
-       * Processes span element styles
-       */
-      processSpanStyles(element, style) {
-        const styleAttr = element.getAttribute("style");
-        if (!styleAttr)
           return;
-        const fontSizeMatch = styleAttr.match(/font-size:\s*(\d+)px/i);
-        if (fontSizeMatch && fontSizeMatch[1]) {
-          style.size = parseInt(fontSizeMatch[1]) * 100;
         }
-        const colorMatch = styleAttr.match(/color:\s*([^;]+)/i);
-        if (colorMatch && colorMatch[1]) {
-          style.color = {
-            type: "srgbClr",
-            value: colorMatch[1].trim()
-          };
+        style.hyperlink = {
+          target: href,
+          isInternal: false
+        };
+      }
+      /** Legacy `<font color size face>` - still emitted by some editors. */
+      applyFontAttributes(element, style) {
+        const color = element.getAttribute("color");
+        if (color) {
+          const normalized = (0, css_style_parser_1.normalizeCssColor)(color);
+          if (normalized) {
+            style.color = { type: "srgbClr", value: normalized };
+          }
+        }
+        const face = element.getAttribute("face");
+        if (face) {
+          const fontFamily = (0, css_style_parser_1.parseCssFontFamily)(face);
+          if (fontFamily) {
+            style.fontFamily = fontFamily;
+          }
         }
       }
       /**
-       * Processes an element with child nodes
+       * Append text to the open paragraph, applying CSS whitespace collapsing:
+       * runs of whitespace become a single space, and a space is dropped at the
+       * start of a paragraph. `&nbsp;` (U+00A0) is not whitespace and survives.
        */
-      processElementWithChildren(element, style) {
-        const runs = [];
-        Array.from(element.childNodes).forEach((child) => {
-          const childRun = this.processTextNode(child, style);
-          if (Array.isArray(childRun)) {
-            runs.push(...childRun.filter((run) => run.text));
-          } else if (childRun.text) {
-            runs.push(childRun);
+      appendText(text, block, inline) {
+        const collapsed = text.replace(/[ \t\r\n\f]+/g, " ");
+        if (collapsed === "") {
+          return;
+        }
+        if (collapsed === " " && !this.open) {
+          return;
+        }
+        this.openParagraph(block);
+        const isParagraphStart = this.open.runs.length === 0;
+        const text_ = isParagraphStart ? collapsed.replace(/^ /, "") : collapsed;
+        if (text_ === "") {
+          return;
+        }
+        this.open.runs.push({ text: text_, style: this.runStyle(block, inline) });
+      }
+      appendBreak(block, inline) {
+        this.openParagraph(block);
+        this.open.runs.push({ break: true, style: this.runStyle(block, inline) });
+      }
+      /** Block styling is the base, inline styling wins. */
+      runStyle(block, inline) {
+        return Object.assign(Object.assign({}, block.blockStyle), inline);
+      }
+      openParagraph(block) {
+        if (this.open) {
+          return;
+        }
+        this.open = { block, runs: [] };
+      }
+      /**
+       * Close the open paragraph and project its block context onto the flat PPTX
+       * paragraph properties.
+       *
+       * @param allowEmpty - Emit the paragraph even without runs (blank line)
+       */
+      flush(allowEmpty = false) {
+        var _a3;
+        if (!this.open) {
+          return;
+        }
+        const { block, runs } = this.open;
+        this.open = void 0;
+        this.trimTrailingWhitespace(runs);
+        if ((_a3 = runs[runs.length - 1]) === null || _a3 === void 0 ? void 0 : _a3.break) {
+          runs.pop();
+          this.trimTrailingWhitespace(runs);
+        }
+        if (runs.length === 0) {
+          if (!allowEmpty) {
+            return;
+          }
+          runs.push({ text: "" });
+        }
+        const listDepth = block.listTypes.length;
+        const listType = block.listTypes[listDepth - 1];
+        const level = listDepth > 0 ? Math.min(listDepth - 1, 8) : 0;
+        this.paragraphs.push({
+          paragraph: Object.assign(Object.assign({ level, bullet: listDepth > 0 }, listType === "ol" ? {
+            bulletType: "number",
+            autoNumberType: AUTO_NUMBER_TYPES[level % AUTO_NUMBER_TYPES.length]
+          } : {}), block.alignment ? { alignment: block.alignment } : {}),
+          textRuns: runs
+        });
+        this.blockMeta.push({ margin: !!block.margin, listRoot: block.listRoot });
+      }
+      /** Trailing collapsed whitespace is layout, not content. */
+      trimTrailingWhitespace(runs) {
+        for (let i = runs.length - 1; i >= 0; i--) {
+          const run = runs[i];
+          if (run.text === void 0) {
+            return;
+          }
+          run.text = run.text.replace(/ +$/, "");
+          if (run.text !== "") {
+            return;
+          }
+          runs.pop();
+        }
+      }
+      /**
+       * Project the browser's default vertical margins onto `spaceBefore`.
+       *
+       * Items of the same list sit tight (nested lists carry no margin in the
+       * default stylesheet); every other boundary touching a margin-bearing block
+       * or a list edge - including the edge between two adjacent lists - gets one
+       * collapsed gap, carried by the later paragraph. The first paragraph gets
+       * none: there is no margin against the text frame.
+       */
+      applyBlockMargins() {
+        this.paragraphs.forEach((paragraph, index) => {
+          if (index === 0) {
+            return;
+          }
+          const previous = this.blockMeta[index - 1];
+          const current = this.blockMeta[index];
+          const sameList = current.listRoot !== void 0 && current.listRoot === previous.listRoot;
+          const touchesMargin = previous.margin || current.margin || previous.listRoot !== void 0 || current.listRoot !== void 0;
+          if (!sameList && touchesMargin) {
+            paragraph.paragraph.spaceBefore = { percent: BLOCK_MARGIN_PERCENT };
           }
         });
-        return runs;
       }
     };
     exports.HtmlToMultiTextHelper = HtmlToMultiTextHelper;
@@ -34455,9 +35204,32 @@ var require_modify_text_helper = __commonJS({
     var multitext_helper_1 = require_multitext_helper();
     var html_to_multitext_helper_1 = require_html_to_multitext_helper();
     var xml_helper_1 = require_xml_helper();
+    var RPR_CHILD_ORDER = [
+      "a:ln",
+      "a:noFill",
+      "a:solidFill",
+      "a:gradFill",
+      "a:blipFill",
+      "a:pattFill",
+      "a:grpFill",
+      "a:effectLst",
+      "a:effectDag",
+      "a:highlight",
+      "a:uLnTx",
+      "a:uLn",
+      "a:uFillTx",
+      "a:uFill",
+      "a:latin",
+      "a:ea",
+      "a:cs",
+      "a:sym",
+      "a:hlinkClick",
+      "a:hlinkMouseOver",
+      "a:rtl",
+      "a:extLst"
+    ];
     var ModifyTextHelper = class {
     };
-    exports.default = ModifyTextHelper;
     _a3 = ModifyTextHelper;
     ModifyTextHelper.setText = (text) => (element) => {
       const paragraphs = element.getElementsByTagName("a:p");
@@ -34471,7 +35243,7 @@ var require_modify_text_helper = __commonJS({
             const block = blocks[j];
             if (j === 0) {
               const textNode = block.getElementsByTagName("a:t")[0];
-              ModifyTextHelper.content(text)(textNode);
+              _a3.content(text)(textNode);
             } else {
               block.parentNode.removeChild(block);
             }
@@ -34495,34 +35267,49 @@ var require_modify_text_helper = __commonJS({
       xmlElements.addBulletList(list);
     };
     ModifyTextHelper.content = (label) => (element) => {
-      if (label !== void 0 && element.firstChild) {
-        element.firstChild.textContent = String(label);
+      if (label === void 0)
+        return;
+      const text = xml_helper_1.XmlHelper.sanitizeText(label);
+      if (element.firstChild) {
+        element.firstChild.textContent = text;
+      } else {
+        element.appendChild(element.ownerDocument.createTextNode(text));
       }
     };
     ModifyTextHelper.style = (style) => (element) => {
       if (!style)
         return;
       if (style.color !== void 0) {
-        ModifyTextHelper.setColor(style.color)(element);
+        _a3.setColor(style.color)(element);
       }
       if (style.size !== void 0) {
-        ModifyTextHelper.setSize(style.size)(element);
+        _a3.setSize(style.size)(element);
       }
       if (style.isBold !== void 0) {
-        ModifyTextHelper.setBold(style.isBold)(element);
+        _a3.setBold(style.isBold)(element);
       }
       if (style.isItalics !== void 0) {
-        ModifyTextHelper.setItalics(style.isItalics)(element);
+        _a3.setItalics(style.isItalics)(element);
       }
       if (style.isUnderlined !== void 0) {
-        ModifyTextHelper.setUnderlined(style.isUnderlined)(element);
+        _a3.setUnderlined(style.isUnderlined)(element);
       }
       if (style.isSuperscript !== void 0) {
-        ModifyTextHelper.setSuperscript(style.isSuperscript)(element);
+        _a3.setSuperscript(style.isSuperscript)(element);
       }
       if (style.isSubscript !== void 0) {
-        ModifyTextHelper.setSubscript(style.isSubscript)(element);
+        _a3.setSubscript(style.isSubscript)(element);
       }
+      if (style.isStrike !== void 0) {
+        _a3.setStrike(style.isStrike)(element);
+      }
+      if (style.fontFamily !== void 0) {
+        _a3.setFontFamily(style.fontFamily)(element);
+      }
+      if (style.highlight !== void 0) {
+        _a3.setHighlight(style.highlight)(element);
+      }
+      xml_helper_1.XmlHelper.sortChildrenBySchema(element, RPR_CHILD_ORDER);
     };
     ModifyTextHelper.setColor = (color) => (element) => {
       modify_color_helper_1.default.solidFill(color)(element);
@@ -34549,6 +35336,31 @@ var require_modify_text_helper = __commonJS({
     ModifyTextHelper.setSubscript = (isSubscript) => (element) => {
       modify_xml_helper_1.default.attribute("baseline", isSubscript ? "-25000" : "0")(element);
     };
+    ModifyTextHelper.setStrike = (isStrike) => (element) => {
+      modify_xml_helper_1.default.attribute("strike", isStrike ? "sngStrike" : "noStrike")(element);
+    };
+    ModifyTextHelper.setFontFamily = (fontFamily) => (element) => {
+      if (!fontFamily)
+        return;
+      let latin = xml_helper_1.XmlHelper.getFirstDirectChild(element, ["a:latin"]);
+      if (!latin) {
+        latin = element.ownerDocument.createElement("a:latin");
+        xml_helper_1.XmlHelper.insertInSchemaOrder(element, latin, RPR_CHILD_ORDER);
+      }
+      latin.setAttribute("typeface", xml_helper_1.XmlHelper.sanitizeAttr(fontFamily));
+    };
+    ModifyTextHelper.setHighlight = (color) => (element) => {
+      if (!color || !color.type)
+        return;
+      modify_color_helper_1.default.normalizeColorObject(color);
+      let highlight = xml_helper_1.XmlHelper.getFirstDirectChild(element, ["a:highlight"]);
+      if (!highlight) {
+        highlight = element.ownerDocument.createElement("a:highlight");
+        xml_helper_1.XmlHelper.insertInSchemaOrder(element, highlight, RPR_CHILD_ORDER);
+      }
+      xml_helper_1.XmlHelper.removeAllChildren(highlight);
+      highlight.appendChild(new xml_elements_1.default(element, { color }).colorType());
+    };
     ModifyTextHelper.setBulletType = (font, character) => (element) => {
       const paragraphs = element.getElementsByTagName("a:p");
       xml_helper_1.XmlHelper.modifyCollection(paragraphs, (paragraph) => {
@@ -34570,6 +35382,7 @@ var require_modify_text_helper = __commonJS({
         }
       });
     };
+    exports.default = ModifyTextHelper;
   }
 });
 
@@ -34668,10 +35481,10 @@ var require_text_replace_helper = __commonJS({
           });
         }
       }
-      applyReplacement(replaceText, textBlock, currentIndex) {
+      applyReplacement(replaceText, textBlock, _currentIndex) {
         var _a3;
         const replace = this.options.openingTag + replaceText.replace + this.options.closingTag;
-        let textNode = this.getTextElement(textBlock);
+        const textNode = this.getTextElement(textBlock);
         const sourceText = (_a3 = textNode.firstChild) === null || _a3 === void 0 ? void 0 : _a3.textContent;
         if (sourceText === null || sourceText === void 0 ? void 0 : sourceText.includes(replace)) {
           const bys = general_helper_1.GeneralHelper.arrayify(replaceText.by);
@@ -34730,13 +35543,14 @@ var require_modify_shape_helper = __commonJS({
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports, "__esModule", { value: true });
+    var xml_elements_1 = __importDefault(require_xml_elements());
     var general_helper_1 = require_general_helper();
     var text_replace_helper_1 = __importDefault(require_text_replace_helper());
     var modify_text_helper_1 = __importDefault(require_modify_text_helper());
     var xml_helper_1 = require_xml_helper();
     var xml_slide_helper_1 = require_xml_slide_helper();
     var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
-    var index_1 = require_dist2();
+    var index_1 = require_dist();
     var map2 = {
       // X position mappings (left)
       x: { tag: "a:off", attribute: "x" },
@@ -34755,6 +35569,13 @@ var require_modify_shape_helper = __commonJS({
       h: { tag: "a:ext", attribute: "cy" },
       height: { tag: "a:ext", attribute: "cy" }
     };
+    var SPPR_AFTER_LINE_TAGS = [
+      "a:effectLst",
+      "a:effectDag",
+      "a:scene3d",
+      "a:sp3d",
+      "a:extLst"
+    ];
     var ModifyShapeHelper = class {
       /**
        * Determines the type of visual element in PowerPoint
@@ -34781,9 +35602,26 @@ var require_modify_shape_helper = __commonJS({
         return index_1.ModifyColorHelper.elementHasBackground(element);
       }
     };
-    exports.default = ModifyShapeHelper;
     ModifyShapeHelper.setSolidFill = (element) => {
       element.getElementsByTagName("a:solidFill")[0].getElementsByTagName("a:schemeClr")[0].setAttribute("val", "accent6");
+    };
+    ModifyShapeHelper.setOutline = (outline) => (element) => {
+      const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
+      if (!spPr) {
+        return;
+      }
+      const existingLine = xml_helper_1.XmlHelper.getFirstDirectChild(spPr, ["a:ln"]);
+      if (existingLine) {
+        new xml_elements_1.default(spPr, { outline }).applyOutline(existingLine);
+        return;
+      }
+      const line = new xml_elements_1.default(spPr, { outline }).outline();
+      const anchor = xml_helper_1.XmlHelper.getFirstDirectChild(spPr, SPPR_AFTER_LINE_TAGS);
+      if (anchor) {
+        spPr.insertBefore(line, anchor);
+      } else {
+        spPr.appendChild(line);
+      }
     };
     ModifyShapeHelper.setText = (text) => (element) => {
       modify_text_helper_1.default.setText(text)(element);
@@ -34832,11 +35670,12 @@ var require_modify_shape_helper = __commonJS({
         return;
       }
       Object.keys(pos).forEach((key) => {
+        const mapped = map2[key];
         let value = Math.round(pos[key]);
-        if (typeof value !== "number" || !map2[key])
+        if (typeof value !== "number" || !mapped)
           return;
         value = value < 0 ? 0 : value;
-        xfrm.getElementsByTagName(map2[key].tag)[0].setAttribute(map2[key].attribute, value);
+        xfrm.getElementsByTagName(mapped.tag)[0].setAttribute(mapped.attribute, String(value));
       });
     };
     ModifyShapeHelper.updatePosition = (pos) => (element) => {
@@ -34845,12 +35684,13 @@ var require_modify_shape_helper = __commonJS({
         return;
       }
       Object.keys(pos).forEach((key) => {
+        const mapped = map2[key];
         let value = Math.round(pos[key]);
-        if (typeof value !== "number" || !map2[key])
+        if (typeof value !== "number" || !mapped)
           return;
-        const currentValue = xfrm.getElementsByTagName(map2[key].tag)[0].getAttribute(map2[key].attribute);
+        const currentValue = xfrm.getElementsByTagName(mapped.tag)[0].getAttribute(mapped.attribute);
         value += Number(currentValue);
-        xfrm.getElementsByTagName(map2[key].tag)[0].setAttribute(map2[key].attribute, value);
+        xfrm.getElementsByTagName(mapped.tag)[0].setAttribute(mapped.attribute, String(value));
       });
     };
     ModifyShapeHelper.rotate = (degrees) => (element) => {
@@ -34898,6 +35738,7 @@ var require_modify_shape_helper = __commonJS({
         xml_helper_1.XmlHelper.remove(noFillElement);
       }
     };
+    exports.default = ModifyShapeHelper;
   }
 });
 
@@ -34908,7 +35749,7 @@ var require_modify_cleanup_helper = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var xml_helper_1 = require_xml_helper();
     var xml_slide_helper_1 = require_xml_slide_helper();
-    var index_1 = require_dist2();
+    var index_1 = require_dist();
     var ModifyCleanupHelper = class _ModifyCleanupHelper {
       /**
        * Removes unwanted visual effects from PowerPoint elements based on their type
@@ -35116,7 +35957,6 @@ var require_modify_cleanup_helper = __commonJS({
         });
       }
     };
-    exports.default = ModifyCleanupHelper;
     ModifyCleanupHelper.removeBackground = (element) => {
       const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
       if (!spPr) {
@@ -35190,6 +36030,7 @@ var require_modify_cleanup_helper = __commonJS({
         }
       });
     };
+    exports.default = ModifyCleanupHelper;
   }
 });
 
@@ -35205,7 +36046,7 @@ var require_modify_table = __commonJS({
     var xml_helper_1 = require_xml_helper();
     var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
     var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    var index_1 = require_dist2();
+    var index_1 = require_dist();
     var general_helper_1 = require_general_helper();
     var ModifyTable = class {
       constructor(table, data) {
@@ -35243,6 +36084,7 @@ var require_modify_table = __commonJS({
                 "a:r": {
                   collection: (collection) => {
                     xml_helper_1.XmlHelper.sliceCollection(collection, 1);
+                    this.breakLines(collection.item(0));
                   }
                 }
               }
@@ -35373,6 +36215,92 @@ var require_modify_table = __commonJS({
         this.table.modify({
           "a:tblGrid": this.slice("a:gridCol", this.maxCols)
         });
+        this.fitRowsToGrid();
+      }
+      /**
+       * Make every <a:tr> hold exactly one <a:tc> per <a:gridCol>. Surplus
+       * template cells are ignored by PowerPoint, but LibreOffice then draws the
+       * table at the top edge of the slide instead of at its <a:off>.
+       *
+       * A spanned cell is followed by one hMerge="1" <a:tc> per covered column,
+       * so each <a:tc> is one grid position. A gridSpan reaching past the new
+       * grid width is clamped; rows shorter than the grid are padded with an
+       * empty clone of their last cell.
+       */
+      fitRowsToGrid() {
+        const rows = this.xml.getElementsByTagName("a:tr");
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows.item(r);
+          const cells = Array.from(row.childNodes).filter((node) => node.tagName === "a:tc");
+          cells.forEach((cell, position) => {
+            if (position >= this.maxCols) {
+              xml_helper_1.XmlHelper.remove(cell);
+              return;
+            }
+            const gridSpan = Number(cell.getAttribute("gridSpan"));
+            if (gridSpan > 1 && position + gridSpan > this.maxCols) {
+              const clamped = this.maxCols - position;
+              if (clamped > 1) {
+                cell.setAttribute("gridSpan", String(clamped));
+              } else {
+                cell.removeAttribute("gridSpan");
+              }
+            }
+          });
+          const lastCell = cells[Math.min(cells.length, this.maxCols) - 1];
+          for (let c = cells.length; lastCell && c < this.maxCols; c++) {
+            const padCell = lastCell.cloneNode(true);
+            ["gridSpan", "rowSpan", "hMerge", "vMerge"].forEach((attribute) => padCell.removeAttribute(attribute));
+            Array.from(padCell.getElementsByTagName("a:t")).forEach((text) => text.textContent = "");
+            Array.from(padCell.getElementsByTagName("a:br")).forEach((br) => xml_helper_1.XmlHelper.remove(br));
+            xml_helper_1.XmlHelper.insertAfter(padCell, lastCell);
+          }
+        }
+      }
+      /**
+       * Turn line breaks in a cell value into soft line breaks.
+       *
+       * A cell is written into its first run only (the others are sliced away
+       * before), so `<a:t>` may now hold a `\n` - or `\u000B`, which
+       * `XmlHelper.sanitizeText` already maps to `\n`. PPTX has no in-run line
+       * break: each line becomes a clone of the run, separated by an `<a:br/>`
+       * that carries a copy of the run's `<a:rPr>`, all in the same paragraph.
+       *
+       * Soft breaks separated the runs that were sliced away, so they go too;
+       * otherwise a cell cloned from a broken neighbour would keep dangling
+       * breaks. As in `MultiTextHelper`, an empty line gets no run of its own.
+       */
+      breakLines(run) {
+        const paragraph = run === null || run === void 0 ? void 0 : run.parentNode;
+        if (!paragraph)
+          return;
+        const txBody = paragraph.parentNode;
+        Array.from((txBody || paragraph).getElementsByTagName("a:br")).forEach((br) => xml_helper_1.XmlHelper.remove(br));
+        const text = run.getElementsByTagName("a:t").item(0);
+        const lines = ((text === null || text === void 0 ? void 0 : text.textContent) || "").split(/\r\n|[\r\n\u000B]/);
+        if (lines.length < 2)
+          return;
+        const rPr = xml_helper_1.XmlHelper.getFirstDirectChild(run, ["a:rPr"]);
+        let previous = run;
+        lines.forEach((line, index) => {
+          if (index > 0) {
+            const br = run.ownerDocument.createElement("a:br");
+            if (rPr) {
+              br.appendChild(rPr.cloneNode(true));
+            }
+            previous = xml_helper_1.XmlHelper.insertAfter(br, previous);
+          }
+          if (line === "")
+            return;
+          const lineRun = index === 0 ? run : run.cloneNode(true);
+          modify_text_helper_1.default.content(line)(lineRun.getElementsByTagName("a:t")[0]);
+          if (index > 0) {
+            previous = xml_helper_1.XmlHelper.insertAfter(lineRun, previous);
+          }
+        });
+        if (lines[0] === "") {
+          xml_helper_1.XmlHelper.remove(run);
+        }
       }
       setCellStyle(style) {
         const cellProps = {
@@ -35538,9 +36466,9 @@ var require_modify_table_helper = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var modify_table_1 = require_modify_table();
     var xml_slide_helper_1 = require_xml_slide_helper();
+    var xml_helper_1 = require_xml_helper();
     var ModifyTableHelper = class {
     };
-    exports.default = ModifyTableHelper;
     ModifyTableHelper.setTable = (data, params) => (element) => {
       const modTable = new modify_table_1.ModifyTable(element, data);
       if (params === null || params === void 0 ? void 0 : params.expand) {
@@ -35597,7 +36525,7 @@ var require_modify_table_helper = __commonJS({
     ModifyTableHelper.setTableStyle = (styleId, attribs) => (element) => {
       const tblPr = element.getElementsByTagName("a:tblPr").item(0);
       const setTableStyleId = (tableStyleId, id) => {
-        tableStyleId.textContent = id;
+        tableStyleId.textContent = xml_helper_1.XmlHelper.sanitizeText(id);
       };
       const createTableStyleId = (tblPr2) => {
         const tableStyleId = tblPr2.ownerDocument.createElement("a:tableStyleId");
@@ -35628,6 +36556,7 @@ var require_modify_table_helper = __commonJS({
         updateTable(tblPr);
       }
     };
+    exports.default = ModifyTableHelper;
   }
 });
 
@@ -35645,15 +36574,16 @@ var require_modify_chart = __commonJS({
     var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
     var modify_text_helper_1 = __importDefault(require_modify_text_helper());
     var modify_color_helper_1 = __importDefault(require_modify_color_helper());
-    var index_1 = require_dist2();
+    var index_1 = require_dist();
     var modify_chart_helper_1 = __importDefault(require_modify_chart_helper());
     var ModifyChart = class {
       constructor(chart, workbook, data, slot) {
+        this.sharedStringCache = {};
         this.setSeriesDataLabels = () => {
           this.data.series.forEach((series, s) => {
             var _a3, _b, _c;
-            this.chart.modify(this.series(s, this.seriesDataLabel(s, (_a3 = series.style) === null || _a3 === void 0 ? void 0 : _a3.label)));
-            if ((_b = series.style) === null || _b === void 0 ? void 0 : _b.label) {
+            if ((_a3 = series.style) === null || _a3 === void 0 ? void 0 : _a3.label) {
+              this.chart.modify(this.series(s, this.seriesDataLabel(s, (_b = series.style) === null || _b === void 0 ? void 0 : _b.label)));
               index_1.modify.setDataLabelAttributes(Object.assign({ applyToSeries: s }, (_c = series.style) === null || _c === void 0 ? void 0 : _c.label))(null, this.chart.root);
             }
             this.data.categories.forEach((category, c) => {
@@ -35669,29 +36599,38 @@ var require_modify_chart = __commonJS({
             }
           };
         };
-        this.chartPoint = (index, idx, style) => {
-          if (!(style === null || style === void 0 ? void 0 : style.color) && !(style === null || style === void 0 ? void 0 : style.border) && !(style === null || style === void 0 ? void 0 : style.marker))
+        this.chartPoint = (idx, style) => {
+          const children = Object.assign(Object.assign({}, this.chartPointSpPr(style)), this.chartPointMarker(style === null || style === void 0 ? void 0 : style.marker));
+          if (!Object.keys(children).length)
             return;
           return {
             "c:dPt": {
-              index,
-              children: Object.assign(Object.assign(Object.assign({ "c:idx": {
-                modify: modify_xml_helper_1.default.attribute("val", idx)
-              } }, this.chartPointFill(style === null || style === void 0 ? void 0 : style.color)), this.chartPointBorder(style === null || style === void 0 ? void 0 : style.border)), this.chartPointMarker(style === null || style === void 0 ? void 0 : style.marker))
+              // c:dPt is sparse: one element per explicitly styled point, addressed
+              // by its <c:idx> payload — never by sibling position.
+              matchIdx: idx,
+              children
             }
           };
         };
-        this.chartPointFill = (color) => {
-          if (!(color === null || color === void 0 ? void 0 : color.type))
+        this.chartPointSpPr = (style) => {
+          var _a3;
+          const modify = [];
+          if ((_a3 = style === null || style === void 0 ? void 0 : style.color) === null || _a3 === void 0 ? void 0 : _a3.type) {
+            modify.push(modify_color_helper_1.default.solidFill(style.color));
+          }
+          const border = this.chartPointBorder(style === null || style === void 0 ? void 0 : style.border);
+          if (!modify.length && !border)
             return;
           return {
             "c:spPr": {
-              modify: modify_color_helper_1.default.solidFill(color)
+              modify,
+              children: border
             }
           };
         };
         this.chartPointMarker = (markerStyle) => {
-          if (!markerStyle)
+          var _a3;
+          if (!((_a3 = markerStyle === null || markerStyle === void 0 ? void 0 : markerStyle.color) === null || _a3 === void 0 ? void 0 : _a3.type))
             return;
           return {
             "c:marker": {
@@ -35705,47 +36644,62 @@ var require_modify_chart = __commonJS({
           };
         };
         this.chartPointBorder = (style) => {
+          var _a3;
           if (!style)
             return;
           const modify = [];
-          if (style.color) {
+          if ((_a3 = style.color) === null || _a3 === void 0 ? void 0 : _a3.type) {
             modify.push(modify_color_helper_1.default.solidFill(style.color));
             modify.push(modify_color_helper_1.default.removeNoFill());
           }
           if (style.weight) {
             modify.push(modify_xml_helper_1.default.attribute("w", style.weight));
           }
+          if (!modify.length)
+            return;
           return {
             "a:ln": {
               modify
             }
           };
         };
-        this.chartPointLabel = (index, idx, labelStyle) => {
+        this.chartPointLabel = (idx, labelStyle) => {
           if (!labelStyle)
             return;
+          const suffixModify = labelStyle.suffix ? [
+            (element) => {
+              modify_chart_helper_1.default.setPointLabelSuffix(element, idx, labelStyle);
+            }
+          ] : [];
           return {
             "c:dLbls": {
               children: {
                 "c:dLbl": {
-                  index,
+                  // Like c:dPt, c:dLbl is a sparse per-point override addressed by
+                  // its <c:idx> payload. A missing label is cloned from the clean
+                  // state of the first existing one.
+                  matchIdx: idx,
                   fromIndex: 0,
+                  modify: suffixModify,
                   children: {
-                    "c:idx": {
-                      modify: modify_xml_helper_1.default.attribute("val", String(idx))
-                    },
+                    // Template content is styled where present, never fabricated.
                     "a:pPr": {
-                      modify: modify_color_helper_1.default.solidFill(labelStyle === null || labelStyle === void 0 ? void 0 : labelStyle.color),
+                      isRequired: false,
                       children: {
                         "a:defRPr": {
                           isRequired: false,
-                          modify: modify_text_helper_1.default.style(labelStyle)
+                          modify: [
+                            modify_color_helper_1.default.solidFill(labelStyle === null || labelStyle === void 0 ? void 0 : labelStyle.color),
+                            modify_text_helper_1.default.style(labelStyle)
+                          ]
                         }
                       }
                     },
                     "a:fld": {
+                      isRequired: false,
                       children: {
                         "a:rPr": {
+                          isRequired: false,
                           modify: [
                             modify_color_helper_1.default.solidFill(labelStyle === null || labelStyle === void 0 ? void 0 : labelStyle.color),
                             modify_text_helper_1.default.style(labelStyle)
@@ -35939,8 +36893,9 @@ var require_modify_chart = __commonJS({
           const worksheetCb = (point, r, category) => {
             return this.workbook.modify(this.rowValues(r, targetCol, mapData(point, category)));
           };
-          const chartCb = slot.type !== void 0 && this[slot.type] !== void 0 && typeof this[slot.type] === "function" ? (point, r, category) => {
-            return this[slot.type](r, targetCol, point, category, slot.tag, mapData, targetYCol);
+          const slotHandler = slot.type !== void 0 ? this[slot.type] : void 0;
+          const chartCb = typeof slotHandler === "function" ? (point, r, category) => {
+            return slotHandler.call(this, r, targetCol, point, category, slot.tag, mapData, targetYCol);
           } : null;
           const column = {
             series: index,
@@ -35969,7 +36924,7 @@ var require_modify_chart = __commonJS({
       }
       setValuesByCategory(cb) {
         this.data.categories.forEach((category, c) => {
-          this.columns.filter((col) => col.chart).forEach((col, s) => {
+          this.columns.filter((col) => col.chart).forEach((col) => {
             if (category.values[col.series] === void 0) {
               throw new Error(`No value for category "${category.label}" at series "${col.label}".`);
             }
@@ -35979,18 +36934,18 @@ var require_modify_chart = __commonJS({
         });
       }
       setPointStyles() {
-        const count = {};
         this.data.categories.forEach((category, c) => {
           if (category.styles) {
             category.styles.forEach((style, s) => {
               if (style === null || !Object.values(style).length)
                 return;
-              count[s] = !count[s] ? 0 : count[s];
-              this.chart.modify(this.series(s, this.chartPoint(count[s], c, style)));
-              if (style.label) {
-                this.chart.modify(this.series(s, this.chartPointLabel(count[s], c, style.label)));
+              const pointTags = this.chartPoint(c, style);
+              if (pointTags) {
+                this.chart.modify(this.series(s, pointTags));
               }
-              count[s]++;
+              if (style.label) {
+                this.chart.modify(this.series(s, this.chartPointLabel(c, style.label)));
+              }
             });
           }
         });
@@ -36051,6 +37006,95 @@ var require_modify_chart = __commonJS({
             toRemove.parentNode.removeChild(toRemove);
           }
         }
+        this.normalizeCellPositions();
+      }
+      /*
+        Excel skips the <c>-tag of an empty cell, e.g. a chart worksheet with an
+        empty top left cell has no <c r="A1"/> at all. All worksheet modifications
+        address a cell by its position inside a <row>, so any gap would shift all
+        following cells and finally create duplicate cell addresses.
+        Inserting a blank cell for each gap restores "nth cell equals nth column".
+        See https://github.com/singerla/pptx-automizer/issues/39
+       */
+      normalizeCellPositions() {
+        const rows = this.workbook.root.getElementsByTagName("row");
+        for (let r = 0; r < rows.length; r++) {
+          this.insertMissingCells(rows[r]);
+        }
+      }
+      insertMissingCells(row) {
+        const cells = Array.from(row.getElementsByTagName("c"));
+        const rowNumber = this.getRowNumber(row, cells);
+        if (rowNumber === null) {
+          return;
+        }
+        let expectedColumn = 0;
+        cells.forEach((cell) => {
+          const column = cell_id_helper_1.default.getColumnIndex(cell.getAttribute("r"));
+          if (column === null || column < expectedColumn) {
+            expectedColumn++;
+            return;
+          }
+          while (expectedColumn < column) {
+            row.insertBefore(this.blankCell(expectedColumn, rowNumber), cell);
+            expectedColumn++;
+          }
+          expectedColumn = column + 1;
+        });
+      }
+      getRowNumber(row, cells) {
+        const rowNumber = Number(row.getAttribute("r"));
+        if (rowNumber) {
+          return rowNumber;
+        }
+        for (const cell of cells) {
+          const cellRow = cell_id_helper_1.default.getRowNumber(cell.getAttribute("r"));
+          if (cellRow) {
+            return cellRow;
+          }
+        }
+        return null;
+      }
+      blankCell(c, rowNumber) {
+        const doc = this.workbook.root.ownerDocument || this.workbook.root;
+        const label = this.blankCellLabel(c, rowNumber);
+        const value = doc.createElement("v");
+        value.appendChild(doc.createTextNode(String(this.getSharedString(label))));
+        const cell = doc.createElement("c");
+        cell.setAttribute("r", cell_id_helper_1.default.getCellAddressString(c, rowNumber - 1));
+        cell.setAttribute("t", "s");
+        cell.appendChild(value);
+        return cell;
+      }
+      /*
+        A blank cell holds a single space, just like PowerPoint does for the empty
+        top left cell of a default chart worksheet. If the worksheet contains a
+        table, a header cell needs to match the name of its tableColumn, otherwise
+        Excel is going to repair the workbook.
+       */
+      blankCellLabel(c, rowNumber) {
+        if (rowNumber !== 1 || !this.workbookTable) {
+          return " ";
+        }
+        const column = this.workbookTable.root.getElementsByTagName("tableColumn")[c];
+        return column ? column.getAttribute("name") : " ";
+      }
+      /*
+        Re-uses an existing shared string to not grow the worksheet on each
+        inserted cell.
+       */
+      getSharedString(label) {
+        if (this.sharedStringCache[label] === void 0) {
+          const strings = this.sharedStrings.getElementsByTagName("si");
+          for (let i = 0; i < strings.length; i++) {
+            if (strings[i].textContent === label) {
+              this.sharedStringCache[label] = i;
+              return i;
+            }
+          }
+          this.sharedStringCache[label] = xml_helper_1.XmlHelper.appendSharedString(this.sharedStrings, label);
+        }
+        return this.sharedStringCache[label];
       }
       setWorkbook() {
         this.workbook.modify(this.spanString());
@@ -36109,7 +37153,11 @@ var require_modify_chart = __commonJS({
             children: {
               c: {
                 index: c,
-                modify: modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(c, 0)),
+                modify: [
+                  modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(c, 0)),
+                  // A label always refers to a shared string.
+                  modify_xml_helper_1.default.attribute("t", "s")
+                ],
                 children: this.sharedString(label)
               }
             }
@@ -36135,7 +37183,11 @@ var require_modify_chart = __commonJS({
             fromPrevious: true,
             children: {
               c: {
-                modify: modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(0, r)),
+                modify: [
+                  modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(0, r)),
+                  // A label always refers to a shared string.
+                  modify_xml_helper_1.default.attribute("t", "s")
+                ],
                 children: this.sharedString(label)
               }
             }
@@ -36151,7 +37203,12 @@ var require_modify_chart = __commonJS({
               c: {
                 index: c,
                 fromPrevious: true,
-                modify: modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(c, r)),
+                modify: [
+                  modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(c, r)),
+                  // A chart value is numeric, it must not point to a shared string,
+                  // e.g. if the cell was blank in the source worksheet.
+                  modify_xml_helper_1.default.removeAttribute("t")
+                ],
                 children: this.cellValue(modify_chart_helper_1.default.parseCellValue(value))
               }
             }
@@ -36239,6 +37296,7 @@ var require_modify_chart_helper = __commonJS({
     };
     var _a3;
     Object.defineProperty(exports, "__esModule", { value: true });
+    var logger_1 = require_logger();
     var modify_chart_1 = require_modify_chart();
     var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
     var xml_helper_1 = require_xml_helper();
@@ -36251,7 +37309,6 @@ var require_modify_chart_helper = __commonJS({
         return String(value);
       }
     };
-    exports.default = ModifyChartHelper;
     _a3 = ModifyChartHelper;
     ModifyChartHelper.setChartData = (data) => (element, chart, workbook) => {
       const slots = [];
@@ -36332,7 +37389,7 @@ var require_modify_chart_helper = __commonJS({
           });
       });
       new modify_chart_1.ModifyChart(chart, workbook, data, slots).modify();
-      ModifyChartHelper.setAxisRange({
+      _a3.setAxisRange({
         axisIndex: 1,
         min: 0,
         max: data.categories.length
@@ -36410,7 +37467,7 @@ var require_modify_chart_helper = __commonJS({
         data.push(rowData);
       }
     };
-    ModifyChartHelper.readChartInfo = (info) => (element, chart, workbook) => {
+    ModifyChartHelper.readChartInfo = (info) => (element, chart, _workbook) => {
       const series = chart.getElementsByTagName("c:ser");
       xml_helper_1.XmlHelper.modifyCollection(series, (tmpSeries, s) => {
         const solidFill = tmpSeries.getElementsByTagName("a:solidFill").item(0);
@@ -36433,13 +37490,13 @@ var require_modify_chart_helper = __commonJS({
       const axis = chart.getElementsByTagName("c:valAx")[range.axisIndex || 0];
       if (!axis)
         return;
-      ModifyChartHelper.setAxisAttribute(axis, "c:majorUnit", range.majorUnit);
-      ModifyChartHelper.setAxisAttribute(axis, "c:minorUnit", range.minorUnit);
-      ModifyChartHelper.setAxisAttribute(axis, "c:numFmt", range.formatCode, "formatCode");
-      ModifyChartHelper.setAxisAttribute(axis, "c:numFmt", range.sourceLinked, "sourceLinked");
+      _a3.setAxisAttribute(axis, "c:majorUnit", range.majorUnit);
+      _a3.setAxisAttribute(axis, "c:minorUnit", range.minorUnit);
+      _a3.setAxisAttribute(axis, "c:numFmt", range.formatCode, "formatCode");
+      _a3.setAxisAttribute(axis, "c:numFmt", range.sourceLinked, "sourceLinked");
       const scaling = axis.getElementsByTagName("c:scaling")[0];
-      ModifyChartHelper.setAxisAttribute(scaling, "c:min", range.min);
-      ModifyChartHelper.setAxisAttribute(scaling, "c:max", range.max);
+      _a3.setAxisAttribute(scaling, "c:min", range.min);
+      _a3.setAxisAttribute(scaling, "c:max", range.max);
     };
     ModifyChartHelper.setAxisAttribute = (element, tag2, value, attribute) => {
       if (value === void 0 || !element)
@@ -36495,7 +37552,7 @@ var require_modify_chart_helper = __commonJS({
     ModifyChartHelper.setPlotArea = (plotArea) => (element, chart) => {
       const modifyXmlHelper = new modify_xml_helper_1.default(chart);
       if (!chart.getElementsByTagName("c:plotArea")[0].getElementsByTagName("c:manualLayout")[0]) {
-        console.error("Can't update plot area. No c:manualLayout found.");
+        logger_1.log.error("Can't update plot area. No c:manualLayout found.");
         return;
       }
       modifyXmlHelper.modify({
@@ -36552,7 +37609,99 @@ var require_modify_chart_helper = __commonJS({
       const chartTitle = chart.getElementsByTagName("c:title").item(0);
       const chartTitleText = chartTitle === null || chartTitle === void 0 ? void 0 : chartTitle.getElementsByTagName("a:t").item(0);
       if (chartTitleText) {
-        chartTitleText.textContent = newTitle;
+        chartTitleText.textContent = xml_helper_1.XmlHelper.sanitizeText(newTitle);
+      }
+    };
+    ModifyChartHelper.removeDataLabels = () => (element, chart) => {
+      const dLbls = chart.getElementsByTagName("c:dLbls");
+      Array.from(dLbls).forEach((dLbl) => {
+        dLbl.parentNode.removeChild(dLbl);
+      });
+    };
+    ModifyChartHelper.setPointLabelSuffix = (element, idx, labelStyle) => {
+      const doc = element.ownerDocument;
+      const txPr = element.getElementsByTagName("c:txPr")[0];
+      if (txPr) {
+        const tx = doc.createElement("c:tx");
+        const rich = doc.createElement("c:rich");
+        while (txPr.firstChild) {
+          rich.appendChild(txPr.firstChild);
+        }
+        tx.appendChild(rich);
+        txPr.parentNode.insertBefore(tx, txPr);
+        txPr.parentNode.removeChild(txPr);
+      }
+      const paragraphs = element.getElementsByTagName("a:p");
+      if (!paragraphs.length)
+        return;
+      const p = paragraphs[0];
+      const existingRuns = Array.from(p.getElementsByTagName("a:r"));
+      existingRuns.forEach((run) => run.parentNode.removeChild(run));
+      const existingFlds = Array.from(p.getElementsByTagName("a:fld"));
+      existingFlds.forEach((fld2) => fld2.parentNode.removeChild(fld2));
+      const endParaRPr = p.getElementsByTagName("a:endParaRPr")[0];
+      const defRPr = p.getElementsByTagName("a:defRPr")[0];
+      const fld = doc.createElement("a:fld");
+      fld.setAttribute("type", "VALUE");
+      fld.setAttribute("id", "{AABBCCDD-1234-5678-9012-" + String(idx).padStart(12, "0") + "}");
+      const fldRPr = doc.createElement("a:rPr");
+      fldRPr.setAttribute("lang", "en-US");
+      if (defRPr) {
+        Array.from(defRPr.childNodes).forEach((child) => {
+          fldRPr.appendChild(child.cloneNode(true));
+        });
+        Array.from(defRPr.attributes).forEach((attr) => {
+          if (attr.name !== "sz" && attr.name !== "b") {
+            fldRPr.setAttribute(attr.name, attr.value);
+          }
+        });
+      }
+      fld.appendChild(fldRPr);
+      const fldT = doc.createElement("a:t");
+      fldT.textContent = "[VALUE]";
+      fld.appendChild(fldT);
+      if (endParaRPr) {
+        p.insertBefore(fld, endParaRPr);
+      } else {
+        p.appendChild(fld);
+      }
+      const r = doc.createElement("a:r");
+      const rPr = doc.createElement("a:rPr");
+      rPr.setAttribute("lang", "en-US");
+      rPr.setAttribute("dirty", "0");
+      if (labelStyle.suffix.color) {
+        const color = Object.assign({}, labelStyle.suffix.color);
+        if (color.value.indexOf("#") === 0) {
+          color.value = color.value.replace("#", "");
+        }
+        const solidFill = doc.createElement("a:solidFill");
+        const colorEl = doc.createElement("a:" + color.type);
+        colorEl.setAttribute("val", color.value);
+        solidFill.appendChild(colorEl);
+        rPr.appendChild(solidFill);
+      }
+      r.appendChild(rPr);
+      const t = doc.createElement("a:t");
+      t.textContent = labelStyle.suffix.text;
+      r.appendChild(t);
+      const endParaRPr2 = p.getElementsByTagName("a:endParaRPr")[0];
+      if (endParaRPr2) {
+        p.insertBefore(r, endParaRPr2);
+      } else {
+        p.appendChild(r);
+      }
+      const bodyPrs = element.getElementsByTagName("a:bodyPr");
+      if (bodyPrs.length) {
+        bodyPrs[0].setAttribute("wrap", "none");
+      }
+      if (!element.getElementsByTagName("c:numFmt").length) {
+        const dLbls = element.parentNode;
+        if (dLbls && dLbls.nodeName === "c:dLbls") {
+          const numFmt = dLbls.getElementsByTagName("c:numFmt")[0];
+          if (numFmt) {
+            element.insertBefore(numFmt.cloneNode(true), element.firstChild);
+          }
+        }
       }
     };
     ModifyChartHelper.setDataLabelAttributes = (dataLabel) => (element, chart) => {
@@ -36565,7 +37714,10 @@ var require_modify_chart_helper = __commonJS({
       modifyXmlHelper.modify({
         "c:ser": Object.assign(Object.assign({}, applyToSeries), { children: {
           "c:dLbls": {
-            children: ModifyChartHelper.setDataPointLabelAttributes(dataLabel)
+            // Modify label attributes only where the template carries
+            // labels — never fabricate a c:dLbls into a series.
+            isRequired: false,
+            children: _a3.setDataPointLabelAttributes(dataLabel)
           }
         } })
       });
@@ -36573,1453 +37725,236 @@ var require_modify_chart_helper = __commonJS({
     ModifyChartHelper.setDataPointLabelAttributes = (dataLabel) => {
       return {
         "c:spPr": {
+          isRequired: false,
           modify: [modify_color_helper_1.default.solidFill(dataLabel.solidFill)]
         },
+        "c:numFmt": {
+          isRequired: false,
+          modify: [
+            modify_xml_helper_1.default.attribute("formatCode", dataLabel.formatCode),
+            modify_xml_helper_1.default.booleanAttribute("sourceLinked", dataLabel.sourceLinked)
+          ]
+        },
         "c:dLblPos": {
+          isRequired: false,
           modify: [modify_xml_helper_1.default.attribute("val", dataLabel.dLblPos)]
         },
         "c:showLegendKey": {
+          isRequired: false,
           modify: [
             modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showLegendKey)
           ]
         },
         "c:showVal": {
+          isRequired: false,
           modify: [modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showVal)]
         },
         "c:showCatName": {
+          isRequired: false,
           modify: [
             modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showCatName)
           ]
         },
         "c:showSerName": {
+          isRequired: false,
           modify: [
             modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showSerName)
           ]
         },
         "c:showPercent": {
+          isRequired: false,
           modify: [
             modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showPercent)
           ]
         },
         "c:showBubbleSize": {
+          isRequired: false,
           modify: [
             modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showBubbleSize)
           ]
         },
         "c:showLeaderLines": {
+          isRequired: false,
           modify: [
             modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showLeaderLines)
           ]
         }
       };
     };
+    exports.default = ModifyChartHelper;
   }
 });
 
-// node_modules/queue/index.js
-var require_queue = __commonJS({
-  "node_modules/queue/index.js"(exports, module) {
-    var inherits = require_inherits();
-    var EventEmitter = __require("events").EventEmitter;
-    module.exports = Queue;
-    module.exports.default = Queue;
-    function Queue(options) {
-      if (!(this instanceof Queue)) {
-        return new Queue(options);
-      }
-      EventEmitter.call(this);
-      options = options || {};
-      this.concurrency = options.concurrency || Infinity;
-      this.timeout = options.timeout || 0;
-      this.autostart = options.autostart || false;
-      this.results = options.results || null;
-      this.pending = 0;
-      this.session = 0;
-      this.running = false;
-      this.jobs = [];
-      this.timers = {};
-    }
-    inherits(Queue, EventEmitter);
-    var arrayMethods = [
-      "pop",
-      "shift",
-      "indexOf",
-      "lastIndexOf"
-    ];
-    arrayMethods.forEach(function(method) {
-      Queue.prototype[method] = function() {
-        return Array.prototype[method].apply(this.jobs, arguments);
-      };
-    });
-    Queue.prototype.slice = function(begin, end) {
-      this.jobs = this.jobs.slice(begin, end);
-      return this;
-    };
-    Queue.prototype.reverse = function() {
-      this.jobs.reverse();
-      return this;
-    };
-    var arrayAddMethods = [
-      "push",
-      "unshift",
-      "splice"
-    ];
-    arrayAddMethods.forEach(function(method) {
-      Queue.prototype[method] = function() {
-        var methodResult = Array.prototype[method].apply(this.jobs, arguments);
-        if (this.autostart) {
-          this.start();
-        }
-        return methodResult;
-      };
-    });
-    Object.defineProperty(Queue.prototype, "length", {
-      get: function() {
-        return this.pending + this.jobs.length;
-      }
-    });
-    Queue.prototype.start = function(cb) {
-      if (cb) {
-        callOnErrorOrEnd.call(this, cb);
-      }
-      this.running = true;
-      if (this.pending >= this.concurrency) {
-        return;
-      }
-      if (this.jobs.length === 0) {
-        if (this.pending === 0) {
-          done.call(this);
-        }
-        return;
-      }
-      var self2 = this;
-      var job = this.jobs.shift();
-      var once = true;
-      var session = this.session;
-      var timeoutId = null;
-      var didTimeout = false;
-      var resultIndex = null;
-      var timeout = job.hasOwnProperty("timeout") ? job.timeout : this.timeout;
-      function next(err, result) {
-        if (once && self2.session === session) {
-          once = false;
-          self2.pending--;
-          if (timeoutId !== null) {
-            delete self2.timers[timeoutId];
-            clearTimeout(timeoutId);
-          }
-          if (err) {
-            self2.emit("error", err, job);
-          } else if (didTimeout === false) {
-            if (resultIndex !== null) {
-              self2.results[resultIndex] = Array.prototype.slice.call(arguments, 1);
-            }
-            self2.emit("success", result, job);
-          }
-          if (self2.session === session) {
-            if (self2.pending === 0 && self2.jobs.length === 0) {
-              done.call(self2);
-            } else if (self2.running) {
-              self2.start();
-            }
-          }
-        }
-      }
-      if (timeout) {
-        timeoutId = setTimeout(function() {
-          didTimeout = true;
-          if (self2.listeners("timeout").length > 0) {
-            self2.emit("timeout", next, job);
-          } else {
-            next();
-          }
-        }, timeout);
-        this.timers[timeoutId] = timeoutId;
-      }
-      if (this.results) {
-        resultIndex = this.results.length;
-        this.results[resultIndex] = null;
-      }
-      this.pending++;
-      self2.emit("start", job);
-      var promise2 = job(next);
-      if (promise2 && promise2.then && typeof promise2.then === "function") {
-        promise2.then(function(result) {
-          return next(null, result);
-        }).catch(function(err) {
-          return next(err || true);
-        });
-      }
-      if (this.running && this.jobs.length > 0) {
-        this.start();
-      }
-    };
-    Queue.prototype.stop = function() {
-      this.running = false;
-    };
-    Queue.prototype.end = function(err) {
-      clearTimers.call(this);
-      this.jobs.length = 0;
-      this.pending = 0;
-      done.call(this, err);
-    };
-    function clearTimers() {
-      for (var key in this.timers) {
-        var timeoutId = this.timers[key];
-        delete this.timers[key];
-        clearTimeout(timeoutId);
-      }
-    }
-    function callOnErrorOrEnd(cb) {
-      var self2 = this;
-      this.on("error", onerror);
-      this.on("end", onend);
-      function onerror(err) {
-        self2.end(err);
-      }
-      function onend(err) {
-        self2.removeListener("error", onerror);
-        self2.removeListener("end", onend);
-        cb(err, this.results);
-      }
-    }
-    function done(err) {
-      this.session++;
-      this.running = false;
-      this.emit("end", err);
-    }
-  }
-});
-
-// node_modules/image-size/dist/types/utils.js
-var require_utils2 = __commonJS({
-  "node_modules/image-size/dist/types/utils.js"(exports) {
+// node_modules/pptx-automizer/dist/helper/image-dimensions.js
+var require_image_dimensions = __commonJS({
+  "node_modules/pptx-automizer/dist/helper/image-dimensions.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.findBox = exports.readUInt = exports.readUInt32LE = exports.readUInt32BE = exports.readInt32LE = exports.readUInt24LE = exports.readUInt16LE = exports.readUInt16BE = exports.readInt16LE = exports.toHexString = exports.toUTF8String = void 0;
-    var decoder = new TextDecoder();
-    var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(input.slice(start, end));
-    exports.toUTF8String = toUTF8String;
-    var toHexString = (input, start = 0, end = input.length) => input.slice(start, end).reduce((memo, i) => memo + ("0" + i.toString(16)).slice(-2), "");
-    exports.toHexString = toHexString;
-    var readInt16LE = (input, offset = 0) => {
-      const val = input[offset] + input[offset + 1] * 2 ** 8;
-      return val | (val & 2 ** 15) * 131070;
-    };
-    exports.readInt16LE = readInt16LE;
-    var readUInt16BE = (input, offset = 0) => input[offset] * 2 ** 8 + input[offset + 1];
-    exports.readUInt16BE = readUInt16BE;
-    var readUInt16LE = (input, offset = 0) => input[offset] + input[offset + 1] * 2 ** 8;
-    exports.readUInt16LE = readUInt16LE;
-    var readUInt24LE = (input, offset = 0) => input[offset] + input[offset + 1] * 2 ** 8 + input[offset + 2] * 2 ** 16;
-    exports.readUInt24LE = readUInt24LE;
-    var readInt32LE = (input, offset = 0) => input[offset] + input[offset + 1] * 2 ** 8 + input[offset + 2] * 2 ** 16 + (input[offset + 3] << 24);
-    exports.readInt32LE = readInt32LE;
-    var readUInt32BE = (input, offset = 0) => input[offset] * 2 ** 24 + input[offset + 1] * 2 ** 16 + input[offset + 2] * 2 ** 8 + input[offset + 3];
-    exports.readUInt32BE = readUInt32BE;
-    var readUInt32LE = (input, offset = 0) => input[offset] + input[offset + 1] * 2 ** 8 + input[offset + 2] * 2 ** 16 + input[offset + 3] * 2 ** 24;
-    exports.readUInt32LE = readUInt32LE;
-    var methods = {
-      readUInt16BE: exports.readUInt16BE,
-      readUInt16LE: exports.readUInt16LE,
-      readUInt32BE: exports.readUInt32BE,
-      readUInt32LE: exports.readUInt32LE
-    };
-    function readUInt(input, bits, offset, isBigEndian) {
-      offset = offset || 0;
-      const endian = isBigEndian ? "BE" : "LE";
-      const methodName = "readUInt" + bits + endian;
-      return methods[methodName](input, offset);
-    }
-    exports.readUInt = readUInt;
-    function readBox(input, offset) {
-      if (input.length - offset < 4)
-        return;
-      const boxSize = (0, exports.readUInt32BE)(input, offset);
-      if (input.length - offset < boxSize)
-        return;
+    exports.imageDimensions = void 0;
+    var MIN_SNIFF_LENGTH = 12;
+    var SVG_SCAN_LIMIT = 4096;
+    var parsePng = (buffer) => {
+      if (buffer.length < 24 || buffer.toString("latin1", 12, 16) !== "IHDR") {
+        throw new Error("Malformed PNG: missing IHDR chunk");
+      }
       return {
-        name: (0, exports.toUTF8String)(input, 4 + offset, 8 + offset),
-        offset,
-        size: boxSize
+        width: buffer.readUInt32BE(16),
+        height: buffer.readUInt32BE(20)
       };
-    }
-    function findBox(input, boxName, offset) {
-      while (offset < input.length) {
-        const box = readBox(input, offset);
-        if (!box)
-          break;
-        if (box.name === boxName)
-          return box;
-        offset += box.size > 0 ? box.size : 8;
-      }
-    }
-    exports.findBox = findBox;
-  }
-});
-
-// node_modules/image-size/dist/types/bmp.js
-var require_bmp = __commonJS({
-  "node_modules/image-size/dist/types/bmp.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.BMP = void 0;
-    var utils_1 = require_utils2();
-    exports.BMP = {
-      validate: (input) => (0, utils_1.toUTF8String)(input, 0, 2) === "BM",
-      calculate: (input) => ({
-        height: Math.abs((0, utils_1.readInt32LE)(input, 22)),
-        width: (0, utils_1.readUInt32LE)(input, 18)
-      })
     };
-  }
-});
-
-// node_modules/image-size/dist/types/ico.js
-var require_ico = __commonJS({
-  "node_modules/image-size/dist/types/ico.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ICO = void 0;
-    var utils_1 = require_utils2();
-    var TYPE_ICON = 1;
-    var SIZE_HEADER = 2 + 2 + 2;
-    var SIZE_IMAGE_ENTRY = 1 + 1 + 1 + 1 + 2 + 2 + 4 + 4;
-    function getSizeFromOffset(input, offset) {
-      const value = input[offset];
-      return value === 0 ? 256 : value;
-    }
-    function getImageSize(input, imageIndex) {
-      const offset = SIZE_HEADER + imageIndex * SIZE_IMAGE_ENTRY;
-      return {
-        height: getSizeFromOffset(input, offset + 1),
-        width: getSizeFromOffset(input, offset)
-      };
-    }
-    exports.ICO = {
-      validate(input) {
-        const reserved = (0, utils_1.readUInt16LE)(input, 0);
-        const imageCount = (0, utils_1.readUInt16LE)(input, 4);
-        if (reserved !== 0 || imageCount === 0)
-          return false;
-        const imageType = (0, utils_1.readUInt16LE)(input, 2);
-        return imageType === TYPE_ICON;
-      },
-      calculate(input) {
-        const nbImages = (0, utils_1.readUInt16LE)(input, 4);
-        const imageSize = getImageSize(input, 0);
-        if (nbImages === 1)
-          return imageSize;
-        const imgs = [imageSize];
-        for (let imageIndex = 1; imageIndex < nbImages; imageIndex += 1) {
-          imgs.push(getImageSize(input, imageIndex));
+    var parseJpeg = (buffer) => {
+      let offset = 2;
+      while (offset + 1 < buffer.length) {
+        if (buffer[offset] !== 255) {
+          throw new Error("Malformed JPEG: expected marker");
         }
-        return {
-          height: imageSize.height,
-          images: imgs,
-          width: imageSize.width
-        };
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/cur.js
-var require_cur = __commonJS({
-  "node_modules/image-size/dist/types/cur.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.CUR = void 0;
-    var ico_1 = require_ico();
-    var utils_1 = require_utils2();
-    var TYPE_CURSOR = 2;
-    exports.CUR = {
-      validate(input) {
-        const reserved = (0, utils_1.readUInt16LE)(input, 0);
-        const imageCount = (0, utils_1.readUInt16LE)(input, 4);
-        if (reserved !== 0 || imageCount === 0)
-          return false;
-        const imageType = (0, utils_1.readUInt16LE)(input, 2);
-        return imageType === TYPE_CURSOR;
-      },
-      calculate: (input) => ico_1.ICO.calculate(input)
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/dds.js
-var require_dds = __commonJS({
-  "node_modules/image-size/dist/types/dds.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DDS = void 0;
-    var utils_1 = require_utils2();
-    exports.DDS = {
-      validate: (input) => (0, utils_1.readUInt32LE)(input, 0) === 542327876,
-      calculate: (input) => ({
-        height: (0, utils_1.readUInt32LE)(input, 12),
-        width: (0, utils_1.readUInt32LE)(input, 16)
-      })
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/gif.js
-var require_gif = __commonJS({
-  "node_modules/image-size/dist/types/gif.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.GIF = void 0;
-    var utils_1 = require_utils2();
-    var gifRegexp = /^GIF8[79]a/;
-    exports.GIF = {
-      validate: (input) => gifRegexp.test((0, utils_1.toUTF8String)(input, 0, 6)),
-      calculate: (input) => ({
-        height: (0, utils_1.readUInt16LE)(input, 8),
-        width: (0, utils_1.readUInt16LE)(input, 6)
-      })
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/heif.js
-var require_heif = __commonJS({
-  "node_modules/image-size/dist/types/heif.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.HEIF = void 0;
-    var utils_1 = require_utils2();
-    var brandMap = {
-      avif: "avif",
-      mif1: "heif",
-      msf1: "heif",
-      // heif-sequence
-      heic: "heic",
-      heix: "heic",
-      hevc: "heic",
-      // heic-sequence
-      hevx: "heic"
-      // heic-sequence
-    };
-    exports.HEIF = {
-      validate(input) {
-        const boxType = (0, utils_1.toUTF8String)(input, 4, 8);
-        if (boxType !== "ftyp")
-          return false;
-        const ftypBox = (0, utils_1.findBox)(input, "ftyp", 0);
-        if (!ftypBox)
-          return false;
-        const brand = (0, utils_1.toUTF8String)(input, ftypBox.offset + 8, ftypBox.offset + 12);
-        return brand in brandMap;
-      },
-      calculate(input) {
-        const metaBox = (0, utils_1.findBox)(input, "meta", 0);
-        const iprpBox = metaBox && (0, utils_1.findBox)(input, "iprp", metaBox.offset + 12);
-        const ipcoBox = iprpBox && (0, utils_1.findBox)(input, "ipco", iprpBox.offset + 8);
-        const ispeBox = ipcoBox && (0, utils_1.findBox)(input, "ispe", ipcoBox.offset + 8);
-        if (ispeBox) {
-          return {
-            height: (0, utils_1.readUInt32BE)(input, ispeBox.offset + 16),
-            width: (0, utils_1.readUInt32BE)(input, ispeBox.offset + 12),
-            type: (0, utils_1.toUTF8String)(input, 8, 12)
-          };
+        while (offset < buffer.length && buffer[offset] === 255) {
+          offset++;
         }
-        throw new TypeError("Invalid HEIF, no size found");
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/icns.js
-var require_icns = __commonJS({
-  "node_modules/image-size/dist/types/icns.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ICNS = void 0;
-    var utils_1 = require_utils2();
-    var SIZE_HEADER = 4 + 4;
-    var FILE_LENGTH_OFFSET = 4;
-    var ENTRY_LENGTH_OFFSET = 4;
-    var ICON_TYPE_SIZE = {
-      ICON: 32,
-      "ICN#": 32,
-      // m => 16 x 16
-      "icm#": 16,
-      icm4: 16,
-      icm8: 16,
-      // s => 16 x 16
-      "ics#": 16,
-      ics4: 16,
-      ics8: 16,
-      is32: 16,
-      s8mk: 16,
-      icp4: 16,
-      // l => 32 x 32
-      icl4: 32,
-      icl8: 32,
-      il32: 32,
-      l8mk: 32,
-      icp5: 32,
-      ic11: 32,
-      // h => 48 x 48
-      ich4: 48,
-      ich8: 48,
-      ih32: 48,
-      h8mk: 48,
-      // . => 64 x 64
-      icp6: 64,
-      ic12: 32,
-      // t => 128 x 128
-      it32: 128,
-      t8mk: 128,
-      ic07: 128,
-      // . => 256 x 256
-      ic08: 256,
-      ic13: 256,
-      // . => 512 x 512
-      ic09: 512,
-      ic14: 512,
-      // . => 1024 x 1024
-      ic10: 1024
-    };
-    function readImageHeader(input, imageOffset) {
-      const imageLengthOffset = imageOffset + ENTRY_LENGTH_OFFSET;
-      return [
-        (0, utils_1.toUTF8String)(input, imageOffset, imageLengthOffset),
-        (0, utils_1.readUInt32BE)(input, imageLengthOffset)
-      ];
-    }
-    function getImageSize(type) {
-      const size = ICON_TYPE_SIZE[type];
-      return { width: size, height: size, type };
-    }
-    exports.ICNS = {
-      validate: (input) => (0, utils_1.toUTF8String)(input, 0, 4) === "icns",
-      calculate(input) {
-        const inputLength = input.length;
-        const fileLength = (0, utils_1.readUInt32BE)(input, FILE_LENGTH_OFFSET);
-        let imageOffset = SIZE_HEADER;
-        let imageHeader = readImageHeader(input, imageOffset);
-        let imageSize = getImageSize(imageHeader[0]);
-        imageOffset += imageHeader[1];
-        if (imageOffset === fileLength)
-          return imageSize;
-        const result = {
-          height: imageSize.height,
-          images: [imageSize],
-          width: imageSize.width
-        };
-        while (imageOffset < fileLength && imageOffset < inputLength) {
-          imageHeader = readImageHeader(input, imageOffset);
-          imageSize = getImageSize(imageHeader[0]);
-          imageOffset += imageHeader[1];
-          result.images.push(imageSize);
-        }
-        return result;
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/j2c.js
-var require_j2c = __commonJS({
-  "node_modules/image-size/dist/types/j2c.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.J2C = void 0;
-    var utils_1 = require_utils2();
-    exports.J2C = {
-      // TODO: this doesn't seem right. SIZ marker doesn't have to be right after the SOC
-      validate: (input) => (0, utils_1.readUInt32BE)(input, 0) === 4283432785,
-      calculate: (input) => ({
-        height: (0, utils_1.readUInt32BE)(input, 12),
-        width: (0, utils_1.readUInt32BE)(input, 8)
-      })
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/jp2.js
-var require_jp2 = __commonJS({
-  "node_modules/image-size/dist/types/jp2.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.JP2 = void 0;
-    var utils_1 = require_utils2();
-    exports.JP2 = {
-      validate(input) {
-        const boxType = (0, utils_1.toUTF8String)(input, 4, 8);
-        if (boxType !== "jP  ")
-          return false;
-        const ftypBox = (0, utils_1.findBox)(input, "ftyp", 0);
-        if (!ftypBox)
-          return false;
-        const brand = (0, utils_1.toUTF8String)(input, ftypBox.offset + 8, ftypBox.offset + 12);
-        return brand === "jp2 ";
-      },
-      calculate(input) {
-        const jp2hBox = (0, utils_1.findBox)(input, "jp2h", 0);
-        const ihdrBox = jp2hBox && (0, utils_1.findBox)(input, "ihdr", jp2hBox.offset + 8);
-        if (ihdrBox) {
-          return {
-            height: (0, utils_1.readUInt32BE)(input, ihdrBox.offset + 8),
-            width: (0, utils_1.readUInt32BE)(input, ihdrBox.offset + 12)
-          };
-        }
-        throw new TypeError("Unsupported JPEG 2000 format");
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/jpg.js
-var require_jpg = __commonJS({
-  "node_modules/image-size/dist/types/jpg.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.JPG = void 0;
-    var utils_1 = require_utils2();
-    var EXIF_MARKER = "45786966";
-    var APP1_DATA_SIZE_BYTES = 2;
-    var EXIF_HEADER_BYTES = 6;
-    var TIFF_BYTE_ALIGN_BYTES = 2;
-    var BIG_ENDIAN_BYTE_ALIGN = "4d4d";
-    var LITTLE_ENDIAN_BYTE_ALIGN = "4949";
-    var IDF_ENTRY_BYTES = 12;
-    var NUM_DIRECTORY_ENTRIES_BYTES = 2;
-    function isEXIF(input) {
-      return (0, utils_1.toHexString)(input, 2, 6) === EXIF_MARKER;
-    }
-    function extractSize(input, index) {
-      return {
-        height: (0, utils_1.readUInt16BE)(input, index),
-        width: (0, utils_1.readUInt16BE)(input, index + 2)
-      };
-    }
-    function extractOrientation(exifBlock, isBigEndian) {
-      const idfOffset = 8;
-      const offset = EXIF_HEADER_BYTES + idfOffset;
-      const idfDirectoryEntries = (0, utils_1.readUInt)(exifBlock, 16, offset, isBigEndian);
-      for (let directoryEntryNumber = 0; directoryEntryNumber < idfDirectoryEntries; directoryEntryNumber++) {
-        const start = offset + NUM_DIRECTORY_ENTRIES_BYTES + directoryEntryNumber * IDF_ENTRY_BYTES;
-        const end = start + IDF_ENTRY_BYTES;
-        if (start > exifBlock.length) {
-          return;
-        }
-        const block = exifBlock.slice(start, end);
-        const tagNumber = (0, utils_1.readUInt)(block, 16, 0, isBigEndian);
-        if (tagNumber === 274) {
-          const dataFormat = (0, utils_1.readUInt)(block, 16, 2, isBigEndian);
-          if (dataFormat !== 3) {
-            return;
-          }
-          const numberOfComponents = (0, utils_1.readUInt)(block, 32, 4, isBigEndian);
-          if (numberOfComponents !== 1) {
-            return;
-          }
-          return (0, utils_1.readUInt)(block, 16, 8, isBigEndian);
-        }
-      }
-    }
-    function validateExifBlock(input, index) {
-      const exifBlock = input.slice(APP1_DATA_SIZE_BYTES, index);
-      const byteAlign = (0, utils_1.toHexString)(exifBlock, EXIF_HEADER_BYTES, EXIF_HEADER_BYTES + TIFF_BYTE_ALIGN_BYTES);
-      const isBigEndian = byteAlign === BIG_ENDIAN_BYTE_ALIGN;
-      const isLittleEndian = byteAlign === LITTLE_ENDIAN_BYTE_ALIGN;
-      if (isBigEndian || isLittleEndian) {
-        return extractOrientation(exifBlock, isBigEndian);
-      }
-    }
-    function validateInput(input, index) {
-      if (index > input.length) {
-        throw new TypeError("Corrupt JPG, exceeded buffer limits");
-      }
-    }
-    exports.JPG = {
-      validate: (input) => (0, utils_1.toHexString)(input, 0, 2) === "ffd8",
-      calculate(input) {
-        input = input.slice(4);
-        let orientation;
-        let next;
-        while (input.length) {
-          const i = (0, utils_1.readUInt16BE)(input, 0);
-          if (input[i] !== 255) {
-            input = input.slice(1);
-            continue;
-          }
-          if (isEXIF(input)) {
-            orientation = validateExifBlock(input, i);
-          }
-          validateInput(input, i);
-          next = input[i + 1];
-          if (next === 192 || next === 193 || next === 194) {
-            const size = extractSize(input, i + 5);
-            if (!orientation) {
-              return size;
-            }
-            return {
-              height: size.height,
-              orientation,
-              width: size.width
-            };
-          }
-          input = input.slice(i + 2);
-        }
-        throw new TypeError("Invalid JPG, no size found");
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/utils/bit-reader.js
-var require_bit_reader = __commonJS({
-  "node_modules/image-size/dist/utils/bit-reader.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.BitReader = void 0;
-    var BitReader = class {
-      constructor(input, endianness) {
-        this.input = input;
-        this.endianness = endianness;
-        this.byteOffset = 2;
-        this.bitOffset = 0;
-      }
-      /** Reads a specified number of bits, and move the offset */
-      getBits(length = 1) {
-        let result = 0;
-        let bitsRead = 0;
-        while (bitsRead < length) {
-          if (this.byteOffset >= this.input.length) {
-            throw new Error("Reached end of input");
-          }
-          const currentByte = this.input[this.byteOffset];
-          const bitsLeft = 8 - this.bitOffset;
-          const bitsToRead = Math.min(length - bitsRead, bitsLeft);
-          if (this.endianness === "little-endian") {
-            const mask = (1 << bitsToRead) - 1;
-            const bits = currentByte >> this.bitOffset & mask;
-            result |= bits << bitsRead;
-          } else {
-            const mask = (1 << bitsToRead) - 1 << 8 - this.bitOffset - bitsToRead;
-            const bits = (currentByte & mask) >> 8 - this.bitOffset - bitsToRead;
-            result = result << bitsToRead | bits;
-          }
-          bitsRead += bitsToRead;
-          this.bitOffset += bitsToRead;
-          if (this.bitOffset === 8) {
-            this.byteOffset++;
-            this.bitOffset = 0;
-          }
-        }
-        return result;
-      }
-    };
-    exports.BitReader = BitReader;
-  }
-});
-
-// node_modules/image-size/dist/types/jxl-stream.js
-var require_jxl_stream = __commonJS({
-  "node_modules/image-size/dist/types/jxl-stream.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.JXLStream = void 0;
-    var utils_1 = require_utils2();
-    var bit_reader_1 = require_bit_reader();
-    function calculateImageDimension(reader, isSmallImage) {
-      if (isSmallImage) {
-        return 8 * (1 + reader.getBits(5));
-      } else {
-        const sizeClass = reader.getBits(2);
-        const extraBits = [9, 13, 18, 30][sizeClass];
-        return 1 + reader.getBits(extraBits);
-      }
-    }
-    function calculateImageWidth(reader, isSmallImage, widthMode, height) {
-      if (isSmallImage && widthMode === 0) {
-        return 8 * (1 + reader.getBits(5));
-      } else if (widthMode === 0) {
-        return calculateImageDimension(reader, false);
-      } else {
-        const aspectRatios = [1, 1.2, 4 / 3, 1.5, 16 / 9, 5 / 4, 2];
-        return Math.floor(height * aspectRatios[widthMode - 1]);
-      }
-    }
-    exports.JXLStream = {
-      validate: (input) => {
-        return (0, utils_1.toHexString)(input, 0, 2) === "ff0a";
-      },
-      calculate(input) {
-        const reader = new bit_reader_1.BitReader(input, "little-endian");
-        const isSmallImage = reader.getBits(1) === 1;
-        const height = calculateImageDimension(reader, isSmallImage);
-        const widthMode = reader.getBits(3);
-        const width = calculateImageWidth(reader, isSmallImage, widthMode, height);
-        return { width, height };
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/jxl.js
-var require_jxl = __commonJS({
-  "node_modules/image-size/dist/types/jxl.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.JXL = void 0;
-    var utils_1 = require_utils2();
-    var jxl_stream_1 = require_jxl_stream();
-    function extractCodestream(input) {
-      const jxlcBox = (0, utils_1.findBox)(input, "jxlc", 0);
-      if (jxlcBox) {
-        return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
-      }
-      const partialStreams = extractPartialStreams(input);
-      if (partialStreams.length > 0) {
-        return concatenateCodestreams(partialStreams);
-      }
-      return void 0;
-    }
-    function extractPartialStreams(input) {
-      const partialStreams = [];
-      let offset = 0;
-      while (offset < input.length) {
-        const jxlpBox = (0, utils_1.findBox)(input, "jxlp", offset);
-        if (!jxlpBox)
-          break;
-        partialStreams.push(input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size));
-        offset = jxlpBox.offset + jxlpBox.size;
-      }
-      return partialStreams;
-    }
-    function concatenateCodestreams(partialCodestreams) {
-      const totalLength = partialCodestreams.reduce((acc, curr) => acc + curr.length, 0);
-      const codestream = new Uint8Array(totalLength);
-      let position = 0;
-      for (const partial2 of partialCodestreams) {
-        codestream.set(partial2, position);
-        position += partial2.length;
-      }
-      return codestream;
-    }
-    exports.JXL = {
-      validate: (input) => {
-        const boxType = (0, utils_1.toUTF8String)(input, 4, 8);
-        if (boxType !== "JXL ")
-          return false;
-        const ftypBox = (0, utils_1.findBox)(input, "ftyp", 0);
-        if (!ftypBox)
-          return false;
-        const brand = (0, utils_1.toUTF8String)(input, ftypBox.offset + 8, ftypBox.offset + 12);
-        return brand === "jxl ";
-      },
-      calculate(input) {
-        const codestream = extractCodestream(input);
-        if (codestream)
-          return jxl_stream_1.JXLStream.calculate(codestream);
-        throw new Error("No codestream found in JXL container");
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/ktx.js
-var require_ktx = __commonJS({
-  "node_modules/image-size/dist/types/ktx.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.KTX = void 0;
-    var utils_1 = require_utils2();
-    exports.KTX = {
-      validate: (input) => {
-        const signature = (0, utils_1.toUTF8String)(input, 1, 7);
-        return ["KTX 11", "KTX 20"].includes(signature);
-      },
-      calculate: (input) => {
-        const type = input[5] === 49 ? "ktx" : "ktx2";
-        const offset = type === "ktx" ? 36 : 20;
-        return {
-          height: (0, utils_1.readUInt32LE)(input, offset + 4),
-          width: (0, utils_1.readUInt32LE)(input, offset),
-          type
-        };
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/png.js
-var require_png = __commonJS({
-  "node_modules/image-size/dist/types/png.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PNG = void 0;
-    var utils_1 = require_utils2();
-    var pngSignature = "PNG\r\n\n";
-    var pngImageHeaderChunkName = "IHDR";
-    var pngFriedChunkName = "CgBI";
-    exports.PNG = {
-      validate(input) {
-        if (pngSignature === (0, utils_1.toUTF8String)(input, 1, 8)) {
-          let chunkName = (0, utils_1.toUTF8String)(input, 12, 16);
-          if (chunkName === pngFriedChunkName) {
-            chunkName = (0, utils_1.toUTF8String)(input, 28, 32);
-          }
-          if (chunkName !== pngImageHeaderChunkName) {
-            throw new TypeError("Invalid PNG");
-          }
-          return true;
-        }
-        return false;
-      },
-      calculate(input) {
-        if ((0, utils_1.toUTF8String)(input, 12, 16) === pngFriedChunkName) {
-          return {
-            height: (0, utils_1.readUInt32BE)(input, 36),
-            width: (0, utils_1.readUInt32BE)(input, 32)
-          };
-        }
-        return {
-          height: (0, utils_1.readUInt32BE)(input, 20),
-          width: (0, utils_1.readUInt32BE)(input, 16)
-        };
-      }
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/pnm.js
-var require_pnm = __commonJS({
-  "node_modules/image-size/dist/types/pnm.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PNM = void 0;
-    var utils_1 = require_utils2();
-    var PNMTypes = {
-      P1: "pbm/ascii",
-      P2: "pgm/ascii",
-      P3: "ppm/ascii",
-      P4: "pbm",
-      P5: "pgm",
-      P6: "ppm",
-      P7: "pam",
-      PF: "pfm"
-    };
-    var handlers = {
-      default: (lines) => {
-        let dimensions = [];
-        while (lines.length > 0) {
-          const line = lines.shift();
-          if (line[0] === "#") {
-            continue;
-          }
-          dimensions = line.split(" ");
+        if (offset >= buffer.length) {
           break;
         }
-        if (dimensions.length === 2) {
-          return {
-            height: parseInt(dimensions[1], 10),
-            width: parseInt(dimensions[0], 10)
-          };
-        } else {
-          throw new TypeError("Invalid PNM");
+        const marker = buffer[offset];
+        offset++;
+        if (marker === 1 || marker >= 208 && marker <= 215) {
+          continue;
         }
-      },
-      pam: (lines) => {
-        const size = {};
-        while (lines.length > 0) {
-          const line = lines.shift();
-          if (line.length > 16 || line.charCodeAt(0) > 128) {
-            continue;
-          }
-          const [key, value] = line.split(" ");
-          if (key && value) {
-            size[key.toLowerCase()] = parseInt(value, 10);
-          }
-          if (size.height && size.width) {
+        if (marker === 217 || marker === 218) {
+          break;
+        }
+        if (offset + 2 > buffer.length) {
+          break;
+        }
+        const segmentLength = buffer.readUInt16BE(offset);
+        if (segmentLength < 2) {
+          throw new Error("Malformed JPEG: invalid segment length");
+        }
+        const isSof = marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204;
+        if (isSof) {
+          if (offset + 7 > buffer.length) {
             break;
           }
-        }
-        if (size.height && size.width) {
           return {
-            height: size.height,
-            width: size.width
+            height: buffer.readUInt16BE(offset + 3),
+            width: buffer.readUInt16BE(offset + 5)
           };
-        } else {
-          throw new TypeError("Invalid PAM");
         }
+        offset += segmentLength;
       }
+      throw new Error("Malformed JPEG: no size found");
     };
-    exports.PNM = {
-      validate: (input) => (0, utils_1.toUTF8String)(input, 0, 2) in PNMTypes,
-      calculate(input) {
-        const signature = (0, utils_1.toUTF8String)(input, 0, 2);
-        const type = PNMTypes[signature];
-        const lines = (0, utils_1.toUTF8String)(input, 3).split(/[\r\n]+/);
-        const handler = handlers[type] || handlers.default;
-        return handler(lines);
+    var parseGif = (buffer) => {
+      if (buffer.length < 10) {
+        throw new Error("Malformed GIF: buffer too short");
       }
+      return {
+        width: buffer.readUInt16LE(6),
+        height: buffer.readUInt16LE(8)
+      };
     };
-  }
-});
-
-// node_modules/image-size/dist/types/psd.js
-var require_psd = __commonJS({
-  "node_modules/image-size/dist/types/psd.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PSD = void 0;
-    var utils_1 = require_utils2();
-    exports.PSD = {
-      validate: (input) => (0, utils_1.toUTF8String)(input, 0, 4) === "8BPS",
-      calculate: (input) => ({
-        height: (0, utils_1.readUInt32BE)(input, 14),
-        width: (0, utils_1.readUInt32BE)(input, 18)
-      })
-    };
-  }
-});
-
-// node_modules/image-size/dist/types/svg.js
-var require_svg = __commonJS({
-  "node_modules/image-size/dist/types/svg.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.SVG = void 0;
-    var utils_1 = require_utils2();
-    var svgReg = /<svg\s([^>"']|"[^"]*"|'[^']*')*>/;
-    var extractorRegExps = {
-      height: /\sheight=(['"])([^%]+?)\1/,
-      root: svgReg,
-      viewbox: /\sviewBox=(['"])(.+?)\1/i,
-      width: /\swidth=(['"])([^%]+?)\1/
-    };
-    var INCH_CM = 2.54;
-    var units = {
-      in: 96,
-      cm: 96 / INCH_CM,
-      em: 16,
-      ex: 8,
-      m: 96 / INCH_CM * 100,
-      mm: 96 / INCH_CM / 10,
-      pc: 96 / 72 / 12,
-      pt: 96 / 72,
-      px: 1
-    };
-    var unitsReg = new RegExp(`^([0-9.]+(?:e\\d+)?)(${Object.keys(units).join("|")})?$`);
-    function parseLength(len) {
-      const m = unitsReg.exec(len);
-      if (!m) {
-        return void 0;
+    var parseBmp = (buffer) => {
+      if (buffer.length < 26) {
+        throw new Error("Malformed BMP: buffer too short");
       }
-      return Math.round(Number(m[1]) * (units[m[2]] || 1));
-    }
-    function parseViewbox(viewbox) {
-      const bounds = viewbox.split(" ");
-      return {
-        height: parseLength(bounds[3]),
-        width: parseLength(bounds[2])
-      };
-    }
-    function parseAttributes(root) {
-      const width = root.match(extractorRegExps.width);
-      const height = root.match(extractorRegExps.height);
-      const viewbox = root.match(extractorRegExps.viewbox);
-      return {
-        height: height && parseLength(height[2]),
-        viewbox: viewbox && parseViewbox(viewbox[2]),
-        width: width && parseLength(width[2])
-      };
-    }
-    function calculateByDimensions(attrs) {
-      return {
-        height: attrs.height,
-        width: attrs.width
-      };
-    }
-    function calculateByViewbox(attrs, viewbox) {
-      const ratio = viewbox.width / viewbox.height;
-      if (attrs.width) {
+      const dibHeaderSize = buffer.readUInt32LE(14);
+      if (dibHeaderSize === 12) {
         return {
-          height: Math.floor(attrs.width / ratio),
-          width: attrs.width
-        };
-      }
-      if (attrs.height) {
-        return {
-          height: attrs.height,
-          width: Math.floor(attrs.height * ratio)
+          width: buffer.readUInt16LE(18),
+          height: buffer.readUInt16LE(20)
         };
       }
       return {
-        height: viewbox.height,
-        width: viewbox.width
+        width: buffer.readInt32LE(18),
+        // top-down BMPs store a negative height
+        height: Math.abs(buffer.readInt32LE(22))
       };
-    }
-    exports.SVG = {
-      // Scan only the first kilo-byte to speed up the check on larger files
-      validate: (input) => svgReg.test((0, utils_1.toUTF8String)(input, 0, 1e3)),
-      calculate(input) {
-        const root = (0, utils_1.toUTF8String)(input).match(extractorRegExps.root);
-        if (root) {
-          const attrs = parseAttributes(root[0]);
-          if (attrs.width && attrs.height) {
-            return calculateByDimensions(attrs);
-          }
-          if (attrs.viewbox) {
-            return calculateByViewbox(attrs, attrs.viewbox);
-          }
-        }
-        throw new TypeError("Invalid SVG");
-      }
     };
-  }
-});
-
-// node_modules/image-size/dist/types/tga.js
-var require_tga = __commonJS({
-  "node_modules/image-size/dist/types/tga.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.TGA = void 0;
-    var utils_1 = require_utils2();
-    exports.TGA = {
-      validate(input) {
-        return (0, utils_1.readUInt16LE)(input, 0) === 0 && (0, utils_1.readUInt16LE)(input, 4) === 0;
-      },
-      calculate(input) {
+    var readUInt24LE = (buffer, offset) => buffer[offset] | buffer[offset + 1] << 8 | buffer[offset + 2] << 16;
+    var parseWebp = (buffer) => {
+      if (buffer.length < 30) {
+        throw new Error("Malformed WebP: buffer too short");
+      }
+      const chunkType = buffer.toString("latin1", 12, 16);
+      if (chunkType === "VP8 ") {
+        if (buffer[23] !== 157 || buffer[24] !== 1 || buffer[25] !== 42) {
+          throw new Error("Malformed WebP: bad VP8 start code");
+        }
         return {
-          height: (0, utils_1.readUInt16LE)(input, 14),
-          width: (0, utils_1.readUInt16LE)(input, 12)
+          width: buffer.readUInt16LE(26) & 16383,
+          height: buffer.readUInt16LE(28) & 16383
         };
       }
+      if (chunkType === "VP8L") {
+        if (buffer[20] !== 47) {
+          throw new Error("Malformed WebP: bad VP8L signature");
+        }
+        const bits = buffer.readUInt32LE(21);
+        return {
+          width: (bits & 16383) + 1,
+          height: (bits >> 14 & 16383) + 1
+        };
+      }
+      if (chunkType === "VP8X") {
+        return {
+          width: readUInt24LE(buffer, 24) + 1,
+          height: readUInt24LE(buffer, 27) + 1
+        };
+      }
+      throw new Error("Malformed WebP: unknown chunk type");
     };
-  }
-});
-
-// node_modules/image-size/dist/types/tiff.js
-var require_tiff = __commonJS({
-  "node_modules/image-size/dist/types/tiff.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.TIFF = void 0;
-    var fs = __require("fs");
-    var utils_1 = require_utils2();
-    function readIFD(input, filepath, isBigEndian) {
-      const ifdOffset = (0, utils_1.readUInt)(input, 32, 4, isBigEndian);
-      let bufferSize = 1024;
-      const fileSize = fs.statSync(filepath).size;
-      if (ifdOffset + bufferSize > fileSize) {
-        bufferSize = fileSize - ifdOffset - 10;
-      }
-      const endBuffer = new Uint8Array(bufferSize);
-      const descriptor = fs.openSync(filepath, "r");
-      fs.readSync(descriptor, endBuffer, 0, bufferSize, ifdOffset);
-      fs.closeSync(descriptor);
-      return endBuffer.slice(2);
-    }
-    function readValue(input, isBigEndian) {
-      const low = (0, utils_1.readUInt)(input, 16, 8, isBigEndian);
-      const high = (0, utils_1.readUInt)(input, 16, 10, isBigEndian);
-      return (high << 16) + low;
-    }
-    function nextTag(input) {
-      if (input.length > 24) {
-        return input.slice(12);
-      }
-    }
-    function extractTags(input, isBigEndian) {
-      const tags = {};
-      let temp = input;
-      while (temp && temp.length) {
-        const code = (0, utils_1.readUInt)(temp, 16, 0, isBigEndian);
-        const type = (0, utils_1.readUInt)(temp, 16, 2, isBigEndian);
-        const length = (0, utils_1.readUInt)(temp, 32, 4, isBigEndian);
-        if (code === 0) {
-          break;
-        } else {
-          if (length === 1 && (type === 3 || type === 4)) {
-            tags[code] = readValue(temp, isBigEndian);
-          }
-          temp = nextTag(temp);
-        }
-      }
-      return tags;
-    }
-    function determineEndianness(input) {
-      const signature = (0, utils_1.toUTF8String)(input, 0, 2);
-      if ("II" === signature) {
-        return "LE";
-      } else if ("MM" === signature) {
-        return "BE";
-      }
-    }
-    var signatures = [
-      // '492049', // currently not supported
-      "49492a00",
-      // Little endian
-      "4d4d002a"
-      // Big Endian
-      // '4d4d002a', // BigTIFF > 4GB. currently not supported
-    ];
-    exports.TIFF = {
-      validate: (input) => signatures.includes((0, utils_1.toHexString)(input, 0, 4)),
-      calculate(input, filepath) {
-        if (!filepath) {
-          throw new TypeError("Tiff doesn't support buffer");
-        }
-        const isBigEndian = determineEndianness(input) === "BE";
-        const ifdBuffer = readIFD(input, filepath, isBigEndian);
-        const tags = extractTags(ifdBuffer, isBigEndian);
-        const width = tags[256];
-        const height = tags[257];
-        if (!width || !height) {
-          throw new TypeError("Invalid Tiff. Missing tags");
-        }
-        return { height, width };
-      }
+    var svgAttribute = (tag2, name) => {
+      const match = tag2.match(new RegExp(`[\\s"']` + name + `\\s*=\\s*["']([0-9.]+)(?:px)?["']`));
+      return match ? Math.round(parseFloat(match[1])) : void 0;
     };
-  }
-});
-
-// node_modules/image-size/dist/types/webp.js
-var require_webp = __commonJS({
-  "node_modules/image-size/dist/types/webp.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.WEBP = void 0;
-    var utils_1 = require_utils2();
-    function calculateExtended(input) {
-      return {
-        height: 1 + (0, utils_1.readUInt24LE)(input, 7),
-        width: 1 + (0, utils_1.readUInt24LE)(input, 4)
-      };
-    }
-    function calculateLossless(input) {
-      return {
-        height: 1 + ((input[4] & 15) << 10 | input[3] << 2 | (input[2] & 192) >> 6),
-        width: 1 + ((input[2] & 63) << 8 | input[1])
-      };
-    }
-    function calculateLossy(input) {
-      return {
-        height: (0, utils_1.readInt16LE)(input, 8) & 16383,
-        width: (0, utils_1.readInt16LE)(input, 6) & 16383
-      };
-    }
-    exports.WEBP = {
-      validate(input) {
-        const riffHeader = "RIFF" === (0, utils_1.toUTF8String)(input, 0, 4);
-        const webpHeader = "WEBP" === (0, utils_1.toUTF8String)(input, 8, 12);
-        const vp8Header = "VP8" === (0, utils_1.toUTF8String)(input, 12, 15);
-        return riffHeader && webpHeader && vp8Header;
-      },
-      calculate(input) {
-        const chunkHeader = (0, utils_1.toUTF8String)(input, 12, 16);
-        input = input.slice(20, 30);
-        if (chunkHeader === "VP8X") {
-          const extendedHeader = input[0];
-          const validStart = (extendedHeader & 192) === 0;
-          const validEnd = (extendedHeader & 1) === 0;
-          if (validStart && validEnd) {
-            return calculateExtended(input);
-          } else {
-            throw new TypeError("Invalid WebP");
-          }
-        }
-        if (chunkHeader === "VP8 " && input[0] !== 47) {
-          return calculateLossy(input);
-        }
-        const signature = (0, utils_1.toHexString)(input, 3, 6);
-        if (chunkHeader === "VP8L" && signature !== "9d012a") {
-          return calculateLossless(input);
-        }
-        throw new TypeError("Invalid WebP");
+    var parseSvg = (buffer) => {
+      const text = buffer.toString("utf8", 0, SVG_SCAN_LIMIT).replace(/^\uFEFF/, "");
+      const svgStart = text.indexOf("<svg");
+      const tagEnd = svgStart === -1 ? -1 : text.indexOf(">", svgStart);
+      if (svgStart === -1 || tagEnd === -1) {
+        throw new Error("Malformed SVG: no <svg> root tag found");
       }
+      const tag2 = text.slice(svgStart, tagEnd + 1);
+      const width = svgAttribute(tag2, "width");
+      const height = svgAttribute(tag2, "height");
+      if (width !== void 0 && height !== void 0) {
+        return { width, height };
+      }
+      const viewBox = tag2.match(/viewBox\s*=\s*["']\s*[0-9.+-]+[\s,]+[0-9.+-]+[\s,]+([0-9.]+)[\s,]+([0-9.]+)\s*["']/);
+      if (viewBox) {
+        return {
+          width: Math.round(parseFloat(viewBox[1])),
+          height: Math.round(parseFloat(viewBox[2]))
+        };
+      }
+      throw new Error("Malformed SVG: no width/height or viewBox found");
     };
-  }
-});
-
-// node_modules/image-size/dist/types/index.js
-var require_types = __commonJS({
-  "node_modules/image-size/dist/types/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.typeHandlers = void 0;
-    var bmp_1 = require_bmp();
-    var cur_1 = require_cur();
-    var dds_1 = require_dds();
-    var gif_1 = require_gif();
-    var heif_1 = require_heif();
-    var icns_1 = require_icns();
-    var ico_1 = require_ico();
-    var j2c_1 = require_j2c();
-    var jp2_1 = require_jp2();
-    var jpg_1 = require_jpg();
-    var jxl_1 = require_jxl();
-    var jxl_stream_1 = require_jxl_stream();
-    var ktx_1 = require_ktx();
-    var png_1 = require_png();
-    var pnm_1 = require_pnm();
-    var psd_1 = require_psd();
-    var svg_1 = require_svg();
-    var tga_1 = require_tga();
-    var tiff_1 = require_tiff();
-    var webp_1 = require_webp();
-    exports.typeHandlers = {
-      bmp: bmp_1.BMP,
-      cur: cur_1.CUR,
-      dds: dds_1.DDS,
-      gif: gif_1.GIF,
-      heif: heif_1.HEIF,
-      icns: icns_1.ICNS,
-      ico: ico_1.ICO,
-      j2c: j2c_1.J2C,
-      jp2: jp2_1.JP2,
-      jpg: jpg_1.JPG,
-      jxl: jxl_1.JXL,
-      "jxl-stream": jxl_stream_1.JXLStream,
-      ktx: ktx_1.KTX,
-      png: png_1.PNG,
-      pnm: pnm_1.PNM,
-      psd: psd_1.PSD,
-      svg: svg_1.SVG,
-      tga: tga_1.TGA,
-      tiff: tiff_1.TIFF,
-      webp: webp_1.WEBP
+    var looksLikeSvg = (buffer) => buffer.toString("utf8", 0, Math.min(buffer.length, SVG_SCAN_LIMIT)).includes("<svg");
+    var imageDimensions = (buffer) => {
+      if (!buffer || buffer.length < MIN_SNIFF_LENGTH) {
+        throw new Error("Image buffer is empty or too short");
+      }
+      if (buffer.readUInt32BE(0) === 2303741511 && buffer.readUInt32BE(4) === 218765834) {
+        return parsePng(buffer);
+      }
+      if (buffer[0] === 255 && buffer[1] === 216) {
+        return parseJpeg(buffer);
+      }
+      const ascii6 = buffer.toString("latin1", 0, 6);
+      if (ascii6 === "GIF87a" || ascii6 === "GIF89a") {
+        return parseGif(buffer);
+      }
+      if (buffer[0] === 66 && buffer[1] === 77) {
+        return parseBmp(buffer);
+      }
+      if (buffer.toString("latin1", 0, 4) === "RIFF" && buffer.toString("latin1", 8, 12) === "WEBP") {
+        return parseWebp(buffer);
+      }
+      if (looksLikeSvg(buffer)) {
+        return parseSvg(buffer);
+      }
+      throw new Error("Unsupported or unrecognized image format");
     };
-  }
-});
-
-// node_modules/image-size/dist/detector.js
-var require_detector = __commonJS({
-  "node_modules/image-size/dist/detector.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.detector = void 0;
-    var index_1 = require_types();
-    var keys = Object.keys(index_1.typeHandlers);
-    var firstBytes = {
-      56: "psd",
-      66: "bmp",
-      68: "dds",
-      71: "gif",
-      73: "tiff",
-      77: "tiff",
-      82: "webp",
-      105: "icns",
-      137: "png",
-      255: "jpg"
-    };
-    function detector(input) {
-      const byte = input[0];
-      if (byte in firstBytes) {
-        const type = firstBytes[byte];
-        if (type && index_1.typeHandlers[type].validate(input)) {
-          return type;
-        }
-      }
-      const finder = (key) => index_1.typeHandlers[key].validate(input);
-      return keys.find(finder);
-    }
-    exports.detector = detector;
-  }
-});
-
-// node_modules/image-size/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/image-size/dist/index.js"(exports, module) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.types = exports.setConcurrency = exports.disableTypes = exports.disableFS = exports.imageSize = void 0;
-    var fs = __require("fs");
-    var path10 = __require("path");
-    var queue_1 = require_queue();
-    var index_1 = require_types();
-    var detector_1 = require_detector();
-    var MaxInputSize = 512 * 1024;
-    var queue = new queue_1.default({ concurrency: 100, autostart: true });
-    var globalOptions = {
-      disabledFS: false,
-      disabledTypes: []
-    };
-    function lookup(input, filepath) {
-      const type = (0, detector_1.detector)(input);
-      if (typeof type !== "undefined") {
-        if (globalOptions.disabledTypes.indexOf(type) > -1) {
-          throw new TypeError("disabled file type: " + type);
-        }
-        if (type in index_1.typeHandlers) {
-          const size = index_1.typeHandlers[type].calculate(input, filepath);
-          if (size !== void 0) {
-            size.type = size.type ?? type;
-            return size;
-          }
-        }
-      }
-      throw new TypeError("unsupported file type: " + type + " (file: " + filepath + ")");
-    }
-    async function readFileAsync(filepath) {
-      const handle = await fs.promises.open(filepath, "r");
-      try {
-        const { size } = await handle.stat();
-        if (size <= 0) {
-          throw new Error("Empty file");
-        }
-        const inputSize = Math.min(size, MaxInputSize);
-        const input = new Uint8Array(inputSize);
-        await handle.read(input, 0, inputSize, 0);
-        return input;
-      } finally {
-        await handle.close();
-      }
-    }
-    function readFileSync9(filepath) {
-      const descriptor = fs.openSync(filepath, "r");
-      try {
-        const { size } = fs.fstatSync(descriptor);
-        if (size <= 0) {
-          throw new Error("Empty file");
-        }
-        const inputSize = Math.min(size, MaxInputSize);
-        const input = new Uint8Array(inputSize);
-        fs.readSync(descriptor, input, 0, inputSize, 0);
-        return input;
-      } finally {
-        fs.closeSync(descriptor);
-      }
-    }
-    module.exports = exports = imageSize;
-    exports.default = imageSize;
-    function imageSize(input, callback) {
-      if (input instanceof Uint8Array) {
-        return lookup(input);
-      }
-      if (typeof input !== "string" || globalOptions.disabledFS) {
-        throw new TypeError("invalid invocation. input should be a Uint8Array");
-      }
-      const filepath = path10.resolve(input);
-      if (typeof callback === "function") {
-        queue.push(() => readFileAsync(filepath).then((input2) => process.nextTick(callback, null, lookup(input2, filepath))).catch(callback));
-      } else {
-        const input2 = readFileSync9(filepath);
-        return lookup(input2, filepath);
-      }
-    }
-    exports.imageSize = imageSize;
-    var disableFS = (v) => {
-      globalOptions.disabledFS = v;
-    };
-    exports.disableFS = disableFS;
-    var disableTypes = (types) => {
-      globalOptions.disabledTypes = types;
-    };
-    exports.disableTypes = disableTypes;
-    var setConcurrency = (c) => {
-      queue.concurrency = c;
-    };
-    exports.setConcurrency = setConcurrency;
-    exports.types = Object.keys(index_1.typeHandlers);
+    exports.imageDimensions = imageDimensions;
   }
 });
 
@@ -38028,7 +37963,8 @@ var require_compute_src_rect = __commonJS({
   "node_modules/pptx-automizer/dist/helper/compute-src-rect.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.computeSrcRectForNewImage = exports.inferContainerAr = void 0;
+    exports.inferContainerAr = inferContainerAr;
+    exports.computeSrcRectForNewImage = computeSrcRectForNewImage;
     var K = 1e5;
     function toFractions(src) {
       var _a3, _b, _c, _d;
@@ -38046,7 +37982,6 @@ var require_compute_src_rect = __commonJS({
       const oldAr = oldImageWidth / oldImageHeight;
       return oldAr * (wf / hf || 1);
     }
-    exports.inferContainerAr = inferContainerAr;
     function computeSrcRectForNewImage(containerAr, newImageWidth, newImageHeight) {
       const newAr = newImageWidth / newImageHeight;
       if (!isFinite(containerAr) || !isFinite(newAr) || containerAr <= 0 || newAr <= 0) {
@@ -38066,7 +38001,6 @@ var require_compute_src_rect = __commonJS({
         return { l: 0, t: 0, r: 0, b: 0 };
       }
     }
-    exports.computeSrcRectForNewImage = computeSrcRectForNewImage;
   }
 });
 
@@ -38106,17 +38040,19 @@ var require_modify_image_helper = __commonJS({
     };
     var _a3;
     Object.defineProperty(exports, "__esModule", { value: true });
+    var logger_1 = require_logger();
+    var types_1 = require_types();
     var slugify_1 = __importDefault(require_slugify());
-    var image_size_1 = require_dist();
+    var image_dimensions_1 = require_image_dimensions();
     var fs_1 = __importDefault(__require("fs"));
+    var xml_helper_1 = require_xml_helper();
     var compute_src_rect_1 = require_compute_src_rect();
     var ModifyImageHelper = class {
     };
-    exports.default = ModifyImageHelper;
     _a3 = ModifyImageHelper;
     ModifyImageHelper.setRelationTarget = (filename) => {
       return (element, arg1) => {
-        arg1.setAttribute("Target", "../media/" + (0, slugify_1.default)(filename));
+        arg1.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr("../media/" + (0, slugify_1.default)(filename)));
       };
     };
     ModifyImageHelper.setRelationTargetCover = (filename, pres) => {
@@ -38131,17 +38067,18 @@ var require_modify_image_helper = __commonJS({
           if (!mediaFile) {
             throw new Error("Media file not found in template archive in path: " + filename);
           }
-          const buffer = fs_1.default.readFileSync(mediaFile.filepath);
-          const _dimensions = (0, image_size_1.imageSize)(buffer);
+          const buffer = (0, types_1.getMediaBuffer)(mediaFile, fs_1.default.readFileSync);
+          const _dimensions = (0, image_dimensions_1.imageDimensions)(buffer);
           newImageDimensions.width = _dimensions.width;
           newImageDimensions.height = _dimensions.height;
         } catch (error51) {
-          console.warn("Couldn't find media file in template archive in path.");
+          const errorMessage = error51 instanceof Error ? error51.message : String(error51);
+          logger_1.log.warn("Could not read new image dimensions, using defaults: " + errorMessage);
         }
         try {
           if (pres.rootTemplate.archive.fileExists(originalTargetPath)) {
             const originalImage = yield pres.rootTemplate.archive.read(originalTargetPath, "nodebuffer");
-            const _dimensions = (0, image_size_1.imageSize)(originalImage);
+            const _dimensions = (0, image_dimensions_1.imageDimensions)(originalImage);
             originalImageDimensions.width = _dimensions.width;
             originalImageDimensions.height = _dimensions.height;
           } else {
@@ -38166,9 +38103,9 @@ var require_modify_image_helper = __commonJS({
           srcRect.setAttribute("b", String(newSrcRect.b));
         } catch (error51) {
           const errorMessage = error51 instanceof Error ? error51.message : String(error51);
-          console.warn("Skipped setting relation target cropped due to an error: " + errorMessage);
+          logger_1.log.warn("Skipped setting relation target cropped due to an error: " + errorMessage);
         }
-        arg1.setAttribute("Target", newTarget);
+        arg1.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
       });
     };
     ModifyImageHelper.setDuotoneFill = (duotoneParams) => (element) => {
@@ -38204,6 +38141,7 @@ var require_modify_image_helper = __commonJS({
         }
       }
     };
+    exports.default = ModifyImageHelper;
   }
 });
 
@@ -38224,12 +38162,12 @@ var require_chart_type = __commonJS({
       LabelPosition2["OutsideEnd"] = "outEnd";
       LabelPosition2["Right"] = "r";
       LabelPosition2["Top"] = "t";
-    })(LabelPosition = exports.LabelPosition || (exports.LabelPosition = {}));
+    })(LabelPosition || (exports.LabelPosition = LabelPosition = {}));
   }
 });
 
 // node_modules/pptx-automizer/dist/index.js
-var require_dist2 = __commonJS({
+var require_dist = __commonJS({
   "node_modules/pptx-automizer/dist/index.js"(exports) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -38250,20 +38188,30 @@ var require_dist2 = __commonJS({
     }) : function(o, v) {
       o["default"] = v;
     });
-    var __importStar = exports && exports.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
+    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o2) {
+          var ar = [];
+          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
+          return ar;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DxaToCm = exports.CmToDxa = exports.read = exports.modify = exports.LabelPosition = exports.ModifyImageHelper = exports.ModifyColorHelper = exports.ModifyTextHelper = exports.ModifyChartHelper = exports.ModifyTableHelper = exports.ModifyCleanupHelper = exports.ModifyShapeHelper = exports.ModifyHelper = exports.XmlHelper = exports.Automizer = void 0;
+    exports.NullLogger = exports.ConsoleLogger = exports.CallbackError = exports.OutputError = exports.ArchiveError = exports.ElementNotFoundError = exports.SlideNotFoundError = exports.TemplateNotFoundError = exports.AutomizerError = exports.EmuToPt = exports.PtToEmu = exports.DxaToCm = exports.CmToDxa = exports.read = exports.modify = exports.LabelPosition = exports.ModifyImageHelper = exports.ModifyColorHelper = exports.ModifyTextHelper = exports.ModifyChartHelper = exports.ModifyTableHelper = exports.ModifyCleanupHelper = exports.ModifyShapeHelper = exports.ModifyHelper = exports.ModifyPresentationHelper = exports.XmlRelationshipHelper = exports.XmlSlideHelper = exports.XmlHelper = exports.Automizer = void 0;
     var automizer_1 = __importDefault(require_automizer());
     exports.Automizer = automizer_1.default;
     var modify_helper_1 = __importStar(require_modify_helper());
@@ -38274,6 +38222,12 @@ var require_dist2 = __commonJS({
     Object.defineProperty(exports, "DxaToCm", { enumerable: true, get: function() {
       return modify_helper_1.DxaToCm;
     } });
+    Object.defineProperty(exports, "EmuToPt", { enumerable: true, get: function() {
+      return modify_helper_1.EmuToPt;
+    } });
+    Object.defineProperty(exports, "PtToEmu", { enumerable: true, get: function() {
+      return modify_helper_1.PtToEmu;
+    } });
     var modify_shape_helper_1 = __importDefault(require_modify_shape_helper());
     exports.ModifyShapeHelper = modify_shape_helper_1.default;
     var modify_cleanup_helper_1 = __importDefault(require_modify_cleanup_helper());
@@ -38283,6 +38237,16 @@ var require_dist2 = __commonJS({
     var modify_chart_helper_1 = __importDefault(require_modify_chart_helper());
     exports.ModifyChartHelper = modify_chart_helper_1.default;
     var modify_hyperlink_helper_1 = __importDefault(require_modify_hyperlink_helper());
+    var modify_presentation_helper_1 = __importDefault(require_modify_presentation_helper());
+    exports.ModifyPresentationHelper = modify_presentation_helper_1.default;
+    var xml_slide_helper_1 = require_xml_slide_helper();
+    Object.defineProperty(exports, "XmlSlideHelper", { enumerable: true, get: function() {
+      return xml_slide_helper_1.XmlSlideHelper;
+    } });
+    var xml_relationship_helper_1 = require_xml_relationship_helper();
+    Object.defineProperty(exports, "XmlRelationshipHelper", { enumerable: true, get: function() {
+      return xml_relationship_helper_1.XmlRelationshipHelper;
+    } });
     var xml_helper_1 = require_xml_helper();
     Object.defineProperty(exports, "XmlHelper", { enumerable: true, get: function() {
       return xml_helper_1.XmlHelper;
@@ -38301,6 +38265,7 @@ var require_dist2 = __commonJS({
     var dumpChart = modify_helper_1.default.dumpChart;
     var setAttribute = modify_helper_1.default.setAttribute;
     var setSolidFill = modify_shape_helper_1.default.setSolidFill;
+    var setOutline = modify_shape_helper_1.default.setOutline;
     var setText = modify_shape_helper_1.default.setText;
     var setMultiText = modify_text_helper_1.default.setMultiText;
     var htmlToMultiText = modify_text_helper_1.default.htmlToMultiText;
@@ -38331,6 +38296,7 @@ var require_dist2 = __commonJS({
     var setWaterFallColumnTotalToLast = modify_chart_helper_1.default.setWaterFallColumnTotalToLast;
     var setChartTitle = modify_chart_helper_1.default.setChartTitle;
     var setDataLabelAttributes = modify_chart_helper_1.default.setDataLabelAttributes;
+    var removeDataLabels = modify_chart_helper_1.default.removeDataLabels;
     var readWorkbookData = modify_chart_helper_1.default.readWorkbookData;
     var readChartInfo = modify_chart_helper_1.default.readChartInfo;
     var setHyperlinkTarget = modify_hyperlink_helper_1.default.setHyperlinkTarget;
@@ -38341,6 +38307,7 @@ var require_dist2 = __commonJS({
       dumpChart,
       setAttribute,
       setSolidFill,
+      setOutline,
       setText,
       setMultiText,
       htmlToMultiText,
@@ -38371,6 +38338,7 @@ var require_dist2 = __commonJS({
       setWaterFallColumnTotalToLast,
       setChartTitle,
       setDataLabelAttributes,
+      removeDataLabels,
       setHyperlinkTarget,
       addHyperlink,
       removeHyperlink
@@ -38379,6 +38347,35 @@ var require_dist2 = __commonJS({
       readWorkbookData,
       readChartInfo
     };
+    var errors_1 = require_errors2();
+    Object.defineProperty(exports, "AutomizerError", { enumerable: true, get: function() {
+      return errors_1.AutomizerError;
+    } });
+    Object.defineProperty(exports, "TemplateNotFoundError", { enumerable: true, get: function() {
+      return errors_1.TemplateNotFoundError;
+    } });
+    Object.defineProperty(exports, "SlideNotFoundError", { enumerable: true, get: function() {
+      return errors_1.SlideNotFoundError;
+    } });
+    Object.defineProperty(exports, "ElementNotFoundError", { enumerable: true, get: function() {
+      return errors_1.ElementNotFoundError;
+    } });
+    Object.defineProperty(exports, "ArchiveError", { enumerable: true, get: function() {
+      return errors_1.ArchiveError;
+    } });
+    Object.defineProperty(exports, "OutputError", { enumerable: true, get: function() {
+      return errors_1.OutputError;
+    } });
+    Object.defineProperty(exports, "CallbackError", { enumerable: true, get: function() {
+      return errors_1.CallbackError;
+    } });
+    var logger_1 = require_logger();
+    Object.defineProperty(exports, "ConsoleLogger", { enumerable: true, get: function() {
+      return logger_1.ConsoleLogger;
+    } });
+    Object.defineProperty(exports, "NullLogger", { enumerable: true, get: function() {
+      return logger_1.NullLogger;
+    } });
     exports.default = automizer_1.default;
   }
 });
@@ -38742,7 +38739,7 @@ var requireFile = (file2, what) => {
 };
 
 // src/infra/version.ts
-var VERSION = true ? "1.0.8" : "0.0.0-dev";
+var VERSION = true ? "1.0.9" : "0.0.0-dev";
 var PACKAGE = true ? "@brusdeylins/pptc" : "@brusdeylins/pptc";
 var CHECK_INTERVAL_MS = 24 * 60 * 60 * 1e3;
 var checkForUpdate = async () => {
@@ -54897,7 +54894,7 @@ var readDeckState = async (archive) => {
 };
 
 // src/engine/session.ts
-var import_pptx_automizer = __toESM(require_dist2(), 1);
+var import_pptx_automizer = __toESM(require_dist(), 1);
 import { readFileSync as readFileSync7, rmSync } from "node:fs";
 import path7 from "node:path";
 
