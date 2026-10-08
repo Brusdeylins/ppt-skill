@@ -2,6 +2,9 @@
 
 ## 1.0.9
 
+- **Plugin manifests no longer carry a version.** `plugin.json` and
+  `marketplace.json` lost their stale `version` fields (they were last set
+  in 1.0.7); the skill version lives in the `VERSION` sidecars only.
 - **`skill:zip` also builds the msg variant.** If `private-templates/`
   exists (or `--from <dir>`), `ppt-msg.zip` and `ppt-skills-msg-<version>.zip`
   carry the msg templates instead of the neutral one. `deploy/` is
