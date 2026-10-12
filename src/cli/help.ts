@@ -168,11 +168,6 @@ of op names. Use this to discover every field an op accepts.
 Example:
   pptc schema el.add`,
 
-    "update": `pptc update
-
-Self-update via npm. pptc checks the npm registry at most once per day;
-when a newer version exists, every envelope carries an 'update' field.`,
-
     "help": `pptc help [command|ops|selectors] [--plain]
 
 Detailed help for a command or topic. 'pptc <command> --help' is the

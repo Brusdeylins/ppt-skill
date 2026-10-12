@@ -25,9 +25,6 @@ bundled [pptc](../README.md) CLI. The plugin ships **two skills**:
 - **Per-deck memory**: language, styles and topic persist as custom document
   properties INSIDE the `.pptx` (so a deck is self-describing and can be handed
   to another person who continues via the skill).
-- **Version-aware**: on first activation each skill prints a one-line version
-  banner and does a best-effort check against the GitHub releases, flagging
-  when a newer version is available (silent offline, never blocks the work).
 
 ## Install
 
@@ -64,12 +61,12 @@ plugin/
   meta/control.md              shared control-tag definitions (all skills)
   skills/ppt/
     SKILL.md                   the build skill (imports ../../meta/control.md)
-    VERSION                    bundled version (checked against GitHub releases)
+    VERSION                    bundled version (written by plugin:sync)
     references/                content rules, prompt formula, styles
     scripts/pptc.mjs           bundled pptc build
     assets/                    neutral fallback template + sidecar
   skills/ppt-prepare/
     SKILL.md                   the content-planning skill (imports ../../meta/control.md)
-    VERSION                    bundled version (checked against GitHub releases)
+    VERSION                    bundled version (written by plugin:sync)
     references/                methodology + storyline patterns
 ```

@@ -31,8 +31,7 @@ await esbuild.build({
             + "const __dirname = __pptcDirname(__filename);"
     },
     define: {
-        "PPTC_VERSION": JSON.stringify(pkg.version),
-        "PPTC_PACKAGE": JSON.stringify(pkg.name)
+        "PPTC_VERSION": JSON.stringify(pkg.version)
     },
     logLevel: "info"
 })

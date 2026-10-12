@@ -111,42 +111,6 @@ Protocols
   </if>
   No transition to PHASE 4 without explicit storyline approval.
 
-
-Startup
--------
-
-The FIRST thing you do when this skill is activated (ONCE per conversation,
-before PHASE 1): announce the version and check for an update -- a one-line
-banner, never a gate; never let it block or delay the work.
-
-`<skill-dir/>` is the absolute directory containing this SKILL.md;
-substitute it literally in the paths and command below.
-
-1.  Read `<skill-dir/>/VERSION`; <version>the file's trimmed
-    content</version>.
-2.  Best-effort update check (Node's `fetch`; on ANY error or no network,
-    skip the update line silently -- never retry, never warn):
-
-    ```bash
-    node -e 'const fs=require("fs");let v="?";try{v=fs.readFileSync(process.argv[1],"utf8").trim()}catch{};const cmp=(a,b)=>{const p=s=>s.split(".").map(Number),x=p(a),y=p(b);for(let i=0;i<3;i++){const d=(x[i]||0)-(y[i]||0);if(d)return d}return 0};fetch("https://api.github.com/repos/Brusdeylins/ppt-skill/releases/latest",{headers:{"User-Agent":"ppt-skill"},signal:AbortSignal.timeout(3000)}).then(r=>r.json()).then(j=>{const l=String(j.tag_name||"").replace(/^v/,"");console.log(JSON.stringify({current:v,latest:l||null,behind:!!l&&cmp(v,l)<0}))}).catch(()=>console.log(JSON.stringify({current:v,latest:null,behind:false})))' '<skill-dir/>/VERSION'
-    ```
-
-3.  <latest>the check's reported `latest` field</latest>. Emit the banner;
-    add the update line ONLY when the check reported `behind: true`
-    (translate the labels into the USER's language):
-
-    <template>
-    📝 **ppt-prepare** · v<version/>
-    </template>
-    <if condition="the check reported behind: true">
-    <template>
-    › ↑ **Update** v<version/> → v<latest/> · Claude Code: `/plugin marketplace update ppt-skill` — release notes: https://github.com/Brusdeylins/ppt-skill/releases
-    </template>
-    </if>
-
-Do this once per conversation, not on every turn, and not for trivial
-follow-ups within the same run.
-
 <flow>
 
 1.  <step id="PHASE 1: Briefing">

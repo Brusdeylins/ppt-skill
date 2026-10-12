@@ -19,6 +19,10 @@ All ZIPs are built by `npm run skill:zip` into `deploy/` (gitignored).
 
 ## Versions
 
+There is no version banner and no update check in the skills or in `pptc` (external
+calls and process spawns from a skill trip the Claude app security scan; a contract
+test guards this). Updates reach users via the marketplace or a new ZIP.
+
 - `package.json` is the single source of the **skill version**.
 - `scripts/sync-versions.mjs` (run by `plugin:sync`) writes it into
   `plugin/skills/ppt/VERSION` and `plugin/skills/ppt-prepare/VERSION` only.
@@ -58,7 +62,10 @@ All ZIPs are built by `npm run skill:zip` into `deploy/` (gitignored).
 4. Commit, tag (`git tag -a <version>`), `git push origin main <version>`.
 5. GitHub release with the **neutral** ZIPs only:
    `gh release create <version> --verify-tag --title "<version>" --notes-from-tag deploy/ppt.zip deploy/ppt-prepare.zip deploy/ppt-skills-<version>.zip`
-6. Hand the msg ZIPs to the company channels (see below).
+6. npm: `npm publish --access public` (the `@brusdeylins/pptc` CLI; `prepublishOnly`
+   runs lint, tests and build). 1.0.8 and 1.0.9 were never published, so npm
+   jumps from 1.0.7 to the next release.
+7. Hand the msg ZIPs to the company channels (see below).
 
 ## Company marketplace
 

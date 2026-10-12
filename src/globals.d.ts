@@ -8,5 +8,3 @@
 
 /**  package version, injected at bundle time  */
 declare const PPTC_VERSION: string
-/**  npm package name, injected at bundle time  */
-declare const PPTC_PACKAGE: string

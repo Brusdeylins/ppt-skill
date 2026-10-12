@@ -329,10 +329,6 @@ JSON Schema of one op (e.g. `pptc schema slide.fill`) or of the whole ops
 document -- generated from the validating Zod schemas, so it is always
 authoritative. Without argument: the list of op names.
 
-#### `pptc update`
-
-Self-update via npm (see [Updating](#updating)).
-
 #### `pptc help` / `pptc --version`
 
 Usage summary / version envelope.
@@ -489,24 +485,6 @@ the 5% they cannot do -- never a self-built PPTX engine.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the layer model and data flow, and
 [DEPLOY.md](DEPLOY.md) for building and delivering releases.
 
-## Updating
-
-`pptc` checks the npm registry at most once per day (offline-tolerant). When a
-newer version exists, every envelope carries an `update` field:
-
-```json
-"update": { "current": "0.1.0", "latest": "0.2.0" }
-```
-
-An agent (or you) then runs:
-
-```
-pptc update
-```
-
-This is how a skill built on pptc keeps itself current without user
-intervention.
-
 ## Development
 
 ```
@@ -534,29 +512,12 @@ knowledge automatically.
 
 ### Versioning & release rule
 
-This repo carries two independently versioned artifacts: the **pptc CLI**
-(`package.json`, published to npm) and the **Claude Code plugin**
-(`plugin/.claude-plugin/plugin.json` + marketplace entry, distributed via
-git). Each skill carries a `VERSION` file at its root
-(`plugin/skills/ppt/VERSION`, `plugin/skills/ppt-prepare/VERSION`) recording
-which build it ships -- both written by `plugin:sync`.
-
-- **Skill-only change** (SKILL.md, references, meta): bump the plugin and
-  marketplace version, add a CHANGELOG entry, commit and push `main`,
-  tag `plugin-v<version>` and create a GitHub release from the CHANGELOG
-  notes (visibility of the version history). No npm; marketplace users
-  update via `/plugin marketplace update`.
-- **CLI/engine change**: bump `package.json`, run `npm run plugin:sync`
-  and bump the plugin version too (a new bundle is a new plugin release).
-  CHANGELOG entry, commit, tag `v<version>`, push `main` + tag, GitHub
-  release -- and `npm publish --access public` once the package is live
-  (`prepublishOnly` enforces lint + tests + build).
-
-Releases carry no ZIP assets (retired in 1.0.6): the tag + notes are the
-release, and installs/updates flow through the marketplace and npm.
-
-CLI change ⇒ plugin release, but skill change ⇏ CLI release. Lint and the
-test suite must be green before any push.
+`package.json` holds the single version (CLI and skills); each skill carries a
+`VERSION` file written by `plugin:sync`. The plugin version of a company
+marketplace is owned by that marketplace. `pptc` has no update check or
+self-update: updates reach users through the marketplace, a skill ZIP or
+`npm install -g @brusdeylins/pptc`. See [DEPLOY.md](DEPLOY.md) for the release
+checklist. Lint and the test suite must be green before any push.
 
 ## License
 

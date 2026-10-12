@@ -10,7 +10,7 @@
 
 import { helpFor } from "./help.js"
 import { PptcError, toPptcError } from "../infra/errors.js"
-import { checkForUpdate, VERSION } from "../infra/version.js"
+import { VERSION } from "../infra/version.js"
 import { cmdApply } from "../commands/apply.js"
 import { cmdNew } from "../commands/new.js"
 import { cmdSchema } from "../commands/schema.js"
@@ -18,7 +18,6 @@ import { cmdState } from "../commands/state.js"
 import { cmdVerify } from "../commands/verify.js"
 import { cmdFooter, cmdMove, cmdNote, cmdRm, cmdText } from "../commands/sugar.js"
 import { cmdTplDescribe, cmdTplInspect, cmdTplList, cmdTplValidate } from "../commands/tpl.js"
-import { cmdUpdate } from "../commands/update.js"
 
 /**  one-line usage summary printed on `pptc help` and usage errors  */
 const USAGE = `pptc ${VERSION} -- deterministic PowerPoint CLI for LLM agents
@@ -29,7 +28,7 @@ Verify decks:     verify <deck> [--strict]  (check for PowerPoint repair trigger
 Write decks:      new <deck> --template <tpl> [--ops @file]
                   apply <deck> (--ops @file|- | -e '<op>') [--template <tpl>] [--dry-run] [--strict] [--rev R] [--out F]
 Micro edits:      text|note|footer|rm|move <deck> --slide SEL ...
-Self-description: schema [op] | help | update
+Self-description: schema [op] | help
 
 Help:             'pptc <command> --help' or 'pptc help <command>' for any
                   command in detail; topics: 'pptc help ops' (the write API),
@@ -47,7 +46,6 @@ const COMMANDS: Record<string, (argv: string[]) => unknown> = {
     "new": cmdNew,
     "apply": cmdApply,
     "schema": cmdSchema,
-    "update": () => cmdUpdate(),
     "text": cmdText,
     "note": cmdNote,
     "footer": cmdFooter,
@@ -116,12 +114,10 @@ const main = async (): Promise<void> => {
             process.exitCode = 0
             return
         }
-        const update = await checkForUpdate()
         emit({
             ok: true,
             cmd: name,
-            ...payload,
-            ...(update !== null && { update })
+            ...payload
         }, 0)
     }
     catch (err) {

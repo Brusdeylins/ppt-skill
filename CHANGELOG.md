@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.10
+
+- **Removed the version banner and every update check.** The skills no
+  longer run an inline `node -e` network call to the GitHub releases API
+  at startup nor print a version banner (the Claude app security scan
+  flags external calls from skills). `pptc update`, the daily npm registry
+  check and the `update` field of the result envelope are gone, together
+  with the `npm install -g` self-update. Updates reach users through the
+  marketplace, a skill ZIP or `npm install -g @brusdeylins/pptc`.
+  The `VERSION` sidecars stay (written by `plugin:sync`, read by the
+  company marketplace build). Release steps: see DEPLOY.md.
+
 ## 1.0.9
 
 - **Plugin manifests no longer carry a version.** `plugin.json` and

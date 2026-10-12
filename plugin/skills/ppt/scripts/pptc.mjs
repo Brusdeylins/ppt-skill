@@ -2913,8 +2913,8 @@ var require_utils = __commonJS({
       var result = transform2[inputType][outputType](input);
       return result;
     };
-    exports.resolve = function(path10) {
-      var parts = path10.split("/");
+    exports.resolve = function(path9) {
+      var parts = path9.split("/");
       var result = [];
       for (var index = 0; index < parts.length; index++) {
         var part = parts[index];
@@ -8767,18 +8767,18 @@ var require_object = __commonJS({
       var object2 = new ZipObject(name, zipObjectContent, o);
       this.files[name] = object2;
     };
-    var parentFolder = function(path10) {
-      if (path10.slice(-1) === "/") {
-        path10 = path10.substring(0, path10.length - 1);
+    var parentFolder = function(path9) {
+      if (path9.slice(-1) === "/") {
+        path9 = path9.substring(0, path9.length - 1);
       }
-      var lastSlash = path10.lastIndexOf("/");
-      return lastSlash > 0 ? path10.substring(0, lastSlash) : "";
+      var lastSlash = path9.lastIndexOf("/");
+      return lastSlash > 0 ? path9.substring(0, lastSlash) : "";
     };
-    var forceTrailingSlash = function(path10) {
-      if (path10.slice(-1) !== "/") {
-        path10 += "/";
+    var forceTrailingSlash = function(path9) {
+      if (path9.slice(-1) !== "/") {
+        path9 += "/";
       }
-      return path10;
+      return path9;
     };
     var folderAdd = function(name, createFolders) {
       createFolders = typeof createFolders !== "undefined" ? createFolders : defaults.createFolders;
@@ -16971,12 +16971,12 @@ var require_archive_fs = __commonJS({
       folder(dir) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.ensureOpen();
-          const path10 = this.getPath(dir);
+          const path9 = this.getPath(dir);
           const files = [];
-          if (!(0, file_helper_1.exists)(path10)) {
+          if (!(0, file_helper_1.exists)(path9)) {
             return files;
           }
-          const entries = yield fs_1.promises.readdir(path10, { withFileTypes: true });
+          const entries = yield fs_1.promises.readdir(path9, { withFileTypes: true });
           for (const entry of entries) {
             if (!entry.isDirectory()) {
               files.push({
@@ -16991,8 +16991,8 @@ var require_archive_fs = __commonJS({
       read(file2) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.ensureOpen();
-          const path10 = this.getPath(file2);
-          return yield fs_1.promises.readFile(path10);
+          const path9 = this.getPath(file2);
+          return yield fs_1.promises.readFile(path9);
         });
       }
       getPath(file2) {
@@ -17013,9 +17013,9 @@ var require_archive_fs = __commonJS({
       remove(file2) {
         return __awaiter(this, void 0, void 0, function* () {
           yield this.ensureOpen();
-          const path10 = this.getPath(file2);
-          if ((0, file_helper_1.exists)(path10)) {
-            yield fs_1.promises.unlink(path10);
+          const path9 = this.getPath(file2);
+          if ((0, file_helper_1.exists)(path9)) {
+            yield fs_1.promises.unlink(path9);
           }
         });
       }
@@ -17319,8 +17319,8 @@ var require_ppt_paths = __commonJS({
       /**
        * `[Content_Types].xml` PartName attributes require a leading slash.
        */
-      static partName(path10) {
-        return `/${path10}`;
+      static partName(path9) {
+        return `/${path9}`;
       }
     };
     exports.PptPaths = PptPaths;
@@ -17790,10 +17790,10 @@ var require_xml_helper = __commonJS({
         }
         return max;
       }
-      static getRelationshipTargetsByPrefix(archive, path10, prefix) {
+      static getRelationshipTargetsByPrefix(archive, path9, prefix) {
         return __awaiter(this, void 0, void 0, function* () {
           const prefixes = typeof prefix === "string" ? [prefix] : prefix;
-          return _XmlHelper.getRelationshipItems(archive, path10, (element, targets) => {
+          return _XmlHelper.getRelationshipItems(archive, path9, (element, targets) => {
             prefixes.forEach((prefix2) => {
               const target = _XmlHelper.parseRelationTarget(element, prefix2);
               if (target.prefix) {
@@ -17846,9 +17846,9 @@ var require_xml_helper = __commonJS({
         }
         return relType === subtype && file2.indexOf(prefix) === 0;
       }
-      static getTargetsByRelationshipType(archive, path10, type) {
+      static getTargetsByRelationshipType(archive, path9, type) {
         return __awaiter(this, void 0, void 0, function* () {
-          return yield _XmlHelper.getRelationshipItems(archive, path10, (element, rels) => {
+          return yield _XmlHelper.getRelationshipItems(archive, path9, (element, rels) => {
             const target = element.getAttribute("Type");
             if (target === type) {
               rels.push({
@@ -17860,10 +17860,10 @@ var require_xml_helper = __commonJS({
           });
         });
       }
-      static getRelationshipItems(archive, path10, cb, tag2) {
+      static getRelationshipItems(archive, path9, cb, tag2) {
         return __awaiter(this, void 0, void 0, function* () {
           tag2 = tag2 || "Relationship";
-          const xml = yield _XmlHelper.getXmlFromArchive(archive, path10);
+          const xml = yield _XmlHelper.getXmlFromArchive(archive, path9);
           const relationshipItems = xml.getElementsByTagName(tag2);
           const rels = [];
           for (const i in relationshipItems) {
@@ -17886,10 +17886,10 @@ var require_xml_helper = __commonJS({
         }
         return false;
       }
-      static replaceAttribute(archive, path10, tagName, attributeName, attributeValue, replaceValue, replaceAttributeName) {
+      static replaceAttribute(archive, path9, tagName, attributeName, attributeValue, replaceValue, replaceAttributeName) {
         return __awaiter(this, void 0, void 0, function* () {
           var _a3;
-          const xml = yield _XmlHelper.getXmlFromArchive(archive, path10);
+          const xml = yield _XmlHelper.getXmlFromArchive(archive, path9);
           const elements2 = xml.getElementsByTagName(tagName);
           for (const i in elements2) {
             const element = elements2[i];
@@ -17897,14 +17897,14 @@ var require_xml_helper = __commonJS({
               element.setAttribute(replaceAttributeName || attributeName, replaceValue);
             }
             if (element.getAttribute !== void 0) {
-              (_a3 = archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(path10, {
+              (_a3 = archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(path9, {
                 Id: element.getAttribute("Id"),
                 Target: element.getAttribute("Target"),
                 Type: element.getAttribute("Type")
               });
             }
           }
-          _XmlHelper.writeXmlToArchive(archive, path10, xml);
+          _XmlHelper.writeXmlToArchive(archive, path9, xml);
         });
       }
       static getTargetByRelId(archive, relsPath, element, type) {
@@ -17948,15 +17948,15 @@ var require_xml_helper = __commonJS({
       static isElementCreationId(selector) {
         return selector.indexOf("{") === 0 && selector.split("-").length === 5;
       }
-      static findByElementCreationId(archive, path10, creationId) {
+      static findByElementCreationId(archive, path9, creationId) {
         return __awaiter(this, void 0, void 0, function* () {
-          const slideXml = yield _XmlHelper.getXmlFromArchive(archive, path10);
+          const slideXml = yield _XmlHelper.getXmlFromArchive(archive, path9);
           return _XmlHelper.findByCreationId(slideXml, creationId);
         });
       }
-      static findByElementName(archive, path10, name, nameIdx) {
+      static findByElementName(archive, path9, name, nameIdx) {
         return __awaiter(this, void 0, void 0, function* () {
-          const slideXml = yield _XmlHelper.getXmlFromArchive(archive, path10);
+          const slideXml = yield _XmlHelper.getXmlFromArchive(archive, path9);
           return _XmlHelper.findByName(slideXml, name, nameIdx);
         });
       }
@@ -18316,11 +18316,11 @@ var require_xml_relationship_helper = __commonJS({
         this.tag = tag2 || "Relationship";
         return this;
       }
-      initialize(archive, file2, path10, prefix) {
+      initialize(archive, file2, path9, prefix) {
         return __awaiter(this, void 0, void 0, function* () {
           this.archive = archive;
           this.file = file2;
-          this.path = path10 + "/";
+          this.path = path9 + "/";
           this.xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, this.path + this.file);
           yield this.readTargets();
           if (prefix) {
@@ -19206,9 +19206,9 @@ var require_xml_slide_helper = __commonJS({
        * @param params
        */
       constructor(slideXml, params) {
-        this.getAndExtractDimensions = (path10) => __awaiter(this, void 0, void 0, function* () {
+        this.getAndExtractDimensions = (path9) => __awaiter(this, void 0, void 0, function* () {
           try {
-            const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.sourceArchive, path10);
+            const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.sourceArchive, path9);
             if (!xml)
               return null;
             const sldSz = xml.getElementsByTagName("p:sldSz")[0];
@@ -19219,7 +19219,7 @@ var require_xml_slide_helper = __commonJS({
             }
             return null;
           } catch (error51) {
-            logger_1.log.warn(`Error while fetching XML from path ${path10}: ${error51}`);
+            logger_1.log.warn(`Error while fetching XML from path ${path9}: ${error51}`);
             return null;
           }
         });
@@ -22974,10 +22974,10 @@ var require_has_shapes = __commonJS({
           return this.getSlideHelperInstance(this.sourceTemplate.archive, this.sourcePath, this.sourceNumber);
         });
       }
-      getSlideHelperInstance(archive, path10, number4) {
+      getSlideHelperInstance(archive, path9, number4) {
         return __awaiter(this, void 0, void 0, function* () {
           try {
-            const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, path10);
+            const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, path9);
             const sourceLayoutId = yield xml_relationship_helper_1.XmlRelationshipHelper.getSlideLayoutNumber(archive, number4);
             return new xml_slide_helper_1.XmlSlideHelper(slideXml, {
               sourceArchive: archive,
@@ -38529,10 +38529,6 @@ of op names. Use this to discover every field an op accepts.
 
 Example:
   pptc schema el.add`,
-  "update": `pptc update
-
-Self-update via npm. pptc checks the npm registry at most once per day;
-when a newer version exists, every envelope carries an 'update' field.`,
   "help": `pptc help [command|ops|selectors] [--plain]
 
 Detailed help for a command or topic. 'pptc <command> --help' is the
@@ -38689,86 +38685,7 @@ var toPptcError = (err) => {
 };
 
 // src/infra/version.ts
-import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, statSync } from "node:fs";
-import path2 from "node:path";
-
-// src/infra/fs.ts
-import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { createHash } from "node:crypto";
-import path from "node:path";
-var resolvePayload = (arg) => {
-  if (arg === "-")
-    return readFileSync(0, "utf8");
-  if (arg.startsWith("@")) {
-    const file2 = arg.slice(1);
-    try {
-      return readFileSync(file2, "utf8");
-    } catch {
-      throw new PptcError("E_FILE", `cannot read payload file '${file2}'`);
-    }
-  }
-  return arg;
-};
-var parseJson = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    throw new PptcError("E_JSON", `payload is not valid JSON: ${err.message}`);
-  }
-};
-var atomicWrite = (file2, data) => {
-  const tmp = `${file2}.tmp-${process.pid}`;
-  writeFileSync(tmp, data);
-  renameSync(tmp, file2);
-};
-var cacheDir = () => {
-  const dir = path.join(tmpdir(), "pptc-cache");
-  mkdirSync(dir, { recursive: true });
-  return dir;
-};
-var contentHash = (...parts) => {
-  const h = createHash("sha1");
-  for (const p of parts)
-    h.update(p);
-  return h.digest("hex").slice(0, 12);
-};
-var requireFile = (file2, what) => {
-  if (!existsSync(file2))
-    throw new PptcError("E_FILE", `${what} not found: '${file2}'`);
-};
-
-// src/infra/version.ts
-var VERSION = true ? "1.0.9" : "0.0.0-dev";
-var PACKAGE = true ? "@brusdeylins/pptc" : "@brusdeylins/pptc";
-var CHECK_INTERVAL_MS = 24 * 60 * 60 * 1e3;
-var checkForUpdate = async () => {
-  if (VERSION === "0.0.0-dev")
-    return null;
-  const cacheFile = path2.join(cacheDir(), "latest-version.json");
-  let latest = null;
-  try {
-    const age = Date.now() - statSync(cacheFile).mtimeMs;
-    if (age < CHECK_INTERVAL_MS)
-      latest = JSON.parse(readFileSync2(cacheFile, "utf8")).latest;
-  } catch {
-  }
-  if (latest === null) {
-    try {
-      const res = await fetch(
-        `https://registry.npmjs.org/${PACKAGE}/latest`,
-        { signal: AbortSignal.timeout(2e3) }
-      );
-      if (!res.ok)
-        return null;
-      latest = (await res.json()).version;
-      writeFileSync2(cacheFile, JSON.stringify({ latest }));
-    } catch {
-      return null;
-    }
-  }
-  return latest !== null && latest !== VERSION ? { current: VERSION, latest } : null;
-};
+var VERSION = true ? "1.0.10" : "0.0.0-dev";
 
 // src/core/ops/registry.ts
 var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
@@ -40310,10 +40227,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path10) {
-  if (!path10)
+function getElementAtPath(obj, path9) {
+  if (!path9)
     return obj;
-  return path10.reduce((acc, key) => acc?.[key], obj);
+  return path9.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -40722,11 +40639,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path10, issues) {
+function prefixIssues(path9, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path10);
+    iss.path.unshift(path9);
     return iss;
   });
 }
@@ -40873,16 +40790,16 @@ function flattenError(error51, mapper = (issue2) => issue2.message) {
 }
 function formatError(error51, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error52, path10 = []) => {
+  const processError = (error52, path9 = []) => {
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path9, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else {
-        const fullpath = [...path10, ...issue2.path];
+        const fullpath = [...path9, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -40909,17 +40826,17 @@ function formatError(error51, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error51, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error52, path10 = []) => {
+  const processError = (error52, path9 = []) => {
     var _a3, _b;
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path9, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
       } else {
-        const fullpath = [...path10, ...issue2.path];
+        const fullpath = [...path9, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -40951,8 +40868,8 @@ function treeifyError(error51, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path10 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path10) {
+  const path9 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path9) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -53644,13 +53561,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path10 = ref.slice(1).split("/").filter(Boolean);
-  if (path10.length === 0) {
+  const path9 = ref.slice(1).split("/").filter(Boolean);
+  if (path9.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path10[0] === defsKey) {
-    const key = path10[1];
+  if (path9[0] === defsKey) {
+    const key = path9[1];
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -54335,8 +54252,54 @@ var OP_NAMES = [
 
 // src/engine/reader.ts
 var import_jszip = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync3 } from "node:fs";
-import path3 from "node:path";
+import { readFileSync as readFileSync2 } from "node:fs";
+import path2 from "node:path";
+
+// src/infra/fs.ts
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import path from "node:path";
+var resolvePayload = (arg) => {
+  if (arg === "-")
+    return readFileSync(0, "utf8");
+  if (arg.startsWith("@")) {
+    const file2 = arg.slice(1);
+    try {
+      return readFileSync(file2, "utf8");
+    } catch {
+      throw new PptcError("E_FILE", `cannot read payload file '${file2}'`);
+    }
+  }
+  return arg;
+};
+var parseJson = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new PptcError("E_JSON", `payload is not valid JSON: ${err.message}`);
+  }
+};
+var atomicWrite = (file2, data) => {
+  const tmp = `${file2}.tmp-${process.pid}`;
+  writeFileSync(tmp, data);
+  renameSync(tmp, file2);
+};
+var cacheDir = () => {
+  const dir = path.join(tmpdir(), "pptc-cache");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
+var contentHash = (...parts) => {
+  const h = createHash("sha1");
+  for (const p of parts)
+    h.update(p);
+  return h.digest("hex").slice(0, 12);
+};
+var requireFile = (file2, what) => {
+  if (!existsSync(file2))
+    throw new PptcError("E_FILE", `${what} not found: '${file2}'`);
+};
 
 // src/engine/xml.ts
 var import_xmldom = __toESM(require_lib4(), 1);
@@ -54383,8 +54346,8 @@ var DeckArchive = class _DeckArchive {
   static async open(file2) {
     requireFile(file2, "presentation file");
     try {
-      const zip = await import_jszip.default.loadAsync(readFileSync3(file2));
-      return new _DeckArchive(zip, path3.resolve(file2));
+      const zip = await import_jszip.default.loadAsync(readFileSync2(file2));
+      return new _DeckArchive(zip, path2.resolve(file2));
     } catch {
       throw new PptcError("E_FILE", `'${file2}' is not a readable pptx/potx archive`);
     }
@@ -54478,16 +54441,16 @@ var layoutPartsInOrder = async (archive) => {
     const target = relTarget(presRels, masterId.getAttribute("r:id") ?? "");
     if (target === null)
       continue;
-    const masterPart = path3.posix.join("ppt", target);
+    const masterPart = path2.posix.join("ppt", target);
     const master = await archive.xml(masterPart);
     const masterRels = await archive.xml(
-      path3.posix.join(path3.posix.dirname(masterPart), "_rels", `${path3.posix.basename(masterPart)}.rels`)
+      path2.posix.join(path2.posix.dirname(masterPart), "_rels", `${path2.posix.basename(masterPart)}.rels`)
     );
     for (const layoutId of elements(master, "p:sldLayoutId")) {
       const lt = relTarget(masterRels, layoutId.getAttribute("r:id") ?? "");
       if (lt !== null)
         parts.push({
-          part: path3.posix.normalize(path3.posix.join("ppt/slideMasters", lt)),
+          part: path2.posix.normalize(path2.posix.join("ppt/slideMasters", lt)),
           master: masterPart
         });
     }
@@ -54800,8 +54763,8 @@ var readDeckState = async (archive) => {
     const sldId = sldIds[index];
     const id = Number(sldId.getAttribute("id"));
     const target = relMap.get(sldId.getAttribute("r:id") ?? "") ?? "";
-    const part = path3.posix.normalize(path3.posix.join("ppt", target));
-    const partBase = path3.posix.basename(part);
+    const part = path2.posix.normalize(path2.posix.join("ppt", target));
+    const partBase = path2.posix.basename(part);
     const slideXmlText = await archive.text(part) ?? "";
     hashParts.push(`${id}:${slideXmlText}`);
     const doc = parseXml(slideXmlText);
@@ -54811,7 +54774,7 @@ var readDeckState = async (archive) => {
     let layoutName = "";
     let layoutIndex = -1;
     if (layoutTarget !== null && layoutTarget !== void 0) {
-      const layoutPart = path3.posix.normalize(path3.posix.join("ppt/slides", layoutTarget));
+      const layoutPart = path2.posix.normalize(path2.posix.join("ppt/slides", layoutTarget));
       const layoutDoc = await archive.xml(layoutPart);
       layoutName = firstElement(layoutDoc, "p:cSld")?.getAttribute("name") ?? "";
       layoutIndex = layoutIndexByName.get(layoutName) ?? -1;
@@ -54852,7 +54815,7 @@ var readDeckState = async (archive) => {
           const embed = firstElement(node, "a:blip")?.getAttribute("r:embed");
           const tgt = embed === null || embed === void 0 ? void 0 : slideRelMap.get(embed);
           if (tgt !== void 0 && tgt !== "")
-            shape.image = path3.posix.basename(tgt);
+            shape.image = path2.posix.basename(tgt);
         }
         if (shape.type === "table") {
           shape.table = tableCells(node);
@@ -54865,7 +54828,7 @@ var readDeckState = async (archive) => {
     const notesTarget = elements(slideRels, "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"))?.getAttribute("Target");
     let notes = null;
     if (notesTarget !== null && notesTarget !== void 0) {
-      const notesPart = path3.posix.normalize(path3.posix.join("ppt/slides", notesTarget));
+      const notesPart = path2.posix.normalize(path2.posix.join("ppt/slides", notesTarget));
       const notesText = await archive.text(notesPart);
       if (notesText !== null) {
         const notesDoc = parseXml(notesText);
@@ -54895,8 +54858,8 @@ var readDeckState = async (archive) => {
 
 // src/engine/session.ts
 var import_pptx_automizer = __toESM(require_dist(), 1);
-import { readFileSync as readFileSync7, rmSync } from "node:fs";
-import path7 from "node:path";
+import { readFileSync as readFileSync6, rmSync } from "node:fs";
+import path6 from "node:path";
 
 // src/engine/elements.ts
 var chartType = (gen, type) => {
@@ -55073,8 +55036,8 @@ var addElement = (slide, gen, el) => {
 
 // src/engine/post.ts
 var import_jszip2 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync4 } from "node:fs";
-import path4 from "node:path";
+import { readFileSync as readFileSync3 } from "node:fs";
+import path3 from "node:path";
 
 // src/engine/text.ts
 var HLINK_ATTR = "pptc-hlink";
@@ -55187,7 +55150,7 @@ var referencedSlides = async (zip) => {
   const pres = parseXml(await partText(zip, "ppt/presentation.xml"));
   const rels = parseXml(await partText(zip, "ppt/_rels/presentation.xml.rels"));
   const relMap = new Map(elements(rels, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
-  return elements(pres, "p:sldId").map((s) => path4.posix.normalize(path4.posix.join("ppt", relMap.get(s.getAttribute("r:id") ?? "") ?? "")));
+  return elements(pres, "p:sldId").map((s) => path3.posix.normalize(path3.posix.join("ppt", relMap.get(s.getAttribute("r:id") ?? "") ?? "")));
 };
 var removeParts = async (zip, parts) => {
   if (parts.length === 0)
@@ -55195,7 +55158,7 @@ var removeParts = async (zip, parts) => {
   let ct = await partText(zip, "[Content_Types].xml");
   for (const part of parts) {
     zip.remove(part);
-    zip.remove(`${path4.posix.dirname(part)}/_rels/${path4.posix.basename(part)}.rels`);
+    zip.remove(`${path3.posix.dirname(part)}/_rels/${path3.posix.basename(part)}.rels`);
     ct = ct.replace(new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "");
   }
   zip.file("[Content_Types].xml", ct);
@@ -55206,24 +55169,24 @@ var gcParts = async (zip, kept) => {
   await removeParts(zip, orphanSlides);
   const referencedNotes = /* @__PURE__ */ new Set();
   for (const slide of kept) {
-    const relsPart = `ppt/slides/_rels/${path4.posix.basename(slide)}.rels`;
+    const relsPart = `ppt/slides/_rels/${path3.posix.basename(slide)}.rels`;
     const relsText = await zip.file(relsPart)?.async("string");
     if (relsText === void 0)
       continue;
     for (const rel of elements(parseXml(relsText), "Relationship"))
       if ((rel.getAttribute("Type") ?? "").endsWith("/notesSlide")) {
-        const notesPart = path4.posix.normalize(
-          path4.posix.join("ppt/slides", rel.getAttribute("Target") ?? "")
+        const notesPart = path3.posix.normalize(
+          path3.posix.join("ppt/slides", rel.getAttribute("Target") ?? "")
         );
         referencedNotes.add(notesPart);
-        const noteRelsPart = `ppt/notesSlides/_rels/${path4.posix.basename(notesPart)}.rels`;
+        const noteRelsPart = `ppt/notesSlides/_rels/${path3.posix.basename(notesPart)}.rels`;
         const noteRelsText = await zip.file(noteRelsPart)?.async("string");
         if (noteRelsText === void 0)
           continue;
         const noteRels = parseXml(noteRelsText);
         for (const back of elements(noteRels, "Relationship"))
           if ((back.getAttribute("Type") ?? "").endsWith("/slide"))
-            back.setAttribute("Target", `../slides/${path4.posix.basename(slide)}`);
+            back.setAttribute("Target", `../slides/${path3.posix.basename(slide)}`);
         zip.file(noteRelsPart, serializeXml(noteRels));
       }
   }
@@ -55237,7 +55200,7 @@ var gcParts = async (zip, kept) => {
   for (const rel of elements(presRels, "Relationship")) {
     if (rel.getAttribute("TargetMode") === "External")
       continue;
-    const target = path4.posix.normalize(path4.posix.join("ppt", rel.getAttribute("Target") ?? ""));
+    const target = path3.posix.normalize(path3.posix.join("ppt", rel.getAttribute("Target") ?? ""));
     const isSlide = (rel.getAttribute("Type") ?? "").endsWith("/slide");
     if (zip.file(target) === null || isSlide && !liveSlideRids.has(rel.getAttribute("Id") ?? "")) {
       rel.parentNode?.removeChild(rel);
@@ -55295,14 +55258,14 @@ var gcAssets = async (zip) => {
     const relsText = await zip.file(relsPart)?.async("string");
     if (relsText === void 0)
       continue;
-    const base = path4.posix.dirname(path4.posix.dirname(relsPart));
+    const base = path3.posix.dirname(path3.posix.dirname(relsPart));
     for (const rel of elements(parseXml(relsText), "Relationship")) {
       if (rel.getAttribute("TargetMode") === "External")
         continue;
-      const target = path4.posix.normalize(path4.posix.join(base, rel.getAttribute("Target") ?? ""));
+      const target = path3.posix.normalize(path3.posix.join(base, rel.getAttribute("Target") ?? ""));
       if (isAsset(target) && !live.has(target)) {
         live.add(target);
-        const tRels = `${path4.posix.dirname(target)}/_rels/${path4.posix.basename(target)}.rels`;
+        const tRels = `${path3.posix.dirname(target)}/_rels/${path3.posix.basename(target)}.rels`;
         if (zip.file(tRels) !== null)
           queue.push(tRels);
       }
@@ -55380,11 +55343,11 @@ var setFooter = async (zip, slidePart, slide, text) => {
     if (ph !== null && ph.getAttribute("type") === "ftr")
       spTree.removeChild(sp);
   }
-  const relsText = await partText(zip, `ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`);
+  const relsText = await partText(zip, `ppt/slides/_rels/${path3.posix.basename(slidePart)}.rels`);
   const layoutTarget = elements(parseXml(relsText), "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/slideLayout"))?.getAttribute("Target");
   if (layoutTarget === void 0 || layoutTarget === null)
     return;
-  const layoutPart = path4.posix.normalize(path4.posix.join("ppt/slides", layoutTarget));
+  const layoutPart = path3.posix.normalize(path3.posix.join("ppt/slides", layoutTarget));
   const layout = parseXml(await partText(zip, layoutPart));
   const ftr = elements(layout, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === "ftr");
   if (ftr === void 0)
@@ -55485,7 +55448,7 @@ var ensureNotesOverride = async (zip, notesPart) => {
     ));
 };
 var setNotes = async (post, slidePart, slideRels, text) => {
-  const base = path4.posix.basename(slidePart, ".xml");
+  const base = path3.posix.basename(slidePart, ".xml");
   const notesPart = `ppt/notesSlides/notesSlide-pptc-${base}.xml`;
   const escaped = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("");
   post.zip.file(
@@ -55494,9 +55457,9 @@ var setNotes = async (post, slidePart, slideRels, text) => {
 <p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Notes Placeholder"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${escaped}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`
   );
   post.zip.file(
-    `ppt/notesSlides/_rels/${path4.posix.basename(notesPart)}.rels`,
+    `ppt/notesSlides/_rels/${path3.posix.basename(notesPart)}.rels`,
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/${path4.posix.basename(slidePart)}"/></Relationships>`
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/${path3.posix.basename(slidePart)}"/></Relationships>`
   );
   await ensureNotesOverride(post.zip, notesPart);
   for (const rel of elements(slideRels, "Relationship"))
@@ -55506,7 +55469,7 @@ var setNotes = async (post, slidePart, slideRels, text) => {
     slideRels,
     nextRid(post),
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
-    `../notesSlides/${path4.posix.basename(notesPart)}`
+    `../notesSlides/${path3.posix.basename(notesPart)}`
   );
 };
 var wireHyperlinks = (post, slide, slideRels) => {
@@ -55529,21 +55492,21 @@ var wireHyperlinks = (post, slide, slideRels) => {
 var dedupeSharedNotes = async (zip, slides) => {
   const refs = /* @__PURE__ */ new Map();
   for (const slidePart of slides) {
-    const relsText = await zip.file(`ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`)?.async("string");
+    const relsText = await zip.file(`ppt/slides/_rels/${path3.posix.basename(slidePart)}.rels`)?.async("string");
     if (relsText === void 0)
       continue;
     const rel = elements(parseXml(relsText), "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"));
     if (rel === void 0)
       continue;
-    const notesPart = path4.posix.normalize(path4.posix.join("ppt/slides", rel.getAttribute("Target") ?? ""));
+    const notesPart = path3.posix.normalize(path3.posix.join("ppt/slides", rel.getAttribute("Target") ?? ""));
     refs.set(notesPart, [...refs.get(notesPart) ?? [], slidePart]);
   }
   const setBackref = async (notesPart, slidePart) => {
-    const relsPart = `ppt/notesSlides/_rels/${path4.posix.basename(notesPart)}.rels`;
+    const relsPart = `ppt/notesSlides/_rels/${path3.posix.basename(notesPart)}.rels`;
     const doc = parseXml(await partText(zip, relsPart));
     for (const back of elements(doc, "Relationship"))
       if ((back.getAttribute("Type") ?? "").endsWith("/slide"))
-        back.setAttribute("Target", `../slides/${path4.posix.basename(slidePart)}`);
+        back.setAttribute("Target", `../slides/${path3.posix.basename(slidePart)}`);
     zip.file(relsPart, serializeXml(doc));
   };
   for (const [notesPart, owners] of refs) {
@@ -55552,20 +55515,20 @@ var dedupeSharedNotes = async (zip, slides) => {
     await setBackref(notesPart, owners[0]);
     for (let i = 1; i < owners.length; i++) {
       const slidePart = owners[i];
-      let clone2 = `ppt/notesSlides/notesSlide-pptc-${path4.posix.basename(slidePart, ".xml")}.xml`;
+      let clone2 = `ppt/notesSlides/notesSlide-pptc-${path3.posix.basename(slidePart, ".xml")}.xml`;
       if (clone2 === notesPart || zip.file(clone2) !== null)
-        clone2 = `ppt/notesSlides/notesSlide-pptc-${path4.posix.basename(slidePart, ".xml")}-${i}.xml`;
+        clone2 = `ppt/notesSlides/notesSlide-pptc-${path3.posix.basename(slidePart, ".xml")}-${i}.xml`;
       zip.file(clone2, await partText(zip, notesPart));
       zip.file(
-        `ppt/notesSlides/_rels/${path4.posix.basename(clone2)}.rels`,
-        await partText(zip, `ppt/notesSlides/_rels/${path4.posix.basename(notesPart)}.rels`)
+        `ppt/notesSlides/_rels/${path3.posix.basename(clone2)}.rels`,
+        await partText(zip, `ppt/notesSlides/_rels/${path3.posix.basename(notesPart)}.rels`)
       );
       await setBackref(clone2, slidePart);
-      const slideRelsPart = `ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`;
+      const slideRelsPart = `ppt/slides/_rels/${path3.posix.basename(slidePart)}.rels`;
       const slideRels = parseXml(await partText(zip, slideRelsPart));
       for (const r of elements(slideRels, "Relationship"))
         if ((r.getAttribute("Type") ?? "").endsWith("/notesSlide"))
-          r.setAttribute("Target", `../notesSlides/${path4.posix.basename(clone2)}`);
+          r.setAttribute("Target", `../notesSlides/${path3.posix.basename(clone2)}`);
       zip.file(slideRelsPart, serializeXml(slideRels));
       await ensureNotesOverride(zip, clone2);
     }
@@ -55582,11 +55545,11 @@ var restoreSlideTags = async (post, slide, slideRels, refs) => {
   const lst = slide.createElementNS(NS_P, "p:custDataLst");
   for (const ref of refs) {
     let target = ref.target;
-    let part = path4.posix.normalize(path4.posix.join("ppt/slides", target));
+    let part = path3.posix.normalize(path3.posix.join("ppt/slides", target));
     if (post.zip.file(part) === null)
       continue;
     if (post.tagsSeen.has(part)) {
-      const ext = path4.posix.extname(part);
+      const ext = path3.posix.extname(part);
       const stem = part.slice(0, part.length - ext.length);
       let n = 2;
       let clone2 = `${stem}-pptc-${n}${ext}`;
@@ -55600,7 +55563,7 @@ var restoreSlideTags = async (post, slide, slideRels, refs) => {
           "[Content_Types].xml",
           ct.replace("</Types>", `${override[0].replace(part, clone2)}</Types>`)
         );
-      target = path4.posix.join(path4.posix.dirname(target), path4.posix.basename(clone2));
+      target = path3.posix.join(path3.posix.dirname(target), path3.posix.basename(clone2));
       part = clone2;
     }
     post.tagsSeen.add(part);
@@ -55736,7 +55699,7 @@ var postProcess = async (bytes, work, props, customProps = null) => {
   for (let i = 0; i < slides.length; i++) {
     const slidePart = slides[i];
     const job = work[i];
-    const relsPart = `ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`;
+    const relsPart = `ppt/slides/_rels/${path3.posix.basename(slidePart)}.rels`;
     const slide = parseXml(await partText(zip, slidePart));
     const slideRels = parseXml(await partText(zip, relsPart));
     if (job !== void 0) {
@@ -55745,16 +55708,16 @@ var postProcess = async (bytes, work, props, customProps = null) => {
       if (job.footer !== null)
         await setFooter(zip, slidePart, slide, job.footer);
       for (const img of job.images) {
-        const ext = path4.extname(img.path).slice(1).toLowerCase() || "png";
+        const ext = path3.extname(img.path).slice(1).toLowerCase() || "png";
         const mediaPart = `ppt/media/pptcImage${mediaSeq++}.${ext}`;
-        zip.file(mediaPart, readFileSync4(img.path));
+        zip.file(mediaPart, readFileSync3(img.path));
         await ensureImageDefault(zip, ext);
         const rid = nextRid(post);
         addRel(
           slideRels,
           rid,
           "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-          `../media/${path4.posix.basename(mediaPart)}`
+          `../media/${path3.posix.basename(mediaPart)}`
         );
         if (!fillPicturePlaceholder(slide, rid, img.phIdx, img.frame))
           throw new PptcError(
@@ -55791,8 +55754,8 @@ var postProcess = async (bytes, work, props, customProps = null) => {
 // src/engine/verify.ts
 var import_jszip3 = __toESM(require_lib3(), 1);
 var import_xmldom2 = __toESM(require_lib4(), 1);
-import path5 from "node:path";
-import { readFileSync as readFileSync5 } from "node:fs";
+import path4 from "node:path";
+import { readFileSync as readFileSync4 } from "node:fs";
 var verifyArchive = async (zip) => {
   if (zip.file("[Content_Types].xml") === null)
     return ["[Content_Types].xml: part missing (not a flat OPC package)"];
@@ -55824,12 +55787,12 @@ var verifyArchive = async (zip) => {
       const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))];
       if (dupIds.length > 0)
         findings.push(`${n}: duplicate relationship ids ${dupIds.join(",")}`);
-      const base = path5.posix.dirname(path5.posix.dirname(n));
+      const base = path4.posix.dirname(path4.posix.dirname(n));
       for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
         if (m[0].includes('TargetMode="External"'))
           continue;
         const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
-        const full = path5.posix.normalize(path5.posix.join(base, target));
+        const full = path4.posix.normalize(path4.posix.join(base, target));
         if (!names.has(full))
           findings.push(`${n}: dead relationship target ${target}`);
       }
@@ -55852,7 +55815,7 @@ var verifyArchive = async (zip) => {
   const relMap = new Map([...rels.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((m) => [m[1], m[2]]));
   for (const m of pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)) {
     const target = relMap.get(m[1]);
-    if (target === void 0 || !names.has(path5.posix.normalize(path5.posix.join("ppt", target))))
+    if (target === void 0 || !names.has(path4.posix.normalize(path4.posix.join("ppt", target))))
       findings.push(`presentation.xml: sldId ${m[1]} does not resolve to a slide part`);
   }
   const seq = [...pres.matchAll(/<p:(sldMasterIdLst|notesMasterIdLst|handoutMasterIdLst|sldIdLst|sldSz|notesSz)[ >/]/g)].map((m) => m[1]);
@@ -55901,12 +55864,12 @@ var verifyArchive = async (zip) => {
   const live = /* @__PURE__ */ new Set();
   for (const n of names)
     if (n.endsWith(".rels")) {
-      const base = path5.posix.dirname(path5.posix.dirname(n));
+      const base = path4.posix.dirname(path4.posix.dirname(n));
       for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
         if (m[0].includes('TargetMode="External"'))
           continue;
         const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
-        live.add(path5.posix.normalize(path5.posix.join(base, target)));
+        live.add(path4.posix.normalize(path4.posix.join(base, target)));
       }
     }
   for (const n of names)
@@ -55915,12 +55878,12 @@ var verifyArchive = async (zip) => {
   return findings;
 };
 var verifyBytes = async (bytes) => await verifyArchive(await import_jszip3.default.loadAsync(bytes));
-var verifyFile = async (file2) => await verifyBytes(readFileSync5(file2));
+var verifyFile = async (file2) => await verifyBytes(readFileSync4(file2));
 
 // src/engine/seed.ts
 var import_jszip4 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync6, writeFileSync as writeFileSync3, existsSync as existsSync2 } from "node:fs";
-import path6 from "node:path";
+import { readFileSync as readFileSync5, writeFileSync as writeFileSync2, existsSync as existsSync2 } from "node:fs";
+import path5 from "node:path";
 var SEED_FORMAT = 4;
 var slideFromLayout = (layoutXml) => {
   const layout = parseXml(layoutXml);
@@ -55963,7 +55926,7 @@ var layoutOrder = async (zip) => {
   const order = [];
   for (const masterPart of Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort()) {
     const master = parseXml(await zip.file(masterPart).async("string"));
-    const relsFile = zip.file(`ppt/slideMasters/_rels/${path6.posix.basename(masterPart)}.rels`);
+    const relsFile = zip.file(`ppt/slideMasters/_rels/${path5.posix.basename(masterPart)}.rels`);
     if (relsFile === null)
       continue;
     const rels = parseXml(await relsFile.async("string"));
@@ -55971,7 +55934,7 @@ var layoutOrder = async (zip) => {
     for (const layoutId of elements(master, "p:sldLayoutId")) {
       const target = relMap.get(layoutId.getAttribute("r:id") ?? "");
       if (target !== void 0 && target.includes("slideLayouts/"))
-        order.push(path6.posix.normalize(path6.posix.join("ppt/slideMasters", target)));
+        order.push(path5.posix.normalize(path5.posix.join("ppt/slideMasters", target)));
     }
   }
   return order;
@@ -56034,30 +55997,30 @@ var buildSeed = async (templateBytes) => {
   };
 };
 var ensureSeed = async (templatePath) => {
-  const bytes = readFileSync6(templatePath);
-  const seedPath = path6.join(cacheDir(), `seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`);
+  const bytes = readFileSync5(templatePath);
+  const seedPath = path5.join(cacheDir(), `seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`);
   if (!existsSync2(seedPath)) {
     const seed = await buildSeed(bytes);
-    writeFileSync3(seedPath, seed.bytes);
+    writeFileSync2(seedPath, seed.bytes);
   }
   return seedPath;
 };
 var ensureSeedFromDeck = async (deckPath) => {
-  const bytes = readFileSync6(deckPath);
+  const bytes = readFileSync5(deckPath);
   const zip = await import_jszip4.default.loadAsync(bytes);
   const designParts = Object.keys(zip.files).filter((f) => /^ppt\/(slideMasters|slideLayouts|theme)\/[^/]+\.xml$/.test(f) || f === "ppt/presentation.xml").sort();
   const design = [];
   for (const part of designParts)
     design.push(`${part}:${await zip.file(part).async("string")}`);
-  const seedPath = path6.join(cacheDir(), `seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`);
+  const seedPath = path5.join(cacheDir(), `seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`);
   if (!existsSync2(seedPath)) {
     const seed = await buildSeed(bytes);
-    writeFileSync3(seedPath, seed.bytes);
+    writeFileSync2(seedPath, seed.bytes);
   }
   return seedPath;
 };
 var buildEmptyDeck = async (templatePath) => {
-  const seed = await buildSeed(readFileSync6(templatePath));
+  const seed = await buildSeed(readFileSync5(templatePath));
   const zip = await import_jszip4.default.loadAsync(seed.bytes);
   const pres = await zip.file("ppt/presentation.xml").async("string");
   const presRels = await zip.file("ppt/_rels/presentation.xml.rels").async("string");
@@ -56134,7 +56097,7 @@ var captureSlideTags = async (archive, plan) => {
     const lst = firstElement(parseXml(slideText), "p:custDataLst");
     if (lst === null)
       continue;
-    const relsDoc = await archive.xml(`ppt/slides/_rels/${path7.posix.basename(part)}.rels`);
+    const relsDoc = await archive.xml(`ppt/slides/_rels/${path6.posix.basename(part)}.rels`);
     const rels = new Map(elements(relsDoc, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r]));
     const tagsEl = firstElement(lst, "p:tags");
     const children = [...elements(lst, "p:custData"), ...tagsEl === null ? [] : [tagsEl]];
@@ -56158,7 +56121,7 @@ var executePlan = async (deckFile, outFile, plan, archive, seedPath, tmpName, tm
     removeExistingSlides: true,
     verbosity: 0
   });
-  let pres = automizer.loadRoot(path7.resolve(deckFile)).load(path7.resolve(deckFile), "self");
+  let pres = automizer.loadRoot(path6.resolve(deckFile)).load(path6.resolve(deckFile), "self");
   if (seedPath !== null)
     pres = pres.load(seedPath, "seed");
   for (const entry of plan.entries) {
@@ -56178,7 +56141,7 @@ var executePlan = async (deckFile, outFile, plan, archive, seedPath, tmpName, tm
       ...f.frame !== void 0 && { frame: f.frame }
     }))
   }));
-  const finalBytes = await postProcess(readFileSync7(tmpFile), work, plan.props, plan.customProps);
+  const finalBytes = await postProcess(readFileSync6(tmpFile), work, plan.props, plan.customProps);
   const findings = await verifyBytes(finalBytes);
   if (findings.length > 0)
     throw new PptcError(
@@ -56186,7 +56149,7 @@ var executePlan = async (deckFile, outFile, plan, archive, seedPath, tmpName, tm
       `the engine produced ${findings.length} integrity violation(s); deck not written`,
       { findings }
     );
-  atomicWrite(path7.resolve(outFile), finalBytes);
+  atomicWrite(path6.resolve(outFile), finalBytes);
   const refIndexes = {};
   for (const [name, entry] of plan.refs)
     refIndexes[name] = plan.entries.indexOf(entry);
@@ -56196,7 +56159,7 @@ var runSession = async (deckFile, outFile, plan, archive, templatePath) => {
   const needsSeed = plan.entries.some((e) => e.source.kind === "seed");
   const seedPath = needsSeed ? templatePath !== null ? await ensureSeed(templatePath) : await ensureSeedFromDeck(deckFile) : null;
   const tmpName = `pptc-session-${process.pid}.pptx`;
-  const tmpFile = path7.join(cacheDir(), tmpName);
+  const tmpFile = path6.join(cacheDir(), tmpName);
   try {
     return await withStdoutShield(() => executePlan(deckFile, outFile, plan, archive, seedPath, tmpName, tmpFile));
   } catch (err) {
@@ -56337,7 +56300,7 @@ var cmdApply = async (argv) => {
 
 // src/commands/new.ts
 import { existsSync as existsSync3, rmSync as rmSync2 } from "node:fs";
-import path8 from "node:path";
+import path7 from "node:path";
 var cmdNew = async (argv) => {
   const args = parse3(argv, {
     "template": { type: "string" },
@@ -56353,12 +56316,12 @@ var cmdNew = async (argv) => {
     throw new PptcError("E_FILE", `'${deckFile}' already exists -- use --force to overwrite`);
   const opsArg = args.str("ops");
   if (opsArg === null) {
-    atomicWrite(path8.resolve(deckFile), await buildEmptyDeck(templatePath));
-    return { file: path8.resolve(deckFile), result: { created: true, slideCount: 0 } };
+    atomicWrite(path7.resolve(deckFile), await buildEmptyDeck(templatePath));
+    return { file: path7.resolve(deckFile), result: { created: true, slideCount: 0 } };
   }
   const rawDoc = parseJson(resolvePayload(opsArg));
   const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc;
-  const stage = path8.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
+  const stage = path7.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
   try {
     atomicWrite(stage, await buildEmptyDeck(templatePath));
     const result = await executeOps(stage, doc, {
@@ -56366,7 +56329,7 @@ var cmdNew = async (argv) => {
       dryRun: false,
       strict: args.flag("strict"),
       expectRev: null,
-      outFile: path8.resolve(deckFile),
+      outFile: path7.resolve(deckFile),
       minFontPt: minFontPtArg(args)
     });
     return { ...result, result: { ...result.result, created: true } };
@@ -56555,8 +56518,8 @@ var cmdMove = async (argv) => {
 };
 
 // src/commands/tpl.ts
-import { readdirSync, existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
-import path9 from "node:path";
+import { readdirSync, existsSync as existsSync4, readFileSync as readFileSync7 } from "node:fs";
+import path8 from "node:path";
 
 // src/core/describe/minimap.ts
 var MAP_W = 40;
@@ -56675,7 +56638,7 @@ var narrateTemplate = (info, source, sidecar) => {
 var loadTemplate = async (file2) => {
   const info = await readTemplateInfo(await DeckArchive.open(file2));
   const sidecarPath = file2.replace(/\.(potx|pptx)$/i, ".md");
-  const sidecar = sidecarPath !== file2 && existsSync4(sidecarPath) ? readFileSync8(sidecarPath, "utf8") : null;
+  const sidecar = sidecarPath !== file2 && existsSync4(sidecarPath) ? readFileSync7(sidecarPath, "utf8") : null;
   return { info, sidecar };
 };
 var filterLayouts = (info, selector) => {
@@ -56696,12 +56659,12 @@ var cmdTplList = (argv) => {
   if (!existsSync4(dir))
     throw new PptcError("E_FILE", `directory not found: '${dir}'`);
   const templates = readdirSync(dir).filter((f) => /\.(potx|pptx)$/i.test(f)).sort().map((f) => ({
-    file: path9.join(dir, f),
-    sidecar: existsSync4(path9.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
+    file: path8.join(dir, f),
+    sidecar: existsSync4(path8.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
   }));
   if (args.flag("plain"))
-    return { plain: templates.length === 0 ? `(no templates in ${path9.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
-  return { result: { dir: path9.resolve(dir), templates } };
+    return { plain: templates.length === 0 ? `(no templates in ${path8.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
+  return { result: { dir: path8.resolve(dir), templates } };
 };
 var cmdTplDescribe = async (argv) => {
   const args = parse3(argv, {
@@ -56713,19 +56676,19 @@ var cmdTplDescribe = async (argv) => {
   const { info, sidecar } = await loadTemplate(file2);
   const filtered = filterLayouts(info, args.str("layout"));
   if (args.flag("plain"))
-    return { plain: narrateTemplate(filtered, path9.basename(file2), sidecar) };
+    return { plain: narrateTemplate(filtered, path8.basename(file2), sidecar) };
   if ((args.str("format") ?? "text") === "json")
-    return { file: path9.resolve(file2), result: filtered };
+    return { file: path8.resolve(file2), result: filtered };
   return {
-    file: path9.resolve(file2),
-    result: { description: narrateTemplate(filtered, path9.basename(file2), sidecar) }
+    file: path8.resolve(file2),
+    result: { description: narrateTemplate(filtered, path8.basename(file2), sidecar) }
   };
 };
 var cmdTplInspect = async (argv) => {
   const args = parse3(argv, { "layout": { type: "string" } }, ["template"]);
   const file2 = args.positionals[0];
   const { info } = await loadTemplate(file2);
-  return { file: path9.resolve(file2), result: filterLayouts(info, args.str("layout")) };
+  return { file: path8.resolve(file2), result: filterLayouts(info, args.str("layout")) };
 };
 var validate = (info, hasNotesMaster) => {
   const issues = [];
@@ -56759,33 +56722,17 @@ var cmdTplValidate = async (argv) => {
     throw new PptcError("E_LINT", "template validation failed", { issues });
   if (args.flag("plain"))
     return { plain: [
-      `${path9.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
+      `${path8.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
       ...issues.map((i) => `  ${i.severity}: ${i.message}`)
     ].join("\n") };
   return {
-    file: path9.resolve(file2),
+    file: path8.resolve(file2),
     result: {
       status: issues.length === 0 ? "ok" : "warn",
       layouts: info.layouts.map((l) => ({ index: l.index, name: l.name })),
       issues
     }
   };
-};
-
-// src/commands/update.ts
-import { spawnSync } from "node:child_process";
-var cmdUpdate = async () => {
-  const update = await checkForUpdate();
-  if (update === null)
-    return { result: { current: VERSION, status: "up-to-date" } };
-  const npm = spawnSync("npm", ["install", "-g", `${PACKAGE}@latest`], { encoding: "utf8" });
-  if (npm.status !== 0)
-    throw new PptcError(
-      "E_ENGINE",
-      `npm install -g ${PACKAGE}@latest failed (exit ${npm.status})`,
-      { stderr: (npm.stderr ?? "").slice(-2e3) }
-    );
-  return { result: { previous: update.current, installed: update.latest, status: "updated" } };
 };
 
 // src/cli/main.ts
@@ -56797,7 +56744,7 @@ Verify decks:     verify <deck> [--strict]  (check for PowerPoint repair trigger
 Write decks:      new <deck> --template <tpl> [--ops @file]
                   apply <deck> (--ops @file|- | -e '<op>') [--template <tpl>] [--dry-run] [--strict] [--rev R] [--out F]
 Micro edits:      text|note|footer|rm|move <deck> --slide SEL ...
-Self-description: schema [op] | help | update
+Self-description: schema [op] | help
 
 Help:             'pptc <command> --help' or 'pptc help <command>' for any
                   command in detail; topics: 'pptc help ops' (the write API),
@@ -56813,7 +56760,6 @@ var COMMANDS = {
   "new": cmdNew,
   "apply": cmdApply,
   "schema": cmdSchema,
-  "update": () => cmdUpdate(),
   "text": cmdText,
   "note": cmdNote,
   "footer": cmdFooter,
@@ -56870,12 +56816,10 @@ var main = async () => {
       process.exitCode = 0;
       return;
     }
-    const update = await checkForUpdate();
     emit({
       ok: true,
       cmd: name,
-      ...payload,
-      ...update !== null && { update }
+      ...payload
     }, 0);
   } catch (err) {
     const error51 = toPptcError(err);

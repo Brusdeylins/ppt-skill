@@ -15,7 +15,7 @@ engine/     OOXML adapters: reader, seed factory, automizer session,
 core/       pure domain logic: model, selectors, ops planning,
             geometry→semantics, lint
   ↓         (no I/O, no engine types -- purity enforced by the module graph)
-infra/      file system, payload resolution, hashing, version check,
+infra/      file system, payload resolution, hashing, version constant,
             arg parsing, error taxonomy
 ```
 
@@ -51,7 +51,7 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |
 | `infra/errors.ts` | `PptcError` with stable codes and the exit-code table |
 | `infra/fs.ts` | `@file`/stdin payloads, atomic write, cache dir, hashing |
-| `infra/version.ts` | version facts, daily cached registry check |
+| `infra/version.ts` | the CLI version constant |
 
 ## Data flow: `apply`
 
