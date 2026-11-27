@@ -181,4 +181,62 @@ describe("parts of PowerPoint-authored decks", () => {
         expect(xml).toContain("TOP-NEW")
         await expectIntact(deck)
     })
+
+    it("keeps SmartArt editable and its pictures on every apply", async () => {
+        const deck = path.join(TMP, "foreign-smartart.pptx")
+        const NS_DGM = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+        const CT = "application/vnd.openxmlformats-officedocument.drawingml."
+        await craftDeck(deck, async (zip, slides) => {
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
+                "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
+            for (const [ i, slide ] of slides.entries()) {
+                const n = i + 1
+                const part = (kind: string): string => `ppt/diagrams/${kind}${n}.xml`
+                zip.file(`ppt/media/smart${n}.png`, Buffer.from(`smart-picture-${n}`))
+                zip.file(part("data"), `<dgm:dataModel xmlns:dgm="${NS_DGM}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`
+                    + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><dgm:ptLst/>"
+                    + "<dgm:bg><a:blipFill><a:blip r:embed=\"rId1\"/></a:blipFill></dgm:bg><dgm:extLst><a:ext uri=\"x\">"
+                    + "<dsp:dataModelExt xmlns:dsp=\"http://schemas.microsoft.com/office/drawing/2008/diagram\" relId=\"rId85\" minVer=\"x\"/>"
+                    + "</a:ext></dgm:extLst></dgm:dataModel>")
+                zip.file(`ppt/diagrams/_rels/data${n}.xml.rels`, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                    + `<Relationship Id="rId1" Type="${REL}/image" Target="../media/smart${n}.png"/></Relationships>`)
+                for (const kind of [ "layout", "quickStyle", "colors" ])
+                    zip.file(part(kind), `<dgm:${kind === "layout" ? "layoutDef" : kind === "colors" ? "colorsDef" : "styleDef"} xmlns:dgm="${NS_DGM}"/>`)
+                zip.file(part("drawing"), "<dsp:drawing xmlns:dsp=\"http://schemas.microsoft.com/office/drawing/2008/diagram\"><dsp:spTree/></dsp:drawing>")
+                await addOverride(zip, part("data"), `${CT}diagramData+xml`)
+                await addOverride(zip, part("layout"), `${CT}diagramLayout+xml`)
+                await addOverride(zip, part("quickStyle"), `${CT}diagramStyle+xml`)
+                await addOverride(zip, part("colors"), `${CT}diagramColors+xml`)
+                await addOverride(zip, part("drawing"), "application/vnd.ms-office.drawingml.diagramDrawing+xml")
+                await addRel(zip, slide, "rId81", "diagramData", `../diagrams/data${n}.xml`)
+                await addRel(zip, slide, "rId82", "diagramLayout", `../diagrams/layout${n}.xml`)
+                await addRel(zip, slide, "rId83", "diagramQuickStyle", `../diagrams/quickStyle${n}.xml`)
+                await addRel(zip, slide, "rId84", "diagramColors", `../diagrams/colors${n}.xml`)
+                const rels = relsOf(slide)
+                zip.file(rels, (await text(zip, rels)).replace("</Relationships>",
+                    `<Relationship Id="rId85" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="../diagrams/drawing${n}.xml"/></Relationships>`))
+                zip.file(slide, (await text(zip, slide)).replace("</p:spTree>",
+                    "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"91\" name=\"Diagramm\"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>"
+                    + "<p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></p:xfrm>"
+                    + `<a:graphic><a:graphicData uri="${NS_DGM}"><dgm:relIds xmlns:dgm="${NS_DGM}" r:dm="rId81" r:lo="rId82" r:qs="rId83" r:cs="rId84"/>`
+                    + "</a:graphicData></a:graphic></p:graphicFrame></p:spTree>"))
+            }
+        })
+        for (let round = 0; round < 3; round++) {
+            await apply(deck, [ { op: "meta.props", set: { title: `Runde ${round}` } } ])
+            const zip = await JSZip.loadAsync(readFileSync(deck))
+            for (const i of [ 0, 1 ]) {
+                const data = (await relatedPart(deck, i, "diagramData"))?.part as string
+                const drawing = await relatedPart(deck, i, "diagramDrawing")
+                expect(drawing).not.toBeNull()
+                const relId = /relId="([^"]+)"/.exec(await text(zip, data))?.[1]
+                const slide = (await readDeckState(await DeckArchive.open(deck))).slides[i] as { part: string }
+                expect(await text(zip, relsOf(slide.part))).toContain(`Id="${relId as string}" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing"`)
+                const picture = /Target="\.\.\/media\/([^"]+)"/.exec(await text(zip, relsOf(data)))?.[1]
+                expect(await (zip.file(`ppt/media/${picture as string}`) as JSZip.JSZipObject).async("string")).toBe(`smart-picture-${i + 1}`)
+            }
+            await expectIntact(deck)
+        }
+    })
 })

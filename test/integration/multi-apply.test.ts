@@ -186,3 +186,42 @@ describe("plan-time checks and rev", () => {
         expect((await readDeckState(await DeckArchive.open(deck))).rev).not.toBe(before)
     })
 })
+
+describe("seed cache", () => {
+    it("rebuilds the deck-derived seed when a layout of the deck changes (and rejects the stale template)", async () => {
+        const deck = path.join(TMP, "multi-seed.pptx")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        const editLayout = async (edit: (xml: string) => string): Promise<void> => {
+            const zip = await JSZip.loadAsync(readFileSync(deck))
+            const layout = (await Promise.all(Object.keys(zip.files).filter((f) => /^ppt\/slideLayouts\/[^/]+\.xml$/.test(f))
+                .map(async (f) => [ f, await (zip.file(f) as JSZip.JSZipObject).async("string") ] as const)))
+                .find(([ , xml ]) => xml.includes("<p:cSld name=\"CONTENT\"")) as readonly [ string, string ]
+            zip.file(layout[0], edit(layout[1]))
+            writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+        }
+
+        /*  extension lists early and late in the layout, as PowerPoint writes them  */
+        await editLayout((xml) => xml
+            .replace("<p:ph type=\"title\"/></p:nvPr>", "<p:ph type=\"title\"/><p:extLst><p:ext uri=\"{A}\"/></p:extLst></p:nvPr>")
+            .replace("</p:sldLayout>", "<p:extLst><p:ext uri=\"{B}\"/></p:extLst></p:sldLayout>"))
+        await apply(deck, [ addTitled("A") ])
+
+        /*  a second add caches the seed under the key of the now settled deck  */
+        await executeOps(deck, { ops: [ addTitled("A2") ] } as never, { ...opts, templatePath: null })
+
+        /*  change the CONTENT layout's body placeholder idx 1 -> 31 in the deck  */
+        await editLayout((xml) => xml.replace("<p:ph idx=\"1\"/>", "<p:ph idx=\"31\"/>"))
+
+        const add = { ops: [ { op: "slide.add", layout: "CONTENT",
+            placeholders: { title: { text: "B" }, body: { text: "neu" } } } ] } as never
+
+        /*  the original template no longer matches the deck's layouts  */
+        await expect(executeOps(deck, add, opts)).rejects.toMatchObject({ code: "E_TEMPLATE" })
+        await executeOps(deck, add, { ...opts, templatePath: null })
+        await expectIntact(deck)
+        expect((await slidesOf(deck)).map((s) => s.title)).toEqual([ "A", "A2", "B" ])
+        const b = (await readDeckState(await DeckArchive.open(deck))).slides[2] as { part: string }
+        const xml = await ((await JSZip.loadAsync(readFileSync(deck))).file(b.part) as JSZip.JSZipObject).async("string")
+        expect(xml).toMatch(/<p:ph idx="31"\/>[\s\S]*<a:t>neu<\/a:t>/)
+    })
+})

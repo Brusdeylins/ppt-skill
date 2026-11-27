@@ -51,6 +51,7 @@ const digest = async (zip: JSZip, part: string): Promise<string> => {
             .replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "")
             .replace(/>\s+</g, "><")
             .replace(/\br:(id|embed|link|pict|dm|lo|qs|cs)="[^"]*"/g, "r:$1=\"\"")
+            .replace(/\brelId="[^"]*"/g, "relId=\"\"")
             .replace(/(<p:sldLayoutId\b[^>]*?\bid=")\d+"/g, "$1\"")
         : bytes
     return createHash("sha1").update(data).digest("hex").slice(0, 12)

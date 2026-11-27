@@ -11,7 +11,7 @@
 */
 
 import JSZip from "jszip"
-import { readFileSync, existsSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
+import { readFileSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
 import path from "node:path"
 import type { Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
@@ -205,29 +205,41 @@ export const ensureSeed = async (templatePath: string): Promise<string> => {
     return await cachedSeed(`seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`, bytes)
 }
 
-/**  seeds unused for this long are dropped from the cache  */
+/**  seeds unused for this long are dropped from the cache, and at most
+     this many seeds are kept (each can carry a template's full media)  */
 const SEED_MAX_AGE_MS = 14 * 24 * 3600 * 1000
+const SEED_MAX_COUNT  = 24
 
 /**  return the cached seed of a name, building it atomically on a miss (a
      concurrent pptc never reads a half-written seed); every use refreshes
-     its mtime, and seeds unused for two weeks are pruned  */
+     its mtime; stale seeds and orphaned temp files are pruned  */
 const cachedSeed = async (name: string, source: Buffer): Promise<string> => {
     const dir = cacheDir()
     const seedPath = path.join(dir, name)
-    if (existsSync(seedPath)) {
+    try {
         const now = new Date()
         utimesSync(seedPath, now, now)
     }
-    else
+    catch {
         atomicWrite(seedPath, (await buildSeed(source)).bytes)
-    for (const f of readdirSync(dir).filter((f) => /^seed-.*\.pptx$/.test(f)))
+    }
+    const seeds: { file: string, mtime: number }[] = []
+    for (const f of readdirSync(dir).filter((f) => f.startsWith("seed-")))
         try {
-            if (Date.now() - statSync(path.join(dir, f)).mtimeMs > SEED_MAX_AGE_MS)
-                rmSync(path.join(dir, f), { force: true })
+            const file = path.join(dir, f)
+            const mtime = statSync(file).mtimeMs
+            if (f.endsWith(".pptx") && file !== seedPath)
+                seeds.push({ file, mtime })
+            else if (!f.endsWith(".pptx") && Date.now() - mtime > 3600 * 1000)
+                rmSync(file, { force: true })
         }
         catch {
             /*  another pptc pruned it first  */
         }
+    seeds.sort((a, b) => b.mtime - a.mtime)
+    for (const [ i, seed ] of seeds.entries())
+        if (i >= SEED_MAX_COUNT - 1 || Date.now() - seed.mtime > SEED_MAX_AGE_MS)
+            rmSync(seed.file, { force: true })
     return seedPath
 }
 
@@ -254,9 +266,13 @@ export const ensureSeedFromDeck = async (deckPath: string): Promise<string> => {
 
     /*  the slide list and sections of presentation.xml change with every
         slide add/remove but never affect the seed -- keep them out of the key  */
-    for (const part of designParts)
-        design.push(`${part}:${(await (zip.file(part) as JSZip.JSZipObject).async("string"))
-            .replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, "").replace(/<p:extLst>[\s\S]*<\/p:extLst>/, "")}`)
+    for (const part of designParts) {
+        let xml = await (zip.file(part) as JSZip.JSZipObject).async("string")
+        if (part === "ppt/presentation.xml")
+            xml = xml.replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, "")
+                .replace(/<p14:sectionLst[\s\S]*?<\/p14:sectionLst>/, "")
+        design.push(`${part}:${xml}`)
+    }
     return await cachedSeed(`seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`, bytes)
 }
 

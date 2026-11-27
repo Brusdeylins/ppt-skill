@@ -130,6 +130,28 @@ const slideCallback = (entry: SlidePlanEntry, source: Document | null) =>
                 planned.name ?? undefined)
     }
 
+/**  the SmartArt data parts of every re-imported source slide, in plan
+     order and document order (the post-pass maps them to their copies)  */
+const captureDiagramSources = async (archive: DeckArchive, plan: MutationPlan): Promise<string[][]> => {
+    const out: string[][] = []
+    for (const entry of plan.entries) {
+        const parts: string[] = []
+        out.push(parts)
+        if (entry.source.kind !== "self")
+            continue
+        const part = entry.source.part
+        const slideText = await archive.text(part)
+        if (slideText === null || !slideText.includes("dgm:relIds"))
+            continue
+        const rels = await archive.xml(`ppt/slides/_rels/${path.posix.basename(part)}.rels`)
+        const targetOf = new Map(elements(rels, "Relationship").map((r) =>
+            [ r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? "" ]))
+        for (const el of elements(parseXml(slideText), "dgm:relIds"))
+            parts.push(path.posix.normalize(path.posix.join("ppt/slides", targetOf.get(el.getAttribute("r:dm") ?? "") ?? "")))
+    }
+    return out
+}
+
 /**  capture the slide-tags references (p:custDataLst: think-cell and other
      add-in metadata) of every re-imported source slide, in plan order.
      pptx-automizer strips the element and its /tags relationships as
@@ -182,6 +204,7 @@ const executePlan = async (
 ): Promise<SessionResult> => {
     /*  snapshot the slide tags BEFORE the automizer pass strips them  */
     const slideTags = await captureSlideTags(archive, plan)
+    const diagramSources = await captureDiagramSources(archive, plan)
     const automizer = new Automizer({
         templateDir: "",
         outputDir: cacheDir(),
@@ -213,6 +236,7 @@ const executePlan = async (
         background: entry.background,
         hidden: entry.hidden,
         slideTags: slideTags[i] as SlideTagRef[],
+        diagrams: diagramSources[i] as string[],
         images: entry.fills
             .filter((f) => f.image !== undefined)
             .map((f) => ({

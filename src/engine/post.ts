@@ -54,6 +54,8 @@ export interface PostSlideWork {
     hidden: boolean
     /**  images to insert into picture placeholders  */
     images: { phIdx: number, path: string, frame?: Frame }[]
+    /**  source SmartArt data parts of a kept slide, in document order  */
+    diagrams: string[]
     /**  slide-tags references (p:custDataLst) captured from the source
          slide, to restore after the automizer rebuild; empty = none  */
     slideTags: SlideTagRef[]
@@ -208,7 +210,7 @@ const STRUCTURAL_RELS = ["/slideLayout", "/notesSlide", ...IMPLICIT_RELS]
 
 /**  drop slide relationships whose id no longer occurs in the slide XML
      (automizer accumulates one stale chart/image rel per re-import)  */
-const pruneUnusedSlideRels = (slide: Document, slideRels: Document): boolean => {
+const pruneUnusedSlideRels = (slide: Document, slideRels: Document, keep: Set<string> = new Set()): boolean => {
     const xml = serializeXml(slide)
     let changed = false
     const seen = new Set<string>()
@@ -222,7 +224,7 @@ const pruneUnusedSlideRels = (slide: Document, slideRels: Document): boolean => 
         }
         seen.add(id)
         const type = rel.getAttribute("Type") ?? ""
-        if (STRUCTURAL_RELS.some((k) => type.endsWith(k)))
+        if (STRUCTURAL_RELS.some((k) => type.endsWith(k)) || keep.has(id))
             continue
         if (!xml.includes(`"${id}"`)) {
             rel.parentNode?.removeChild(rel)
@@ -232,9 +234,47 @@ const pruneUnusedSlideRels = (slide: Document, slideRels: Document): boolean => 
     return changed
 }
 
+/**  re-wire the SmartArt of a slide after automizer copied its parts to
+     fresh numbers: (1) automizer does not copy the parts' own rels, so
+     pictures inside SmartArt would be lost -- copy them from the source
+     data/drawing part; (2) the drawing rel is referenced from the data part
+     (`dsp:dataModelExt relId`), not from the slide XML -- point it at the
+     drawing of the same number and keep that rel from being pruned.
+     @returns the ids of the drawing rels to keep  */
+const wireDiagrams = async (zip: JSZip, slide: Document, slideRels: Document, sources: string[]): Promise<Set<string>> => {
+    const keep = new Set<string>()
+    const rels = elements(slideRels, "Relationship")
+    const targetOf = new Map(rels.map((r) => [ r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? "" ]))
+    const dataRefs = elements(slide, "dgm:relIds").map((el) => targetOf.get(el.getAttribute("r:dm") ?? "") ?? "")
+    for (const [ k, target ] of dataRefs.entries()) {
+        const n = /data(\d+)\.xml$/.exec(target)?.[1]
+        if (n === undefined)
+            continue
+        const source = /data(\d+)\.xml$/.exec(sources[k] ?? "")?.[1]
+        if (source !== undefined && source !== n)
+            for (const kind of [ "data", "drawing" ]) {
+                const from = zip.file(`ppt/diagrams/_rels/${kind}${source}.xml.rels`)
+                const to = `ppt/diagrams/_rels/${kind}${n}.xml.rels`
+                if (from !== null && zip.file(to) === null)
+                    zip.file(to, await from.async("string"))
+            }
+        const drawingRel = rels.find((r) => (r.getAttribute("Type") ?? "").endsWith("/diagramDrawing")
+            && r.getAttribute("Target") === `../diagrams/drawing${n}.xml`)
+        const dataPart = `ppt/diagrams/data${n}.xml`
+        if (drawingRel === undefined || zip.file(dataPart) === null)
+            continue
+        const id = drawingRel.getAttribute("Id") ?? ""
+        keep.add(id)
+        zip.file(dataPart, (await partText(zip, dataPart))
+            .replace(/(<dsp:dataModelExt\b[^>]*?\brelId=")[^"]*"/, `$1${id}"`))
+    }
+    return keep
+}
+
 /**  parts automizer copies per slide on every apply (charts with their
      drawings and theme overrides, SmartArt, embeddings, media) plus slide
-     comments; unreachable ones (e.g. of a removed slide) are garbage. Mirrored by the orphan check in engine/verify.ts.  */
+     comments; unreachable ones (e.g. of a removed slide) are garbage.
+     Mirrored by the orphan check in engine/verify.ts.  */
 export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
 
 /**  normalise embedded workbook names: automizer appends `-created-<n>` to
@@ -879,8 +919,10 @@ export const postProcess = async (
             if (job.slideTags.length > 0)
                 await restoreSlideTags(post, slide, slideRels, job.slideTags)
         }
+        const keepRels = job !== undefined && job.diagrams.length > 0
+            ? await wireDiagrams(zip, slide, slideRels, job.diagrams) : new Set<string>()
         const idsChanged = uniquifyShapeIds(slide)
-        const relsChanged = pruneUnusedSlideRels(slide, slideRels)
+        const relsChanged = pruneUnusedSlideRels(slide, slideRels, keepRels)
 
         if (job !== undefined || idsChanged || relsChanged) {
             zip.file(slidePart, serializeXml(slide))
