@@ -7,77 +7,25 @@
 **  PowerPoint "repair" trigger. This SHIPS with the engine (and therefore
 **  with the skill bundle), so `apply` self-checks its own output on any
 **  machine -- a structurally fine but repair-prompting file is never written.
-**  The engine repairs these triggers on touched slides (engine/inplace/
-**  slides.ts) and package-wide (engine/post.ts); verify is the safety net
-**  that turns any residual corruption into a clean, atomic failure instead
-**  of a broken .pptx the user only discovers in PowerPoint.
-**
-**  LOCKSTEP: the trigger list here mirrors what engine/inplace/slides.ts
-**  and engine/post.ts repair -- extend both sides together.
+**  The triggers of single parts come from engine/defects, the rule set the
+**  engine repairs its input by; the package-level rules (slide list, content
+**  types, notes ownership, app properties, orphans) live here.
 */
 
 import JSZip from "jszip"
-import path from "node:path"
 import { readFileSync } from "node:fs"
-import { DOMParser } from "@xmldom/xmldom"
-import { ASSET_PART } from "./post.js"
-import { normalizeRelTargets } from "./parts.js"
-import { doubleQuoted } from "./xml.js"
+import { DOMParser, type Document, type Element } from "@xmldom/xmldom"
+import { notesOwner, partDefects, type PartView } from "./defects.js"
+import { ASSET_PART, bytesOf, findPart, relTargets, relsOwner, type Rel } from "./parts.js"
+import { elements } from "./xml.js"
 
-/**
- *  Repair triggers inside one slide part: duplicate `p:cNvPr` shape ids.
- *
- *  @param part - the slide part name
- *  @param xml - its content
- *  @returns findings, empty when clean
- */
-export const shapeIdFindings = (part: string, xml: string): string[] => {
-    const ids = [...xml.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1])
-    const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))]
-    return dup.length > 0 ? [`${part}: duplicate cNvPr ids ${dup.join(",")}`] : []
-}
-
-/**
- *  Dangling references inside one slide part: every relationship id the
- *  slide XML uses (pictures, charts, links, SmartArt, tags) must exist in
- *  its relationships part.
- *
- *  @param part - the slide part name
- *  @param xml - its content (attributes double-quoted)
- *  @param relsXml - the content of its rels part (attributes double-quoted)
- *  @returns findings, empty when clean
- */
-export const refFindings = (part: string, xml: string, relsXml: string): string[] => {
-    const ids = new Set([ ...relsXml.matchAll(/<Relationship\b[^>]*\bId="([^"]+)"/g) ].map((m) => m[1]))
-    const dangling = [ ...new Set([ ...xml.matchAll(/\br:(?:id|embed|link|pict|dm|lo|qs|cs)="([^"]+)"/g) ]
-        .map((m) => m[1] as string).filter((id) => !ids.has(id))) ]
-    return dangling.length > 0 ? [`${part}: references missing relationship ids ${dangling.join(",")}`] : []
-}
-
-/**
- *  Repair triggers inside one relationships part: duplicate ids and dead
- *  internal targets (targets in relative form).
- *
- *  @param relsPart - the rels part name
- *  @param xml - its content
- *  @param names - all part names of the package
- *  @returns findings, empty when clean
- */
-export const relsFindings = (relsPart: string, xml: string, names: Set<string>): string[] => {
-    const findings: string[] = []
-    const relIds = [...xml.matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1])
-    const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))]
-    if (dupIds.length > 0)
-        findings.push(`${relsPart}: duplicate relationship ids ${dupIds.join(",")}`)
-    const base = path.posix.dirname(path.posix.dirname(relsPart))
-    for (const m of xml.matchAll(/<Relationship [^>]*?\/>/g)) {
-        if (m[0].includes("TargetMode=\"External\""))
-            continue
-        const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""
-        if (!names.has(path.posix.normalize(path.posix.join(base, target))))
-            findings.push(`${relsPart}: dead relationship target ${target}`)
-    }
-    return findings
+/**  the element children of an element, by name  */
+const childNames = (el: Element): string[] => {
+    const names: string[] = []
+    for (let n = el.firstChild; n !== null; n = n.nextSibling)
+        if (n.nodeType === 1)
+            names.push(n.nodeName)
+    return names
 }
 
 /**
@@ -91,170 +39,169 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
         interleaved "piece" save stores it fragmented) -- report a single
         finding instead of crashing the part-based checks below  */
     if (zip.file("[Content_Types].xml") === null)
-        return ["[Content_Types].xml: part missing (not a flat OPC package)"]
+        return [ "[Content_Types].xml: part missing (not a flat OPC package)" ]
     const findings: string[] = []
+
     /*  parts under the reserved OPC folder [trash]/ are logically deleted
         (left by PowerPoint incremental save / OneDrive co-authoring), carry
         no content type by design and are ignored by PowerPoint -- exclude
         them from every check (the engine drops them from the output)  */
     const names = new Set(Object.keys(zip.files)
         .filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")))
-    const raw = async (part: string): Promise<string> =>
-        (await (zip.file(part) as JSZip.JSZipObject).async("string")).replace(/^\uFEFF/, "")
+    const exists = (part: string): boolean => names.has(part)
 
-    /*  the regex checks below read every attribute double-quoted  */
-    const text = async (part: string): Promise<string> => {
-        const xml = await raw(part)
-        try {
-            return doubleQuoted(xml)
-        }
-        catch {
-            return xml
-        }
-    }
-
-    /*  1. every XML part must be well-formed  */
+    /*  1. every XML part must be well-formed; each is parsed once for all
+        rules below  */
+    const docs = new Map<string, Document>()
     for (const n of names)
         if (n.endsWith(".xml") || n.endsWith(".rels"))
             try {
                 const parser = new DOMParser({
                     onError: (_level, msg): void => { throw new Error(msg) }
                 })
-                parser.parseFromString(await raw(n), "application/xml")
+                const text = (await (zip.file(n) as JSZip.JSZipObject).async("string")).replace(/^\uFEFF/, "")
+                docs.set(n, parser.parseFromString(text, "application/xml"))
             }
             catch (err) {
                 findings.push(`${n}: malformed XML (${String(err).slice(0, 80)})`)
             }
-
-    /*  2. cNvPr shape ids must be unique per slide; every relationship id
-        a slide uses must exist  */
-    for (const n of names)
-        if (/^ppt\/slides\/slide\d+\.xml$/.test(n)) {
-            const relsPart = `ppt/slides/_rels/${path.posix.basename(n)}.rels`
-            findings.push(...shapeIdFindings(n, await text(n)),
-                ...refFindings(n, await text(n), names.has(relsPart) ? await text(relsPart) : ""))
-        }
-
-    /*  3. every internal relationship target must exist; rel ids unique  */
-    for (const n of names)
+    const rels = new Map<string, Rel[]>()
+    for (const [ n, doc ] of docs)
         if (n.endsWith(".rels"))
-            findings.push(...relsFindings(n, await text(n), names))
+            rels.set(relsOwner(n), relTargets(relsOwner(n), doc, zip))
 
-    /*  4. content-type overrides: no dead parts, no duplicates  */
-    const ct = await text("[Content_Types].xml")
-    const overrides = [...ct.matchAll(/<Override PartName="([^"]+)"/g)].map((m) => m[1] as string)
-    for (const o of new Set(overrides)) {
-        if (!names.has(o.replace(/^\//, "")))
-            findings.push(`[Content_Types].xml: override for missing part ${o}`)
-        if (overrides.filter((x) => x === o).length > 1)
-            findings.push(`[Content_Types].xml: duplicate override ${o}`)
+    /*  2. the triggers of every single part: duplicate or dead
+        relationships, references to missing relationships, duplicate shape
+        ids on slides  */
+    const owners = new Set([ ...rels.keys(), ...[ ...docs.keys() ].filter((n) => n.endsWith(".xml")) ])
+    for (const part of owners) {
+        const view: PartView = { part: part === "" ? "_rels/.rels" : part, doc: docs.get(part) ?? null, rels: rels.get(part) ?? [] }
+        findings.push(...partDefects(view, exists))
     }
 
-    /*  5. every part must be covered by a default or override  */
-    const defaults = new Set([...ct.matchAll(/<Default Extension="([^"]+)"/g)].map((m) => (m[1] as string).toLowerCase()))
-    const overridden = new Set(overrides.map((o) => o.replace(/^\//, "")))
+    /*  3. content-type overrides: no dead parts, no duplicates; every part
+        covered by a default or an override  */
+    const ct = docs.get("[Content_Types].xml")
+    if (ct !== undefined) {
+        const overrides = elements(ct, "Override").map((o) => (o.getAttribute("PartName") ?? "").replace(/^\//, ""))
+        const seen = new Set<string>()
+        for (const o of overrides) {
+            if (findPart(zip, o) === null)
+                findings.push(`[Content_Types].xml: override for missing part /${o}`)
+            if (seen.has(o.toLowerCase()))
+                findings.push(`[Content_Types].xml: duplicate override /${o}`)
+            seen.add(o.toLowerCase())
+        }
+        const defaults = new Set(elements(ct, "Default").map((d) => (d.getAttribute("Extension") ?? "").toLowerCase()))
+        for (const n of names)
+            if (n !== "[Content_Types].xml" && !seen.has(n.toLowerCase())
+                && !defaults.has(n.split(".").pop()?.toLowerCase() ?? ""))
+                findings.push(`${n}: no content type (neither default nor override)`)
+    }
+
+    /*  4. the slide list: every sldId resolves to its own slide part, every
+        slide relationship and slide part is in the list  */
+    const pres = docs.get("ppt/presentation.xml")
+    const presRels = new Map((rels.get("ppt/presentation.xml") ?? []).map((r) => [ r.id, r ]))
+    const sldIds = pres === undefined ? [] : elements(pres, "p:sldId")
+        .map((el) => ({ id: el.getAttribute("id") ?? "", rid: el.getAttribute("r:id") ?? "" }))
+    const slides: string[] = []
+    for (const { rid } of sldIds) {
+        const target = presRels.get(rid)?.target ?? null
+        if (target === null || !exists(target) || !(presRels.get(rid)?.type ?? "").endsWith("/slide"))
+            findings.push(`presentation.xml: sldId ${rid} does not resolve to a slide part`)
+        else if (slides.includes(target))
+            findings.push(`presentation.xml: sldId ${rid} lists slide ${target} a second time`)
+        else
+            slides.push(target)
+    }
+    const listed = new Set(sldIds.map((s) => s.rid))
+    for (const r of presRels.values())
+        if (r.type.endsWith("/slide") && !listed.has(r.id))
+            findings.push(`presentation.xml.rels: dangling slide relationship ${r.id} (no sldId references it)`)
     for (const n of names)
-        if (n !== "[Content_Types].xml" && !overridden.has(n)
-            && !defaults.has(n.split(".").pop()?.toLowerCase() ?? ""))
-            findings.push(`${n}: no content type (neither default nor override)`)
+        if (/^ppt\/slides\/[^/]+\.xml$/.test(n) && !slides.includes(n))
+            findings.push(`${n}: slide part not in the slide list`)
 
-    /*  6. every sldId in the presentation must resolve to a slide part  */
-    const pres = await text("ppt/presentation.xml")
-    const rels = await text("ppt/_rels/presentation.xml.rels")
-    const relMap = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)]
-        .map((m) => [/\bId="([^"]+)"/.exec(m[0])?.[1] ?? "", /\bTarget="([^"]+)"/.exec(m[0])?.[1] ?? ""]))
-    for (const m of pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)) {
-        const target = relMap.get(m[1] as string)
-        if (target === undefined || !names.has(path.posix.normalize(path.posix.join("ppt", target))))
-            findings.push(`presentation.xml: sldId ${m[1]} does not resolve to a slide part`)
-    }
-    /*  ... and every other r:id there (masters, custom shows) to a rel  */
-    for (const m of pres.matchAll(/<([\w:]+)\b[^>]*\br:id="([^"]+)"/g))
-        if (m[1] !== "p:sldId" && !relMap.has(m[2] as string))
-            findings.push(`presentation.xml: <${m[1] as string}> r:id ${m[2] as string} has no relationship`)
-
-    /*  7. CT_Presentation is an ordered sequence: master id lists must
-        precede sldIdLst (violations trigger the repair dialog)  */
-    const seq = [...pres.matchAll(/<p:(sldMasterIdLst|notesMasterIdLst|handoutMasterIdLst|sldIdLst|sldSz|notesSz)[ >/]/g)]
-        .map((m) => m[1] as string)
-    const sldAt = seq.indexOf("sldIdLst")
-    if (sldAt >= 0)
-        for (const lst of ["notesMasterIdLst", "handoutMasterIdLst"])
-            if (seq.includes(lst) && seq.indexOf(lst) > sldAt)
-                findings.push(`presentation.xml: ${lst} appears after sldIdLst (schema order violated)`)
-    if (seq.includes("sldSz") && seq.includes("notesSz")
-        && seq.indexOf("sldSz") > seq.indexOf("notesSz"))
+    /*  CT_Presentation is an ordered sequence: master id lists must precede
+        sldIdLst, sldSz must precede notesSz  */
+    const presRoot = pres?.documentElement ?? null
+    const seq = presRoot === null ? [] : childNames(presRoot)
+    const before = (a: string, b: string): boolean =>
+        !seq.includes(a) || !seq.includes(b) || seq.indexOf(a) < seq.indexOf(b)
+    for (const lst of [ "p:notesMasterIdLst", "p:handoutMasterIdLst" ])
+        if (!before(lst, "p:sldIdLst"))
+            findings.push(`presentation.xml: ${lst.slice(2)} appears after sldIdLst (schema order violated)`)
+    if (!before("p:sldSz", "p:notesSz"))
         findings.push("presentation.xml: sldSz appears after notesSz (schema order violated)")
 
-    /*  7a. no dangling /slide relationship: a slide rel no sldId uses
-        points at a part that may still exist, so the dead-target check (#3)
-        misses it, and piled-up ones make PowerPoint demand a repair. Every
-        /slide rel must be live.  */
-    const liveSlideRids = new Set([...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]))
-    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-        const id = /\bId="([^"]+)"/.exec(m[0])?.[1] ?? ""
-        if (/\bType="[^"]*\/slide"/.test(m[0]) && !liveSlideRids.has(id))
-            findings.push(`presentation.xml.rels: dangling slide relationship ${id} (no sldId references it)`)
-    }
+    /*  section slide references must resolve to existing sldIds  */
+    const realIds = new Set(sldIds.map((s) => s.id))
+    for (const ref of pres === undefined ? [] : elements(pres, "p14:sldId"))
+        if (!realIds.has(ref.getAttribute("id") ?? ""))
+            findings.push(`presentation.xml: section references removed slide id ${ref.getAttribute("id") ?? ""}`)
 
-    /*  7b. section slide references must resolve to existing sldIds  */
-    const realIds = new Set([...pres.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => m[1] as string))
-    for (const m of pres.matchAll(/<p14:sldId id="(\d+)"/g))
-        if (!realIds.has(m[1] as string))
-            findings.push(`presentation.xml: section references removed slide id ${m[1]}`)
-
-    /*  7c. docProps/app.xml must declare the real slide count and a matching
+    /*  5. docProps/app.xml must declare the real slide count and a matching
         title list: a deck claiming fewer slides than it has makes PowerPoint
-        demand a repair on open.  */
+        demand a repair on open  */
     if (names.has("docProps/app.xml")) {
-        const app = await text("docProps/app.xml")
-        const slideCount = [...pres.matchAll(/<p:sldId /g)].length
+        const app = await (zip.file("docProps/app.xml") as JSZip.JSZipObject).async("string")
         const declared = /<Slides>(\d+)<\/Slides>/.exec(app)
-        if (declared !== null && Number(declared[1]) !== slideCount)
-            findings.push(`docProps/app.xml: declares ${declared[1]} slides, deck has ${slideCount}`)
+        if (declared !== null && Number(declared[1]) !== sldIds.length)
+            findings.push(`docProps/app.xml: declares ${declared[1]} slides, deck has ${sldIds.length}`)
         const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(app)
         const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(app)
         if (hp !== null && tp !== null) {
-            const sum = [...(hp[1] ?? "").matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].reduce((a, m) => a + Number(m[1]), 0)
-            const entries = [...(tp[1] ?? "").matchAll(/<vt:lpstr>/g)].length
+            const sum = [ ...(hp[1] ?? "").matchAll(/<vt:i4>(\d+)<\/vt:i4>/g) ].reduce((a, m) => a + Number(m[1]), 0)
+            const entries = [ ...(tp[1] ?? "").matchAll(/<vt:lpstr>/g) ].length
             if (sum !== entries)
                 findings.push(`docProps/app.xml: HeadingPairs sum ${sum} != TitlesOfParts ${entries}`)
         }
     }
 
-    /*  7d. a notesSlide must belong to exactly one slide. Two slides
-        pointing at one notes part (it carries a single back-reference) is
-        invalid and makes PowerPoint demand a repair.  */
-    const notesRef = new Map<string, string[]>()
-    for (const n of names)
-        if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(n))
-            for (const m of (await text(n)).matchAll(/Target="\.\.\/notesSlides\/([^"]+)"/g)) {
-                const part = m[1] as string
-                notesRef.set(part, [...(notesRef.get(part) ?? []), n])
+    /*  6. a notes part belongs to exactly one slide, the one its
+        back-reference names  */
+    const notesOf = new Map<string, string[]>()
+    for (const slide of [ ...names ].filter((n) => /^ppt\/slides\/[^/]+\.xml$/.test(n)))
+        for (const r of rels.get(slide) ?? [])
+            if (r.type.endsWith("/notesSlide") && r.target !== null && exists(r.target)) {
+                notesOf.set(r.target, [ ...notesOf.get(r.target) ?? [], slide ])
+                const owner = notesOwner({ part: r.target, doc: docs.get(r.target) ?? null, rels: rels.get(r.target) ?? [] })
+                if (owner !== slide)
+                    findings.push(`${slide}: its notes part ${r.target} belongs to ${owner ?? "no slide"}`)
             }
-    for (const [part, owners] of notesRef)
-        if (owners.length > 1)
-            findings.push(`notesSlide ${part} is referenced by ${owners.length} slides (must be 1:1)`)
+    for (const [ part, users ] of notesOf)
+        if (users.length > 1)
+            findings.push(`notesSlide ${part} is referenced by ${users.length} slides (must be 1:1)`)
 
-    /*  8. charts, SmartArt, embeddings and media must be reachable from some part
-        (orphans accumulate over applies and bloat or break the file)  */
-    const isAsset = (f: string): boolean =>
-        ASSET_PART.test(f) && !f.includes("/_rels/")
-    const live = new Set<string>()
+    /*  7. charts, SmartArt, embeddings and media must be reachable from some
+        part (orphans accumulate over applies and bloat or break the file)  */
+    const live = new Set([ ...rels.values() ].flat().map((r) => r.target))
     for (const n of names)
-        if (n.endsWith(".rels")) {
-            const base = path.posix.dirname(path.posix.dirname(n))
-            for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
-                if (m[0].includes("TargetMode=\"External\""))
-                    continue
-                const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""
-                live.add(path.posix.normalize(path.posix.join(base, target)))
-            }
-        }
-    for (const n of names)
-        if (isAsset(n) && !live.has(n))
+        if (ASSET_PART.test(n) && !n.includes("/_rels/") && !live.has(n))
             findings.push(`${n}: orphan asset (not referenced from any part)`)
 
+    return findings
+}
+
+/**
+ *  Validate an opened deck, optionally against the deck it was made from.
+ *
+ *  @param zip - the deck
+ *  @param before - optional pre-apply archive to detect overwritten media
+ *  @returns list of findings; empty when clean
+ */
+export const verifyZip = async (zip: JSZip, before?: JSZip): Promise<string[]> => {
+    const findings = await verifyArchive(zip)
+
+    /*  with the pre-apply archive: a media file kept under its name must keep
+        its bytes, or another slide silently shows the new image  */
+    if (before !== undefined)
+        for (const n of Object.keys(before.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))) {
+            const now = await bytesOf(zip, n)
+            if (now !== null && !now.equals(await bytesOf(before, n) as Buffer))
+                findings.push(`${n}: existing media file overwritten with different content`)
+        }
     return findings
 }
 
@@ -262,26 +209,10 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
  *  Validate a deck given its bytes.
  *
  *  @param bytes - the .pptx contents
- *  @param before - optional pre-apply archive to detect overwritten media
  *  @returns list of findings; empty when clean
  */
-export const verifyBytes = async (bytes: Buffer, before?: JSZip): Promise<string[]> => {
-    const zip = await JSZip.loadAsync(bytes)
-
-    /*  absolute rel targets are valid OPC -- check them in relative form  */
-    await normalizeRelTargets(zip)
-    const findings = await verifyArchive(zip)
-
-    /*  with the pre-apply archive: a media file kept under its name must keep
-        its bytes, or another slide silently shows the new image  */
-    if (before !== undefined)
-        for (const n of Object.keys(before.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))) {
-            const after = zip.file(n)
-            if (after !== null && !(await after.async("nodebuffer")).equals(await (before.file(n) as JSZip.JSZipObject).async("nodebuffer")))
-                findings.push(`${n}: existing media file overwritten with different content`)
-        }
-    return findings
-}
+export const verifyBytes = async (bytes: Buffer): Promise<string[]> =>
+    await verifyZip(await JSZip.loadAsync(bytes))
 
 /**
  *  Validate a deck file on disk.

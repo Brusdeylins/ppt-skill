@@ -4,7 +4,7 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  infra/fs: file-system primitives -- payload resolution (@file / stdin /
-**  inline), atomic writes, the seed cache directory, and content hashing.
+**  inline), atomic writes, the staging directory, and content hashing.
 */
 
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs"
@@ -77,7 +77,7 @@ export const cacheDir = (): string => {
 }
 
 /**
- *  Short content hash (SHA-1, 12 hex chars) used for rev tokens and cache keys.
+ *  Short content hash (SHA-1, 12 hex chars) used for rev tokens.
  *
  *  @param parts - byte or string parts hashed in order
  *  @returns 12-character hex digest

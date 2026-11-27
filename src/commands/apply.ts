@@ -14,8 +14,8 @@ import { planOps } from "../core/ops/planner.js"
 import { OpsDocumentSchema, type OpsDocument } from "../schema/ops.js"
 import { DeckArchive, readDeckState, readTemplateInfo } from "../engine/reader.js"
 import type { Layout } from "../core/model.js"
-import { runSession } from "../engine/inplace/engine.js"
-import { IMAGE_TYPES } from "../engine/post.js"
+import { preflight, runSession } from "../engine/inplace/engine.js"
+import { IMAGE_TYPES } from "../engine/parts.js"
 import { parseJson, requireFile, resolvePayload } from "../infra/fs.js"
 import { parse, type Parsed } from "../infra/args.js"
 import { DEFAULT_MIN_FONT_PT, type LintWarning } from "../core/lint.js"
@@ -135,6 +135,7 @@ export const executeOps = async (
             `${plan.warnings.length} lint finding(s) under --strict`,
             { warnings: plan.warnings })
 
+    await preflight(plan, archive)
     if (opts.dryRun)
         return {
             file: deck.file,
@@ -145,7 +146,7 @@ export const executeOps = async (
 
     /*  execute and report the final identities  */
     const outFile = opts.outFile ?? deckFile
-    const session = await runSession(deckFile, outFile, plan, archive)
+    const session = await runSession(outFile, plan, archive)
     const finalState = await readDeckState(await DeckArchive.open(outFile))
     const slides: Record<string, { id: number, index: number }> = {}
     for (const [ref, index] of Object.entries(session.refIndexes)) {

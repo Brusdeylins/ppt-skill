@@ -11,18 +11,12 @@
 
 import JSZip from "jszip"
 import path from "node:path"
-import type { Document, Element } from "@xmldom/xmldom"
-import { PartAllocator, partText, relsPartOf, resolveTarget } from "../parts.js"
-import { IMAGE_TYPES, removeParts } from "../post.js"
-import { NS_REL, doubleQuoted, elements, parseXml, serializeXml } from "../xml.js"
-
-/**  relationship types whose target a clone inside the same package shares:
-     layouts, masters, other slides, immutable media and external content  */
-const SHARED_RELS = [ "/slideLayout", "/slideMaster", "/notesMaster", "/slide", "/image", "/media", "/video", "/audio", "/hyperlink", "/theme" ]
-
-/**  an empty relationships document  */
-const EMPTY_RELS = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-    + `<Relationships xmlns="${NS_REL}"/>`
+import type { Document } from "@xmldom/xmldom"
+import {
+    EMPTY_RELS, IMAGE_TYPES, PartAllocator, RELS, appendRel, findPart, partText, relIs, relTargets,
+    relsPartOf, removeParts, type Rel
+} from "../parts.js"
+import { elements, parseXml, serializeXml, xmlEscape } from "../xml.js"
 
 /**  the deck package of one apply  */
 export class Package {
@@ -53,13 +47,13 @@ export class Package {
     }
 
     /**
-     *  Whether a part exists.
+     *  Whether a part exists (part names are case-insensitive).
      *
      *  @param part - part name
      *  @returns true when present
      */
     has(part: string): boolean {
-        return this.zip.file(part) !== null
+        return findPart(this.zip, part) !== null
     }
 
     /**
@@ -133,13 +127,7 @@ export class Package {
      */
     addRel(rels: Document, type: string, target: string, external = false): string {
         const id = this.alloc.relId()
-        const rel = rels.createElementNS(NS_REL, "Relationship")
-        rel.setAttribute("Id", id)
-        rel.setAttribute("Type", type)
-        rel.setAttribute("Target", target)
-        if (external)
-            rel.setAttribute("TargetMode", "External")
-        rels.documentElement?.appendChild(rel)
+        appendRel(rels, id, type, target, external)
         return id
     }
 
@@ -151,7 +139,7 @@ export class Package {
      */
     async typeAs(part: string, contentType: string): Promise<void> {
         this.write("[Content_Types].xml", (await this.text("[Content_Types].xml"))
-            .replace("</Types>", `<Override PartName="/${part}" ContentType="${contentType}"/></Types>`))
+            .replace("</Types>", () => `<Override PartName="/${xmlEscape(part, true)}" ContentType="${xmlEscape(contentType, true)}"/></Types>`))
     }
 
     /**
@@ -163,19 +151,24 @@ export class Package {
      *  @param sourcePart - the part it was copied from
      */
     async typePart(part: string, sourceCtText: string, sourcePart: string): Promise<void> {
-        const sourceCt = doubleQuoted(sourceCtText)
-        const override = new RegExp(`<Override [^>]*PartName="/${sourcePart.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(sourceCt)
-        if (override !== null) {
-            await this.typeAs(part, /ContentType="([^"]+)"/.exec(override[0])?.[1] ?? "")
+        const sourceCt = sourceCtText === "" ? null : parseXml(sourceCtText)
+        const override = sourceCt === null ? undefined : elements(sourceCt, "Override").find((o) =>
+            (o.getAttribute("PartName") ?? "").toLowerCase() === `/${sourcePart.toLowerCase()}`)
+        if (override !== undefined) {
+            await this.typeAs(part, override.getAttribute("ContentType") ?? "")
             return
         }
-        const ct = doubleQuoted(await this.text("[Content_Types].xml"))
         const ext = path.posix.extname(part).slice(1).toLowerCase()
-        if (new RegExp(`<Default [^>]*Extension="${ext}"`, "i").test(ct))
+        const defaultOf = (ct: Document | null): string | null => ct === null ? null : elements(ct, "Default")
+            .find((d) => (d.getAttribute("Extension") ?? "").toLowerCase() === ext)?.getAttribute("ContentType") ?? null
+        const ct = parseXml(await this.text("[Content_Types].xml"))
+        if (defaultOf(ct) !== null)
             return
-        const type = new RegExp(`<Default [^>]*Extension="${ext}"[^>]*ContentType="([^"]+)"`, "i").exec(sourceCt)?.[1]
-            ?? IMAGE_TYPES[ext] ?? "application/octet-stream"
-        this.write("[Content_Types].xml", ct.replace(/<Default\b/, `<Default Extension="${ext}" ContentType="${type}"/><Default`))
+        const def = ct.createElementNS(ct.documentElement?.namespaceURI ?? null, "Default")
+        def.setAttribute("Extension", ext)
+        def.setAttribute("ContentType", defaultOf(sourceCt) ?? IMAGE_TYPES[ext] ?? "application/octet-stream")
+        ct.documentElement?.insertBefore(def, ct.documentElement.firstChild)
+        this.write("[Content_Types].xml", ct)
     }
 
     /**
@@ -206,9 +199,9 @@ export class Package {
     }
 
     /**
-     *  Re-point the relationships of a copied part: targets copied in the
-     *  same operation point at their copy, shared ones keep their part,
-     *  everything else is copied recursively.
+     *  Re-point the relationships of a copied part: dead targets go, targets
+     *  copied in the same operation point at their copy, shared ones keep
+     *  their part, everything else is copied recursively.
      *
      *  @param from - the package holding the original
      *  @param part - the original part
@@ -216,21 +209,19 @@ export class Package {
      *  @param rels - the relationships to re-point (in place)
      *  @param done - parts already copied in this operation
      */
-    async relinkClone(from: Package, part: string, copy: string, rels: Document, done: Map<string, string>): Promise<void> {
-        for (const rel of elements(rels, "Relationship")) {
-            if (rel.getAttribute("TargetMode") === "External")
+    private async relinkClone(from: Package, part: string, copy: string, rels: Document, done: Map<string, string>): Promise<void> {
+        for (const { el, type, target } of from.targets(part, rels)) {
+            if (target === null)
                 continue
-            const target = resolveTarget(path.posix.dirname(part), rel.getAttribute("Target") ?? "")
-            const type = rel.getAttribute("Type") ?? ""
             let next = done.get(target)
-            if (next === undefined && from === this && SHARED_RELS.some((k) => type.endsWith(k)))
-                next = target
             if (next === undefined && !from.has(target)) {
-                rel.parentNode?.removeChild(rel)
+                el.parentNode?.removeChild(el)
                 continue
             }
+            if (next === undefined && from === this && relIs(type, RELS.shared))
+                next = target
             next ??= await this.clonePart(from, target, done)
-            rel.setAttribute("Target", path.posix.relative(path.posix.dirname(copy), next))
+            el.setAttribute("Target", path.posix.relative(path.posix.dirname(copy), next))
         }
     }
 
@@ -244,18 +235,14 @@ export class Package {
     }
 
     /**
-     *  Targets of the relationships of a part, resolved to part names.
+     *  The relationships of a part, targets resolved to the part names of
+     *  this package (case-insensitively).
      *
      *  @param part - the owning part
      *  @param rels - its rels DOM
-     *  @returns relationship elements with their resolved target
+     *  @returns the relationships in document order
      */
-    static targets(part: string, rels: Document): { rel: Element, type: string, target: string | null }[] {
-        return elements(rels, "Relationship").map((rel) => ({
-            rel,
-            type: rel.getAttribute("Type") ?? "",
-            target: rel.getAttribute("TargetMode") === "External" ? null
-                : resolveTarget(path.posix.dirname(part), rel.getAttribute("Target") ?? "")
-        }))
+    targets(part: string, rels: Document): Rel[] {
+        return relTargets(part, rels, this.zip)
     }
 }

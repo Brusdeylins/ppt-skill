@@ -30,22 +30,30 @@
   slide (shared, or left over by a removed slide) -- is repaired and
   reported with the new warning `W_REPAIRED`; a link to a missing slide
   goes together with its hyperlink, a placeholder picture fill without
-  its picture goes so the layout's fill shows again. Dead and duplicate
-  relationships of layouts, masters and the presentation are dropped
-  package-wide. All other slides stay untouched.
-- **`verify` finds references to missing relationships.** A slide using a
-  relationship id its relationships part does not have (a picture, chart,
-  link) is reported -- 1.0.x created such slides from layouts with picture
-  fills.
-- **Single-quoted XML attributes are read correctly.** Parts written with
-  `attr='value'` no longer look like repair triggers or lose their slide
-  list.
+  its picture goes so the layout's fill shows again, any other shape
+  without its picture goes alone (not its whole group). Copies of such a
+  slide are repaired as well. Triggers in layouts, masters and the
+  presentation (a master id of a dead relationship) and slide parts
+  outside the slide list are repaired package-wide before anything else.
+  All other slides stay untouched.
+- **`verify` checks more.** References to missing relationships in any
+  part (1.0.x created such slides from layouts with picture fills), a
+  notes part that names another slide, a slide listed twice and slide
+  parts outside the slide list are reported. The repeated shape ids of an
+  `mc:Fallback` (equations, OLE objects) are no trigger. Part names are
+  compared case-insensitively, as OPC demands: a picture whose target
+  differs in letter case is no longer taken for dead and removed.
+- **Single-quoted XML attributes are read correctly.** Relationships,
+  content types and the slide list are read through the DOM: a deck
+  re-saved with `attr='value'` no longer gets clashing relationship ids,
+  looks defective or loses its slide list.
 - **Further fixes:** a hidden slide written as `show="false"` stays hidden;
   speaker notes on a deck without notes master fail with a clear
-  `E_TEMPLATE` instead of a dead relationship; new part names never clash
+  `E_TEMPLATE`, already under `--dry-run`; new part names never clash
   with existing ones in another letter case; ink and ActiveX parts of
   removed slides are collected; `el.rm` of a SmartArt also removes its
-  drawing.
+  drawing; a slide title containing `$'` or `$&` no longer breaks the
+  app properties.
 - **Fix: new slides showed "the picture cannot be displayed".** A layout
   placeholder with a picture fill (e.g. the decorative circle of a
   corporate title layout) was cloned onto the new slide without its

@@ -11,13 +11,11 @@
 
 import JSZip from "jszip"
 import { readFileSync } from "node:fs"
-import path from "node:path"
 import type { Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
 import { seedPlaceholderName } from "../core/model.js"
-import { cleanContentTypes, normalizeRelTargets } from "./parts.js"
-import { gcAssets } from "./post.js"
-import { NS_A, doubleQuoted, elements, firstElement, parseXml, serializeElement } from "./xml.js"
+import { cleanContentTypes, gcAssets, layoutOrder, normalizeRelTargets } from "./parts.js"
+import { NS_A, NS_P, elements, firstElement, parseXml, serializeElement, serializeXml } from "./xml.js"
 
 /**  clone the fillable placeholders of a layout onto an empty slide (DOM)  */
 export const slideFromLayout = (layoutXml: string): string => {
@@ -64,60 +62,17 @@ export const slideFromLayout = (layoutXml: string): string => {
         + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
 }
 
-/**  matches a presentation-rels slide relationship element  */
-const SLIDE_REL_RE = /<Relationship [^>]*Type="[^"]*\/slide"[^>]*\/>/g
-
-/**  strip every slide relationship, slide content-type override and slide part from a deck zip  */
-const stripSlides = (
-    presRels: string, ct: string
-): { presRels: string, ct: string } => ({
-    presRels: presRels.replace(SLIDE_REL_RE, ""),
-    ct: ct.replace(/<Override PartName="\/ppt\/slides\/[^"]*"[^>]*\/>/g, "")
-})
-
-/**  layout part paths in slide-master order  */
-export const layoutOrder = async (zip: JSZip): Promise<string[]> => {
-    const order: string[] = []
-
-    /*  masters in sldMasterIdLst order -- the order the reader (and so every
-        layout index) uses; part names need not follow it  */
-    const pres = doubleQuoted(await zip.file("ppt/presentation.xml")?.async("string") ?? "")
-    const presRels = doubleQuoted(await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? "")
-    const relTarget = new Map([ ...presRels.matchAll(/<Relationship\b[^>]*>/g) ].map((m) =>
-        [ /Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? "" ]))
-    const listed = [ ...pres.matchAll(/<p:sldMasterId\b[^>]*\br:id="([^"]+)"/g) ]
-        .map((m) => path.posix.normalize(path.posix.join("ppt", relTarget.get(m[1] as string) ?? "")))
-        .filter((part) => zip.file(part) !== null)
-    const masters = listed.length > 0 ? listed
-        : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort()
-    for (const masterPart of masters) {
-        const master = parseXml(await (zip.file(masterPart) as JSZip.JSZipObject).async("string"))
-        const relsFile = zip.file(`ppt/slideMasters/_rels/${path.posix.basename(masterPart)}.rels`)
-        if (relsFile === null)
-            continue
-        const rels = parseXml(await relsFile.async("string"))
-        const relMap = new Map(elements(rels, "Relationship")
-            .map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]))
-        for (const layoutId of elements(master, "p:sldLayoutId")) {
-            const target = relMap.get(layoutId.getAttribute("r:id") ?? "")
-            if (target !== undefined && target.includes("slideLayouts/"))
-                order.push(path.posix.normalize(path.posix.join("ppt/slideMasters", target)))
-        }
-    }
-    return order
-}
-
 /**
- *  Build a seed deck from a template archive: convert .potx content types,
- *  drop all existing slides/notes, then add one empty cloned-placeholder
- *  slide per layout under the canonical names slide1..slideN.
+ *  Create an empty deck from a template: .potx content types converted,
+ *  every slide, notes part, section and master-view setting of the template
+ *  dropped. Used by `pptc new`.
  *
- *  @param templateBytes - raw bytes of the .potx/.pptx template
- *  @returns seed deck bytes and the number of layouts
- *  @throws PptcError E_TEMPLATE when the template has no layouts
+ *  @param template - path or bytes of the .potx/.pptx template
+ *  @returns bytes of a valid, zero-slide .pptx carrying the template's design
+ *  @throws PptcError E_TEMPLATE when the template lacks required parts or layouts
  */
-export const buildSeed = async (templateBytes: Buffer): Promise<{ bytes: Buffer, layoutCount: number }> => {
-    const zip = await JSZip.loadAsync(templateBytes)
+export const buildEmptyDeck = async (template: string | Buffer): Promise<Buffer> => {
+    const zip = await JSZip.loadAsync(typeof template === "string" ? readFileSync(template) : template)
     await normalizeRelTargets(zip)
     const get = async (part: string): Promise<string> => {
         const f = zip.file(part)
@@ -125,100 +80,70 @@ export const buildSeed = async (templateBytes: Buffer): Promise<{ bytes: Buffer,
             throw new PptcError("E_TEMPLATE", `template is missing required part: ${part}`)
         return await f.async("string")
     }
-
-    let ct = (await get("[Content_Types].xml"))
-        .replace("presentationml.template.main+xml", "presentationml.presentation.main+xml")
-    let pres = await get("ppt/presentation.xml")
-    let presRels = await get("ppt/_rels/presentation.xml.rels")
+    if ((await layoutOrder(zip)).length === 0)
+        throw new PptcError("E_TEMPLATE", "template contains no slide layouts")
 
     /*  drop existing slides and notes completely  */
-    pres = pres
-        .replace(/<p:sldIdLst\s*\/>/, "<p:sldIdLst></p:sldIdLst>")
-        .replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst></p:sldIdLst>")
-    if (!pres.includes("<p:sldIdLst>"))
-        pres = pres.replace("</p:sldMasterIdLst>", "</p:sldMasterIdLst><p:sldIdLst></p:sldIdLst>")
+    const pres = parseXml(await get("ppt/presentation.xml"))
+    const root = pres.documentElement as Element
+    let sldIdLst = firstElement(pres, "p:sldIdLst")
+    if (sldIdLst === null) {
+        sldIdLst = pres.createElementNS(NS_P, "p:sldIdLst")
+        const anchor = firstElement(pres, "p:sldSz")
+        root.insertBefore(sldIdLst, anchor)
+    }
+    while (sldIdLst.firstChild !== null)
+        sldIdLst.removeChild(sldIdLst.firstChild)
 
-    /*  drop PowerPoint sections: they group the template's example
-        slides, which are stripped -- stale section definitions would
-        reference removed sldIds  */
-    pres = pres
-        .replace(/<p:ext uri="\{521415D9-36F7-43E2-AB2F-B90AF26B5E84\}">.*?<\/p:ext>/s, "")
-        .replace(/<p:extLst>\s*<\/p:extLst>/, "")
+    /*  drop PowerPoint sections: they group the template's example slides,
+        stale section definitions would reference removed sldIds  */
+    for (const ext of elements(pres, "p:ext"))
+        if (ext.getAttribute("uri") === "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}") {
+            const extLst = ext.parentNode as Element
+            extLst.removeChild(ext)
+            if (firstElement(extLst, "p:ext") === null)
+                extLst.parentNode?.removeChild(extLst)
+        }
 
     /*  CT_Presentation is an ordered sequence: notesMasterIdLst (and
         handoutMasterIdLst) MUST precede sldIdLst -- sloppy templates
         violate this and PowerPoint answers with the repair dialog  */
-    for (const lst of ["handoutMasterIdLst", "notesMasterIdLst"]) {
-        const el = new RegExp(`<p:${lst}>.*?</p:${lst}>|<p:${lst}\\s*/>`, "s").exec(pres)
-        if (el !== null && pres.indexOf(el[0]) > pres.indexOf("<p:sldIdLst"))
-            pres = pres.replace(el[0], "").replace(/<p:sldIdLst/, `${el[0]}<p:sldIdLst`)
+    for (const lst of [ "p:notesMasterIdLst", "p:handoutMasterIdLst" ]) {
+        const el = firstElement(pres, lst)
+        if (el !== null && el.parentNode === root) {
+            let ahead = false
+            for (let n = sldIdLst.previousSibling; n !== null; n = n.previousSibling)
+                ahead ||= n === el
+            if (!ahead)
+                root.insertBefore(el, sldIdLst)
+        }
     }
-    presRels = presRels.replace(SLIDE_REL_RE, "")
+    zip.file("ppt/presentation.xml", serializeXml(pres))
+
+    const presRels = parseXml(await get("ppt/_rels/presentation.xml.rels"))
+    for (const rel of elements(presRels, "Relationship"))
+        if ((rel.getAttribute("Type") ?? "").endsWith("/slide"))
+            rel.parentNode?.removeChild(rel)
+    zip.file("ppt/_rels/presentation.xml.rels", serializeXml(presRels))
     for (const f of Object.keys(zip.files))
         if (/^ppt\/(slides|notesSlides)\//.test(f))
             zip.remove(f)
-    ct = ct.replace(/<Override PartName="\/ppt\/(slides|notesSlides)\/[^"]*"[^>]*\/>/g, "")
+    zip.file("[Content_Types].xml", (await get("[Content_Types].xml"))
+        .replace("presentationml.template.main+xml", "presentationml.presentation.main+xml"))
 
     /*  templates saved in master/layout view carry that view along --
         drop lastView so the produced deck opens in normal view  */
     const viewPr = zip.file("ppt/viewProps.xml")
-    if (viewPr !== null)
-        zip.file("ppt/viewProps.xml",
-            (await viewPr.async("string")).replace(/ lastView="[^"]*"/g, ""))
-
-    /*  one seed slide per layout  */
-    const order = await layoutOrder(zip)
-    if (order.length === 0)
-        throw new PptcError("E_TEMPLATE", "template contains no slide layouts")
-    let sldIds = "", rels = "", overrides = ""
-    for (let i = 0; i < order.length; i++) {
-        const n = i + 1
-        const layoutXml = await get(order[i] as string)
-        zip.file(`ppt/slides/slide${n}.xml`, slideFromLayout(layoutXml))
-        zip.file(`ppt/slides/_rels/slide${n}.xml.rels`,
-            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-            + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-            + `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../${(order[i] as string).substring(4)}"/>`
-            + "</Relationships>")
-        sldIds += `<p:sldId id="${9000 + n}" r:id="rIdPptcSeed${n}"/>`
-        rels += `<Relationship Id="rIdPptcSeed${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${n}.xml"/>`
-        overrides += `<Override PartName="/ppt/slides/slide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`
+    if (viewPr !== null) {
+        const view = parseXml(await viewPr.async("string"))
+        view.documentElement?.removeAttribute("lastView")
+        zip.file("ppt/viewProps.xml", serializeXml(view))
     }
-    zip.file("[Content_Types].xml", ct.replace("</Types>", `${overrides}</Types>`))
-    zip.file("ppt/presentation.xml", pres.replace("<p:sldIdLst></p:sldIdLst>", `<p:sldIdLst>${sldIds}</p:sldIdLst>`))
-    zip.file("ppt/_rels/presentation.xml.rels", presRels.replace("</Relationships>", `${rels}</Relationships>`))
 
-    /*  templates may carry stale or duplicate content-type overrides
-        of their own -- sweep them so every derived deck starts clean; a
-        seed derived from a deck also drops the media of its removed slides  */
+    /*  templates may carry stale or duplicate content-type overrides of
+        their own, a deck used as template the media of its slides: sweep
+        them so every derived deck starts clean  */
     await gcAssets(zip)
     await cleanContentTypes(zip)
-
-    return {
-        bytes: await zip.generateAsync({ type: "nodebuffer" }),
-        layoutCount: order.length
-    }
-}
-
-/**
- *  Create an empty deck from a template: the seed deck with the slide list
- *  truncated and all seed slide parts removed. Used by `pptc new`.
- *
- *  @param templatePath - path of the .potx/.pptx template
- *  @returns bytes of a valid, zero-slide .pptx carrying the template's design
- */
-export const buildEmptyDeck = async (templatePath: string): Promise<Buffer> => {
-    const seed = await buildSeed(readFileSync(templatePath))
-    const zip = await JSZip.loadAsync(seed.bytes)
-    const pres = await (zip.file("ppt/presentation.xml") as JSZip.JSZipObject).async("string")
-    const presRels = await (zip.file("ppt/_rels/presentation.xml.rels") as JSZip.JSZipObject).async("string")
-    const ct = await (zip.file("[Content_Types].xml") as JSZip.JSZipObject).async("string")
-    zip.file("ppt/presentation.xml", pres.replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst/>"))
-    const stripped = stripSlides(presRels, ct)
-    zip.file("ppt/_rels/presentation.xml.rels", stripped.presRels)
-    zip.file("[Content_Types].xml", stripped.ct)
-    for (const f of Object.keys(zip.files))
-        if (/^ppt\/slides\//.test(f))
-            zip.remove(f)
     return await zip.generateAsync({ type: "nodebuffer" })
 }

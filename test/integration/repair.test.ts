@@ -197,7 +197,9 @@ describe("repair triggers in the input deck", () => {
         for (const f of Object.keys(zip.files).filter((n) => n.startsWith("ppt/notesMasters/")))
             zip.remove(f)
         writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
-        await expect(apply(deck, [ { op: "slide.add", layout: "CONTENT", notes: "n" } ])).rejects.toMatchObject({ code: "E_TEMPLATE" })
+        const ops = [ { op: "slide.add", layout: "CONTENT", notes: "n" } ]
+        await expect(executeOps(deck, { ops } as never, { ...opts, dryRun: true })).rejects.toMatchObject({ code: "E_TEMPLATE" })
+        await expect(apply(deck, ops)).rejects.toMatchObject({ code: "E_TEMPLATE" })
     })
 
     it("removes a SmartArt together with its drawing on el.rm", async () => {
@@ -254,5 +256,158 @@ describe("repair triggers in the input deck", () => {
         const media = Object.keys(zip.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))
         expect(new Set(media.map((m) => m.toLowerCase())).size).toBe(media.length)
         expect((await (zip.file("ppt/media/IMAGE1.PNG") as JSZip.JSZipObject).async("nodebuffer")).toString().endsWith("upper")).toBe(true)
+    })
+})
+
+/**  the bytes of a part of a deck file  */
+const bytesIn = async (deck: string, part: string): Promise<Buffer> =>
+    await ((await JSZip.loadAsync(readFileSync(deck))).file(part) as JSZip.JSZipObject).async("nodebuffer")
+
+/**  the notes part a slide's relationships name  */
+const notesPartOf = async (zip: JSZip, slide: string): Promise<string> =>
+    path.posix.join("ppt/slides", /Target="(\.\.\/notesSlides\/[^"]+)"/.exec(await text(zip, relsOf(slide)))?.[1] as string)
+
+describe("repair triggers beyond the slide itself", () => {
+    it("allocates above relationship ids of a single-quoted deck", async () => {
+        const deck = await craftDeck("single-quoted-pres-rels", async (zip) => {
+            zip.file("ppt/_rels/presentation.xml.rels", (await text(zip, "ppt/_rels/presentation.xml.rels")).replace(/"/g, "'"))
+        })
+        const res = await apply(deck, [ { op: "slide.copy", slide: "index:0" }, { op: "slide.add", layout: "CONTENT" } ])
+        expect(repaired(res)).toEqual([])
+        await expectIntact(deck)
+        const parts = (await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.part)
+        expect(parts).toHaveLength(5)
+        expect(new Set(parts).size).toBe(5)
+    })
+
+    it("drops a master id of a dead presentation relationship", async () => {
+        const deck = await craftDeck("dead-handout", async (zip) => {
+            await addRel(zip, "ppt/presentation.xml", "rIdHM", "handoutMaster", "handoutMasters/none.xml")
+            zip.file("ppt/presentation.xml", (await text(zip, "ppt/presentation.xml")).replace("<p:sldIdLst>",
+                "<p:handoutMasterIdLst><p:handoutMasterId r:id=\"rIdHM\"/></p:handoutMasterIdLst><p:sldIdLst>"))
+        })
+        const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        expect(repaired(res).join(" ")).toContain("ppt/presentation.xml")
+        await expectIntact(deck)
+        expect((await bytesIn(deck, "ppt/presentation.xml")).toString()).not.toContain("rIdHM")
+    })
+
+    it("drops a layout picture whose relationship is dead", async () => {
+        let layout = ""
+        const deck = await craftDeck("dead-layout-pic", async (zip) => {
+            layout = Object.keys(zip.files).find((f) => /^ppt\/slideLayouts\/[^/]+\.xml$/.test(f)) as string
+            await addRel(zip, layout, "rIdDead", "image", "../media/none.png")
+            await addShape(zip, layout, pic(90, "Deko", "rIdDead"))
+        })
+        const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        expect(repaired(res).join(" ")).toContain(layout)
+        await expectIntact(deck)
+        expect((await bytesIn(deck, layout)).toString()).not.toContain("rIdDead")
+    })
+
+    it("repairs the notes of a copied slide", async () => {
+        const deck = await craftDeck("copy-defective-notes", async (zip, [ a ]) => {
+            const notes = await notesPartOf(zip, a as string)
+            zip.file("ppt/media/n.png", png("n"))
+            await addRel(zip, notes, "rIdDup", "image", "../media/n.png")
+            await addRel(zip, notes, "rIdDup", "image", "../media/n.png")
+        })
+        await apply(deck, [ { op: "slide.copy", slide: "index:0" } ])
+        await expectIntact(deck)
+        expect((await notesOf(deck)).filter((n) => n === "notes A")).toHaveLength(2)
+    })
+
+    it("gives a copy of a slide with foreign notes its own notes", async () => {
+        const deck = await craftDeck("copy-foreign-notes", async (zip, [ a, b ]) => {
+            const notesRels = relsOf(await notesPartOf(zip, a as string))
+            zip.file(notesRels, (await text(zip, notesRels)).replace(/\.\.\/slides\/[^"]+/, `../slides/${path.posix.basename(b as string)}`))
+        })
+        await apply(deck, [ { op: "slide.copy", slide: "index:0" } ])
+        await expectIntact(deck)
+        expect((await notesOf(deck)).filter((n) => n === "notes A")).toHaveLength(2)
+    })
+
+    it("drops only the dead picture of a group", async () => {
+        let slide = ""
+        const deck = await craftDeck("group-dangling", async (zip, [ a ]) => {
+            slide = a as string
+            zip.file("ppt/media/ok.png", png("ok"))
+            await addRel(zip, slide, "rIdOk", "image", "../media/ok.png")
+            await addShape(zip, slide, "<p:grpSp><p:nvGrpSpPr><p:cNvPr id=\"80\" name=\"Gruppe\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
+                + `<p:grpSpPr/>${pic(81, "Gut", "rIdOk")}${pic(82, "Kaputt", "rIdMissing")}</p:grpSp>`)
+        })
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await expectIntact(deck)
+        const xml = (await bytesIn(deck, slide)).toString()
+        expect(xml).toContain("name=\"Gut\"")
+        expect(xml).not.toContain("name=\"Kaputt\"")
+    })
+
+    it("keeps a picture whose target differs in letter case", async () => {
+        let slide = ""
+        const deck = await craftDeck("case-target", async (zip, [ a ]) => {
+            slide = a as string
+            zip.file("ppt/media/Photo1.PNG", png("case"))
+            await addRel(zip, slide, "rIdCase", "image", "../media/photo1.png")
+            await addShape(zip, slide, pic(90, "Foto", "rIdCase"))
+        })
+        const before = await bytesIn(deck, slide)
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res)).toEqual([])
+        await expectIntact(deck)
+        expect((await bytesIn(deck, slide)).equals(before)).toBe(true)
+        expect((await bytesIn(deck, "ppt/media/Photo1.PNG")).toString().endsWith("case")).toBe(true)
+    })
+
+    it("accepts the repeated shape ids of an mc:Fallback", async () => {
+        let slide = ""
+        const sp = "<p:sp><p:nvSpPr><p:cNvPr id=\"70\" name=\"Formel\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/></p:sp>"
+        const deck = await craftDeck("mc-fallback", async (zip, [ a ]) => {
+            slide = a as string
+            await addShape(zip, slide, "<mc:AlternateContent xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\">"
+                + `<mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">${sp}</mc:Choice>`
+                + `<mc:Fallback>${sp}</mc:Fallback></mc:AlternateContent>`)
+        })
+        const before = await bytesIn(deck, slide)
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res)).toEqual([])
+        await expectIntact(deck)
+        expect((await bytesIn(deck, slide)).equals(before)).toBe(true)
+    })
+
+    it("drops a background picture whose relationship is missing", async () => {
+        let slide = ""
+        const deck = await craftDeck("bg-dangling", async (zip, [ a ]) => {
+            slide = a as string
+            zip.file(slide, (await text(zip, slide)).replace("<p:cSld>", "<p:cSld><p:bg><p:bgPr><a:blipFill><a:blip r:embed=\"rIdGone\"/>"
+                + "<a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>"))
+        })
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await expectIntact(deck)
+        expect((await bytesIn(deck, slide)).toString()).not.toContain("<p:bg>")
+    })
+
+    it("writes a title with replacement patterns into the app properties", async () => {
+        const deck = await craftDeck("dollar-title", async () => {})
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Revenue in US$'000 $&" } } } ])
+        await expectIntact(deck)
+        expect((await bytesIn(deck, "docProps/app.xml")).toString()).toContain("Revenue in US$'000 $&amp;")
+    })
+
+    it("collects the ink and ActiveX parts of a removed slide", async () => {
+        const deck = await craftDeck("ink-activex", async (zip, [ a ]) => {
+            zip.file("ppt/ink/ink1.xml", "<inkml:ink xmlns:inkml=\"http://www.w3.org/2003/InkML\"/>")
+            zip.file("ppt/activeX/activeX1.xml", "<ax:ocx xmlns:ax=\"http://schemas.microsoft.com/office/2006/activeX\"/>")
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("</Types>",
+                "<Override PartName=\"/ppt/ink/ink1.xml\" ContentType=\"application/inkml+xml\"/>"
+                + "<Override PartName=\"/ppt/activeX/activeX1.xml\" ContentType=\"application/vnd.ms-office.activeX+xml\"/></Types>"))
+            await addRel(zip, a as string, "rIdInk", "customXml", "../ink/ink1.xml")
+            await addRel(zip, a as string, "rIdAx", "control", "../activeX/activeX1.xml")
+        })
+        await apply(deck, [ { op: "slide.rm", slide: "index:0" } ])
+        await expectIntact(deck)
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        expect(zip.file("ppt/ink/ink1.xml")).toBeNull()
+        expect(zip.file("ppt/activeX/activeX1.xml")).toBeNull()
     })
 })

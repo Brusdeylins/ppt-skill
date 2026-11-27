@@ -16,21 +16,20 @@ import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../../infra/errors.js"
 import { inchToEmu, type Frame } from "../../core/model.js"
 import type { SlidePlanEntry } from "../../core/ops/registry.js"
-import { IMPLICIT_RELS } from "../guard.js"
-import { PartAllocator, relsPartOf } from "../parts.js"
+import { notesOwner } from "../defects.js"
+import { EMPTY_RELS, PartAllocator, REL, RELS, relIs, relsPartOf } from "../parts.js"
 import { slideFromLayout } from "../seed.js"
 import { HLINK_ATTR, setShapeText } from "../text.js"
-import { NS_A, NS_P, NS_R, elements, firstElement, parseXml, serializeXml } from "../xml.js"
-import { Package } from "./package.js"
+import { NS_A, NS_P, NS_R, elements, firstElement, inFallback, parseXml, relRefs, serializeXml, xmlEscape } from "../xml.js"
+import type { Package } from "./package.js"
 import type { Generated } from "./transplant.js"
 
-/**  OfficeDocument relationship type base URI  */
-const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+/**  the elements a slide's shape tree is made of: the smallest unit a
+     reference to a missing relationship can take down  */
+const SHAPES = [ "p:sp", "p:pic", "p:graphicFrame", "p:cxnSp", "p:grpSp", "p:contentPart" ]
 
-/**  relationship types a slide carries without referencing them by id in
-     its XML (layout, notes, comments, theme override, ...; the SmartArt
-     drawing is referenced from the SmartArt data part)  */
-const UNREFERENCED_RELS = [ "/slideLayout", "/notesSlide", "/diagramDrawing", ...IMPLICIT_RELS ]
+/**  elements that only link or tag: they go alone  */
+const LINKS = [ "a:hlinkClick", "a:hlinkHover", "a:hlinkMouseOver", "p:custData", "p:tags" ]
 
 /**  is the shape the placeholder with the given idx  */
 const isPlaceholder = (idx: number) => (shape: Element): boolean => {
@@ -51,28 +50,12 @@ const findShape = (slide: Document, name: string, pick: (shape: Element) => bool
     elements(slide, "p:cNvPr").map(shapeOf).find((shape) =>
         firstElement(shape, "p:cNvPr")?.getAttribute("name") === name && pick(shape)) ?? null
 
-/**  every relationship id an element subtree references  */
-const relIdsOf = (scope: Element): string[] => {
-    const ids: string[] = []
-    const walk = (el: Element): void => {
-        for (let i = 0; i < el.attributes.length; i++) {
-            const attr = el.attributes.item(i)
-            if (attr !== null && attr.namespaceURI === NS_R)
-                ids.push(attr.value)
-        }
-        for (let n = el.firstChild; n !== null; n = n.nextSibling)
-            if (n.nodeType === 1)
-                walk(n as Element)
-    }
-    walk(scope)
-    return ids
-}
-
 /**  remove a shape; inside an `mc:AlternateContent` (OLE objects,
      SmartArt) the whole wrapper goes, so no fallback copy stays behind  */
 const removeShape = (shape: Element): void => {
     let doomed = shape
-    for (let up = shape.parentNode as Element | null; up !== null && up.nodeName !== "p:spTree"; up = up.parentNode as Element | null)
+    for (let up = shape.parentNode as Element | null; up !== null && up.nodeName !== "p:spTree" && up.nodeName !== "p:grpSp";
+        up = up.parentNode as Element | null)
         if (up.nodeName === "mc:AlternateContent")
             doomed = up
     doomed.parentNode?.removeChild(doomed)
@@ -197,10 +180,6 @@ const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, fra
     return true
 }
 
-/**  escape text for an XML text node  */
-const xmlEscape = (s: string): string =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-
 /**  write speaker notes into a fresh notesSlide part and point the slide at
      it (the previous notes part is collected by the package sweep)  */
 const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, text: string, notesMaster: string): Promise<void> => {
@@ -234,15 +213,13 @@ const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, te
 /**  give a slide its own copy of a notes part another slide uses, with the
      back-reference pointing at this slide  */
 const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document): Promise<void> => {
-    const rel = elements(slideRels, "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"))
-    const notesPart = rel === undefined ? null : Package.targets(slidePart, slideRels).find((t) => t.rel === rel)?.target ?? null
+    const rel = pkg.targets(slidePart, slideRels).find((t) => t.type.endsWith("/notesSlide"))
+    const notesPart = rel?.target ?? null
     if (rel === undefined || notesPart === null || !pkg.has(notesPart))
         return
-    const notesXml = await pkg.text(notesPart)
-    const backref = Package.targets(notesPart, await pkg.rels(notesPart)).find((t) =>
-        t.type.endsWith("/slide") && !notesXml.includes(`"${t.rel.getAttribute("Id") ?? ""}"`))?.target ?? slidePart
-    const copy = await pkg.clonePart(pkg, notesPart, new Map([ [ backref, slidePart ] ]))
-    rel.setAttribute("Target", `../notesSlides/${path.posix.basename(copy)}`)
+    const owner = notesOwner({ part: notesPart, doc: await pkg.xml(notesPart), rels: pkg.targets(notesPart, await pkg.rels(notesPart)) })
+    const copy = await pkg.clonePart(pkg, notesPart, new Map([ [ owner ?? slidePart, slidePart ] ]))
+    rel.el.setAttribute("Target", `../notesSlides/${path.posix.basename(copy)}`)
 }
 
 /**  replace the `pptc-hlink` markers of the text writer by external
@@ -260,12 +237,11 @@ const wireHyperlinks = (pkg: Package, slide: Document, slideRels: Document): voi
 
 /**  drop links to removed slides (hyperlink jumps, zoom) with their
      relationship; returns whether anything was dropped  */
-export const dropLinksToRemoved = (owner: string, doc: Document | null, rels: Document, removed: Set<string>): boolean => {
+export const dropLinksToRemoved = (pkg: Package, owner: string, doc: Document | null, rels: Document, removed: Set<string>): boolean => {
     let changed = false
-    for (const { rel, type, target } of Package.targets(owner, rels)) {
+    for (const { el: rel, id, type, target } of pkg.targets(owner, rels)) {
         if (!/\/relationships\/slide$/.test(type) || target === null || !removed.has(target))
             continue
-        const id = rel.getAttribute("Id") ?? ""
         rel.parentNode?.removeChild(rel)
         changed = true
         if (doc !== null)
@@ -277,17 +253,23 @@ export const dropLinksToRemoved = (owner: string, doc: Document | null, rels: Do
     return changed
 }
 
-/**  make cNvPr shape ids unique within a slide (duplicates trigger repair)  */
-const uniquifyShapeIds = (slide: Document): void => {
+/**  make cNvPr shape ids unique within a slide (duplicates trigger repair);
+     an `mc:Fallback` repeats the ids of its choice by design
+     @returns whether an id changed  */
+const uniquifyShapeIds = (slide: Document): boolean => {
     const nextId = PartAllocator.shapeIds(slide)
     const seen = new Set<string>()
-    for (const el of elements(slide, "p:cNvPr")) {
+    let changed = false
+    for (const el of elements(slide, "p:cNvPr").filter((e) => !inFallback(e))) {
         const id = el.getAttribute("id") ?? "0"
-        if (seen.has(id))
+        if (seen.has(id)) {
             el.setAttribute("id", String(nextId()))
+            changed = true
+        }
         else
             seen.add(id)
     }
+    return changed
 }
 
 /**  repair the relationships of a part: duplicate ids keep their first
@@ -300,10 +282,9 @@ const repairRels = (pkg: Package, part: string, doc: Document | null, rels: Docu
     const xml = doc === null ? "" : serializeXml(doc)
     const seen = new Set<string>()
     let changed = false
-    for (const { rel, type, target } of Package.targets(part, rels)) {
-        const id = rel.getAttribute("Id") ?? ""
+    for (const { el: rel, id, type, target } of pkg.targets(part, rels)) {
         const dead = target !== null && !pkg.has(target)
-        const stale = (forced.has(id) || (unused.has(id) && !UNREFERENCED_RELS.some((k) => type.endsWith(k))))
+        const stale = (forced.has(id) || (unused.has(id) && !relIs(type, RELS.implicit)))
             && !xml.includes(`"${id}"`)
         if (seen.has(id) || dead || stale) {
             rel.parentNode?.removeChild(rel)
@@ -314,84 +295,83 @@ const repairRels = (pkg: Package, part: string, doc: Document | null, rels: Docu
     return changed
 }
 
-/**  drop what references a relationship the part does not have: a
-     hyperlink goes, a picture fill of a placeholder goes (the layout's fill
-     shows again), any other shape goes as a whole -- it cannot render  */
-const dropDangling = (doc: Document, rels: Document): void => {
+/**  whether an element is still part of its document  */
+const attached = (el: Element, root: Element): boolean => {
+    for (let n: Element | null = el; n !== null; n = n.parentNode as Element | null)
+        if (n === root)
+            return true
+    return false
+}
+
+/**  the nearest ancestor (or self) with one of the given names  */
+const closest = (el: Element, names: string[]): Element | null => {
+    for (let n: Element | null = el; n !== null && n.nodeType === 1; n = n.parentNode as Element | null)
+        if (names.includes(n.nodeName))
+            return n
+    return null
+}
+
+/**  drop what references a relationship the part does not have. A dead
+     attribute next to a valid reference goes alone; a link or tag goes; a
+     picture fill of a shape or background goes (the layout's fill shows
+     again); a dead fallback goes, its choice stays; otherwise the smallest
+     enclosing shape goes -- it cannot render -- or, outside shapes, the
+     element itself
+     @returns whether anything was dropped  */
+const dropDangling = (doc: Document, rels: Document): boolean => {
+    const root = doc.documentElement
+    if (root === null)
+        return false
     const ids = new Set(elements(rels, "Relationship").map((r) => r.getAttribute("Id") ?? ""))
-    const dangling: Element[] = []
-    const walk = (el: Element): void => {
-        for (let i = 0; i < el.attributes.length; i++) {
-            const attr = el.attributes.item(i)
-            if (attr !== null && attr.namespaceURI === NS_R && attr.value !== "" && !ids.has(attr.value)) {
-                dangling.push(el)
-                break
-            }
-        }
-        for (let n = el.firstChild; n !== null; n = n.nextSibling)
-            if (n.nodeType === 1)
-                walk(n as Element)
-    }
-    if (doc.documentElement !== null)
-        walk(doc.documentElement)
-    for (const el of dangling) {
-        if (el.parentNode === null)
+    const dead = relRefs(root).filter((ref) => ref.attr.value !== "" && !ids.has(ref.attr.value))
+    for (const { el, attr } of dead) {
+        if (!attached(el, root))
             continue
         const parent = el.parentNode as Element
-        if ([ "a:hlinkClick", "a:hlinkHover", "p:custData", "p:tags" ].includes(el.nodeName))
+        const holder = parent.parentNode as Element | null
+        const kept = relRefs(el).some((ref) => ref.el === el && ref.attr !== attr && ids.has(ref.attr.value))
+        if (el === root || kept)
+            el.removeAttributeNode(attr)
+        else if (LINKS.includes(el.nodeName))
             parent.removeChild(el)
-        else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && (parent.parentNode as Element | null)?.nodeName === "p:spPr")
-            parent.parentNode?.removeChild(parent)
+        else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && holder?.nodeName === "p:bgPr")
+            holder.parentNode?.parentNode?.removeChild(holder.parentNode)
+        else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && holder?.nodeName === "p:spPr")
+            holder.removeChild(parent)
+        else if (inFallback(el))
+            closest(el, [ "mc:Fallback" ])?.parentNode?.removeChild(closest(el, [ "mc:Fallback" ]) as Element)
         else {
-            let shape: Element | null = el
-            while (shape !== null && (shape.parentNode as Element | null)?.nodeName !== "p:spTree")
-                shape = shape.parentNode as Element | null
+            const shape = closest(el, SHAPES)
             if (shape !== null)
                 removeShape(shape)
             else
-                for (let i = el.attributes.length - 1; i >= 0; i--) {
-                    const attr = el.attributes.item(i)
-                    if (attr !== null && attr.namespaceURI === NS_R && !ids.has(attr.value))
-                        el.removeAttributeNode(attr)
-                }
+                parent.removeChild(el)
         }
     }
+    return dead.length > 0
 }
 
 /**
- *  Repair a part of a touched slide other than the slide itself (its
- *  notes, a chart, ...): duplicate and dead relationships go, and what
- *  references them.
+ *  Repair a part carrying repair triggers (engine/defects): duplicate and
+ *  dead relationships go, what references a missing relationship goes,
+ *  duplicate shape ids of a slide are renumbered.
  *
  *  @param pkg - the deck package
- *  @param part - the part to repair
- */
-export const repairPart = async (pkg: Package, part: string): Promise<void> => {
-    const rels = await pkg.rels(part)
-    const doc = /\.xml$/.test(part) ? await pkg.xml(part) : null
-    if (!repairRels(pkg, part, doc, rels))
-        return
-    if (doc !== null) {
-        dropDangling(doc, rels)
-        pkg.write(part, doc)
-    }
-    pkg.writeRels(part, rels)
-}
-
-/**
- *  Repair a package-wide part (layout, master, presentation): duplicate
- *  and dead relationships go; the part's own XML stays as it is.
- *
- *  @param pkg - the deck package
- *  @param part - the part whose relationships to repair
+ *  @param part - the part to repair (a slide's notes or chart, a layout,
+ *                a master, the presentation, ...)
  *  @returns whether anything was repaired
  */
-export const repairPackageRels = async (pkg: Package, part: string): Promise<boolean> => {
+export const repairPart = async (pkg: Package, part: string): Promise<boolean> => {
     const rels = await pkg.rels(part)
-    if (!repairRels(pkg, part, null, rels))
-        return false
-    pkg.writeRels(part, rels)
-    return true
+    const doc = /\.xml$/.test(part) ? await pkg.xml(part) : null
+    const relsChanged = repairRels(pkg, part, doc, rels)
+    const dropped = doc !== null && dropDangling(doc, rels)
+    const renumbered = doc !== null && doc.documentElement?.nodeName === "p:sld" && uniquifyShapeIds(doc)
+    if (relsChanged)
+        pkg.writeRels(part, rels)
+    if (doc !== null && (dropped || renumbered))
+        pkg.write(part, doc)
+    return relsChanged || dropped || renumbered
 }
 
 /**
@@ -404,36 +384,24 @@ export const repairPackageRels = async (pkg: Package, part: string): Promise<boo
 export const createSlide = async (pkg: Package, layoutPart: string): Promise<string> => {
     const part = pkg.alloc.part("ppt/slides", "slide", ".xml")
     const slide = parseXml(slideFromLayout(await pkg.text(layoutPart)))
-    const rels = parseXml("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-        + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>")
+    const rels = parseXml(EMPTY_RELS)
     pkg.addRel(rels, `${REL}/slideLayout`, path.posix.relative("ppt/slides", layoutPart))
 
     /*  cloned placeholders may reference layout relationships (a picture
         fill, a hyperlink): the slide gets its own relationship to the same
         target, as the layout's ids mean nothing on the slide  */
-    const layoutRels = new Map(Package.targets(layoutPart, await pkg.rels(layoutPart))
-        .map((t) => [ t.rel.getAttribute("Id") ?? "", t ]))
+    const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [ t.id, t ]))
     const ids = new Map<string, string>()
-    const relink = (el: Element): void => {
-        for (let i = 0; i < el.attributes.length; i++) {
-            const attr = el.attributes.item(i)
-            if (attr === null || attr.namespaceURI !== NS_R)
-                continue
-            const rel = layoutRels.get(attr.value)
-            if (rel !== undefined && !ids.has(attr.value))
-                ids.set(attr.value, pkg.addRel(rels, rel.type,
-                    rel.target === null ? rel.rel.getAttribute("Target") ?? "" : path.posix.relative("ppt/slides", rel.target),
-                    rel.target === null))
-            const id = ids.get(attr.value)
-            if (id !== undefined)
-                el.setAttributeNS(NS_R, attr.name, id)
-        }
-        for (let n = el.firstChild; n !== null; n = n.nextSibling)
-            if (n.nodeType === 1)
-                relink(n as Element)
+    for (const { el, attr } of slide.documentElement === null ? [] : relRefs(slide.documentElement)) {
+        const rel = layoutRels.get(attr.value)
+        if (rel !== undefined && !ids.has(attr.value))
+            ids.set(attr.value, pkg.addRel(rels, rel.type,
+                rel.target === null ? rel.el.getAttribute("Target") ?? "" : path.posix.relative("ppt/slides", rel.target),
+                rel.target === null))
+        const id = ids.get(attr.value)
+        if (id !== undefined)
+            el.setAttributeNS(NS_R, attr.name, id)
     }
-    if (slide.documentElement !== null)
-        relink(slide.documentElement)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
     await pkg.typeAs(part, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")
@@ -494,12 +462,12 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<void> =>
         text used (hyperlinks) are dropped below  */
     const unused = new Set<string>()
     for (const shape of [ ...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape), ...texts.map((t) => t.shape) ])
-        for (const id of relIdsOf(shape))
-            unused.add(id)
+        for (const ref of relRefs(shape))
+            unused.add(ref.attr.value)
 
     /*  a removed SmartArt's drawing is referenced from its data part  */
     const forced = new Set<string>()
-    const targetOf = new Map(Package.targets(part, rels).map((t) => [ t.rel.getAttribute("Id") ?? "", t.target ]))
+    const targetOf = new Map(pkg.targets(part, rels).map((t) => [ t.id, t.target ]))
     for (const shape of doomed)
         for (const relIds of elements(shape, "dgm:relIds")) {
             const data = targetOf.get(relIds.getAttribute("r:dm") ?? "") ?? null
@@ -531,7 +499,7 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<void> =>
     if (entry.background !== null)
         setBackground(slide, entry.background)
     if (entry.footer !== null) {
-        const layout = Package.targets(part, rels).find((t) => t.type.endsWith("/slideLayout"))?.target ?? null
+        const layout = pkg.targets(part, rels).find((t) => t.type.endsWith("/slideLayout"))?.target ?? null
         setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide))
     }
     if (entry.notes !== null)
@@ -544,7 +512,7 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<void> =>
         await work.generated.transplant(pkg, entry, slide, rels, part)
     wireHyperlinks(pkg, slide, rels)
     setSlideVisibility(slide, entry.hidden)
-    dropLinksToRemoved(part, slide, rels, work.removed)
+    dropLinksToRemoved(pkg, part, slide, rels, work.removed)
     uniquifyShapeIds(slide)
     repairRels(pkg, part, slide, rels, unused, forced)
     dropDangling(slide, rels)

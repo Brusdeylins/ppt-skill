@@ -2913,8 +2913,8 @@ var require_utils = __commonJS({
       var result = transform2[inputType][outputType](input2);
       return result;
     };
-    exports.resolve = function(path15) {
-      var parts = path15.split("/");
+    exports.resolve = function(path11) {
+      var parts = path11.split("/");
       var result = [];
       for (var index = 0; index < parts.length; index++) {
         var part = parts[index];
@@ -8767,18 +8767,18 @@ var require_object = __commonJS({
       var object2 = new ZipObject(name, zipObjectContent, o);
       this.files[name] = object2;
     };
-    var parentFolder = function(path15) {
-      if (path15.slice(-1) === "/") {
-        path15 = path15.substring(0, path15.length - 1);
+    var parentFolder = function(path11) {
+      if (path11.slice(-1) === "/") {
+        path11 = path11.substring(0, path11.length - 1);
       }
-      var lastSlash = path15.lastIndexOf("/");
-      return lastSlash > 0 ? path15.substring(0, lastSlash) : "";
+      var lastSlash = path11.lastIndexOf("/");
+      return lastSlash > 0 ? path11.substring(0, lastSlash) : "";
     };
-    var forceTrailingSlash = function(path15) {
-      if (path15.slice(-1) !== "/") {
-        path15 += "/";
+    var forceTrailingSlash = function(path11) {
+      if (path11.slice(-1) !== "/") {
+        path11 += "/";
       }
-      return path15;
+      return path11;
     };
     var folderAdd = function(name, createFolders) {
       createFolders = typeof createFolders !== "undefined" ? createFolders : defaults.createFolders;
@@ -22188,7 +22188,7 @@ var toPptcError = (err) => {
 var VERSION = true ? "1.1.0" : "0.0.0-dev";
 
 // src/commands/apply.ts
-import path12 from "node:path";
+import path8 from "node:path";
 
 // src/core/ops/registry.ts
 var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
@@ -23781,10 +23781,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path15) {
-  if (!path15)
+function getElementAtPath(obj, path11) {
+  if (!path11)
     return obj;
-  return path15.reduce((acc, key) => acc?.[key], obj);
+  return path11.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -24124,11 +24124,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path15, issues) {
+function prefixIssues(path11, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path15);
+    iss.path.unshift(path11);
     return iss;
   });
 }
@@ -24590,16 +24590,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path15 = []) => {
+  const processError = (error63, path11 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path15, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else {
-        const fullpath = [...path15, ...issue2.path];
+        const fullpath = [...path11, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -24638,17 +24638,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path15 = []) => {
+  const processError = (error63, path11 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path15, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else {
-        const fullpath = [...path15, ...issue2.path];
+        const fullpath = [...path11, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -24687,8 +24687,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path15 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path15) {
+  const path11 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path11) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -41826,13 +41826,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path15 = ref.slice(1).split("/").filter(Boolean);
-  if (path15.length === 0) {
+  const path11 = ref.slice(1).split("/").filter(Boolean);
+  if (path11.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path15[0] === defsKey) {
-    const key = path15[1] === void 0 ? void 0 : decodeJSONPointerSegment(path15[1]);
+  if (path11[0] === defsKey) {
+    const key = path11[1] === void 0 ? void 0 : decodeJSONPointerSegment(path11[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -43015,7 +43015,31 @@ var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 var NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 var parseXml = (xml) => new import_xmldom.DOMParser().parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
 var serializeXml = (doc) => new import_xmldom.XMLSerializer().serializeToString(doc);
-var doubleQuoted = (xml) => /\s[\w:]+\s*=\s*'/.test(xml) ? serializeXml(parseXml(xml)) : xml;
+var xmlEscape = (s, attr = false) => {
+  const text = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return attr ? text.replace(/"/g, "&quot;") : text;
+};
+var relRefs = (scope) => {
+  const refs = [];
+  const walk = (el) => {
+    for (let i = 0; i < el.attributes.length; i++) {
+      const attr = el.attributes.item(i);
+      if (attr !== null && attr.namespaceURI === NS_R)
+        refs.push({ el, attr });
+    }
+    for (let n = el.firstChild; n !== null; n = n.nextSibling)
+      if (n.nodeType === 1)
+        walk(n);
+  };
+  walk(scope);
+  return refs;
+};
+var inFallback = (el) => {
+  for (let up = el.parentNode; up !== null && up.nodeType === 1; up = up.parentNode)
+    if (up.nodeName === "mc:Fallback")
+      return true;
+  return false;
+};
 var serializeElement = (el) => new import_xmldom.XMLSerializer().serializeToString(el);
 var elements = (scope, qname) => {
   const list = scope.getElementsByTagName(qname);
@@ -43036,8 +43060,64 @@ var drawingText = (scope) => {
 
 // src/engine/parts.ts
 import path2 from "node:path";
+var REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+var RELS = {
+  /**  leave a slide's own content: layout, master, other slides, notes
+       master, theme  */
+  foreign: ["/slideLayout", "/slideMaster", "/slide", "/notesMaster", "/theme"],
+  /**  targets a clone inside the same package shares: layouts, masters,
+       other slides, immutable media and external content  */
+  shared: ["/slideLayout", "/slideMaster", "/notesMaster", "/slide", "/image", "/media", "/video", "/audio", "/hyperlink", "/theme"],
+  /**  carried without being referenced by id in the owner's XML (the
+       SmartArt drawing is referenced from the SmartArt data part)  */
+  implicit: ["/slideLayout", "/notesSlide", "/diagramDrawing", "/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo"]
+};
+var relIs = (type, kinds) => kinds.some((k) => type.endsWith(k));
+var EMPTY_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${NS_REL}"/>`;
 var resolveTarget = (base, target) => target.startsWith("/") ? target.slice(1) : path2.posix.normalize(path2.posix.join(base, target));
 var relsPartOf = (part) => `${path2.posix.dirname(part)}/_rels/${path2.posix.basename(part)}.rels`;
+var relsOwner = (relsPart) => relsPart === "_rels/.rels" ? "" : relsPart.replace(/(^|\/)_rels\/([^/]+)\.rels$/, "$1$2");
+var findPart = (zip, name) => {
+  if (zip.file(name) !== null)
+    return name;
+  const lower = name.toLowerCase();
+  return Object.keys(zip.files).find((f) => !f.endsWith("/") && f.toLowerCase() === lower) ?? null;
+};
+var relTargets = (owner, rels, zip) => elements(rels, "Relationship").map((el) => {
+  let target = null;
+  if (el.getAttribute("TargetMode") !== "External") {
+    target = resolveTarget(path2.posix.dirname(owner), el.getAttribute("Target") ?? "");
+    if (zip !== void 0)
+      target = findPart(zip, target) ?? target;
+  }
+  return { el, id: el.getAttribute("Id") ?? "", type: el.getAttribute("Type") ?? "", target };
+});
+var readRels = async (zip, owner) => {
+  const f = zip.file(relsPartOf(owner));
+  return f === null ? [] : relTargets(owner, parseXml(await f.async("string")), zip);
+};
+var appendRel = (rels, id, type, target, external = false) => {
+  const rel = rels.createElementNS(NS_REL, "Relationship");
+  rel.setAttribute("Id", id);
+  rel.setAttribute("Type", type);
+  rel.setAttribute("Target", target);
+  if (external)
+    rel.setAttribute("TargetMode", "External");
+  rels.documentElement?.appendChild(rel);
+};
+var inflated = /* @__PURE__ */ new WeakMap();
+var bytesOf = async (zip, part) => {
+  const f = zip.file(part);
+  if (f === null)
+    return null;
+  let bytes = inflated.get(f);
+  if (bytes === void 0) {
+    bytes = f.async("nodebuffer");
+    inflated.set(f, bytes);
+  }
+  return await bytes;
+};
 var reEscape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var PartAllocator = class _PartAllocator {
   constructor(names, rid, sldId, sldIds) {
@@ -43061,7 +43141,7 @@ var PartAllocator = class _PartAllocator {
     let rid = 9e3;
     for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
       const text = await zip.file(relsPart)?.async("string") ?? "";
-      for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
+      for (const m of text.matchAll(/["']rIdPptc(\d+)["']/g))
         rid = Math.max(rid, Number(m[1]));
     }
     const names = new Set(Object.keys(zip.files).map((f) => f.toLowerCase()));
@@ -43136,7 +43216,7 @@ var PartAllocator = class _PartAllocator {
 var partText = async (zip, part) => {
   const f = zip.file(part);
   if (f === null)
-    throw new PptcError("E_ENGINE", `output archive is missing part ${part}`);
+    throw new PptcError("E_ENGINE", `the deck is missing part ${part}`);
   return (await f.async("string")).replace(/^\uFEFF/, "");
 };
 var cleanContentTypes = async (zip) => {
@@ -43177,17 +43257,79 @@ var normalizeRelTargets = async (zip) => {
   }
   return changed;
 };
+var IMAGE_TYPES = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  emf: "image/x-emf",
+  wmf: "image/x-wmf"
+};
+var ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags|ink|activeX)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/;
+var removeParts = async (zip, parts) => {
+  if (parts.length === 0)
+    return;
+  const doomed = new Set(parts.map((p) => `/${p.toLowerCase()}`));
+  for (const part of parts) {
+    zip.remove(part);
+    zip.remove(relsPartOf(part));
+  }
+  const ct = parseXml(await partText(zip, "[Content_Types].xml"));
+  for (const o of elements(ct, "Override"))
+    if (doomed.has((o.getAttribute("PartName") ?? "").toLowerCase()))
+      o.parentNode?.removeChild(o);
+  zip.file("[Content_Types].xml", serializeXml(ct));
+};
+var gcAssets = async (zip) => {
+  const isAsset = (f) => ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/");
+  const assets = Object.keys(zip.files).filter(isAsset);
+  if (assets.length === 0)
+    return;
+  const live = /* @__PURE__ */ new Set();
+  const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(relsOwner(f))).map(relsOwner);
+  while (queue.length > 0) {
+    for (const { target } of await readRels(zip, queue.pop()))
+      if (target !== null && isAsset(target) && !live.has(target)) {
+        live.add(target);
+        queue.push(target);
+      }
+  }
+  await removeParts(zip, assets.filter((a) => !live.has(a)));
+};
+var layoutOrder = async (zip) => {
+  const presRels = new Map((await readRels(zip, "ppt/presentation.xml")).map((r) => [r.id, r.target]));
+  const pres = zip.file("ppt/presentation.xml") === null ? null : parseXml(await partText(zip, "ppt/presentation.xml"));
+  const listed = (pres === null ? [] : elements(pres, "p:sldMasterId")).map((m) => presRels.get(m.getAttribute("r:id") ?? "") ?? null).filter((part) => part !== null && zip.file(part) !== null);
+  const masters = listed.length > 0 ? listed : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort();
+  const order = [];
+  for (const master of masters) {
+    const rels = new Map((await readRels(zip, master)).map((r) => [r.id, r]));
+    for (const layoutId of elements(parseXml(await partText(zip, master)), "p:sldLayoutId")) {
+      const rel = rels.get(layoutId.getAttribute("r:id") ?? "");
+      if (rel !== void 0 && rel.target !== null && rel.type.endsWith("/slideLayout"))
+        order.push(rel.target);
+    }
+  }
+  return order;
+};
 
 // src/engine/reader.ts
 var DeckArchive = class _DeckArchive {
-  constructor(zip, file2, normalized) {
+  constructor(zip, file2, normalized, bytes) {
     this.zip = zip;
     this.file = file2;
     this.normalized = normalized;
+    this.bytes = bytes;
   }
   zip;
   file;
   normalized;
+  bytes;
   cache = /* @__PURE__ */ new Map();
   /**
    *  Open a .pptx or .potx file.
@@ -43199,9 +43341,10 @@ var DeckArchive = class _DeckArchive {
   static async open(file2) {
     requireFile(file2, "presentation file");
     try {
-      const zip = await import_jszip.default.loadAsync(readFileSync2(file2));
+      const bytes = readFileSync2(file2);
+      const zip = await import_jszip.default.loadAsync(bytes);
       const normalized = await normalizeRelTargets(zip);
-      return new _DeckArchive(zip, path3.resolve(file2), normalized);
+      return new _DeckArchive(zip, path3.resolve(file2), normalized, bytes);
     } catch {
       throw new PptcError("E_FILE", `'${file2}' is not a readable pptx/potx archive`);
     }
@@ -43719,14 +43862,46 @@ var readDeckState = async (archive) => {
 // src/engine/inplace/engine.ts
 var import_jszip6 = __toESM(require_lib3(), 1);
 import { readFileSync as readFileSync6 } from "node:fs";
-import path11 from "node:path";
+import path7 from "node:path";
+
+// src/engine/defects.ts
+var shapeIdDefects = (view) => {
+  if (view.doc === null || view.doc.documentElement?.nodeName !== "p:sld")
+    return [];
+  const ids = elements(view.doc, "p:cNvPr").filter((el) => !inFallback(el)).map((el) => el.getAttribute("id") ?? "");
+  const dup = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  return dup.length > 0 ? [`${view.part}: duplicate cNvPr ids ${dup.join(",")}`] : [];
+};
+var relsDefects = (view, exists) => {
+  const findings = [];
+  const ids = view.rels.map((r) => r.id);
+  const dup = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  if (dup.length > 0)
+    findings.push(`${view.part}: duplicate relationship ids ${dup.join(",")}`);
+  for (const r of view.rels)
+    if (r.target !== null && !exists(r.target))
+      findings.push(`${view.part}: dead relationship target ${r.el.getAttribute("Target") ?? ""}`);
+  return findings;
+};
+var refDefects = (view) => {
+  const root = view.doc?.documentElement ?? null;
+  if (root === null)
+    return [];
+  const ids = new Set(view.rels.map((r) => r.id));
+  const dangling = [...new Set(relRefs(root).map((ref) => ref.attr.value).filter((id) => id !== "" && !ids.has(id)))];
+  return dangling.length > 0 ? [`${view.part}: references missing relationship ids ${dangling.join(",")}`] : [];
+};
+var partDefects = (view, exists) => [...relsDefects(view, exists), ...refDefects(view), ...shapeIdDefects(view)];
+var notesOwner = (notes) => {
+  const root = notes.doc?.documentElement ?? null;
+  const used = new Set(root === null ? [] : relRefs(root).map((ref) => ref.attr.value));
+  return notes.rels.find((r) => r.type.endsWith("/slide") && !used.has(r.id))?.target ?? null;
+};
 
 // src/engine/guard.ts
 var import_jszip2 = __toESM(require_lib3(), 1);
-import path4 from "node:path";
 import { createHash as createHash2 } from "node:crypto";
 var SKIP_RELS = ["/slideLayout", "/notesSlide", "/hyperlink", "/slide"];
-var IMPLICIT_RELS = ["/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo"];
 var canonText = async (zip, part) => {
   const text = await zip.file(part)?.async("string");
   if (text === void 0)
@@ -43738,11 +43913,24 @@ var canonText = async (zip, part) => {
   }
 };
 var digestBytes = (bytes) => createHash2("sha1").update(bytes).digest("hex").slice(0, 12);
+var digests = /* @__PURE__ */ new WeakMap();
 var digest = async (zip, part) => {
-  const file2 = zip.file(part);
-  if (file2 === null)
+  let memo2 = digests.get(zip);
+  if (memo2 === void 0) {
+    memo2 = /* @__PURE__ */ new Map();
+    digests.set(zip, memo2);
+  }
+  let hash2 = memo2.get(part);
+  if (hash2 === void 0) {
+    hash2 = computeDigest(zip, part);
+    memo2.set(part, hash2);
+  }
+  return await hash2;
+};
+var computeDigest = async (zip, part) => {
+  const bytes = await bytesOf(zip, part);
+  if (bytes === null)
     return "missing";
-  const bytes = await file2.async("nodebuffer");
   let data = bytes;
   if (/\.(xml|rels)$/.test(part)) {
     let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "");
@@ -43760,42 +43948,31 @@ var digest = async (zip, part) => {
   return createHash2("sha1").update(data).digest("hex").slice(0, 12);
 };
 var relatedDigests = async (zip, part, xml, depth) => {
-  const relsPart = `${path4.posix.dirname(part)}/_rels/${path4.posix.basename(part)}.rels`;
-  const rels = await canonText(zip, relsPart);
-  if (rels === null)
-    return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-    const rel = m[0];
-    const type = /Type="([^"]+)"/.exec(rel)?.[1] ?? "";
-    const id = /\bId="([^"]+)"/.exec(rel)?.[1] ?? "";
-    if (SKIP_RELS.some((k) => type.endsWith(k)) || seen.has(id))
+  for (const { el, id, type, target } of await readRels(zip, part)) {
+    if (relIs(type, SKIP_RELS) || seen.has(id))
       continue;
     seen.add(id);
-    if (xml !== null && !xml.includes(`"${id}"`) && !IMPLICIT_RELS.some((k) => type.endsWith(k)) && !type.endsWith("/diagramDrawing"))
+    if (xml !== null && !xml.includes(`"${id}"`) && !relIs(type, RELS.implicit))
       continue;
-    if (rel.includes('TargetMode="External"')) {
-      out.push(`${type.slice(type.lastIndexOf("/") + 1)}:ext:${/Target="([^"]+)"/.exec(rel)?.[1] ?? ""}`);
+    const kind = type.slice(type.lastIndexOf("/") + 1);
+    if (target === null) {
+      out.push(`${kind}:ext:${el.getAttribute("Target") ?? ""}`);
       continue;
     }
-    const target = path4.posix.normalize(path4.posix.join(path4.posix.dirname(part), /Target="([^"]+)"/.exec(rel)?.[1] ?? ""));
     if (zip.file(target) === null)
       continue;
     let hash2 = await digest(zip, target);
     if (depth > 0)
       hash2 += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`;
-    out.push(`${type.slice(type.lastIndexOf("/") + 1)}:${hash2}`);
+    out.push(`${kind}:${hash2}`);
   }
   return out.sort();
 };
 var notesText = async (zip, slidePart) => {
-  const rels = await canonText(zip, `ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`) ?? "";
-  const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => m[0]).find((r) => /Type="[^"]*\/notesSlide"/.test(r));
-  if (rel === void 0)
-    return null;
-  const part = path4.posix.normalize(path4.posix.join("ppt/slides", /Target="([^"]+)"/.exec(rel)?.[1] ?? ""));
-  const xml = await canonText(zip, part);
+  const notes = (await readRels(zip, slidePart)).find((r) => r.type.endsWith("/notesSlide"))?.target ?? null;
+  const xml = notes === null ? null : await canonText(zip, notes);
   return xml === null ? null : [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("\n");
 };
 var slidePrint = async (zip, slidePart) => {
@@ -43803,10 +43980,9 @@ var slidePrint = async (zip, slidePart) => {
   return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1) };
 };
 var slideParts = async (zip) => {
-  const pres = await canonText(zip, "ppt/presentation.xml") ?? "";
-  const rels = await canonText(zip, "ppt/_rels/presentation.xml.rels") ?? "";
-  const target = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
-  return [...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => path4.posix.normalize(path4.posix.join("ppt", target.get(m[1]) ?? "")));
+  const target = new Map((await readRels(zip, "ppt/presentation.xml")).map((r) => [r.id, r.target ?? ""]));
+  const pres = await canonText(zip, "ppt/presentation.xml");
+  return pres === null ? [] : elements(parseXml(pres), "p:sldId").map((s) => target.get(s.getAttribute("r:id") ?? "") ?? "");
 };
 var minus = (a, b) => {
   const rest = [...a];
@@ -43821,7 +43997,7 @@ var parseEntry = (entry) => {
   const i = entry.indexOf("[");
   return { base: entry.slice(0, i), children: entry.slice(i + 1, -1).split(",").filter((c) => c !== "") };
 };
-var verifyContent = async (before, after, expects) => {
+var verifyContent = async (before, after, expects, repaired = /* @__PURE__ */ new Set()) => {
   const blocked = [];
   const lost = [];
   const outParts = await slideParts(after);
@@ -43877,7 +44053,7 @@ var verifyContent = async (before, after, expects) => {
         lost.push({ slide: i, what: type });
     }
   }
-  for (const part of Object.keys(before.files).filter((f) => /^ppt\/(slideLayouts|slideMasters|theme)\/[^/]+\.xml$/.test(f) && after.file(f) !== null)) {
+  for (const part of Object.keys(before.files).filter((f) => /^ppt\/(slideLayouts|slideMasters|theme)\/[^/]+\.xml$/.test(f) && after.file(f) !== null && !repaired.has(f))) {
     const xmlBefore = await canonText(before, part) ?? "";
     const xmlAfter = await canonText(after, part) ?? "";
     const was = `${await digest(before, part)} ${(await relatedDigests(before, part, xmlBefore, 1)).join(" ")}`;
@@ -43889,18 +44065,6 @@ var verifyContent = async (before, after, expects) => {
 };
 
 // src/engine/post.ts
-import path5 from "node:path";
-var removeParts = async (zip, parts) => {
-  if (parts.length === 0)
-    return;
-  let ct = doubleQuoted(await partText(zip, "[Content_Types].xml"));
-  for (const part of parts) {
-    zip.remove(part);
-    zip.remove(`${path5.posix.dirname(part)}/_rels/${path5.posix.basename(part)}.rels`);
-    ct = ct.replace(new RegExp(`<Override [^>]*PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "");
-  }
-  zip.file("[Content_Types].xml", ct);
-};
 var syncSectionRefs = async (zip) => {
   const part = "ppt/presentation.xml";
   const xml = await partText(zip, part);
@@ -43954,56 +44118,6 @@ var syncSectionRefs = async (zip) => {
   }
   zip.file(part, serializeXml(pres));
 };
-var ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags|ink|activeX)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/;
-var gcAssets = async (zip) => {
-  const isAsset = (f) => ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/");
-  const assets = Object.keys(zip.files).filter(isAsset);
-  if (assets.length === 0)
-    return;
-  const live = /* @__PURE__ */ new Set();
-  const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(f.replace(/_rels\/([^/]+)\.rels$/, "$1")));
-  while (queue.length > 0) {
-    const relsPart = queue.pop();
-    const relsText = await zip.file(relsPart)?.async("string");
-    if (relsText === void 0)
-      continue;
-    const base = path5.posix.dirname(path5.posix.dirname(relsPart));
-    for (const rel of elements(parseXml(relsText), "Relationship")) {
-      if (rel.getAttribute("TargetMode") === "External")
-        continue;
-      const target = resolveTarget(base, rel.getAttribute("Target") ?? "");
-      if (isAsset(target) && !live.has(target)) {
-        live.add(target);
-        const tRels = `${path5.posix.dirname(target)}/_rels/${path5.posix.basename(target)}.rels`;
-        if (zip.file(tRels) !== null)
-          queue.push(tRels);
-      }
-    }
-  }
-  await removeParts(zip, assets.filter((a) => !live.has(a)));
-};
-var addRel = (rels, id, type, target, external = false) => {
-  const rel = rels.createElementNS(NS_REL, "Relationship");
-  rel.setAttribute("Id", id);
-  rel.setAttribute("Type", type);
-  rel.setAttribute("Target", target);
-  if (external)
-    rel.setAttribute("TargetMode", "External");
-  rels.documentElement?.appendChild(rel);
-};
-var IMAGE_TYPES = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  svg: "image/svg+xml",
-  webp: "image/webp",
-  bmp: "image/bmp",
-  tif: "image/tiff",
-  tiff: "image/tiff",
-  emf: "image/x-emf",
-  wmf: "image/x-wmf"
-};
 var slideTitle = (slide) => {
   for (const sp of elements(slide, "p:sp")) {
     const type = firstElement(sp, "p:ph")?.getAttribute("type") ?? "";
@@ -44012,7 +44126,6 @@ var slideTitle = (slide) => {
   }
   return "";
 };
-var xmlEscape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 var syncAppProperties = async (zip, slides) => {
   const part = "docProps/app.xml";
   const f = zip.file(part);
@@ -44034,8 +44147,8 @@ var syncAppProperties = async (zip, slides) => {
   let seen = 0;
   const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) => ++seen === counts.length ? `<vt:i4>${n}</vt:i4>` : m);
   const kept = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)].map((m) => m[1]).slice(0, leading);
-  const lpstr = [...kept, ...titles.map(xmlEscape)].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
-  xml = xml.replace(/<Slides>\d+<\/Slides>/, `<Slides>${n}</Slides>`).replace(hp[0], `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
+  const lpstr = [...kept, ...titles.map((t) => xmlEscape(t))].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
+  xml = xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`).replace(hp[0], () => `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], () => `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
   zip.file(part, xml);
 };
 var setProps = async (zip, props) => {
@@ -44086,7 +44199,7 @@ var setCustomProps = async (zip, patch) => {
   let pid = 2;
   let body = "";
   for (const [name, value] of props)
-    body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name)}"><vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`;
+    body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name, true)}"><vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`;
   zip.file(
     CUSTOM_PROPS_PART,
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r
@@ -44096,7 +44209,7 @@ var setCustomProps = async (zip, patch) => {
   if (!ct.includes(`PartName="/${CUSTOM_PROPS_PART}"`))
     zip.file("[Content_Types].xml", ct.replace(
       "</Types>",
-      `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`
+      () => `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`
     ));
   const rootRels = parseXml(await partText(zip, "_rels/.rels"));
   const present = elements(rootRels, "Relationship").some((r) => (r.getAttribute("Type") ?? "") === CUSTOM_PROPS_REL);
@@ -44105,46 +44218,39 @@ var setCustomProps = async (zip, patch) => {
     let n = 1;
     while (ids.has(`rId${n}`))
       n++;
-    addRel(rootRels, `rId${n}`, CUSTOM_PROPS_REL, CUSTOM_PROPS_PART);
+    appendRel(rootRels, `rId${n}`, CUSTOM_PROPS_REL, CUSTOM_PROPS_PART);
     zip.file("_rels/.rels", serializeXml(rootRels));
   }
 };
 var sweepSlideRefs = async (zip, slides) => {
   const notes = /* @__PURE__ */ new Set();
-  for (const slide of slides) {
-    const rels = doubleQuoted(await zip.file(`ppt/slides/_rels/${path5.posix.basename(slide)}.rels`)?.async("string") ?? "");
-    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g))
-      if (/Type="[^"]*\/notesSlide"/.test(m[0]))
-        notes.add(resolveTarget("ppt/slides", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""));
-  }
+  for (const slide of slides)
+    for (const r of await readRels(zip, slide))
+      if (r.type.endsWith("/notesSlide") && r.target !== null)
+        notes.add(r.target);
   await removeParts(zip, Object.keys(zip.files).filter((f) => /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)));
   const presRelsPart = "ppt/_rels/presentation.xml.rels";
   const presRels = parseXml(await partText(zip, presRelsPart));
-  const presXml = doubleQuoted(await partText(zip, "ppt/presentation.xml"));
-  const liveSlideRids = new Set([...presXml.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]));
+  const pres = parseXml(await partText(zip, "ppt/presentation.xml"));
+  const liveSlideRids = new Set(elements(pres, "p:sldId").map((s) => s.getAttribute("r:id") ?? ""));
   let pruned = false;
-  for (const rel of elements(presRels, "Relationship")) {
-    if (rel.getAttribute("TargetMode") === "External")
+  for (const r of await readRels(zip, "ppt/presentation.xml")) {
+    if (r.target === null || zip.file(r.target) !== null && !(r.type.endsWith("/slide") && !liveSlideRids.has(r.id)))
       continue;
-    const target = resolveTarget("ppt", rel.getAttribute("Target") ?? "");
-    if (zip.file(target) === null || (rel.getAttribute("Type") ?? "").endsWith("/slide") && !liveSlideRids.has(rel.getAttribute("Id") ?? "")) {
-      rel.parentNode?.removeChild(rel);
-      pruned = true;
-    }
+    for (const rel of elements(presRels, "Relationship"))
+      if (rel.getAttribute("Id") === r.id)
+        rel.parentNode?.removeChild(rel);
+    pruned = true;
   }
   if (pruned)
     zip.file(presRelsPart, serializeXml(presRels));
-  if (!presXml.includes("<p:custShow"))
-    return;
   const rids = new Set(elements(presRels, "Relationship").map((r) => r.getAttribute("Id") ?? ""));
-  const pres = parseXml(presXml);
   let dropped = false;
-  for (const show of elements(pres, "p:custShow"))
-    for (const sld of elements(show, "p:sld"))
-      if (!rids.has(sld.getAttribute("r:id") ?? "")) {
-        sld.parentNode?.removeChild(sld);
-        dropped = true;
-      }
+  for (const sld of elements(pres, "p:sld"))
+    if (!rids.has(sld.getAttribute("r:id") ?? "")) {
+      sld.parentNode?.removeChild(sld);
+      dropped = true;
+    }
   if (dropped)
     zip.file("ppt/presentation.xml", serializeXml(pres));
 };
@@ -44160,189 +44266,24 @@ var finishPackage = async (zip, slides, props, customProps) => {
   await syncAppProperties(zip, slides);
 };
 
-// src/engine/seed.ts
-var import_jszip3 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync3 } from "node:fs";
-import path6 from "node:path";
-var slideFromLayout = (layoutXml) => {
-  const layout = parseXml(layoutXml);
-  const sps = [];
-  let nextId = 2;
-  for (const sp of elements(layout, "p:sp")) {
-    const ph = firstElement(sp, "p:ph");
-    if (ph === null)
-      continue;
-    const type = ph.getAttribute("type") ?? "body";
-    const clone2 = sp.cloneNode(true);
-    const cNvPr = firstElement(clone2, "p:cNvPr");
-    cNvPr?.setAttribute("id", String(nextId++));
-    if (type === "ftr" || type === "sldNum" || type === "dt") {
-      sps.push(serializeElement(clone2));
-      continue;
-    }
-    cNvPr?.setAttribute("name", seedPlaceholderName(Number(ph.getAttribute("idx") ?? "0")));
-    const txBody = firstElement(clone2, "p:txBody");
-    const doc = clone2.ownerDocument;
-    if (txBody !== null && doc !== null) {
-      while (txBody.firstChild !== null)
-        txBody.removeChild(txBody.firstChild);
-      txBody.appendChild(doc.createElementNS(NS_A, "a:bodyPr"));
-      txBody.appendChild(doc.createElementNS(NS_A, "a:lstStyle"));
-      const p = doc.createElementNS(NS_A, "a:p");
-      p.appendChild(doc.createElementNS(NS_A, "a:endParaRPr"));
-      txBody.appendChild(p);
-    }
-    sps.push(serializeElement(clone2));
-  }
-  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' + sps.join("") + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>";
-};
-var SLIDE_REL_RE = /<Relationship [^>]*Type="[^"]*\/slide"[^>]*\/>/g;
-var stripSlides = (presRels, ct) => ({
-  presRels: presRels.replace(SLIDE_REL_RE, ""),
-  ct: ct.replace(/<Override PartName="\/ppt\/slides\/[^"]*"[^>]*\/>/g, "")
-});
-var layoutOrder = async (zip) => {
-  const order = [];
-  const pres = doubleQuoted(await zip.file("ppt/presentation.xml")?.async("string") ?? "");
-  const presRels = doubleQuoted(await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? "");
-  const relTarget = new Map([...presRels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
-  const listed = [...pres.matchAll(/<p:sldMasterId\b[^>]*\br:id="([^"]+)"/g)].map((m) => path6.posix.normalize(path6.posix.join("ppt", relTarget.get(m[1]) ?? ""))).filter((part) => zip.file(part) !== null);
-  const masters = listed.length > 0 ? listed : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort();
-  for (const masterPart of masters) {
-    const master = parseXml(await zip.file(masterPart).async("string"));
-    const relsFile = zip.file(`ppt/slideMasters/_rels/${path6.posix.basename(masterPart)}.rels`);
-    if (relsFile === null)
-      continue;
-    const rels = parseXml(await relsFile.async("string"));
-    const relMap = new Map(elements(rels, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
-    for (const layoutId of elements(master, "p:sldLayoutId")) {
-      const target = relMap.get(layoutId.getAttribute("r:id") ?? "");
-      if (target !== void 0 && target.includes("slideLayouts/"))
-        order.push(path6.posix.normalize(path6.posix.join("ppt/slideMasters", target)));
-    }
-  }
-  return order;
-};
-var buildSeed = async (templateBytes) => {
-  const zip = await import_jszip3.default.loadAsync(templateBytes);
-  await normalizeRelTargets(zip);
-  const get = async (part) => {
-    const f = zip.file(part);
-    if (f === null)
-      throw new PptcError("E_TEMPLATE", `template is missing required part: ${part}`);
-    return await f.async("string");
-  };
-  let ct = (await get("[Content_Types].xml")).replace("presentationml.template.main+xml", "presentationml.presentation.main+xml");
-  let pres = await get("ppt/presentation.xml");
-  let presRels = await get("ppt/_rels/presentation.xml.rels");
-  pres = pres.replace(/<p:sldIdLst\s*\/>/, "<p:sldIdLst></p:sldIdLst>").replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst></p:sldIdLst>");
-  if (!pres.includes("<p:sldIdLst>"))
-    pres = pres.replace("</p:sldMasterIdLst>", "</p:sldMasterIdLst><p:sldIdLst></p:sldIdLst>");
-  pres = pres.replace(/<p:ext uri="\{521415D9-36F7-43E2-AB2F-B90AF26B5E84\}">.*?<\/p:ext>/s, "").replace(/<p:extLst>\s*<\/p:extLst>/, "");
-  for (const lst of ["handoutMasterIdLst", "notesMasterIdLst"]) {
-    const el = new RegExp(`<p:${lst}>.*?</p:${lst}>|<p:${lst}\\s*/>`, "s").exec(pres);
-    if (el !== null && pres.indexOf(el[0]) > pres.indexOf("<p:sldIdLst"))
-      pres = pres.replace(el[0], "").replace(/<p:sldIdLst/, `${el[0]}<p:sldIdLst`);
-  }
-  presRels = presRels.replace(SLIDE_REL_RE, "");
-  for (const f of Object.keys(zip.files))
-    if (/^ppt\/(slides|notesSlides)\//.test(f))
-      zip.remove(f);
-  ct = ct.replace(/<Override PartName="\/ppt\/(slides|notesSlides)\/[^"]*"[^>]*\/>/g, "");
-  const viewPr = zip.file("ppt/viewProps.xml");
-  if (viewPr !== null)
-    zip.file(
-      "ppt/viewProps.xml",
-      (await viewPr.async("string")).replace(/ lastView="[^"]*"/g, "")
-    );
-  const order = await layoutOrder(zip);
-  if (order.length === 0)
-    throw new PptcError("E_TEMPLATE", "template contains no slide layouts");
-  let sldIds = "", rels = "", overrides = "";
-  for (let i = 0; i < order.length; i++) {
-    const n = i + 1;
-    const layoutXml = await get(order[i]);
-    zip.file(`ppt/slides/slide${n}.xml`, slideFromLayout(layoutXml));
-    zip.file(
-      `ppt/slides/_rels/slide${n}.xml.rels`,
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../${order[i].substring(4)}"/></Relationships>`
-    );
-    sldIds += `<p:sldId id="${9e3 + n}" r:id="rIdPptcSeed${n}"/>`;
-    rels += `<Relationship Id="rIdPptcSeed${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${n}.xml"/>`;
-    overrides += `<Override PartName="/ppt/slides/slide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
-  }
-  zip.file("[Content_Types].xml", ct.replace("</Types>", `${overrides}</Types>`));
-  zip.file("ppt/presentation.xml", pres.replace("<p:sldIdLst></p:sldIdLst>", `<p:sldIdLst>${sldIds}</p:sldIdLst>`));
-  zip.file("ppt/_rels/presentation.xml.rels", presRels.replace("</Relationships>", `${rels}</Relationships>`));
-  await gcAssets(zip);
-  await cleanContentTypes(zip);
-  return {
-    bytes: await zip.generateAsync({ type: "nodebuffer" }),
-    layoutCount: order.length
-  };
-};
-var buildEmptyDeck = async (templatePath) => {
-  const seed = await buildSeed(readFileSync3(templatePath));
-  const zip = await import_jszip3.default.loadAsync(seed.bytes);
-  const pres = await zip.file("ppt/presentation.xml").async("string");
-  const presRels = await zip.file("ppt/_rels/presentation.xml.rels").async("string");
-  const ct = await zip.file("[Content_Types].xml").async("string");
-  zip.file("ppt/presentation.xml", pres.replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst/>"));
-  const stripped = stripSlides(presRels, ct);
-  zip.file("ppt/_rels/presentation.xml.rels", stripped.presRels);
-  zip.file("[Content_Types].xml", stripped.ct);
-  for (const f of Object.keys(zip.files))
-    if (/^ppt\/slides\//.test(f))
-      zip.remove(f);
-  return await zip.generateAsync({ type: "nodebuffer" });
-};
-
 // src/engine/verify.ts
-var import_jszip4 = __toESM(require_lib3(), 1);
+var import_jszip3 = __toESM(require_lib3(), 1);
 var import_xmldom2 = __toESM(require_lib4(), 1);
-import path7 from "node:path";
-import { readFileSync as readFileSync4 } from "node:fs";
-var shapeIdFindings = (part, xml) => {
-  const ids = [...xml.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1]);
-  const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))];
-  return dup.length > 0 ? [`${part}: duplicate cNvPr ids ${dup.join(",")}`] : [];
-};
-var refFindings = (part, xml, relsXml) => {
-  const ids = new Set([...relsXml.matchAll(/<Relationship\b[^>]*\bId="([^"]+)"/g)].map((m) => m[1]));
-  const dangling = [...new Set([...xml.matchAll(/\br:(?:id|embed|link|pict|dm|lo|qs|cs)="([^"]+)"/g)].map((m) => m[1]).filter((id) => !ids.has(id)))];
-  return dangling.length > 0 ? [`${part}: references missing relationship ids ${dangling.join(",")}`] : [];
-};
-var relsFindings = (relsPart, xml, names) => {
-  const findings = [];
-  const relIds = [...xml.matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1]);
-  const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))];
-  if (dupIds.length > 0)
-    findings.push(`${relsPart}: duplicate relationship ids ${dupIds.join(",")}`);
-  const base = path7.posix.dirname(path7.posix.dirname(relsPart));
-  for (const m of xml.matchAll(/<Relationship [^>]*?\/>/g)) {
-    if (m[0].includes('TargetMode="External"'))
-      continue;
-    const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
-    if (!names.has(path7.posix.normalize(path7.posix.join(base, target))))
-      findings.push(`${relsPart}: dead relationship target ${target}`);
-  }
-  return findings;
+import { readFileSync as readFileSync3 } from "node:fs";
+var childNames = (el) => {
+  const names = [];
+  for (let n = el.firstChild; n !== null; n = n.nextSibling)
+    if (n.nodeType === 1)
+      names.push(n.nodeName);
+  return names;
 };
 var verifyArchive = async (zip) => {
   if (zip.file("[Content_Types].xml") === null)
     return ["[Content_Types].xml: part missing (not a flat OPC package)"];
   const findings = [];
   const names = new Set(Object.keys(zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")));
-  const raw = async (part) => (await zip.file(part).async("string")).replace(/^\uFEFF/, "");
-  const text = async (part) => {
-    const xml = await raw(part);
-    try {
-      return doubleQuoted(xml);
-    } catch {
-      return xml;
-    }
-  };
+  const exists = (part) => names.has(part);
+  const docs = /* @__PURE__ */ new Map();
   for (const n of names)
     if (n.endsWith(".xml") || n.endsWith(".rels"))
       try {
@@ -44351,70 +44292,73 @@ var verifyArchive = async (zip) => {
             throw new Error(msg);
           }
         });
-        parser.parseFromString(await raw(n), "application/xml");
+        const text = (await zip.file(n).async("string")).replace(/^\uFEFF/, "");
+        docs.set(n, parser.parseFromString(text, "application/xml"));
       } catch (err) {
         findings.push(`${n}: malformed XML (${String(err).slice(0, 80)})`);
       }
-  for (const n of names)
-    if (/^ppt\/slides\/slide\d+\.xml$/.test(n)) {
-      const relsPart = `ppt/slides/_rels/${path7.posix.basename(n)}.rels`;
-      findings.push(
-        ...shapeIdFindings(n, await text(n)),
-        ...refFindings(n, await text(n), names.has(relsPart) ? await text(relsPart) : "")
-      );
-    }
-  for (const n of names)
+  const rels = /* @__PURE__ */ new Map();
+  for (const [n, doc] of docs)
     if (n.endsWith(".rels"))
-      findings.push(...relsFindings(n, await text(n), names));
-  const ct = await text("[Content_Types].xml");
-  const overrides = [...ct.matchAll(/<Override PartName="([^"]+)"/g)].map((m) => m[1]);
-  for (const o of new Set(overrides)) {
-    if (!names.has(o.replace(/^\//, "")))
-      findings.push(`[Content_Types].xml: override for missing part ${o}`);
-    if (overrides.filter((x) => x === o).length > 1)
-      findings.push(`[Content_Types].xml: duplicate override ${o}`);
+      rels.set(relsOwner(n), relTargets(relsOwner(n), doc, zip));
+  const owners = /* @__PURE__ */ new Set([...rels.keys(), ...[...docs.keys()].filter((n) => n.endsWith(".xml"))]);
+  for (const part of owners) {
+    const view = { part: part === "" ? "_rels/.rels" : part, doc: docs.get(part) ?? null, rels: rels.get(part) ?? [] };
+    findings.push(...partDefects(view, exists));
   }
-  const defaults = new Set([...ct.matchAll(/<Default Extension="([^"]+)"/g)].map((m) => m[1].toLowerCase()));
-  const overridden = new Set(overrides.map((o) => o.replace(/^\//, "")));
+  const ct = docs.get("[Content_Types].xml");
+  if (ct !== void 0) {
+    const overrides = elements(ct, "Override").map((o) => (o.getAttribute("PartName") ?? "").replace(/^\//, ""));
+    const seen = /* @__PURE__ */ new Set();
+    for (const o of overrides) {
+      if (findPart(zip, o) === null)
+        findings.push(`[Content_Types].xml: override for missing part /${o}`);
+      if (seen.has(o.toLowerCase()))
+        findings.push(`[Content_Types].xml: duplicate override /${o}`);
+      seen.add(o.toLowerCase());
+    }
+    const defaults = new Set(elements(ct, "Default").map((d) => (d.getAttribute("Extension") ?? "").toLowerCase()));
+    for (const n of names)
+      if (n !== "[Content_Types].xml" && !seen.has(n.toLowerCase()) && !defaults.has(n.split(".").pop()?.toLowerCase() ?? ""))
+        findings.push(`${n}: no content type (neither default nor override)`);
+  }
+  const pres = docs.get("ppt/presentation.xml");
+  const presRels = new Map((rels.get("ppt/presentation.xml") ?? []).map((r) => [r.id, r]));
+  const sldIds = pres === void 0 ? [] : elements(pres, "p:sldId").map((el) => ({ id: el.getAttribute("id") ?? "", rid: el.getAttribute("r:id") ?? "" }));
+  const slides = [];
+  for (const { rid } of sldIds) {
+    const target = presRels.get(rid)?.target ?? null;
+    if (target === null || !exists(target) || !(presRels.get(rid)?.type ?? "").endsWith("/slide"))
+      findings.push(`presentation.xml: sldId ${rid} does not resolve to a slide part`);
+    else if (slides.includes(target))
+      findings.push(`presentation.xml: sldId ${rid} lists slide ${target} a second time`);
+    else
+      slides.push(target);
+  }
+  const listed = new Set(sldIds.map((s) => s.rid));
+  for (const r of presRels.values())
+    if (r.type.endsWith("/slide") && !listed.has(r.id))
+      findings.push(`presentation.xml.rels: dangling slide relationship ${r.id} (no sldId references it)`);
   for (const n of names)
-    if (n !== "[Content_Types].xml" && !overridden.has(n) && !defaults.has(n.split(".").pop()?.toLowerCase() ?? ""))
-      findings.push(`${n}: no content type (neither default nor override)`);
-  const pres = await text("ppt/presentation.xml");
-  const rels = await text("ppt/_rels/presentation.xml.rels");
-  const relMap = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/\bId="([^"]+)"/.exec(m[0])?.[1] ?? "", /\bTarget="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
-  for (const m of pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)) {
-    const target = relMap.get(m[1]);
-    if (target === void 0 || !names.has(path7.posix.normalize(path7.posix.join("ppt", target))))
-      findings.push(`presentation.xml: sldId ${m[1]} does not resolve to a slide part`);
-  }
-  for (const m of pres.matchAll(/<([\w:]+)\b[^>]*\br:id="([^"]+)"/g))
-    if (m[1] !== "p:sldId" && !relMap.has(m[2]))
-      findings.push(`presentation.xml: <${m[1]}> r:id ${m[2]} has no relationship`);
-  const seq = [...pres.matchAll(/<p:(sldMasterIdLst|notesMasterIdLst|handoutMasterIdLst|sldIdLst|sldSz|notesSz)[ >/]/g)].map((m) => m[1]);
-  const sldAt = seq.indexOf("sldIdLst");
-  if (sldAt >= 0) {
-    for (const lst of ["notesMasterIdLst", "handoutMasterIdLst"])
-      if (seq.includes(lst) && seq.indexOf(lst) > sldAt)
-        findings.push(`presentation.xml: ${lst} appears after sldIdLst (schema order violated)`);
-  }
-  if (seq.includes("sldSz") && seq.includes("notesSz") && seq.indexOf("sldSz") > seq.indexOf("notesSz"))
+    if (/^ppt\/slides\/[^/]+\.xml$/.test(n) && !slides.includes(n))
+      findings.push(`${n}: slide part not in the slide list`);
+  const presRoot = pres?.documentElement ?? null;
+  const seq = presRoot === null ? [] : childNames(presRoot);
+  const before = (a, b) => !seq.includes(a) || !seq.includes(b) || seq.indexOf(a) < seq.indexOf(b);
+  for (const lst of ["p:notesMasterIdLst", "p:handoutMasterIdLst"])
+    if (!before(lst, "p:sldIdLst"))
+      findings.push(`presentation.xml: ${lst.slice(2)} appears after sldIdLst (schema order violated)`);
+  if (!before("p:sldSz", "p:notesSz"))
     findings.push("presentation.xml: sldSz appears after notesSz (schema order violated)");
-  const liveSlideRids = new Set([...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]));
-  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-    const id = /\bId="([^"]+)"/.exec(m[0])?.[1] ?? "";
-    if (/\bType="[^"]*\/slide"/.test(m[0]) && !liveSlideRids.has(id))
-      findings.push(`presentation.xml.rels: dangling slide relationship ${id} (no sldId references it)`);
-  }
-  const realIds = new Set([...pres.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => m[1]));
-  for (const m of pres.matchAll(/<p14:sldId id="(\d+)"/g))
-    if (!realIds.has(m[1]))
-      findings.push(`presentation.xml: section references removed slide id ${m[1]}`);
+  const realIds = new Set(sldIds.map((s) => s.id));
+  for (const ref of pres === void 0 ? [] : elements(pres, "p14:sldId"))
+    if (!realIds.has(ref.getAttribute("id") ?? ""))
+      findings.push(`presentation.xml: section references removed slide id ${ref.getAttribute("id") ?? ""}`);
   if (names.has("docProps/app.xml")) {
-    const app = await text("docProps/app.xml");
-    const slideCount = [...pres.matchAll(/<p:sldId /g)].length;
+    const app = await zip.file("docProps/app.xml").async("string");
     const declared = /<Slides>(\d+)<\/Slides>/.exec(app);
-    if (declared !== null && Number(declared[1]) !== slideCount)
-      findings.push(`docProps/app.xml: declares ${declared[1]} slides, deck has ${slideCount}`);
+    if (declared !== null && Number(declared[1]) !== sldIds.length)
+      findings.push(`docProps/app.xml: declares ${declared[1]} slides, deck has ${sldIds.length}`);
     const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(app);
     const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(app);
     if (hp !== null && tp !== null) {
@@ -44424,53 +44368,40 @@ var verifyArchive = async (zip) => {
         findings.push(`docProps/app.xml: HeadingPairs sum ${sum} != TitlesOfParts ${entries}`);
     }
   }
-  const notesRef = /* @__PURE__ */ new Map();
-  for (const n of names)
-    if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(n))
-      for (const m of (await text(n)).matchAll(/Target="\.\.\/notesSlides\/([^"]+)"/g)) {
-        const part = m[1];
-        notesRef.set(part, [...notesRef.get(part) ?? [], n]);
+  const notesOf = /* @__PURE__ */ new Map();
+  for (const slide of [...names].filter((n) => /^ppt\/slides\/[^/]+\.xml$/.test(n)))
+    for (const r of rels.get(slide) ?? [])
+      if (r.type.endsWith("/notesSlide") && r.target !== null && exists(r.target)) {
+        notesOf.set(r.target, [...notesOf.get(r.target) ?? [], slide]);
+        const owner = notesOwner({ part: r.target, doc: docs.get(r.target) ?? null, rels: rels.get(r.target) ?? [] });
+        if (owner !== slide)
+          findings.push(`${slide}: its notes part ${r.target} belongs to ${owner ?? "no slide"}`);
       }
-  for (const [part, owners] of notesRef)
-    if (owners.length > 1)
-      findings.push(`notesSlide ${part} is referenced by ${owners.length} slides (must be 1:1)`);
-  const isAsset = (f) => ASSET_PART.test(f) && !f.includes("/_rels/");
-  const live = /* @__PURE__ */ new Set();
+  for (const [part, users] of notesOf)
+    if (users.length > 1)
+      findings.push(`notesSlide ${part} is referenced by ${users.length} slides (must be 1:1)`);
+  const live = new Set([...rels.values()].flat().map((r) => r.target));
   for (const n of names)
-    if (n.endsWith(".rels")) {
-      const base = path7.posix.dirname(path7.posix.dirname(n));
-      for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
-        if (m[0].includes('TargetMode="External"'))
-          continue;
-        const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
-        live.add(path7.posix.normalize(path7.posix.join(base, target)));
-      }
-    }
-  for (const n of names)
-    if (isAsset(n) && !live.has(n))
+    if (ASSET_PART.test(n) && !n.includes("/_rels/") && !live.has(n))
       findings.push(`${n}: orphan asset (not referenced from any part)`);
   return findings;
 };
-var verifyBytes = async (bytes, before) => {
-  const zip = await import_jszip4.default.loadAsync(bytes);
-  await normalizeRelTargets(zip);
+var verifyZip = async (zip, before) => {
   const findings = await verifyArchive(zip);
   if (before !== void 0)
     for (const n of Object.keys(before.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))) {
-      const after = zip.file(n);
-      if (after !== null && !(await after.async("nodebuffer")).equals(await before.file(n).async("nodebuffer")))
+      const now = await bytesOf(zip, n);
+      if (now !== null && !now.equals(await bytesOf(before, n)))
         findings.push(`${n}: existing media file overwritten with different content`);
     }
   return findings;
 };
-var verifyFile = async (file2) => await verifyBytes(readFileSync4(file2));
+var verifyBytes = async (bytes) => await verifyZip(await import_jszip3.default.loadAsync(bytes));
+var verifyFile = async (file2) => await verifyBytes(readFileSync3(file2));
 
 // src/engine/inplace/package.ts
-var import_jszip5 = __toESM(require_lib3(), 1);
-import path8 from "node:path";
-var SHARED_RELS = ["/slideLayout", "/slideMaster", "/notesMaster", "/slide", "/image", "/media", "/video", "/audio", "/hyperlink", "/theme"];
-var EMPTY_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="${NS_REL}"/>`;
+var import_jszip4 = __toESM(require_lib3(), 1);
+import path4 from "node:path";
 var Package = class _Package {
   constructor(zip, alloc) {
     this.zip = zip;
@@ -44486,20 +44417,20 @@ var Package = class _Package {
    *  @returns the package
    */
   static async open(bytes, sldIds) {
-    const zip = await import_jszip5.default.loadAsync(bytes);
+    const zip = await import_jszip4.default.loadAsync(bytes);
     for (const f of Object.keys(zip.files))
       if (f.startsWith("[trash]/"))
         zip.remove(f);
     return new _Package(zip, await PartAllocator.create(zip, sldIds));
   }
   /**
-   *  Whether a part exists.
+   *  Whether a part exists (part names are case-insensitive).
    *
    *  @param part - part name
    *  @returns true when present
    */
   has(part) {
-    return this.zip.file(part) !== null;
+    return findPart(this.zip, part) !== null;
   }
   /**
    *  Text of a part (byte-order mark dropped); the part must exist.
@@ -44530,11 +44461,11 @@ var Package = class _Package {
   async rels(part) {
     const relsPart = relsPartOf(part);
     const doc = parseXml(this.has(relsPart) ? await this.text(relsPart) : EMPTY_RELS);
-    const base = path8.posix.dirname(part);
+    const base = path4.posix.dirname(part);
     for (const rel of elements(doc, "Relationship")) {
       const target = rel.getAttribute("Target") ?? "";
       if (rel.getAttribute("TargetMode") !== "External" && target.startsWith("/"))
-        rel.setAttribute("Target", path8.posix.relative(base, target.slice(1)));
+        rel.setAttribute("Target", path4.posix.relative(base, target.slice(1)));
     }
     return doc;
   }
@@ -44567,13 +44498,7 @@ var Package = class _Package {
    */
   addRel(rels, type, target, external = false) {
     const id = this.alloc.relId();
-    const rel = rels.createElementNS(NS_REL, "Relationship");
-    rel.setAttribute("Id", id);
-    rel.setAttribute("Type", type);
-    rel.setAttribute("Target", target);
-    if (external)
-      rel.setAttribute("TargetMode", "External");
-    rels.documentElement?.appendChild(rel);
+    appendRel(rels, id, type, target, external);
     return id;
   }
   /**
@@ -44583,7 +44508,7 @@ var Package = class _Package {
    *  @param contentType - its content type
    */
   async typeAs(part, contentType) {
-    this.write("[Content_Types].xml", (await this.text("[Content_Types].xml")).replace("</Types>", `<Override PartName="/${part}" ContentType="${contentType}"/></Types>`));
+    this.write("[Content_Types].xml", (await this.text("[Content_Types].xml")).replace("</Types>", () => `<Override PartName="/${xmlEscape(part, true)}" ContentType="${xmlEscape(contentType, true)}"/></Types>`));
   }
   /**
    *  Give a part a content type: the override it has in the source
@@ -44594,18 +44519,22 @@ var Package = class _Package {
    *  @param sourcePart - the part it was copied from
    */
   async typePart(part, sourceCtText, sourcePart) {
-    const sourceCt = doubleQuoted(sourceCtText);
-    const override = new RegExp(`<Override [^>]*PartName="/${sourcePart.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(sourceCt);
-    if (override !== null) {
-      await this.typeAs(part, /ContentType="([^"]+)"/.exec(override[0])?.[1] ?? "");
+    const sourceCt = sourceCtText === "" ? null : parseXml(sourceCtText);
+    const override = sourceCt === null ? void 0 : elements(sourceCt, "Override").find((o) => (o.getAttribute("PartName") ?? "").toLowerCase() === `/${sourcePart.toLowerCase()}`);
+    if (override !== void 0) {
+      await this.typeAs(part, override.getAttribute("ContentType") ?? "");
       return;
     }
-    const ct = doubleQuoted(await this.text("[Content_Types].xml"));
-    const ext = path8.posix.extname(part).slice(1).toLowerCase();
-    if (new RegExp(`<Default [^>]*Extension="${ext}"`, "i").test(ct))
+    const ext = path4.posix.extname(part).slice(1).toLowerCase();
+    const defaultOf = (ct2) => ct2 === null ? null : elements(ct2, "Default").find((d) => (d.getAttribute("Extension") ?? "").toLowerCase() === ext)?.getAttribute("ContentType") ?? null;
+    const ct = parseXml(await this.text("[Content_Types].xml"));
+    if (defaultOf(ct) !== null)
       return;
-    const type = new RegExp(`<Default [^>]*Extension="${ext}"[^>]*ContentType="([^"]+)"`, "i").exec(sourceCt)?.[1] ?? IMAGE_TYPES[ext] ?? "application/octet-stream";
-    this.write("[Content_Types].xml", ct.replace(/<Default\b/, `<Default Extension="${ext}" ContentType="${type}"/><Default`));
+    const def = ct.createElementNS(ct.documentElement?.namespaceURI ?? null, "Default");
+    def.setAttribute("Extension", ext);
+    def.setAttribute("ContentType", defaultOf(sourceCt) ?? IMAGE_TYPES[ext] ?? "application/octet-stream");
+    ct.documentElement?.insertBefore(def, ct.documentElement.firstChild);
+    this.write("[Content_Types].xml", ct);
   }
   /**
    *  Copy a part and everything it relates to under fresh names. Inside
@@ -44634,9 +44563,9 @@ var Package = class _Package {
     return copy;
   }
   /**
-   *  Re-point the relationships of a copied part: targets copied in the
-   *  same operation point at their copy, shared ones keep their part,
-   *  everything else is copied recursively.
+   *  Re-point the relationships of a copied part: dead targets go, targets
+   *  copied in the same operation point at their copy, shared ones keep
+   *  their part, everything else is copied recursively.
    *
    *  @param from - the package holding the original
    *  @param part - the original part
@@ -44645,20 +44574,18 @@ var Package = class _Package {
    *  @param done - parts already copied in this operation
    */
   async relinkClone(from, part, copy, rels, done) {
-    for (const rel of elements(rels, "Relationship")) {
-      if (rel.getAttribute("TargetMode") === "External")
+    for (const { el, type, target } of from.targets(part, rels)) {
+      if (target === null)
         continue;
-      const target = resolveTarget(path8.posix.dirname(part), rel.getAttribute("Target") ?? "");
-      const type = rel.getAttribute("Type") ?? "";
       let next = done.get(target);
-      if (next === void 0 && from === this && SHARED_RELS.some((k) => type.endsWith(k)))
-        next = target;
       if (next === void 0 && !from.has(target)) {
-        rel.parentNode?.removeChild(rel);
+        el.parentNode?.removeChild(el);
         continue;
       }
+      if (next === void 0 && from === this && relIs(type, RELS.shared))
+        next = target;
       next ??= await this.clonePart(from, target, done);
-      rel.setAttribute("Target", path8.posix.relative(path8.posix.dirname(copy), next));
+      el.setAttribute("Target", path4.posix.relative(path4.posix.dirname(copy), next));
     }
   }
   /**
@@ -44670,24 +44597,115 @@ var Package = class _Package {
     await removeParts(this.zip, parts);
   }
   /**
-   *  Targets of the relationships of a part, resolved to part names.
+   *  The relationships of a part, targets resolved to the part names of
+   *  this package (case-insensitively).
    *
    *  @param part - the owning part
    *  @param rels - its rels DOM
-   *  @returns relationship elements with their resolved target
+   *  @returns the relationships in document order
    */
-  static targets(part, rels) {
-    return elements(rels, "Relationship").map((rel) => ({
-      rel,
-      type: rel.getAttribute("Type") ?? "",
-      target: rel.getAttribute("TargetMode") === "External" ? null : resolveTarget(path8.posix.dirname(part), rel.getAttribute("Target") ?? "")
-    }));
+  targets(part, rels) {
+    return relTargets(part, rels, this.zip);
   }
 };
 
 // src/engine/inplace/slides.ts
 import { readFileSync as readFileSync5 } from "node:fs";
-import path9 from "node:path";
+import path5 from "node:path";
+
+// src/engine/seed.ts
+var import_jszip5 = __toESM(require_lib3(), 1);
+import { readFileSync as readFileSync4 } from "node:fs";
+var slideFromLayout = (layoutXml) => {
+  const layout = parseXml(layoutXml);
+  const sps = [];
+  let nextId = 2;
+  for (const sp of elements(layout, "p:sp")) {
+    const ph = firstElement(sp, "p:ph");
+    if (ph === null)
+      continue;
+    const type = ph.getAttribute("type") ?? "body";
+    const clone2 = sp.cloneNode(true);
+    const cNvPr = firstElement(clone2, "p:cNvPr");
+    cNvPr?.setAttribute("id", String(nextId++));
+    if (type === "ftr" || type === "sldNum" || type === "dt") {
+      sps.push(serializeElement(clone2));
+      continue;
+    }
+    cNvPr?.setAttribute("name", seedPlaceholderName(Number(ph.getAttribute("idx") ?? "0")));
+    const txBody = firstElement(clone2, "p:txBody");
+    const doc = clone2.ownerDocument;
+    if (txBody !== null && doc !== null) {
+      while (txBody.firstChild !== null)
+        txBody.removeChild(txBody.firstChild);
+      txBody.appendChild(doc.createElementNS(NS_A, "a:bodyPr"));
+      txBody.appendChild(doc.createElementNS(NS_A, "a:lstStyle"));
+      const p = doc.createElementNS(NS_A, "a:p");
+      p.appendChild(doc.createElementNS(NS_A, "a:endParaRPr"));
+      txBody.appendChild(p);
+    }
+    sps.push(serializeElement(clone2));
+  }
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' + sps.join("") + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>";
+};
+var buildEmptyDeck = async (template) => {
+  const zip = await import_jszip5.default.loadAsync(typeof template === "string" ? readFileSync4(template) : template);
+  await normalizeRelTargets(zip);
+  const get = async (part) => {
+    const f = zip.file(part);
+    if (f === null)
+      throw new PptcError("E_TEMPLATE", `template is missing required part: ${part}`);
+    return await f.async("string");
+  };
+  if ((await layoutOrder(zip)).length === 0)
+    throw new PptcError("E_TEMPLATE", "template contains no slide layouts");
+  const pres = parseXml(await get("ppt/presentation.xml"));
+  const root = pres.documentElement;
+  let sldIdLst = firstElement(pres, "p:sldIdLst");
+  if (sldIdLst === null) {
+    sldIdLst = pres.createElementNS(NS_P, "p:sldIdLst");
+    const anchor2 = firstElement(pres, "p:sldSz");
+    root.insertBefore(sldIdLst, anchor2);
+  }
+  while (sldIdLst.firstChild !== null)
+    sldIdLst.removeChild(sldIdLst.firstChild);
+  for (const ext of elements(pres, "p:ext"))
+    if (ext.getAttribute("uri") === "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}") {
+      const extLst = ext.parentNode;
+      extLst.removeChild(ext);
+      if (firstElement(extLst, "p:ext") === null)
+        extLst.parentNode?.removeChild(extLst);
+    }
+  for (const lst of ["p:notesMasterIdLst", "p:handoutMasterIdLst"]) {
+    const el = firstElement(pres, lst);
+    if (el !== null && el.parentNode === root) {
+      let ahead = false;
+      for (let n = sldIdLst.previousSibling; n !== null; n = n.previousSibling)
+        ahead ||= n === el;
+      if (!ahead)
+        root.insertBefore(el, sldIdLst);
+    }
+  }
+  zip.file("ppt/presentation.xml", serializeXml(pres));
+  const presRels = parseXml(await get("ppt/_rels/presentation.xml.rels"));
+  for (const rel of elements(presRels, "Relationship"))
+    if ((rel.getAttribute("Type") ?? "").endsWith("/slide"))
+      rel.parentNode?.removeChild(rel);
+  zip.file("ppt/_rels/presentation.xml.rels", serializeXml(presRels));
+  for (const f of Object.keys(zip.files))
+    if (/^ppt\/(slides|notesSlides)\//.test(f))
+      zip.remove(f);
+  zip.file("[Content_Types].xml", (await get("[Content_Types].xml")).replace("presentationml.template.main+xml", "presentationml.presentation.main+xml"));
+  const viewPr = zip.file("ppt/viewProps.xml");
+  if (viewPr !== null) {
+    const view = parseXml(await viewPr.async("string"));
+    view.documentElement?.removeAttribute("lastView");
+    zip.file("ppt/viewProps.xml", serializeXml(view));
+  }
+  await gcAssets(zip);
+  await cleanContentTypes(zip);
+  return await zip.generateAsync({ type: "nodebuffer" });
+};
 
 // src/engine/text.ts
 var HLINK_ATTR = "pptc-hlink";
@@ -44773,8 +44791,8 @@ var setShapeText = (shape, text, append = false) => {
 };
 
 // src/engine/inplace/slides.ts
-var REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-var UNREFERENCED_RELS = ["/slideLayout", "/notesSlide", "/diagramDrawing", ...IMPLICIT_RELS];
+var SHAPES = ["p:sp", "p:pic", "p:graphicFrame", "p:cxnSp", "p:grpSp", "p:contentPart"];
+var LINKS = ["a:hlinkClick", "a:hlinkHover", "a:hlinkMouseOver", "p:custData", "p:tags"];
 var isPlaceholder = (idx) => (shape) => {
   const ph = firstElement(shape, "p:ph");
   return ph !== null && Number(ph.getAttribute("idx") ?? "0") === idx;
@@ -44782,24 +44800,9 @@ var isPlaceholder = (idx) => (shape) => {
 var isTopLevel = (shape) => shape.parentNode?.nodeName === "p:spTree";
 var shapeOf = (cNvPr) => cNvPr.parentNode?.parentNode;
 var findShape = (slide, name, pick2) => elements(slide, "p:cNvPr").map(shapeOf).find((shape) => firstElement(shape, "p:cNvPr")?.getAttribute("name") === name && pick2(shape)) ?? null;
-var relIdsOf = (scope) => {
-  const ids = [];
-  const walk = (el) => {
-    for (let i = 0; i < el.attributes.length; i++) {
-      const attr = el.attributes.item(i);
-      if (attr !== null && attr.namespaceURI === NS_R)
-        ids.push(attr.value);
-    }
-    for (let n = el.firstChild; n !== null; n = n.nextSibling)
-      if (n.nodeType === 1)
-        walk(n);
-  };
-  walk(scope);
-  return ids;
-};
 var removeShape = (shape) => {
   let doomed = shape;
-  for (let up = shape.parentNode; up !== null && up.nodeName !== "p:spTree"; up = up.parentNode)
+  for (let up = shape.parentNode; up !== null && up.nodeName !== "p:spTree" && up.nodeName !== "p:grpSp"; up = up.parentNode)
     if (up.nodeName === "mc:AlternateContent")
       doomed = up;
   doomed.parentNode?.removeChild(doomed);
@@ -44909,10 +44912,9 @@ var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
   sp.parentNode?.replaceChild(pic, sp);
   return true;
 };
-var xmlEscape2 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 var setNotes = async (pkg, slidePart, slideRels, text, notesMaster) => {
   const notesPart = pkg.alloc.part("ppt/notesSlides", "notesSlide", ".xml");
-  const paras = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape2(line)}</a:t></a:r></a:p>`).join("");
+  const paras = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("");
   pkg.write(
     notesPart,
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -44921,23 +44923,22 @@ var setNotes = async (pkg, slidePart, slideRels, text, notesMaster) => {
   pkg.write(
     relsPartOf(notesPart),
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${path9.posix.relative("ppt/notesSlides", notesMaster)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path9.posix.basename(slidePart)}"/></Relationships>`
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${path5.posix.relative("ppt/notesSlides", notesMaster)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
   );
   await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml");
   for (const rel of elements(slideRels, "Relationship"))
     if ((rel.getAttribute("Type") ?? "").endsWith("/notesSlide"))
       rel.parentNode?.removeChild(rel);
-  pkg.addRel(slideRels, `${REL}/notesSlide`, `../notesSlides/${path9.posix.basename(notesPart)}`);
+  pkg.addRel(slideRels, `${REL}/notesSlide`, `../notesSlides/${path5.posix.basename(notesPart)}`);
 };
 var unshareNotes = async (pkg, slidePart, slideRels) => {
-  const rel = elements(slideRels, "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"));
-  const notesPart = rel === void 0 ? null : Package.targets(slidePart, slideRels).find((t) => t.rel === rel)?.target ?? null;
+  const rel = pkg.targets(slidePart, slideRels).find((t) => t.type.endsWith("/notesSlide"));
+  const notesPart = rel?.target ?? null;
   if (rel === void 0 || notesPart === null || !pkg.has(notesPart))
     return;
-  const notesXml = await pkg.text(notesPart);
-  const backref = Package.targets(notesPart, await pkg.rels(notesPart)).find((t) => t.type.endsWith("/slide") && !notesXml.includes(`"${t.rel.getAttribute("Id") ?? ""}"`))?.target ?? slidePart;
-  const copy = await pkg.clonePart(pkg, notesPart, /* @__PURE__ */ new Map([[backref, slidePart]]));
-  rel.setAttribute("Target", `../notesSlides/${path9.posix.basename(copy)}`);
+  const owner = notesOwner({ part: notesPart, doc: await pkg.xml(notesPart), rels: pkg.targets(notesPart, await pkg.rels(notesPart)) });
+  const copy = await pkg.clonePart(pkg, notesPart, /* @__PURE__ */ new Map([[owner ?? slidePart, slidePart]]));
+  rel.el.setAttribute("Target", `../notesSlides/${path5.posix.basename(copy)}`);
 };
 var wireHyperlinks = (pkg, slide, slideRels) => {
   for (const hlink of elements(slide, "a:hlinkClick")) {
@@ -44949,12 +44950,11 @@ var wireHyperlinks = (pkg, slide, slideRels) => {
     hlink.setAttributeNS(NS_R, "r:id", rid);
   }
 };
-var dropLinksToRemoved = (owner, doc, rels, removed) => {
+var dropLinksToRemoved = (pkg, owner, doc, rels, removed) => {
   let changed = false;
-  for (const { rel, type, target } of Package.targets(owner, rels)) {
+  for (const { el: rel, id, type, target } of pkg.targets(owner, rels)) {
     if (!/\/relationships\/slide$/.test(type) || target === null || !removed.has(target))
       continue;
-    const id = rel.getAttribute("Id") ?? "";
     rel.parentNode?.removeChild(rel);
     changed = true;
     if (doc !== null) {
@@ -44969,22 +44969,24 @@ var dropLinksToRemoved = (owner, doc, rels, removed) => {
 var uniquifyShapeIds = (slide) => {
   const nextId = PartAllocator.shapeIds(slide);
   const seen = /* @__PURE__ */ new Set();
-  for (const el of elements(slide, "p:cNvPr")) {
+  let changed = false;
+  for (const el of elements(slide, "p:cNvPr").filter((e) => !inFallback(e))) {
     const id = el.getAttribute("id") ?? "0";
-    if (seen.has(id))
+    if (seen.has(id)) {
       el.setAttribute("id", String(nextId()));
-    else
+      changed = true;
+    } else
       seen.add(id);
   }
+  return changed;
 };
 var repairRels = (pkg, part, doc, rels, unused = /* @__PURE__ */ new Set(), forced = /* @__PURE__ */ new Set()) => {
   const xml = doc === null ? "" : serializeXml(doc);
   const seen = /* @__PURE__ */ new Set();
   let changed = false;
-  for (const { rel, type, target } of Package.targets(part, rels)) {
-    const id = rel.getAttribute("Id") ?? "";
+  for (const { el: rel, id, type, target } of pkg.targets(part, rels)) {
     const dead = target !== null && !pkg.has(target);
-    const stale = (forced.has(id) || unused.has(id) && !UNREFERENCED_RELS.some((k) => type.endsWith(k))) && !xml.includes(`"${id}"`);
+    const stale = (forced.has(id) || unused.has(id) && !relIs(type, RELS.implicit)) && !xml.includes(`"${id}"`);
     if (seen.has(id) || dead || stale) {
       rel.parentNode?.removeChild(rel);
       changed = true;
@@ -44993,94 +44995,82 @@ var repairRels = (pkg, part, doc, rels, unused = /* @__PURE__ */ new Set(), forc
   }
   return changed;
 };
+var attached = (el, root) => {
+  for (let n = el; n !== null; n = n.parentNode)
+    if (n === root)
+      return true;
+  return false;
+};
+var closest = (el, names) => {
+  for (let n = el; n !== null && n.nodeType === 1; n = n.parentNode)
+    if (names.includes(n.nodeName))
+      return n;
+  return null;
+};
 var dropDangling = (doc, rels) => {
+  const root = doc.documentElement;
+  if (root === null)
+    return false;
   const ids = new Set(elements(rels, "Relationship").map((r) => r.getAttribute("Id") ?? ""));
-  const dangling = [];
-  const walk = (el) => {
-    for (let i = 0; i < el.attributes.length; i++) {
-      const attr = el.attributes.item(i);
-      if (attr !== null && attr.namespaceURI === NS_R && attr.value !== "" && !ids.has(attr.value)) {
-        dangling.push(el);
-        break;
-      }
-    }
-    for (let n = el.firstChild; n !== null; n = n.nextSibling)
-      if (n.nodeType === 1)
-        walk(n);
-  };
-  if (doc.documentElement !== null)
-    walk(doc.documentElement);
-  for (const el of dangling) {
-    if (el.parentNode === null)
+  const dead = relRefs(root).filter((ref) => ref.attr.value !== "" && !ids.has(ref.attr.value));
+  for (const { el, attr } of dead) {
+    if (!attached(el, root))
       continue;
     const parent = el.parentNode;
-    if (["a:hlinkClick", "a:hlinkHover", "p:custData", "p:tags"].includes(el.nodeName))
+    const holder = parent.parentNode;
+    const kept = relRefs(el).some((ref) => ref.el === el && ref.attr !== attr && ids.has(ref.attr.value));
+    if (el === root || kept)
+      el.removeAttributeNode(attr);
+    else if (LINKS.includes(el.nodeName))
       parent.removeChild(el);
-    else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && parent.parentNode?.nodeName === "p:spPr")
-      parent.parentNode?.removeChild(parent);
+    else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && holder?.nodeName === "p:bgPr")
+      holder.parentNode?.parentNode?.removeChild(holder.parentNode);
+    else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && holder?.nodeName === "p:spPr")
+      holder.removeChild(parent);
+    else if (inFallback(el))
+      closest(el, ["mc:Fallback"])?.parentNode?.removeChild(closest(el, ["mc:Fallback"]));
     else {
-      let shape = el;
-      while (shape !== null && shape.parentNode?.nodeName !== "p:spTree")
-        shape = shape.parentNode;
+      const shape = closest(el, SHAPES);
       if (shape !== null)
         removeShape(shape);
       else
-        for (let i = el.attributes.length - 1; i >= 0; i--) {
-          const attr = el.attributes.item(i);
-          if (attr !== null && attr.namespaceURI === NS_R && !ids.has(attr.value))
-            el.removeAttributeNode(attr);
-        }
+        parent.removeChild(el);
     }
   }
+  return dead.length > 0;
 };
 var repairPart = async (pkg, part) => {
   const rels = await pkg.rels(part);
   const doc = /\.xml$/.test(part) ? await pkg.xml(part) : null;
-  if (!repairRels(pkg, part, doc, rels))
-    return;
-  if (doc !== null) {
-    dropDangling(doc, rels);
+  const relsChanged = repairRels(pkg, part, doc, rels);
+  const dropped = doc !== null && dropDangling(doc, rels);
+  const renumbered = doc !== null && doc.documentElement?.nodeName === "p:sld" && uniquifyShapeIds(doc);
+  if (relsChanged)
+    pkg.writeRels(part, rels);
+  if (doc !== null && (dropped || renumbered))
     pkg.write(part, doc);
-  }
-  pkg.writeRels(part, rels);
-};
-var repairPackageRels = async (pkg, part) => {
-  const rels = await pkg.rels(part);
-  if (!repairRels(pkg, part, null, rels))
-    return false;
-  pkg.writeRels(part, rels);
-  return true;
+  return relsChanged || dropped || renumbered;
 };
 var createSlide = async (pkg, layoutPart) => {
   const part = pkg.alloc.part("ppt/slides", "slide", ".xml");
   const slide = parseXml(slideFromLayout(await pkg.text(layoutPart)));
-  const rels = parseXml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>');
-  pkg.addRel(rels, `${REL}/slideLayout`, path9.posix.relative("ppt/slides", layoutPart));
-  const layoutRels = new Map(Package.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [t.rel.getAttribute("Id") ?? "", t]));
+  const rels = parseXml(EMPTY_RELS);
+  pkg.addRel(rels, `${REL}/slideLayout`, path5.posix.relative("ppt/slides", layoutPart));
+  const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [t.id, t]));
   const ids = /* @__PURE__ */ new Map();
-  const relink = (el) => {
-    for (let i = 0; i < el.attributes.length; i++) {
-      const attr = el.attributes.item(i);
-      if (attr === null || attr.namespaceURI !== NS_R)
-        continue;
-      const rel = layoutRels.get(attr.value);
-      if (rel !== void 0 && !ids.has(attr.value))
-        ids.set(attr.value, pkg.addRel(
-          rels,
-          rel.type,
-          rel.target === null ? rel.rel.getAttribute("Target") ?? "" : path9.posix.relative("ppt/slides", rel.target),
-          rel.target === null
-        ));
-      const id = ids.get(attr.value);
-      if (id !== void 0)
-        el.setAttributeNS(NS_R, attr.name, id);
-    }
-    for (let n = el.firstChild; n !== null; n = n.nextSibling)
-      if (n.nodeType === 1)
-        relink(n);
-  };
-  if (slide.documentElement !== null)
-    relink(slide.documentElement);
+  for (const { el, attr } of slide.documentElement === null ? [] : relRefs(slide.documentElement)) {
+    const rel = layoutRels.get(attr.value);
+    if (rel !== void 0 && !ids.has(attr.value))
+      ids.set(attr.value, pkg.addRel(
+        rels,
+        rel.type,
+        rel.target === null ? rel.el.getAttribute("Target") ?? "" : path5.posix.relative("ppt/slides", rel.target),
+        rel.target === null
+      ));
+    const id = ids.get(attr.value);
+    if (id !== void 0)
+      el.setAttributeNS(NS_R, attr.name, id);
+  }
   pkg.write(part, slide);
   pkg.writeRels(part, rels);
   await pkg.typeAs(part, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml");
@@ -45112,10 +45102,10 @@ var editSlide = async (pkg, work) => {
   }
   const unused = /* @__PURE__ */ new Set();
   for (const shape of [...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape), ...texts.map((t) => t.shape)])
-    for (const id of relIdsOf(shape))
-      unused.add(id);
+    for (const ref of relRefs(shape))
+      unused.add(ref.attr.value);
   const forced = /* @__PURE__ */ new Set();
-  const targetOf = new Map(Package.targets(part, rels).map((t) => [t.rel.getAttribute("Id") ?? "", t.target]));
+  const targetOf = new Map(pkg.targets(part, rels).map((t) => [t.id, t.target]));
   for (const shape of doomed)
     for (const relIds of elements(shape, "dgm:relIds")) {
       const data = targetOf.get(relIds.getAttribute("r:dm") ?? "") ?? null;
@@ -45131,18 +45121,18 @@ var editSlide = async (pkg, work) => {
     setShapeText(shape, text);
   for (const fill of entry.fills.filter((f) => f.image !== void 0)) {
     const file2 = fill.image;
-    const ext = path9.extname(file2).slice(1).toLowerCase() || "png";
+    const ext = path5.extname(file2).slice(1).toLowerCase() || "png";
     const media = pkg.alloc.part("ppt/media", "image", `.${ext}`);
     pkg.write(media, readFileSync5(file2));
     await pkg.typePart(media, "", media);
-    const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path9.posix.basename(media)}`);
+    const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path5.posix.basename(media)}`);
     if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame))
       throw missing(`empty picture placeholder idx ${fill.phIdx}`);
   }
   if (entry.background !== null)
     setBackground(slide, entry.background);
   if (entry.footer !== null) {
-    const layout = Package.targets(part, rels).find((t) => t.type.endsWith("/slideLayout"))?.target ?? null;
+    const layout = pkg.targets(part, rels).find((t) => t.type.endsWith("/slideLayout"))?.target ?? null;
     setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide));
   }
   if (entry.notes !== null)
@@ -45153,7 +45143,7 @@ var editSlide = async (pkg, work) => {
     await work.generated.transplant(pkg, entry, slide, rels, part);
   wireHyperlinks(pkg, slide, rels);
   setSlideVisibility(slide, entry.hidden);
-  dropLinksToRemoved(part, slide, rels, work.removed);
+  dropLinksToRemoved(pkg, part, slide, rels, work.removed);
   uniquifyShapeIds(slide);
   repairRels(pkg, part, slide, rels, unused, forced);
   dropDangling(slide, rels);
@@ -45164,7 +45154,7 @@ var editSlide = async (pkg, work) => {
 // src/engine/inplace/transplant.ts
 var import_pptxgenjs = __toESM(require_pptxgen_cjs(), 1);
 import { randomUUID } from "node:crypto";
-import path10 from "node:path";
+import path6 from "node:path";
 
 // src/engine/elements.ts
 var chartType = (gen, type) => {
@@ -45387,7 +45377,7 @@ var generateElements = async (entries) => {
       if (info === void 0 || spTree === null)
         return;
       const genSlide = await source.xml(info.part);
-      const genRels = new Map(Package.targets(info.part, await source.rels(info.part)).map((t) => [t.rel.getAttribute("Id") ?? "", t]));
+      const genRels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [t.id, t]));
       const nextId = PartAllocator.shapeIds(slide);
       const copies = /* @__PURE__ */ new Map();
       const anchor2 = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null;
@@ -45397,26 +45387,17 @@ var generateElements = async (entries) => {
           throw new PptcError("E_ENGINE", `generated element '${name}' not found in the generator output`);
         const shape = slide.importNode(cNvPr.parentNode?.parentNode, true);
         const ids = /* @__PURE__ */ new Map();
-        const relink = async (el) => {
-          for (let i = 0; i < el.attributes.length; i++) {
-            const attr = el.attributes.item(i);
-            if (attr === null || attr.namespaceURI !== NS_R)
-              continue;
-            let id = ids.get(attr.value);
-            const rel = genRels.get(attr.value);
-            if (id === void 0 && rel !== void 0) {
-              const target = rel.target === null ? rel.rel.getAttribute("Target") ?? "" : path10.posix.relative(path10.posix.dirname(part), await pkg.clonePart(source, rel.target, copies));
-              id = pkg.addRel(rels, rel.type, target, rel.target === null);
-              ids.set(attr.value, id);
-            }
-            if (id !== void 0)
-              el.setAttributeNS(NS_R, attr.name, id);
+        for (const { el, attr } of relRefs(shape)) {
+          let id = ids.get(attr.value);
+          const rel = genRels.get(attr.value);
+          if (id === void 0 && rel !== void 0) {
+            const target = rel.target === null ? rel.el.getAttribute("Target") ?? "" : path6.posix.relative(path6.posix.dirname(part), await pkg.clonePart(source, rel.target, copies));
+            id = pkg.addRel(rels, rel.type, target, rel.target === null);
+            ids.set(attr.value, id);
           }
-          for (let n = el.firstChild; n !== null; n = n.nextSibling)
-            if (n.nodeType === 1)
-              await relink(n);
-        };
-        await relink(shape);
+          if (id !== void 0)
+            el.setAttributeNS(NS_R, attr.name, id);
+        }
         firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()));
         spTree.insertBefore(shape, anchor2);
       }
@@ -45425,8 +45406,7 @@ var generateElements = async (entries) => {
 };
 
 // src/engine/inplace/engine.ts
-var REL2 = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-var FOREIGN_RELS = ["/slideLayout", "/slideMaster", "/slide", "/notesMaster", "/theme"];
+var PACKAGE_PART = /^ppt\/(presentation|viewProps|presProps)\.xml$|^ppt\/(slideMasters|slideLayouts|notesMasters|handoutMasters|theme)\/[^/]+\.xml$/;
 var withStdoutShield = async (fn) => {
   const original = { log: console.log, info: console.info, warn: console.warn };
   console.log = (...args) => {
@@ -45447,50 +45427,64 @@ var withStdoutShield = async (fn) => {
   }
 };
 var hasEdits = (e) => e.fills.length > 0 || e.setTexts.length > 0 || e.removeNames.length > 0 || e.elements.length > 0 || e.notes !== null || e.footer !== null || e.background !== null;
+var viewOf = async (pkg, part) => ({
+  part,
+  doc: /\.xml$/.test(part) ? await pkg.xml(part) : null,
+  rels: pkg.targets(part, await pkg.rels(part))
+});
 var closure = async (pkg, slide) => {
-  const parts = [];
+  const views = [];
   const queue = [slide];
   while (queue.length > 0) {
-    const part = queue.pop();
-    if (parts.includes(part) || !pkg.has(part))
+    const part = queue.shift();
+    if (views.some((v) => v.part === part) || !pkg.has(part))
       continue;
-    parts.push(part);
-    if (!pkg.has(relsPartOf(part)))
-      continue;
-    parts.push(relsPartOf(part));
-    for (const t of Package.targets(part, await pkg.rels(part)))
-      if (t.target !== null && !FOREIGN_RELS.some((k) => t.type.endsWith(k)))
-        queue.push(t.target);
+    const view = await viewOf(pkg, part);
+    views.push(view);
+    for (const r of view.rels)
+      if (r.target !== null && !relIs(r.type, RELS.foreign))
+        queue.push(r.target);
   }
-  return parts;
+  return views;
 };
-var linksTo = async (pkg, parts, removed) => {
-  for (const part of parts.filter((p) => !p.endsWith(".rels") && pkg.has(relsPartOf(p))))
-    if (Package.targets(part, await pkg.rels(part)).some((t) => t.type.endsWith("/slide") && t.target !== null && removed.has(t.target)))
-      return true;
-  return false;
+var repairedWarning = (slide, message) => ({ code: "W_REPAIRED", slide, message });
+var preflight = async (plan, archive) => {
+  if (!plan.entries.some((e) => e.notes !== null))
+    return;
+  const master = (await readRels(archive.zip, "ppt/presentation.xml")).find((r) => r.type.endsWith("/notesMaster"))?.target ?? null;
+  if (master === null || archive.zip.file(master) === null)
+    throw new PptcError("E_TEMPLATE", "the deck has no notes master, which speaker notes need -- add a note to any slide in PowerPoint once, then retry");
 };
-var executePlan = async (outFile, plan, archive) => {
-  const presIn = await archive.xml("ppt/presentation.xml");
-  const inputIds = elements(presIn, "p:sldId").map((s) => Number(s.getAttribute("id")));
-  const pkg = await Package.open(readFileSync6(archive.file), inputIds);
+var repairPackage = async (pkg, warnings, repaired) => {
+  for (const part of Object.keys(pkg.zip.files).filter((f) => PACKAGE_PART.test(f))) {
+    const defects = partDefects(await viewOf(pkg, part), (p) => pkg.has(p));
+    if (defects.length > 0 && await repairPart(pkg, part)) {
+      repaired.add(part);
+      warnings.push(repairedWarning(
+        { id: null, index: -1, title: null },
+        `the input deck carried PowerPoint repair triggers in ${part}; pptc repaired them: ${defects.join("; ")}`
+      ));
+    }
+  }
+};
+var readDeck = async (pkg) => {
   const pres = await pkg.xml("ppt/presentation.xml");
   const presRels = await pkg.rels("ppt/presentation.xml");
-  const ridTarget = new Map(Package.targets("ppt/presentation.xml", presRels).map((t) => [t.rel.getAttribute("Id") ?? "", t.target ?? ""]));
+  const targets = pkg.targets("ppt/presentation.xml", presRels);
+  const ridTarget = new Map(targets.map((t) => [t.id, t.target ?? ""]));
   const input2 = elements(pres, "p:sldId").map((el) => ({
     el,
     id: Number(el.getAttribute("id")),
     part: ridTarget.get(el.getAttribute("r:id") ?? "") ?? ""
   }));
-  const notesMaster = Package.targets("ppt/presentation.xml", presRels).find((t) => t.type.endsWith("/notesMaster"))?.target ?? null;
-  if (plan.entries.some((e) => e.notes !== null) && (notesMaster === null || !pkg.has(notesMaster)))
-    throw new PptcError("E_TEMPLATE", "the deck has no notes master, which speaker notes need -- add a note to any slide in PowerPoint once, then retry");
-  const layouts = await layoutOrder(archive.zip);
-  const keptIds = new Set(plan.entries.filter((e) => e.virtualId > 0).map((e) => e.virtualId));
-  const removed = new Set(input2.filter((s) => !keptIds.has(s.id)).map((s) => s.part));
+  const notesMaster = targets.find((t) => t.type.endsWith("/notesMaster"))?.target ?? null;
+  return { pres, presRels, input: input2, notesMaster };
+};
+var buildSlides = async (pkg, plan, deck) => {
+  const layouts = await layoutOrder(pkg.zip);
   const parts = [];
   for (const entry of plan.entries) {
-    const kept = input2.find((s) => s.id === entry.virtualId);
+    const kept = deck.input.find((s) => s.id === entry.virtualId);
     if (kept !== void 0)
       parts.push(kept.part);
     else if (entry.source.kind === "self")
@@ -45502,144 +45496,151 @@ var executePlan = async (outFile, plan, archive) => {
       parts.push(await createSlide(pkg, layout));
     }
   }
-  const names = new Set(Object.keys(archive.zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")));
-  const quoted = async (part) => doubleQuoted(await archive.text(part) ?? "");
-  const touched = [];
-  const sharedNotes = [];
-  const repairs = [];
-  const untouched = /* @__PURE__ */ new Map();
-  const warnings = [];
+  return parts;
+};
+var classifySlides = async (pkg, plan, parts, removed, warnings) => {
+  const exists = (p) => pkg.has(p);
+  const states = [];
   for (const [i, entry] of plan.entries.entries()) {
     const part = parts[i];
-    touched.push(true);
-    sharedNotes.push(false);
-    repairs.push([]);
-    if (entry.virtualId <= 0)
-      continue;
-    const own2 = await closure(pkg, part);
-    const xml = await quoted(part);
-    const defects = [...shapeIdFindings(part, xml), ...refFindings(part, xml, await quoted(relsPartOf(part)))];
-    for (const relsPart of own2.filter((p) => p.endsWith(".rels"))) {
-      const found = relsFindings(relsPart, await quoted(relsPart), names);
+    const views = await closure(pkg, part);
+    const slide = views[0];
+    const defects = [];
+    const repairs = [];
+    for (const view of views) {
+      const found = partDefects(view, exists);
       defects.push(...found);
-      const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1");
-      if (found.length > 0 && owner !== part)
-        repairs[i].push(owner);
+      if (found.length > 0 && view.part !== part)
+        repairs.push(view.part);
     }
-    const notes = Package.targets(part, await pkg.rels(part)).find((t) => t.type.endsWith("/notesSlide"))?.target ?? null;
-    if (notes !== null && pkg.has(notes)) {
-      const notesXml = await pkg.text(notes);
-      const backref = Package.targets(notes, await pkg.rels(notes)).find((t) => t.type.endsWith("/slide") && !notesXml.includes(`"${t.rel.getAttribute("Id") ?? ""}"`))?.target ?? part;
-      if (backref !== part) {
-        sharedNotes[i] = true;
-        defects.push(`notes part ${notes} belongs to another slide`);
-      }
-    }
-    const hidden = /<p:sld\b[^>]*\bshow="(0|false)"/.test(xml);
-    const touch = hasEdits(entry) || hidden !== entry.hidden || defects.length > 0 || await linksTo(pkg, own2, removed);
-    touched[i] = touch;
+    const notes = slide.rels.find((r) => r.type.endsWith("/notesSlide"))?.target ?? null;
+    const notesView = views.find((v) => v.part === notes);
+    const sharedNotes = notesView !== void 0 && notesOwner(notesView) !== part;
+    if (sharedNotes)
+      defects.push(`notes part ${notes ?? ""} belongs to another slide`);
+    const show = slide.doc?.documentElement?.getAttribute("show") ?? "";
+    const links = views.some((v) => v.rels.some((r) => r.type.endsWith("/slide") && r.target !== null && removed.has(r.target)));
+    const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden || defects.length > 0 || links;
     if (defects.length > 0)
-      warnings.push({
-        code: "W_REPAIRED",
-        slide: { id: entry.virtualId, index: i, title: entry.title },
-        message: `the input deck carried PowerPoint repair triggers on this slide; pptc repaired them: ${defects.join("; ")}`
-      });
-    if (!touch)
-      for (const p of own2)
-        untouched.set(p, pkg.zip.file(p));
+      warnings.push(repairedWarning(
+        { id: entry.virtualId > 0 ? entry.virtualId : null, index: i, title: entry.title },
+        `the input deck carried PowerPoint repair triggers on this slide${entry.virtualId > 0 ? "" : " (or the slide it was copied from)"}; pptc repaired them: ${defects.join("; ")}`
+      ));
+    states.push({ entry, part, closure: views, touched, sharedNotes, repairs });
   }
-  const generated = await generateElements(plan.entries);
-  for (const [i, entry] of plan.entries.entries())
-    if (touched[i] === true) {
-      await editSlide(pkg, {
-        part: parts[i],
-        entry,
-        removed,
-        notesMaster: notesMaster ?? "",
-        generated,
-        sharedNotes: sharedNotes[i] === true
-      });
-      for (const owner of repairs[i])
-        await repairPart(pkg, owner);
-    }
-  if (parts.length !== input2.length || parts.some((p, i) => p !== input2[i]?.part)) {
-    let lst = firstElement(pres, "p:sldIdLst");
-    if (lst === null) {
-      lst = pres.createElementNS(NS_P, "p:sldIdLst");
-      pres.documentElement?.insertBefore(lst, firstElement(pres, "p:sldSz"));
-    }
-    for (const s of input2)
-      lst.removeChild(s.el);
-    for (const [i, entry] of plan.entries.entries()) {
-      let el = input2.find((s) => s.id === entry.virtualId)?.el;
-      if (el === void 0) {
-        el = pres.createElementNS(NS_P, "p:sldId");
-        el.setAttribute("id", String(pkg.alloc.slideId()));
-        el.setAttributeNS(NS_R, "r:id", pkg.addRel(
-          presRels,
-          `${REL2}/slide`,
-          path11.posix.relative("ppt", parts[i])
-        ));
-      }
-      lst.appendChild(el);
-    }
-    for (const s of input2.filter((s2) => removed.has(s2.part)))
-      for (const rel of elements(presRels, "Relationship"))
-        if (rel.getAttribute("Id") === s.el.getAttribute("r:id"))
-          rel.parentNode?.removeChild(rel);
-    pkg.write("ppt/presentation.xml", pres);
-    pkg.writeRels("ppt/presentation.xml", presRels);
+  return states;
+};
+var writeSlideList = (pkg, deck, states, removed) => {
+  const { pres, presRels, input: input2 } = deck;
+  if (states.length === input2.length && states.every((s, i) => s.part === input2[i]?.part))
+    return;
+  let lst = firstElement(pres, "p:sldIdLst");
+  if (lst === null) {
+    lst = pres.createElementNS(NS_P, "p:sldIdLst");
+    pres.documentElement?.insertBefore(lst, firstElement(pres, "p:sldSz"));
   }
+  for (const s of input2)
+    s.el.parentNode?.removeChild(s.el);
+  for (const { entry, part } of states) {
+    let el = input2.find((s) => s.id === entry.virtualId)?.el;
+    if (el === void 0) {
+      el = pres.createElementNS(NS_P, "p:sldId");
+      el.setAttribute("id", String(pkg.alloc.slideId()));
+      el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`, path7.posix.relative("ppt", part)));
+    }
+    lst.appendChild(el);
+  }
+  for (const t of pkg.targets("ppt/presentation.xml", presRels))
+    if (t.type.endsWith("/slide") && t.target !== null && removed.has(t.target))
+      t.el.parentNode?.removeChild(t.el);
+  pkg.write("ppt/presentation.xml", pres);
+  pkg.writeRels("ppt/presentation.xml", presRels);
+};
+var removeSlides = async (pkg, removed) => {
+  if (removed.size === 0)
+    return;
   await pkg.remove([...removed]);
-  if (removed.size > 0)
-    for (const relsPart of Object.keys(pkg.zip.files).filter((f) => /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/viewProps\.xml\.rels$/.test(f))) {
-      const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1");
-      if (!pkg.has(owner))
-        continue;
-      const rels = await pkg.rels(owner);
-      const doc = await pkg.xml(owner);
-      if (dropLinksToRemoved(owner, doc, rels, removed)) {
-        pkg.writeRels(owner, rels);
-        pkg.write(owner, doc);
-      }
+  for (const owner of Object.keys(pkg.zip.files).filter((f) => /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/viewProps\.xml\.rels$/.test(f)).map(relsOwner)) {
+    if (!pkg.has(owner))
+      continue;
+    const rels = await pkg.rels(owner);
+    const doc = await pkg.xml(owner);
+    if (dropLinksToRemoved(pkg, owner, doc, rels, removed)) {
+      pkg.writeRels(owner, rels);
+      pkg.write(owner, doc);
     }
-  for (const relsPart of Object.keys(pkg.zip.files).filter((f) => /^ppt\/(slideLayouts|slideMasters|notesMasters|handoutMasters|theme)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/presentation\.xml\.rels$/.test(f))) {
-    const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1");
-    if (!untouched.has(relsPart) && relsFindings(relsPart, doubleQuoted(await pkg.text(relsPart)), new Set(Object.keys(pkg.zip.files))).length > 0 && await repairPackageRels(pkg, owner))
-      warnings.push({
-        code: "W_REPAIRED",
-        slide: { id: null, index: -1, title: null },
-        message: `the input deck carried PowerPoint repair triggers in ${owner}; pptc dropped its dead or duplicate relationships`
-      });
   }
+};
+var byteGuard = async (zip, untouched, after) => {
+  const changed = [];
+  for (const [name, file2] of untouched) {
+    const now = await bytesOf(after, name);
+    if (zip.file(name) !== file2 || file2 === null || now === null || !now.equals(await bytesOf(zip, name)))
+      changed.push(`${name}: part of an untouched slide would change`);
+  }
+  return changed;
+};
+var expectations = (states) => states.map(({ entry, touched }, i) => ({
+  source: entry.source.kind === "self" && touched ? entry.source.part : null,
+  label: `#${i} '${entry.title ?? ""}'`,
+  notes: entry.notes !== null,
+  assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== void 0) ? "any" : entry.elements.length > 0 ? "grow" : "same",
+  grow: {
+    images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync6(e.spec.path))] : []),
+    fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
+    charts: entry.elements.filter((e) => e.spec.type === "chart").length
+  },
+  textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== void 0 && !f.append)
+}));
+var executePlan = async (outFile, plan, archive) => {
+  await preflight(plan, archive);
+  const inputIds = elements(await archive.xml("ppt/presentation.xml"), "p:sldId").map((s) => Number(s.getAttribute("id")));
+  const pkg = await Package.open(archive.bytes, inputIds);
+  const warnings = [];
+  const repaired = /* @__PURE__ */ new Set();
+  await repairPackage(pkg, warnings, repaired);
+  const deck = await readDeck(pkg);
+  const keptIds = new Set(plan.entries.filter((e) => e.virtualId > 0).map((e) => e.virtualId));
+  const removed = new Set(deck.input.filter((s) => !keptIds.has(s.id)).map((s) => s.part));
+  for (const orphan of Object.keys(pkg.zip.files).filter((f) => /^ppt\/slides\/[^/]+\.xml$/.test(f) && !deck.input.some((s) => s.part === f))) {
+    removed.add(orphan);
+    warnings.push(repairedWarning(
+      { id: null, index: -1, title: null },
+      `the input deck carried a slide part outside its slide list; pptc removed ${orphan}`
+    ));
+  }
+  const parts = await buildSlides(pkg, plan, deck);
+  const states = await classifySlides(pkg, plan, parts, removed, warnings);
+  const untouched = /* @__PURE__ */ new Map();
+  for (const s of states.filter((s2) => !s2.touched))
+    for (const { part } of s.closure)
+      for (const p of pkg.has(relsPartOf(part)) ? [part, relsPartOf(part)] : [part])
+        untouched.set(p, pkg.zip.file(p));
+  const generated = await generateElements(plan.entries);
+  for (const s of states.filter((s2) => s2.touched)) {
+    for (const owner of s.repairs)
+      await repairPart(pkg, owner);
+    await editSlide(pkg, {
+      part: s.part,
+      entry: s.entry,
+      removed,
+      notesMaster: deck.notesMaster ?? "",
+      generated,
+      sharedNotes: s.sharedNotes
+    });
+  }
+  writeSlideList(pkg, deck, states, removed);
+  await removeSlides(pkg, removed);
   await finishPackage(pkg.zip, parts, plan.props, plan.customProps);
   const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
   const after = await import_jszip6.default.loadAsync(finalBytes);
-  const changed = [];
-  for (const [name, file2] of untouched) {
-    const now = after.file(name);
-    if (pkg.zip.file(name) !== file2 || file2 === null || now === null || !Buffer.from(await now.async("uint8array")).equals(Buffer.from(await file2.async("uint8array"))))
-      changed.push(`${name}: part of an untouched slide would change`);
-  }
-  await normalizeRelTargets(after);
-  const expects = plan.entries.map((entry, i) => ({
-    source: entry.source.kind === "self" && touched[i] === true ? entry.source.part : null,
-    label: `#${i} '${entry.title ?? ""}'`,
-    notes: entry.notes !== null,
-    assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== void 0) ? "any" : entry.elements.length > 0 ? "grow" : "same",
-    grow: {
-      images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync6(e.spec.path))] : []),
-      fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
-      charts: entry.elements.filter((e) => e.spec.type === "chart").length
-    },
-    textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== void 0 && !f.append)
-  }));
-  const content = await verifyContent(archive.zip, after, expects);
+  const expects = expectations(states);
+  const content = await verifyContent(archive.zip, after, expects, repaired);
   const findings = [
-    ...await verifyBytes(finalBytes, archive.zip),
+    ...await verifyZip(after, archive.zip),
     ...content.blocked,
     ...content.lost.map((l) => `slide ${expects[l.slide].label}: ${l.what} would be lost although no op removed it`),
-    ...changed
+    ...await byteGuard(pkg.zip, untouched, after)
   ];
   if (findings.length > 0)
     throw new PptcError(
@@ -45647,16 +45648,14 @@ var executePlan = async (outFile, plan, archive) => {
       `the engine produced ${findings.length} integrity violation(s); deck not written`,
       { findings }
     );
-  atomicWrite(path11.resolve(outFile), finalBytes);
+  atomicWrite(path7.resolve(outFile), finalBytes);
   const refIndexes = {};
   for (const [name, entry] of plan.refs)
     refIndexes[name] = plan.entries.indexOf(entry);
   return { slideCount: plan.entries.length, refIndexes, warnings };
 };
-var runSession = async (deckFile, outFile, plan, archive) => {
+var runSession = async (outFile, plan, archive) => {
   try {
-    if (path11.resolve(deckFile) !== archive.file)
-      throw new PptcError("E_ENGINE", "the archive does not belong to the deck file");
     return await withStdoutShield(() => executePlan(outFile, plan, archive));
   } catch (err) {
     throw toPptcError(err);
@@ -45752,7 +45751,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     for (const fill of entry.fills)
       if (fill.image !== void 0) {
         requireFile(fill.image, "image");
-        const ext = path12.extname(fill.image).slice(1).toLowerCase();
+        const ext = path8.extname(fill.image).slice(1).toLowerCase();
         if (ext !== "" && IMAGE_TYPES[ext] === void 0)
           throw new PptcError(
             "E_SCHEMA",
@@ -45770,6 +45769,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
       `${plan.warnings.length} lint finding(s) under --strict`,
       { warnings: plan.warnings }
     );
+  await preflight(plan, archive);
   if (opts.dryRun)
     return {
       file: deck.file,
@@ -45778,7 +45778,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
       warnings: plan.warnings
     };
   const outFile = opts.outFile ?? deckFile;
-  const session = await runSession(deckFile, outFile, plan, archive);
+  const session = await runSession(outFile, plan, archive);
   const finalState = await readDeckState(await DeckArchive.open(outFile));
   const slides = {};
   for (const [ref, index] of Object.entries(session.refIndexes)) {
@@ -45822,7 +45822,7 @@ var cmdApply = async (argv) => {
 
 // src/commands/new.ts
 import { existsSync as existsSync2, rmSync } from "node:fs";
-import path13 from "node:path";
+import path9 from "node:path";
 var cmdNew = async (argv) => {
   const args = parse3(argv, {
     "template": { type: "string" },
@@ -45838,12 +45838,12 @@ var cmdNew = async (argv) => {
     throw new PptcError("E_FILE", `'${deckFile}' already exists -- use --force to overwrite`);
   const opsArg = args.str("ops");
   if (opsArg === null) {
-    atomicWrite(path13.resolve(deckFile), await buildEmptyDeck(templatePath));
-    return { file: path13.resolve(deckFile), result: { created: true, slideCount: 0 } };
+    atomicWrite(path9.resolve(deckFile), await buildEmptyDeck(templatePath));
+    return { file: path9.resolve(deckFile), result: { created: true, slideCount: 0 } };
   }
   const rawDoc = parseJson(resolvePayload(opsArg));
   const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc;
-  const stage = path13.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
+  const stage = path9.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
   try {
     atomicWrite(stage, await buildEmptyDeck(templatePath));
     const result = await executeOps(stage, doc, {
@@ -45851,7 +45851,7 @@ var cmdNew = async (argv) => {
       dryRun: false,
       strict: args.flag("strict"),
       expectRev: null,
-      outFile: path13.resolve(deckFile),
+      outFile: path9.resolve(deckFile),
       minFontPt: minFontPtArg(args)
     });
     return { ...result, result: { ...result.result, created: true } };
@@ -46041,7 +46041,7 @@ var cmdMove = async (argv) => {
 
 // src/commands/tpl.ts
 import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
-import path14 from "node:path";
+import path10 from "node:path";
 
 // src/core/describe/minimap.ts
 var MAP_W = 40;
@@ -46181,12 +46181,12 @@ var cmdTplList = (argv) => {
   if (!existsSync3(dir))
     throw new PptcError("E_FILE", `directory not found: '${dir}'`);
   const templates = readdirSync(dir).filter((f) => /\.(potx|pptx)$/i.test(f)).sort().map((f) => ({
-    file: path14.join(dir, f),
-    sidecar: existsSync3(path14.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
+    file: path10.join(dir, f),
+    sidecar: existsSync3(path10.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
   }));
   if (args.flag("plain"))
-    return { plain: templates.length === 0 ? `(no templates in ${path14.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
-  return { result: { dir: path14.resolve(dir), templates } };
+    return { plain: templates.length === 0 ? `(no templates in ${path10.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
+  return { result: { dir: path10.resolve(dir), templates } };
 };
 var cmdTplDescribe = async (argv) => {
   const args = parse3(argv, {
@@ -46198,19 +46198,19 @@ var cmdTplDescribe = async (argv) => {
   const { info, sidecar } = await loadTemplate(file2);
   const filtered = filterLayouts(info, args.str("layout"));
   if (args.flag("plain"))
-    return { plain: narrateTemplate(filtered, path14.basename(file2), sidecar) };
+    return { plain: narrateTemplate(filtered, path10.basename(file2), sidecar) };
   if ((args.str("format") ?? "text") === "json")
-    return { file: path14.resolve(file2), result: filtered };
+    return { file: path10.resolve(file2), result: filtered };
   return {
-    file: path14.resolve(file2),
-    result: { description: narrateTemplate(filtered, path14.basename(file2), sidecar) }
+    file: path10.resolve(file2),
+    result: { description: narrateTemplate(filtered, path10.basename(file2), sidecar) }
   };
 };
 var cmdTplInspect = async (argv) => {
   const args = parse3(argv, { "layout": { type: "string" } }, ["template"]);
   const file2 = args.positionals[0];
   const { info } = await loadTemplate(file2);
-  return { file: path14.resolve(file2), result: filterLayouts(info, args.str("layout")) };
+  return { file: path10.resolve(file2), result: filterLayouts(info, args.str("layout")) };
 };
 var validate2 = (info, hasNotesMaster) => {
   const issues = [];
@@ -46244,11 +46244,11 @@ var cmdTplValidate = async (argv) => {
     throw new PptcError("E_LINT", "template validation failed", { issues });
   if (args.flag("plain"))
     return { plain: [
-      `${path14.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
+      `${path10.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
       ...issues.map((i) => `  ${i.severity}: ${i.message}`)
     ].join("\n") };
   return {
-    file: path14.resolve(file2),
+    file: path10.resolve(file2),
     result: {
       status: issues.length === 0 ? "ok" : "warn",
       layouts: info.layouts.map((l) => ({ index: l.index, name: l.name })),

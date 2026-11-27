@@ -35,7 +35,9 @@ export class DeckArchive {
         readonly file: string,
         /**  whether absolute rel targets were rewritten in memory (the file
              on disk then differs from `zip`)  */
-        readonly normalized: boolean
+        readonly normalized: boolean,
+        /**  the file's bytes as read (what an apply edits)  */
+        readonly bytes: Buffer
     ) {}
 
     /**
@@ -48,9 +50,10 @@ export class DeckArchive {
     static async open(file: string): Promise<DeckArchive> {
         requireFile(file, "presentation file")
         try {
-            const zip = await JSZip.loadAsync(readFileSync(file))
+            const bytes = readFileSync(file)
+            const zip = await JSZip.loadAsync(bytes)
             const normalized = await normalizeRelTargets(zip)
-            return new DeckArchive(zip, path.resolve(file), normalized)
+            return new DeckArchive(zip, path.resolve(file), normalized, bytes)
         }
         catch {
             throw new PptcError("E_FILE", `'${file}' is not a readable pptx/potx archive`)

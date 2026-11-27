@@ -16,8 +16,8 @@
 */
 
 import JSZip from "jszip"
-import path from "node:path"
 import { createHash } from "node:crypto"
+import { RELS, bytesOf, readRels, relIs } from "./parts.js"
 import { elements, parseXml, serializeXml } from "./xml.js"
 
 /**  what the plan allows to change on one output slide  */
@@ -44,9 +44,6 @@ export interface SlideExpect {
      checked separately), excluded from the asset fingerprint  */
 const SKIP_RELS = [ "/slideLayout", "/notesSlide", "/hyperlink", "/slide" ]
 
-/**  rel types a slide carries without referencing them by id in its XML  */
-export const IMPLICIT_RELS = [ "/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo" ]
-
 /**  a part's text in canonical form (parsed and re-serialized), so that
      attribute quoting and entity spellings never matter to a regex  */
 const canonText = async (zip: JSZip, part: string): Promise<string | null> => {
@@ -65,16 +62,31 @@ const canonText = async (zip: JSZip, part: string): Promise<string | null> => {
 export const digestBytes = (bytes: Buffer): string =>
     createHash("sha1").update(bytes).digest("hex").slice(0, 12)
 
+/**  content hashes per archive: layouts and shared parts are hashed once  */
+const digests = new WeakMap<JSZip, Map<string, Promise<string>>>()
+
 /**  content hash of a part. XML is hashed in a canonical form -- parsed
      and re-serialized, so quoting, entity and empty-element spellings do
      not matter (a touched part is re-serialized) -- with relationship ids
      and layout ids blanked, since a copied slide carries them under other
      names, and slide-jump links left out (links to removed slides go)  */
 const digest = async (zip: JSZip, part: string): Promise<string> => {
-    const file = zip.file(part)
-    if (file === null)
+    let memo = digests.get(zip)
+    if (memo === undefined) {
+        memo = new Map()
+        digests.set(zip, memo)
+    }
+    let hash = memo.get(part)
+    if (hash === undefined) {
+        hash = computeDigest(zip, part)
+        memo.set(part, hash)
+    }
+    return await hash
+}
+const computeDigest = async (zip: JSZip, part: string): Promise<string> => {
+    const bytes = await bytesOf(zip, part)
+    if (bytes === null)
         return "missing"
-    const bytes = await file.async("nodebuffer")
     let data: Buffer | string = bytes
     if (/\.(xml|rels)$/.test(part)) {
         let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "")
@@ -103,31 +115,22 @@ const digest = async (zip: JSZip, part: string): Promise<string> => {
 /**  type-tagged hashes of the parts a part relates to (charts one level
      deeper, so a swapped workbook or chart style is caught as well)  */
 const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number): Promise<string[]> => {
-    const relsPart = `${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`
-    const rels = await canonText(zip, relsPart)
-    if (rels === null)
-        return []
     const out: string[] = []
     const seen = new Set<string>()
-    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-        const rel = m[0]
-        const type = /Type="([^"]+)"/.exec(rel)?.[1] ?? ""
-        const id = /\bId="([^"]+)"/.exec(rel)?.[1] ?? ""
-
+    for (const { el, id, type, target } of await readRels(zip, part)) {
         /*  a duplicate id resolves to its first relationship (as repaired)  */
-        if (SKIP_RELS.some((k) => type.endsWith(k)) || seen.has(id))
+        if (relIs(type, SKIP_RELS) || seen.has(id))
             continue
         seen.add(id)
-        if (xml !== null && !xml.includes(`"${id}"`) && !IMPLICIT_RELS.some((k) => type.endsWith(k))
-            && !type.endsWith("/diagramDrawing"))
+        if (xml !== null && !xml.includes(`"${id}"`) && !relIs(type, RELS.implicit))
             continue
 
         /*  a linked file (picture, OLE object, video) counts by its target  */
-        if (rel.includes("TargetMode=\"External\"")) {
-            out.push(`${type.slice(type.lastIndexOf("/") + 1)}:ext:${/Target="([^"]+)"/.exec(rel)?.[1] ?? ""}`)
+        const kind = type.slice(type.lastIndexOf("/") + 1)
+        if (target === null) {
+            out.push(`${kind}:ext:${el.getAttribute("Target") ?? ""}`)
             continue
         }
-        const target = path.posix.normalize(path.posix.join(path.posix.dirname(part), /Target="([^"]+)"/.exec(rel)?.[1] ?? ""))
 
         /*  a dead target carries no content that could be lost  */
         if (zip.file(target) === null)
@@ -135,20 +138,15 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
         let hash = await digest(zip, target)
         if (depth > 0)
             hash += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`
-        out.push(`${type.slice(type.lastIndexOf("/") + 1)}:${hash}`)
+        out.push(`${kind}:${hash}`)
     }
     return out.sort()
 }
 
 /**  all a:t text of the slide's notes part, null when it has none  */
 const notesText = async (zip: JSZip, slidePart: string): Promise<string | null> => {
-    const rels = await canonText(zip, `ppt/slides/_rels/${path.posix.basename(slidePart)}.rels`) ?? ""
-    const rel = [ ...rels.matchAll(/<Relationship\b[^>]*>/g) ].map((m) => m[0])
-        .find((r) => /Type="[^"]*\/notesSlide"/.test(r))
-    if (rel === undefined)
-        return null
-    const part = path.posix.normalize(path.posix.join("ppt/slides", /Target="([^"]+)"/.exec(rel)?.[1] ?? ""))
-    const xml = await canonText(zip, part)
+    const notes = (await readRels(zip, slidePart)).find((r) => r.type.endsWith("/notesSlide"))?.target ?? null
+    const xml = notes === null ? null : await canonText(zip, notes)
     return xml === null ? null
         : [ ...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g) ].map((t) => t[1]).join("\n")
 }
@@ -161,12 +159,9 @@ const slidePrint = async (zip: JSZip, slidePart: string): Promise<{ notes: strin
 
 /**  slide part paths in presentation order  */
 const slideParts = async (zip: JSZip): Promise<string[]> => {
-    const pres = await canonText(zip, "ppt/presentation.xml") ?? ""
-    const rels = await canonText(zip, "ppt/_rels/presentation.xml.rels") ?? ""
-    const target = new Map([ ...rels.matchAll(/<Relationship\b[^>]*>/g) ].map((m) =>
-        [ /Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? "" ]))
-    return [ ...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g) ].map((m) =>
-        path.posix.normalize(path.posix.join("ppt", target.get(m[1] as string) ?? "")))
+    const target = new Map((await readRels(zip, "ppt/presentation.xml")).map((r) => [ r.id, r.target ?? "" ]))
+    const pres = await canonText(zip, "ppt/presentation.xml")
+    return pres === null ? [] : elements(parseXml(pres), "p:sldId").map((s) => target.get(s.getAttribute("r:id") ?? "") ?? "")
 }
 
 /**  remove the entries of `b` from `a` (multiset difference)  */
@@ -200,10 +195,13 @@ export interface ContentCheck {
  *  @param before - the input deck
  *  @param after - the output deck
  *  @param expects - one expectation per output slide, in output order
+ *  @param repaired - layouts and masters the engine repaired (W_REPAIRED),
+ *                    exempt from the layout check
  *  @returns blocking findings and mere losses; both empty when nothing
  *           changed that the plan kept
  */
-export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideExpect[]): Promise<ContentCheck> => {
+export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideExpect[],
+    repaired: Set<string> = new Set()): Promise<ContentCheck> => {
     const blocked: string[] = []
     const lost: { slide: number, what: string }[] = []
     const outParts = await slideParts(after)
@@ -271,7 +269,7 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
 
     /*  layouts, masters and themes are never changed by an apply  */
     for (const part of Object.keys(before.files).filter((f) =>
-        /^ppt\/(slideLayouts|slideMasters|theme)\/[^/]+\.xml$/.test(f) && after.file(f) !== null)) {
+        /^ppt\/(slideLayouts|slideMasters|theme)\/[^/]+\.xml$/.test(f) && after.file(f) !== null && !repaired.has(f))) {
         const xmlBefore = await canonText(before, part) ?? ""
         const xmlAfter = await canonText(after, part) ?? ""
         const was = `${await digest(before, part)} ${(await relatedDigests(before, part, xmlBefore, 1)).join(" ")}`

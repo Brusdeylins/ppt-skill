@@ -8,7 +8,7 @@
 */
 
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
-import type { Document, Element } from "@xmldom/xmldom"
+import type { Attr, Document, Element } from "@xmldom/xmldom"
 
 /**  DrawingML main namespace (`a:`)  */
 export const NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -40,15 +40,54 @@ export const serializeXml = (doc: Document): string =>
     new XMLSerializer().serializeToString(doc)
 
 /**
- *  The XML with every attribute value in double quotes, as PowerPoint
- *  writes it -- re-serialized only when it carries single-quoted values,
- *  so the regex-based checks over raw package parts read it correctly.
+ *  Escape text for an XML text node, or for a double-quoted attribute value.
  *
- *  @param xml - XML source text
- *  @returns XML text with double-quoted attributes
+ *  @param s - plain text
+ *  @param attr - whether the text goes into an attribute value
+ *  @returns escaped text
  */
-export const doubleQuoted = (xml: string): string =>
-    /\s[\w:]+\s*=\s*'/.test(xml) ? serializeXml(parseXml(xml)) : xml
+export const xmlEscape = (s: string, attr = false): string => {
+    const text = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    return attr ? text.replace(/"/g, "&quot;") : text
+}
+
+/**
+ *  Every relationship reference (`r:id`, `r:embed`, `r:link`, ... -- any
+ *  attribute in the relationships namespace) of an element subtree.
+ *
+ *  @param scope - the subtree root
+ *  @returns the referencing elements with their attribute, in document order
+ */
+export const relRefs = (scope: Element): { el: Element, attr: Attr }[] => {
+    const refs: { el: Element, attr: Attr }[] = []
+    const walk = (el: Element): void => {
+        for (let i = 0; i < el.attributes.length; i++) {
+            const attr = el.attributes.item(i)
+            if (attr !== null && attr.namespaceURI === NS_R)
+                refs.push({ el, attr })
+        }
+        for (let n = el.firstChild; n !== null; n = n.nextSibling)
+            if (n.nodeType === 1)
+                walk(n as Element)
+    }
+    walk(scope)
+    return refs
+}
+
+/**
+ *  Whether an element lies inside an `mc:Fallback` -- the alternative
+ *  PowerPoint writes for older readers, which repeats the shape ids of the
+ *  `mc:Choice` content by design.
+ *
+ *  @param el - the element
+ *  @returns true inside a fallback
+ */
+export const inFallback = (el: Element): boolean => {
+    for (let up = el.parentNode as Element | null; up !== null && up.nodeType === 1; up = up.parentNode as Element | null)
+        if (up.nodeName === "mc:Fallback")
+            return true
+    return false
+}
 
 /**
  *  Serialize a single element subtree to its XML string.

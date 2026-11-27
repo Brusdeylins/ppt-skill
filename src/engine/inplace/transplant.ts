@@ -18,7 +18,7 @@ import { PptcError } from "../../infra/errors.js"
 import type { SlidePlanEntry } from "../../core/ops/registry.js"
 import { addElement, type GenRoot, type GenSlide } from "../elements.js"
 import { PartAllocator } from "../parts.js"
-import { NS_R, elements, firstElement } from "../xml.js"
+import { NS_R, elements, firstElement, relRefs } from "../xml.js"
 import { Package } from "./package.js"
 
 /**  the PptxGenJS API surface used here  */
@@ -93,8 +93,7 @@ export const generateElements = async (entries: SlidePlanEntry[]): Promise<Gener
             if (info === undefined || spTree === null)
                 return
             const genSlide = await source.xml(info.part)
-            const genRels = new Map(Package.targets(info.part, await source.rels(info.part))
-                .map((t) => [ t.rel.getAttribute("Id") ?? "", t ]))
+            const genRels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [ t.id, t ]))
             const nextId = PartAllocator.shapeIds(slide)
             const copies = new Map<string, string>()
 
@@ -107,27 +106,18 @@ export const generateElements = async (entries: SlidePlanEntry[]): Promise<Gener
                     throw new PptcError("E_ENGINE", `generated element '${name}' not found in the generator output`)
                 const shape = slide.importNode(cNvPr.parentNode?.parentNode as Element, true) as Element
                 const ids = new Map<string, string>()
-                const relink = async (el: Element): Promise<void> => {
-                    for (let i = 0; i < el.attributes.length; i++) {
-                        const attr = el.attributes.item(i)
-                        if (attr === null || attr.namespaceURI !== NS_R)
-                            continue
-                        let id = ids.get(attr.value)
-                        const rel = genRels.get(attr.value)
-                        if (id === undefined && rel !== undefined) {
-                            const target = rel.target === null ? rel.rel.getAttribute("Target") ?? ""
-                                : path.posix.relative(path.posix.dirname(part), await pkg.clonePart(source, rel.target, copies))
-                            id = pkg.addRel(rels, rel.type, target, rel.target === null)
-                            ids.set(attr.value, id)
-                        }
-                        if (id !== undefined)
-                            el.setAttributeNS(NS_R, attr.name, id)
+                for (const { el, attr } of relRefs(shape)) {
+                    let id = ids.get(attr.value)
+                    const rel = genRels.get(attr.value)
+                    if (id === undefined && rel !== undefined) {
+                        const target = rel.target === null ? rel.el.getAttribute("Target") ?? ""
+                            : path.posix.relative(path.posix.dirname(part), await pkg.clonePart(source, rel.target, copies))
+                        id = pkg.addRel(rels, rel.type, target, rel.target === null)
+                        ids.set(attr.value, id)
                     }
-                    for (let n = el.firstChild; n !== null; n = n.nextSibling)
-                        if (n.nodeType === 1)
-                            await relink(n as Element)
+                    if (id !== undefined)
+                        el.setAttributeNS(NS_R, attr.name, id)
                 }
-                await relink(shape)
                 firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()))
                 spTree.insertBefore(shape, anchor)
             }

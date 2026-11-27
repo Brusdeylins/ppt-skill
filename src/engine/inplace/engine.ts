@@ -4,39 +4,36 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  engine/inplace/engine: execute a finished MutationPlan by editing the
-**  deck package in place. Slides the plan does not touch are never parsed
-**  for writing, renamed or re-serialized; new and copied slides get fresh
-**  part names and sldIds above everything in use. Every touched slide gets
-**  all of its edits in one pass, then the package-wide steps run, the output
-**  is checked (repair triggers, content guard, byte guard) and written
+**  deck package in place. Repair triggers of the input outside the slides
+**  are repaired first; slides the plan does not touch are never parsed for
+**  writing, renamed or re-serialized; new and copied slides get fresh part
+**  names and sldIds above everything in use. Every touched slide gets all
+**  of its edits in one pass, then the package-wide steps run, the output is
+**  checked (repair triggers, content guard, byte guard) and written
 **  atomically. A failing session never touches the target file.
 */
 
 import JSZip from "jszip"
 import { readFileSync } from "node:fs"
 import path from "node:path"
-import type { Element } from "@xmldom/xmldom"
+import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError, toPptcError } from "../../infra/errors.js"
 import type { MutationPlan, SlidePlanEntry } from "../../core/ops/registry.js"
 import type { LintWarning } from "../../core/lint.js"
 import { atomicWrite } from "../../infra/fs.js"
+import { notesOwner, partDefects, type PartView } from "../defects.js"
 import { digestBytes, verifyContent, type SlideExpect } from "../guard.js"
 import { finishPackage } from "../post.js"
-import { normalizeRelTargets, relsPartOf } from "../parts.js"
+import { REL, RELS, bytesOf, layoutOrder, readRels, relIs, relsOwner, relsPartOf } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
-import { layoutOrder } from "../seed.js"
-import { refFindings, relsFindings, shapeIdFindings, verifyBytes } from "../verify.js"
-import { NS_P, NS_R, doubleQuoted, elements, firstElement } from "../xml.js"
+import { verifyZip } from "../verify.js"
+import { NS_P, NS_R, elements, firstElement } from "../xml.js"
 import { Package } from "./package.js"
-import { createSlide, dropLinksToRemoved, editSlide, repairPackageRels, repairPart } from "./slides.js"
+import { createSlide, dropLinksToRemoved, editSlide, repairPart } from "./slides.js"
 import { generateElements } from "./transplant.js"
 
-/**  OfficeDocument relationship type base URI  */
-const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-
-/**  relationship types that leave a slide's own content: its layout and
-     master, other slides, the notes master and themes  */
-const FOREIGN_RELS = [ "/slideLayout", "/slideMaster", "/slide", "/notesMaster", "/theme" ]
+/**  the parts outside every slide's own content  */
+const PACKAGE_PART = /^ppt\/(presentation|viewProps|presProps)\.xml$|^ppt\/(slideMasters|slideLayouts|notesMasters|handoutMasters|theme)\/[^/]+\.xml$/
 
 /**  result facts of an executed session  */
 export interface SessionResult {
@@ -44,9 +41,37 @@ export interface SessionResult {
     slideCount: number
     /**  plan-order positions of the entries that carried a ref  */
     refIndexes: Record<string, number>
-    /**  slides repaired because the input deck carried repair triggers
-         on them (W_REPAIRED)  */
+    /**  repairs of PowerPoint repair triggers the input deck carried
+         (W_REPAIRED)  */
     warnings: LintWarning[]
+}
+
+/**  the input deck's slide list  */
+interface Deck {
+    /**  the presentation part  */
+    pres: Document
+    /**  its relationships  */
+    presRels: Document
+    /**  the input slides in order  */
+    input: { el: Element, id: number, part: string }[]
+    /**  the notes master, null when the deck has none  */
+    notesMaster: string | null
+}
+
+/**  one output slide and what the apply does to it  */
+interface SlideState {
+    /**  its plan entry  */
+    entry: SlidePlanEntry
+    /**  the output slide part  */
+    part: string
+    /**  the parts of its own content, the slide first  */
+    closure: PartView[]
+    /**  whether the apply writes it  */
+    touched: boolean
+    /**  whether its notes part belongs to another slide  */
+    sharedNotes: boolean
+    /**  parts of its content other than the slide carrying repair triggers  */
+    repairs: string[]
 }
 
 /**
@@ -77,63 +102,89 @@ const hasEdits = (e: SlidePlanEntry): boolean =>
     e.fills.length > 0 || e.setTexts.length > 0 || e.removeNames.length > 0 || e.elements.length > 0
         || e.notes !== null || e.footer !== null || e.background !== null
 
-/**  the parts that make up a slide's own content: the slide, its rels and
-     everything reachable from it except layouts, masters, other slides and
-     themes (media included -- shared media must not change either)  */
-const closure = async (pkg: Package, slide: string): Promise<string[]> => {
-    const parts: string[] = []
+/**  a part with its DOM and relationships, as engine/defects reads it  */
+const viewOf = async (pkg: Package, part: string): Promise<PartView> => ({
+    part,
+    doc:  /\.xml$/.test(part) ? await pkg.xml(part) : null,
+    rels: pkg.targets(part, await pkg.rels(part))
+})
+
+/**  the parts that make up a slide's own content: the slide and everything
+     reachable from it except layouts, masters, other slides and themes
+     (media included -- shared media must not change either)  */
+const closure = async (pkg: Package, slide: string): Promise<PartView[]> => {
+    const views: PartView[] = []
     const queue = [ slide ]
     while (queue.length > 0) {
-        const part = queue.pop() as string
-        if (parts.includes(part) || !pkg.has(part))
+        const part = queue.shift() as string
+        if (views.some((v) => v.part === part) || !pkg.has(part))
             continue
-        parts.push(part)
-        if (!pkg.has(relsPartOf(part)))
-            continue
-        parts.push(relsPartOf(part))
-        for (const t of Package.targets(part, await pkg.rels(part)))
-            if (t.target !== null && !FOREIGN_RELS.some((k) => t.type.endsWith(k)))
-                queue.push(t.target)
+        const view = await viewOf(pkg, part)
+        views.push(view)
+        for (const r of view.rels)
+            if (r.target !== null && !relIs(r.type, RELS.foreign))
+                queue.push(r.target)
     }
-    return parts
+    return views
 }
 
-/**  do the relationships of any part of a closure link to a removed slide  */
-const linksTo = async (pkg: Package, parts: string[], removed: Set<string>): Promise<boolean> => {
-    for (const part of parts.filter((p) => !p.endsWith(".rels") && pkg.has(relsPartOf(p))))
-        if (Package.targets(part, await pkg.rels(part)).some((t) =>
-            t.type.endsWith("/slide") && t.target !== null && removed.has(t.target)))
-            return true
-    return false
+/**  a W_REPAIRED warning  */
+const repairedWarning = (slide: LintWarning["slide"], message: string): LintWarning =>
+    ({ code: "W_REPAIRED", slide, message })
+
+/**
+ *  Check what an apply needs from the deck beyond its layouts, before
+ *  anything runs (also for --dry-run).
+ *
+ *  @param plan - the finished mutation plan
+ *  @param archive - the open input deck
+ *  @throws PptcError E_TEMPLATE when speaker notes are planned on a deck
+ *          without notes master
+ */
+export const preflight = async (plan: MutationPlan, archive: DeckArchive): Promise<void> => {
+    if (!plan.entries.some((e) => e.notes !== null))
+        return
+    const master = (await readRels(archive.zip, "ppt/presentation.xml")).find((r) => r.type.endsWith("/notesMaster"))?.target ?? null
+    if (master === null || archive.zip.file(master) === null)
+        throw new PptcError("E_TEMPLATE", "the deck has no notes master, which speaker notes need -- "
+            + "add a note to any slide in PowerPoint once, then retry")
 }
 
-/**  the two passes: slide structure and edits, then package-wide steps  */
-const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArchive): Promise<SessionResult> => {
-    /*  the package as on disk: untouched parts keep their exact bytes  */
-    const presIn = await archive.xml("ppt/presentation.xml")
-    const inputIds = elements(presIn, "p:sldId").map((s) => Number(s.getAttribute("id")))
-    const pkg = await Package.open(readFileSync(archive.file), inputIds)
+/**  repair triggers outside the slides (presentation, masters, layouts,
+     themes) are repaired before the engine writes anything, so a defect of
+     the input never hides one of the engine's own  */
+const repairPackage = async (pkg: Package, warnings: LintWarning[], repaired: Set<string>): Promise<void> => {
+    for (const part of Object.keys(pkg.zip.files).filter((f) => PACKAGE_PART.test(f))) {
+        const defects = partDefects(await viewOf(pkg, part), (p) => pkg.has(p))
+        if (defects.length > 0 && await repairPart(pkg, part)) {
+            repaired.add(part)
+            warnings.push(repairedWarning({ id: null, index: -1, title: null },
+                `the input deck carried PowerPoint repair triggers in ${part}; pptc repaired them: ${defects.join("; ")}`))
+        }
+    }
+}
+
+/**  the input slide list of the (repaired) package  */
+const readDeck = async (pkg: Package): Promise<Deck> => {
     const pres = await pkg.xml("ppt/presentation.xml")
     const presRels = await pkg.rels("ppt/presentation.xml")
-    const ridTarget = new Map(Package.targets("ppt/presentation.xml", presRels)
-        .map((t) => [ t.rel.getAttribute("Id") ?? "", t.target ?? "" ]))
+    const targets = pkg.targets("ppt/presentation.xml", presRels)
+    const ridTarget = new Map(targets.map((t) => [ t.id, t.target ?? "" ]))
     const input = elements(pres, "p:sldId").map((el) => ({
         el, id: Number(el.getAttribute("id")), part: ridTarget.get(el.getAttribute("r:id") ?? "") ?? ""
     }))
-    const notesMaster = Package.targets("ppt/presentation.xml", presRels)
-        .find((t) => t.type.endsWith("/notesMaster"))?.target ?? null
-    if (plan.entries.some((e) => e.notes !== null) && (notesMaster === null || !pkg.has(notesMaster)))
-        throw new PptcError("E_TEMPLATE", "the deck has no notes master, which speaker notes need -- "
-            + "add a note to any slide in PowerPoint once, then retry")
-    const layouts = await layoutOrder(archive.zip)
+    const notesMaster = targets.find((t) => t.type.endsWith("/notesMaster"))?.target ?? null
+    return { pres, presRels, input, notesMaster }
+}
 
-    /*  structure: kept slides stay where they are; copies are cloned from
-        the unchanged input, new slides come from the deck's own layouts  */
-    const keptIds = new Set(plan.entries.filter((e) => e.virtualId > 0).map((e) => e.virtualId))
-    const removed = new Set(input.filter((s) => !keptIds.has(s.id)).map((s) => s.part))
+/**  the output slide parts: kept slides stay where they are; copies are
+     cloned from the unchanged input, new slides come from the deck's own
+     layouts  */
+const buildSlides = async (pkg: Package, plan: MutationPlan, deck: Deck): Promise<string[]> => {
+    const layouts = await layoutOrder(pkg.zip)
     const parts: string[] = []
     for (const entry of plan.entries) {
-        const kept = input.find((s) => s.id === entry.virtualId)
+        const kept = deck.input.find((s) => s.id === entry.virtualId)
         if (kept !== undefined)
             parts.push(kept.part)
         else if (entry.source.kind === "self")
@@ -145,149 +196,118 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
             parts.push(await createSlide(pkg, layout))
         }
     }
+    return parts
+}
 
-    /*  which kept slides are touched: edited, re-shown/hidden, linking to a
-        removed slide, sharing a notes part, or carrying repair triggers  */
-    const names = new Set(Object.keys(archive.zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")))
-    const quoted = async (part: string): Promise<string> => doubleQuoted(await archive.text(part) ?? "")
-    const touched: boolean[] = []
-    const sharedNotes: boolean[] = []
-    const repairs: string[][] = []
-    const untouched = new Map<string, JSZip.JSZipObject | null>()
-    const warnings: LintWarning[] = []
+/**  what the apply does to each output slide: a slide is touched when the
+     plan edits, shows or hides it, when it links to a removed slide, or
+     when its content carries repair triggers (engine/defects) or a notes
+     part of another slide; untouched slides are never written  */
+const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[], removed: Set<string>,
+    warnings: LintWarning[]): Promise<SlideState[]> => {
+    const exists = (p: string): boolean => pkg.has(p)
+    const states: SlideState[] = []
     for (const [ i, entry ] of plan.entries.entries()) {
         const part = parts[i] as string
-        touched.push(true)
-        sharedNotes.push(false)
-        repairs.push([])
-        if (entry.virtualId <= 0)
-            continue
-
-        /*  repair triggers of the slide and of every part of its own
-            content (notes, charts, ...): such a slide is repaired  */
-        const own = await closure(pkg, part)
-        const xml = await quoted(part)
-        const defects = [ ...shapeIdFindings(part, xml), ...refFindings(part, xml, await quoted(relsPartOf(part))) ]
-        for (const relsPart of own.filter((p) => p.endsWith(".rels"))) {
-            const found = relsFindings(relsPart, await quoted(relsPart), names)
+        const views = await closure(pkg, part)
+        const slide = views[0] as PartView
+        const defects: string[] = []
+        const repairs: string[] = []
+        for (const view of views) {
+            const found = partDefects(view, exists)
             defects.push(...found)
-            const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1")
-            if (found.length > 0 && owner !== part)
-                (repairs[i] as string[]).push(owner)
+            if (found.length > 0 && view.part !== part)
+                repairs.push(view.part)
         }
-
-        /*  a notes part whose back-reference names another slide (shared,
-            or left over by a removed slide) gets a copy of its own  */
-        const notes = Package.targets(part, await pkg.rels(part)).find((t) => t.type.endsWith("/notesSlide"))?.target ?? null
-        if (notes !== null && pkg.has(notes)) {
-            const notesXml = await pkg.text(notes)
-            const backref = Package.targets(notes, await pkg.rels(notes)).find((t) =>
-                t.type.endsWith("/slide") && !notesXml.includes(`"${t.rel.getAttribute("Id") ?? ""}"`))?.target ?? part
-            if (backref !== part) {
-                sharedNotes[i] = true
-                defects.push(`notes part ${notes} belongs to another slide`)
-            }
-        }
-        const hidden = /<p:sld\b[^>]*\bshow="(0|false)"/.test(xml)
-        const touch = hasEdits(entry) || hidden !== entry.hidden || defects.length > 0 || await linksTo(pkg, own, removed)
-        touched[i] = touch
+        const notes = slide.rels.find((r) => r.type.endsWith("/notesSlide"))?.target ?? null
+        const notesView = views.find((v) => v.part === notes)
+        const sharedNotes = notesView !== undefined && notesOwner(notesView) !== part
+        if (sharedNotes)
+            defects.push(`notes part ${notes ?? ""} belongs to another slide`)
+        const show = slide.doc?.documentElement?.getAttribute("show") ?? ""
+        const links = views.some((v) => v.rels.some((r) => r.type.endsWith("/slide") && r.target !== null && removed.has(r.target)))
+        const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden
+            || defects.length > 0 || links
         if (defects.length > 0)
-            warnings.push({
-                code: "W_REPAIRED",
-                slide: { id: entry.virtualId, index: i, title: entry.title },
-                message: `the input deck carried PowerPoint repair triggers on this slide; pptc repaired them: ${defects.join("; ")}`
-            })
-        if (!touch)
-            for (const p of own)
-                untouched.set(p, pkg.zip.file(p))
+            warnings.push(repairedWarning({ id: entry.virtualId > 0 ? entry.virtualId : null, index: i, title: entry.title },
+                `the input deck carried PowerPoint repair triggers on this slide${entry.virtualId > 0 ? "" : " (or the slide it was copied from)"}; `
+                + `pptc repaired them: ${defects.join("; ")}`))
+        states.push({ entry, part, closure: views, touched, sharedNotes, repairs })
     }
+    return states
+}
 
-    /*  one pass per touched slide, then the repairs of its other parts  */
-    const generated = await generateElements(plan.entries)
-    for (const [ i, entry ] of plan.entries.entries())
-        if (touched[i] === true) {
-            await editSlide(pkg, {
-                part: parts[i] as string, entry, removed, notesMaster: notesMaster ?? "", generated,
-                sharedNotes: sharedNotes[i] === true
-            })
-            for (const owner of repairs[i] as string[])
-                await repairPart(pkg, owner)
-        }
-
-    /*  the slide list: kept sldIds in their new order, fresh ids for new
-        and copied slides, removed slides and their relationships gone  */
-    if (parts.length !== input.length || parts.some((p, i) => p !== input[i]?.part)) {
-        let lst = firstElement(pres, "p:sldIdLst")
-        if (lst === null) {
-            lst = pres.createElementNS(NS_P, "p:sldIdLst")
-            pres.documentElement?.insertBefore(lst, firstElement(pres, "p:sldSz"))
-        }
-        for (const s of input)
-            lst.removeChild(s.el)
-        for (const [ i, entry ] of plan.entries.entries()) {
-            let el: Element | undefined = input.find((s) => s.id === entry.virtualId)?.el
-            if (el === undefined) {
-                el = pres.createElementNS(NS_P, "p:sldId")
-                el.setAttribute("id", String(pkg.alloc.slideId()))
-                el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`,
-                    path.posix.relative("ppt", parts[i] as string)))
-            }
-            lst.appendChild(el)
-        }
-        for (const s of input.filter((s) => removed.has(s.part)))
-            for (const rel of elements(presRels, "Relationship"))
-                if (rel.getAttribute("Id") === s.el.getAttribute("r:id"))
-                    rel.parentNode?.removeChild(rel)
-        pkg.write("ppt/presentation.xml", pres)
-        pkg.writeRels("ppt/presentation.xml", presRels)
+/**  the slide list: kept sldIds in their new order, fresh ids for new and
+     copied slides, removed slides and their relationships gone  */
+const writeSlideList = (pkg: Package, deck: Deck, states: SlideState[], removed: Set<string>): void => {
+    const { pres, presRels, input } = deck
+    if (states.length === input.length && states.every((s, i) => s.part === input[i]?.part))
+        return
+    let lst = firstElement(pres, "p:sldIdLst")
+    if (lst === null) {
+        lst = pres.createElementNS(NS_P, "p:sldIdLst")
+        pres.documentElement?.insertBefore(lst, firstElement(pres, "p:sldSz"))
     }
+    for (const s of input)
+        s.el.parentNode?.removeChild(s.el)
+    for (const { entry, part } of states) {
+        let el: Element | undefined = input.find((s) => s.id === entry.virtualId)?.el
+        if (el === undefined) {
+            el = pres.createElementNS(NS_P, "p:sldId")
+            el.setAttribute("id", String(pkg.alloc.slideId()))
+            el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`, path.posix.relative("ppt", part)))
+        }
+        lst.appendChild(el)
+    }
+    for (const t of pkg.targets("ppt/presentation.xml", presRels))
+        if (t.type.endsWith("/slide") && t.target !== null && removed.has(t.target))
+            t.el.parentNode?.removeChild(t.el)
+    pkg.write("ppt/presentation.xml", pres)
+    pkg.writeRels("ppt/presentation.xml", presRels)
+}
 
-    /*  removed slides: their parts go, links to them elsewhere go  */
+/**  removed slides: their parts go, links to them from parts outside the
+     slides go  */
+const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> => {
+    if (removed.size === 0)
+        return
     await pkg.remove([ ...removed ])
-    if (removed.size > 0)
-        for (const relsPart of Object.keys(pkg.zip.files).filter((f) =>
-            /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/viewProps\.xml\.rels$/.test(f))) {
-            const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1")
-            if (!pkg.has(owner))
-                continue
-            const rels = await pkg.rels(owner)
-            const doc = await pkg.xml(owner)
-            if (dropLinksToRemoved(owner, doc, rels, removed)) {
-                pkg.writeRels(owner, rels)
-                pkg.write(owner, doc)
-            }
+    for (const owner of Object.keys(pkg.zip.files).filter((f) =>
+        /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/viewProps\.xml\.rels$/.test(f)).map(relsOwner)) {
+        if (!pkg.has(owner))
+            continue
+        const rels = await pkg.rels(owner)
+        const doc = await pkg.xml(owner)
+        if (dropLinksToRemoved(pkg, owner, doc, rels, removed)) {
+            pkg.writeRels(owner, rels)
+            pkg.write(owner, doc)
         }
-
-    /*  repair triggers outside the slides (layouts, masters, presentation):
-        dead and duplicate relationships go  */
-    for (const relsPart of Object.keys(pkg.zip.files).filter((f) =>
-        /^ppt\/(slideLayouts|slideMasters|notesMasters|handoutMasters|theme)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/presentation\.xml\.rels$/.test(f))) {
-        const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1")
-        if (!untouched.has(relsPart) && relsFindings(relsPart, doubleQuoted(await pkg.text(relsPart)), new Set(Object.keys(pkg.zip.files))).length > 0
-            && await repairPackageRels(pkg, owner))
-            warnings.push({
-                code: "W_REPAIRED",
-                slide: { id: null, index: -1, title: null },
-                message: `the input deck carried PowerPoint repair triggers in ${owner}; pptc dropped its dead or duplicate relationships`
-            })
     }
-    await finishPackage(pkg.zip, parts, plan.props, plan.customProps)
-    const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
+}
 
-    /*  self-checks before writing: repair triggers, the content of every
-        touched slide (canonical), and every part of every untouched slide
-        (never written at all)  */
-    const after = await JSZip.loadAsync(finalBytes)
+/**
+ *  The byte guard: every part of an untouched slide keeps its exact bytes
+ *  (it is never written at all).
+ *
+ *  @param zip - the edited package
+ *  @param untouched - the parts of untouched slides with their input entry
+ *  @param after - the output deck
+ *  @returns findings, empty when every such part is unchanged
+ */
+export const byteGuard = async (zip: JSZip, untouched: Map<string, JSZip.JSZipObject | null>, after: JSZip): Promise<string[]> => {
     const changed: string[] = []
     for (const [ name, file ] of untouched) {
-        const now = after.file(name)
-        if (pkg.zip.file(name) !== file || file === null || now === null
-            || !Buffer.from(await now.async("uint8array")).equals(Buffer.from(await file.async("uint8array"))))
+        const now = await bytesOf(after, name)
+        if (zip.file(name) !== file || file === null || now === null || !now.equals(await bytesOf(zip, name) as Buffer))
             changed.push(`${name}: part of an untouched slide would change`)
     }
-    await normalizeRelTargets(after)
-    const expects: SlideExpect[] = plan.entries.map((entry, i) => ({
-        source: entry.source.kind === "self" && touched[i] === true ? entry.source.part : null,
+    return changed
+}
+
+/**  what the content guard allows to change on each output slide  */
+const expectations = (states: SlideState[]): SlideExpect[] =>
+    states.map(({ entry, touched }, i) => ({
+        source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
         notes: entry.notes !== null,
         assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
@@ -299,12 +319,63 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
         },
         textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append)
     }))
-    const content = await verifyContent(archive.zip, after, expects)
+
+/**  the passes of an apply: package repairs, slide structure, edits,
+     slide list, package-wide steps, self-checks, write  */
+const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArchive): Promise<SessionResult> => {
+    await preflight(plan, archive)
+
+    /*  the package as on disk: untouched parts keep their exact bytes  */
+    const inputIds = elements(await archive.xml("ppt/presentation.xml"), "p:sldId").map((s) => Number(s.getAttribute("id")))
+    const pkg = await Package.open(archive.bytes, inputIds)
+    const warnings: LintWarning[] = []
+    const repaired = new Set<string>()
+    await repairPackage(pkg, warnings, repaired)
+    const deck = await readDeck(pkg)
+
+    /*  removed slides, plus slide parts outside the slide list (garbage
+        PowerPoint would complain about)  */
+    const keptIds = new Set(plan.entries.filter((e) => e.virtualId > 0).map((e) => e.virtualId))
+    const removed = new Set(deck.input.filter((s) => !keptIds.has(s.id)).map((s) => s.part))
+    for (const orphan of Object.keys(pkg.zip.files).filter((f) =>
+        /^ppt\/slides\/[^/]+\.xml$/.test(f) && !deck.input.some((s) => s.part === f))) {
+        removed.add(orphan)
+        warnings.push(repairedWarning({ id: null, index: -1, title: null },
+            `the input deck carried a slide part outside its slide list; pptc removed ${orphan}`))
+    }
+
+    const parts = await buildSlides(pkg, plan, deck)
+    const states = await classifySlides(pkg, plan, parts, removed, warnings)
+    const untouched = new Map<string, JSZip.JSZipObject | null>()
+    for (const s of states.filter((s) => !s.touched))
+        for (const { part } of s.closure)
+            for (const p of pkg.has(relsPartOf(part)) ? [ part, relsPartOf(part) ] : [ part ])
+                untouched.set(p, pkg.zip.file(p))
+
+    /*  one pass per touched slide, after the repairs of its other parts  */
+    const generated = await generateElements(plan.entries)
+    for (const s of states.filter((s) => s.touched)) {
+        for (const owner of s.repairs)
+            await repairPart(pkg, owner)
+        await editSlide(pkg, {
+            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes
+        })
+    }
+    writeSlideList(pkg, deck, states, removed)
+    await removeSlides(pkg, removed)
+    await finishPackage(pkg.zip, parts, plan.props, plan.customProps)
+    const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
+
+    /*  self-checks before writing: repair triggers, the content of every
+        touched slide (canonical), every part of every untouched slide  */
+    const after = await JSZip.loadAsync(finalBytes)
+    const expects = expectations(states)
+    const content = await verifyContent(archive.zip, after, expects, repaired)
     const findings = [
-        ...await verifyBytes(finalBytes, archive.zip),
+        ...await verifyZip(after, archive.zip),
         ...content.blocked,
         ...content.lost.map((l) => `slide ${(expects[l.slide] as SlideExpect).label}: ${l.what} would be lost although no op removed it`),
-        ...changed
+        ...await byteGuard(pkg.zip, untouched, after)
     ]
     if (findings.length > 0)
         throw new PptcError("E_INTEGRITY",
@@ -319,25 +390,18 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
 }
 
 /**
- *  Execute a mutation plan against a deck file.
+ *  Execute a mutation plan against an open deck.
  *
- *  @param deckFile - the deck to read from
- *  @param outFile - the file to write atomically (may equal deckFile)
+ *  @param outFile - the file to write atomically (may be the deck itself)
  *  @param plan - the finished mutation plan
- *  @param archive - the caller's open archive of deckFile (read-only reuse)
+ *  @param archive - the open input deck the plan was made for
  *  @returns session facts for the result envelope
- *  @throws PptcError E_INTEGRITY when a self-check fails, E_ENGINE on
- *          unexpected failures (target untouched in both cases)
+ *  @throws PptcError E_INTEGRITY when a self-check fails, E_TEMPLATE when
+ *          the deck lacks what the plan needs, E_ENGINE on unexpected
+ *          failures (target untouched in every case)
  */
-export const runSession = async (
-    deckFile: string,
-    outFile: string,
-    plan: MutationPlan,
-    archive: DeckArchive
-): Promise<SessionResult> => {
+export const runSession = async (outFile: string, plan: MutationPlan, archive: DeckArchive): Promise<SessionResult> => {
     try {
-        if (path.resolve(deckFile) !== archive.file)
-            throw new PptcError("E_ENGINE", "the archive does not belong to the deck file")
         return await withStdoutShield(() => executePlan(outFile, plan, archive))
     }
     catch (err) {

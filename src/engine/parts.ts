@@ -3,16 +3,49 @@
 **  Copyright (c) 2026 Matthias Brusdeylins
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
-**  engine/parts: neutral zip-package helpers shared by the write-path
-**  (engine/inplace, post.ts) and the seed builder (seed.ts), plus the
-**  allocator that hands out every fresh part name and id of an apply.
+**  engine/parts: the OPC package layer below every other engine module --
+**  part names, relationships (read through the DOM, never by regex), the
+**  relationship-type taxonomy, content types, part removal and asset
+**  collection, plus the allocator that hands out every fresh part name and
+**  id of an apply.
 */
 
 import type JSZip from "jszip"
 import path from "node:path"
-import type { Document } from "@xmldom/xmldom"
+import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
-import { elements, parseXml, serializeXml } from "./xml.js"
+import { NS_REL, elements, parseXml, serializeXml } from "./xml.js"
+
+/**  OfficeDocument relationship type base URI  */
+export const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+/**  the relationship types by role (matched as type suffixes) -- the one
+     taxonomy the engine, the content guard and the verifier share  */
+export const RELS = {
+    /**  leave a slide's own content: layout, master, other slides, notes
+         master, theme  */
+    foreign:  [ "/slideLayout", "/slideMaster", "/slide", "/notesMaster", "/theme" ],
+    /**  targets a clone inside the same package shares: layouts, masters,
+         other slides, immutable media and external content  */
+    shared:   [ "/slideLayout", "/slideMaster", "/notesMaster", "/slide", "/image", "/media", "/video", "/audio", "/hyperlink", "/theme" ],
+    /**  carried without being referenced by id in the owner's XML (the
+         SmartArt drawing is referenced from the SmartArt data part)  */
+    implicit: [ "/slideLayout", "/notesSlide", "/diagramDrawing", "/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo" ]
+} as const
+
+/**
+ *  Whether a relationship type is one of a role's types.
+ *
+ *  @param type - full relationship type URI
+ *  @param kinds - type suffixes, e.g. `RELS.shared`
+ *  @returns true when it matches
+ */
+export const relIs = (type: string, kinds: readonly string[]): boolean =>
+    kinds.some((k) => type.endsWith(k))
+
+/**  an empty relationships document  */
+export const EMPTY_RELS = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+    + `<Relationships xmlns="${NS_REL}"/>`
 
 /**
  *  Resolve a relationship target to a part name. Absolute targets
@@ -33,6 +66,116 @@ export const resolveTarget = (base: string, target: string): string =>
  */
 export const relsPartOf = (part: string): string =>
     `${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`
+
+/**
+ *  The part a rels part belongs to ("" for the package rels `_rels/.rels`).
+ *
+ *  @param relsPart - the rels part name
+ *  @returns the owning part
+ */
+export const relsOwner = (relsPart: string): string =>
+    relsPart === "_rels/.rels" ? "" : relsPart.replace(/(^|\/)_rels\/([^/]+)\.rels$/, "$1$2")
+
+/**
+ *  The actual name of a part, looked up case-insensitively as OPC demands
+ *  (`../media/photo1.png` names `ppt/media/Photo1.PNG`).
+ *
+ *  @param zip - the archive
+ *  @param name - the part name as referenced
+ *  @returns the name in the archive, null when there is no such part
+ */
+export const findPart = (zip: JSZip, name: string): string | null => {
+    if (zip.file(name) !== null)
+        return name
+    const lower = name.toLowerCase()
+    return Object.keys(zip.files).find((f) => !f.endsWith("/") && f.toLowerCase() === lower) ?? null
+}
+
+/**  one relationship of a part  */
+export interface Rel {
+    /**  the Relationship element  */
+    el: Element
+    /**  its id  */
+    id: string
+    /**  its full type URI  */
+    type: string
+    /**  the target part (case resolved when an archive is given), null for
+         an external target  */
+    target: string | null
+}
+
+/**
+ *  The relationships of a part, targets resolved to part names.
+ *
+ *  @param owner - the owning part ("" for the package rels)
+ *  @param rels - its rels DOM
+ *  @param zip - the archive, to resolve target names case-insensitively
+ *  @returns the relationships in document order
+ */
+export const relTargets = (owner: string, rels: Document, zip?: JSZip): Rel[] =>
+    elements(rels, "Relationship").map((el) => {
+        let target: string | null = null
+        if (el.getAttribute("TargetMode") !== "External") {
+            target = resolveTarget(path.posix.dirname(owner), el.getAttribute("Target") ?? "")
+            if (zip !== undefined)
+                target = findPart(zip, target) ?? target
+        }
+        return { el, id: el.getAttribute("Id") ?? "", type: el.getAttribute("Type") ?? "", target }
+    })
+
+/**
+ *  Read the relationships of a part from an archive.
+ *
+ *  @param zip - the archive
+ *  @param owner - the owning part
+ *  @returns its relationships, empty when it has none
+ */
+export const readRels = async (zip: JSZip, owner: string): Promise<Rel[]> => {
+    const f = zip.file(relsPartOf(owner))
+    return f === null ? [] : relTargets(owner, parseXml(await f.async("string")), zip)
+}
+
+/**
+ *  Append a relationship to a rels document.
+ *
+ *  @param rels - the rels DOM
+ *  @param id - the relationship id
+ *  @param type - full relationship type URI
+ *  @param target - target, relative to the owner (or a URL)
+ *  @param external - whether the target is external
+ */
+export const appendRel = (rels: Document, id: string, type: string, target: string, external = false): void => {
+    const rel = rels.createElementNS(NS_REL, "Relationship")
+    rel.setAttribute("Id", id)
+    rel.setAttribute("Type", type)
+    rel.setAttribute("Target", target)
+    if (external)
+        rel.setAttribute("TargetMode", "External")
+    rels.documentElement?.appendChild(rel)
+}
+
+/**  inflated content per archive entry: every check of an apply reads
+     a part's bytes once  */
+const inflated = new WeakMap<JSZip.JSZipObject, Promise<Buffer>>()
+
+/**
+ *  The bytes of an archive part, inflated once per archive entry.
+ *
+ *  @param zip - the archive
+ *  @param part - the part name
+ *  @returns its bytes, null when the part does not exist
+ */
+export const bytesOf = async (zip: JSZip, part: string): Promise<Buffer | null> => {
+    const f = zip.file(part)
+    if (f === null)
+        return null
+    let bytes = inflated.get(f)
+    if (bytes === undefined) {
+        bytes = f.async("nodebuffer")
+        inflated.set(f, bytes)
+    }
+    return await bytes
+}
 
 /**  escape a string for a literal RegExp  */
 const reEscape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -62,7 +205,9 @@ export class PartAllocator {
         let rid = 9000
         for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
             const text = await zip.file(relsPart)?.async("string") ?? ""
-            for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
+
+            /*  any quoting: a re-saved deck may single-quote its attributes  */
+            for (const m of text.matchAll(/["']rIdPptc(\d+)["']/g))
                 rid = Math.max(rid, Number(m[1]))
         }
         const names = new Set(Object.keys(zip.files).map((f) => f.toLowerCase()))
@@ -151,7 +296,7 @@ export class PartAllocator {
 export const partText = async (zip: JSZip, part: string): Promise<string> => {
     const f = zip.file(part)
     if (f === null)
-        throw new PptcError("E_ENGINE", `output archive is missing part ${part}`)
+        throw new PptcError("E_ENGINE", `the deck is missing part ${part}`)
     return (await f.async("string")).replace(/^\uFEFF/, "")
 }
 
@@ -207,4 +352,90 @@ export const normalizeRelTargets = async (zip: JSZip): Promise<boolean> => {
         }
     }
     return changed
+}
+
+/**  content-type defaults for image media  */
+export const IMAGE_TYPES: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+    gif: "image/gif", svg: "image/svg+xml", webp: "image/webp",
+    bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff",
+    emf: "image/x-emf", wmf: "image/x-wmf"
+}
+
+/**  parts a slide carries (charts with their drawings and theme
+     overrides, SmartArt, embeddings, media, comments, tags, ink and
+     ActiveX controls); unreachable ones (e.g. of a removed slide) are
+     garbage -- collected by `gcAssets`, reported by engine/verify  */
+export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags|ink|activeX)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
+
+/**
+ *  Remove parts together with their rels and content-type overrides.
+ *
+ *  @param zip - the archive to edit in place
+ *  @param parts - the parts to remove
+ */
+export const removeParts = async (zip: JSZip, parts: string[]): Promise<void> => {
+    if (parts.length === 0)
+        return
+    const doomed = new Set(parts.map((p) => `/${p.toLowerCase()}`))
+    for (const part of parts) {
+        zip.remove(part)
+        zip.remove(relsPartOf(part))
+    }
+    const ct = parseXml(await partText(zip, "[Content_Types].xml"))
+    for (const o of elements(ct, "Override"))
+        if (doomed.has((o.getAttribute("PartName") ?? "").toLowerCase()))
+            o.parentNode?.removeChild(o)
+    zip.file("[Content_Types].xml", serializeXml(ct))
+}
+
+/**
+ *  Remove the assets no live part reaches (e.g. those of removed slides).
+ *
+ *  @param zip - the archive to edit in place
+ */
+export const gcAssets = async (zip: JSZip): Promise<void> => {
+    const isAsset = (f: string): boolean =>
+        ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/")
+    const assets = Object.keys(zip.files).filter(isAsset)
+    if (assets.length === 0)
+        return
+    const live = new Set<string>()
+    const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(relsOwner(f)))
+        .map(relsOwner)
+    while (queue.length > 0) {
+        for (const { target } of await readRels(zip, queue.pop() as string))
+            if (target !== null && isAsset(target) && !live.has(target)) {
+                live.add(target)
+                queue.push(target)
+            }
+    }
+    await removeParts(zip, assets.filter((a) => !live.has(a)))
+}
+
+/**
+ *  The layout parts of a deck in slide-master order -- the order the
+ *  reader (and so every layout index) uses; part names need not follow it.
+ *
+ *  @param zip - the archive
+ *  @returns the layout part names
+ */
+export const layoutOrder = async (zip: JSZip): Promise<string[]> => {
+    const presRels = new Map((await readRels(zip, "ppt/presentation.xml")).map((r) => [ r.id, r.target ]))
+    const pres = zip.file("ppt/presentation.xml") === null ? null : parseXml(await partText(zip, "ppt/presentation.xml"))
+    const listed = (pres === null ? [] : elements(pres, "p:sldMasterId"))
+        .map((m) => presRels.get(m.getAttribute("r:id") ?? "") ?? null)
+        .filter((part): part is string => part !== null && zip.file(part) !== null)
+    const masters = listed.length > 0 ? listed
+        : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort()
+    const order: string[] = []
+    for (const master of masters) {
+        const rels = new Map((await readRels(zip, master)).map((r) => [ r.id, r ]))
+        for (const layoutId of elements(parseXml(await partText(zip, master)), "p:sldLayoutId")) {
+            const rel = rels.get(layoutId.getAttribute("r:id") ?? "")
+            if (rel !== undefined && rel.target !== null && rel.type.endsWith("/slideLayout"))
+                order.push(rel.target)
+        }
+    }
+    return order
 }

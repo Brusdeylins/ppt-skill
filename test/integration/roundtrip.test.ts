@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import JSZip from "jszip"
-import { buildEmptyDeck, buildSeed } from "../../src/engine/seed.js"
+import { buildEmptyDeck, slideFromLayout } from "../../src/engine/seed.js"
 import { expectIntact } from "../util/integrity.js"
 import { DeckArchive, readDeckState, readTemplateInfo } from "../../src/engine/reader.js"
 import { executeOps } from "../../src/commands/apply.js"
@@ -101,7 +101,7 @@ describe("roundtrip against the fixture template", () => {
             .rejects.toSatisfy((err: unknown) => (err as PptcError).code === "E_SCHEMA")
     })
 
-    it("keeps footer and slide-number placeholders on seed slides", async () => {
+    it("keeps footer and slide-number placeholders on new slides", async () => {
         const zip = await JSZip.loadAsync(readFileSync(TEMPLATE))
         const layoutPart = "ppt/slideLayouts/slideLayout1.xml"
         const layout = await (zip.file(layoutPart) as JSZip.JSZipObject).async("string")
@@ -110,10 +110,7 @@ describe("roundtrip against the fixture template", () => {
             + "<p:txBody><a:bodyPr/><a:lstStyle/><a:p>"
             + "<a:fld id=\"{11111111-2222-3333-4444-555555555555}\" type=\"slidenum\"><a:t>1</a:t></a:fld>"
             + "</a:p></p:txBody></p:sp>"
-        zip.file(layoutPart, layout.replace("</p:spTree>", `${sldNumSp}</p:spTree>`))
-        const seed = await buildSeed(await zip.generateAsync({ type: "nodebuffer" }))
-        const out = await JSZip.loadAsync(seed.bytes)
-        const slide = await (out.file("ppt/slides/slide1.xml") as JSZip.JSZipObject).async("string")
+        const slide = slideFromLayout(layout.replace("</p:spTree>", `${sldNumSp}</p:spTree>`))
         expect(slide).toContain("type=\"sldNum\"")
         expect(slide).toContain("type=\"slidenum\"")
     })
@@ -131,8 +128,7 @@ describe("roundtrip against the fixture template", () => {
             + "<p14:sldIdLst><p14:sldId id=\"256\"/></p14:sldIdLst></p14:section>"
             + "</p14:sectionLst></p:ext></p:extLst>"
         zip.file("ppt/presentation.xml", pres.replace("</p:presentation>", `${section}</p:presentation>`))
-        const seed = await buildSeed(await zip.generateAsync({ type: "nodebuffer" }))
-        const out = await JSZip.loadAsync(seed.bytes)
+        const out = await JSZip.loadAsync(await buildEmptyDeck(await zip.generateAsync({ type: "nodebuffer" })))
         const outPres = await (out.file("ppt/presentation.xml") as JSZip.JSZipObject).async("string")
         expect(outPres).not.toContain("sectionLst")
     })
@@ -143,8 +139,7 @@ describe("roundtrip against the fixture template", () => {
         zip.file("ppt/viewProps.xml", viewPr
             .replace(/ lastView="[^"]*"/g, "")
             .replace("<p:viewPr ", "<p:viewPr lastView=\"sldMasterView\" "))
-        const seed = await buildSeed(await zip.generateAsync({ type: "nodebuffer" }))
-        const out = await JSZip.loadAsync(seed.bytes)
+        const out = await JSZip.loadAsync(await buildEmptyDeck(await zip.generateAsync({ type: "nodebuffer" })))
         const outViewPr = await (out.file("ppt/viewProps.xml") as JSZip.JSZipObject).async("string")
         expect(outViewPr).not.toContain("lastView=")
     })

@@ -6,32 +6,14 @@
 **  engine/post: the package-wide steps of an apply, after every slide is in
 **  place: sweep unreferenced notes and stale presentation references, apply
 **  document properties, collect unreachable assets, sync sections, content
-**  types and app properties. Slide-level edits live in engine/inplace.
-**
-**  LOCKSTEP: every repair trigger this module and engine/inplace/slides.ts
-**  fix is asserted read-only by engine/verify.ts -- when a trigger is added
-**  or changed here, teach the verifier the same rule (and vice versa), or
-**  self-verify turns green fixes into false E_INTEGRITY failures.
+**  types and app properties. Slide-level edits live in engine/inplace; the
+**  package-level rules these steps satisfy are asserted by engine/verify.
 */
 
 import type JSZip from "jszip"
-import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
-import { partText, cleanContentTypes, resolveTarget } from "./parts.js"
-import { NS_REL, doubleQuoted, elements, firstElement, parseXml, serializeXml } from "./xml.js"
-
-/**  remove a list of parts plus their rels and content-type overrides  */
-export const removeParts = async (zip: JSZip, parts: string[]): Promise<void> => {
-    if (parts.length === 0)
-        return
-    let ct = doubleQuoted(await partText(zip, "[Content_Types].xml"))
-    for (const part of parts) {
-        zip.remove(part)
-        zip.remove(`${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`)
-        ct = ct.replace(new RegExp(`<Override [^>]*PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "")
-    }
-    zip.file("[Content_Types].xml", ct)
-}
+import { appendRel, cleanContentTypes, gcAssets, partText, readRels, removeParts } from "./parts.js"
+import { elements, firstElement, parseXml, serializeXml, xmlEscape } from "./xml.js"
 
 /**  sync user-created sections with the slide list. Sections are
      contiguous runs of the slide order, so the slides that kept their
@@ -97,63 +79,6 @@ export const syncSectionRefs = async (zip: JSZip): Promise<void> => {
     zip.file(part, serializeXml(pres))
 }
 
-/**  parts a slide carries (charts with their drawings and theme
-     overrides, SmartArt, embeddings, media, comments, tags, ink and
-     ActiveX controls);
-     unreachable ones (e.g. of a removed slide) are garbage.
-     Mirrored by the orphan check in engine/verify.ts.  */
-export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags|ink|activeX)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
-
-/**  GC assets unreachable from any live part  */
-export const gcAssets = async (zip: JSZip): Promise<void> => {
-    const isAsset = (f: string): boolean =>
-        ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/")
-    const assets = Object.keys(zip.files).filter(isAsset)
-    if (assets.length === 0)
-        return
-    const live = new Set<string>()
-    const queue = Object.keys(zip.files).filter((f) =>
-        f.endsWith(".rels") && !isAsset(f.replace(/_rels\/([^/]+)\.rels$/, "$1")))
-    while (queue.length > 0) {
-        const relsPart = queue.pop() as string
-        const relsText = await zip.file(relsPart)?.async("string")
-        if (relsText === undefined)
-            continue
-        const base = path.posix.dirname(path.posix.dirname(relsPart))
-        for (const rel of elements(parseXml(relsText), "Relationship")) {
-            if (rel.getAttribute("TargetMode") === "External")
-                continue
-            const target = resolveTarget(base, rel.getAttribute("Target") ?? "")
-            if (isAsset(target) && !live.has(target)) {
-                live.add(target)
-                const tRels = `${path.posix.dirname(target)}/_rels/${path.posix.basename(target)}.rels`
-                if (zip.file(tRels) !== null)
-                    queue.push(tRels)
-            }
-        }
-    }
-    await removeParts(zip, assets.filter((a) => !live.has(a)))
-}
-
-/**  append a relationship to a rels document  */
-const addRel = (rels: Document, id: string, type: string, target: string, external = false): void => {
-    const rel = rels.createElementNS(NS_REL, "Relationship")
-    rel.setAttribute("Id", id)
-    rel.setAttribute("Type", type)
-    rel.setAttribute("Target", target)
-    if (external)
-        rel.setAttribute("TargetMode", "External")
-    rels.documentElement?.appendChild(rel)
-}
-
-/**  content-type defaults for image media  */
-export const IMAGE_TYPES: Record<string, string> = {
-    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
-    gif: "image/gif", svg: "image/svg+xml", webp: "image/webp",
-    bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff",
-    emf: "image/x-emf", wmf: "image/x-wmf"
-}
-
 /**  read a slide's title text (title/ctrTitle placeholder), "" if none  */
 const slideTitle = (slide: Document): string => {
     for (const sp of elements(slide, "p:sp")) {
@@ -163,10 +88,6 @@ const slideTitle = (slide: Document): string => {
     }
     return ""
 }
-
-/**  escape text for an XML text node  */
-const xmlEscape = (s: string): string =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 /**  keep docProps/app.xml in sync with the real slides: a deck declaring
      fewer slides than it has makes PowerPoint demand a repair on open.
@@ -199,11 +120,14 @@ export const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<v
         ++seen === counts.length ? `<vt:i4>${n}</vt:i4>` : m)
     const kept = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)]
         .map((m) => m[1] as string).slice(0, leading)
-    const lpstr = [...kept, ...titles.map(xmlEscape)].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("")
+    const lpstr = [ ...kept, ...titles.map((t) => xmlEscape(t)) ].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("")
+
+    /*  replacer functions: a title like "US$'000" must not read as a
+        replacement pattern  */
     xml = xml
-        .replace(/<Slides>\d+<\/Slides>/, `<Slides>${n}</Slides>`)
-        .replace(hp[0], `<HeadingPairs>${newHp}</HeadingPairs>`)
-        .replace(tp[0], `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`)
+        .replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`)
+        .replace(hp[0], () => `<HeadingPairs>${newHp}</HeadingPairs>`)
+        .replace(tp[0], () => `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`)
     zip.file(part, xml)
 }
 
@@ -267,7 +191,7 @@ export const setCustomProps = async (zip: JSZip, patch: Record<string, string>):
     let pid = 2
     let body = ""
     for (const [name, value] of props)
-        body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name)}">`
+        body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name, true)}">`
             + `<vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`
     zip.file(CUSTOM_PROPS_PART,
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n"
@@ -277,7 +201,7 @@ export const setCustomProps = async (zip: JSZip, patch: Record<string, string>):
     const ct = await partText(zip, "[Content_Types].xml")
     if (!ct.includes(`PartName="/${CUSTOM_PROPS_PART}"`))
         zip.file("[Content_Types].xml", ct.replace("</Types>",
-            `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`))
+            () => `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`))
 
     /*  package relationship from the root .rels (idempotent)  */
     const rootRels = parseXml(await partText(zip, "_rels/.rels"))
@@ -288,7 +212,7 @@ export const setCustomProps = async (zip: JSZip, patch: Record<string, string>):
         let n = 1
         while (ids.has(`rId${n}`))
             n++
-        addRel(rootRels, `rId${n}`, CUSTOM_PROPS_REL, CUSTOM_PROPS_PART)
+        appendRel(rootRels, `rId${n}`, CUSTOM_PROPS_REL, CUSTOM_PROPS_PART)
         zip.file("_rels/.rels", serializeXml(rootRels))
     }
 }
@@ -298,43 +222,37 @@ export const setCustomProps = async (zip: JSZip, patch: Record<string, string>):
      whose relationship is gone  */
 const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
     const notes = new Set<string>()
-    for (const slide of slides) {
-        const rels = doubleQuoted(await zip.file(`ppt/slides/_rels/${path.posix.basename(slide)}.rels`)?.async("string") ?? "")
-        for (const m of rels.matchAll(/<Relationship\b[^>]*>/g))
-            if (/Type="[^"]*\/notesSlide"/.test(m[0]))
-                notes.add(resolveTarget("ppt/slides", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""))
-    }
+    for (const slide of slides)
+        for (const r of await readRels(zip, slide))
+            if (r.type.endsWith("/notesSlide") && r.target !== null)
+                notes.add(r.target)
     await removeParts(zip, Object.keys(zip.files).filter((f) =>
         /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)))
 
     const presRelsPart = "ppt/_rels/presentation.xml.rels"
     const presRels = parseXml(await partText(zip, presRelsPart))
-    const presXml = doubleQuoted(await partText(zip, "ppt/presentation.xml"))
-    const liveSlideRids = new Set([ ...presXml.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g) ].map((m) => m[1]))
+    const pres = parseXml(await partText(zip, "ppt/presentation.xml"))
+    const liveSlideRids = new Set(elements(pres, "p:sldId").map((s) => s.getAttribute("r:id") ?? ""))
     let pruned = false
-    for (const rel of elements(presRels, "Relationship")) {
-        if (rel.getAttribute("TargetMode") === "External")
+    for (const r of await readRels(zip, "ppt/presentation.xml")) {
+        if (r.target === null || (zip.file(r.target) !== null && !(r.type.endsWith("/slide") && !liveSlideRids.has(r.id))))
             continue
-        const target = resolveTarget("ppt", rel.getAttribute("Target") ?? "")
-        if (zip.file(target) === null
-            || ((rel.getAttribute("Type") ?? "").endsWith("/slide") && !liveSlideRids.has(rel.getAttribute("Id") ?? ""))) {
-            rel.parentNode?.removeChild(rel)
-            pruned = true
-        }
+        for (const rel of elements(presRels, "Relationship"))
+            if (rel.getAttribute("Id") === r.id)
+                rel.parentNode?.removeChild(rel)
+        pruned = true
     }
     if (pruned)
         zip.file(presRelsPart, serializeXml(presRels))
-    if (!presXml.includes("<p:custShow"))
-        return
     const rids = new Set(elements(presRels, "Relationship").map((r) => r.getAttribute("Id") ?? ""))
-    const pres = parseXml(presXml)
     let dropped = false
-    for (const show of elements(pres, "p:custShow"))
-        for (const sld of elements(show, "p:sld"))
-            if (!rids.has(sld.getAttribute("r:id") ?? "")) {
-                sld.parentNode?.removeChild(sld)
-                dropped = true
-            }
+
+    /*  p:sld only occurs in the slide lists of custom shows  */
+    for (const sld of elements(pres, "p:sld"))
+        if (!rids.has(sld.getAttribute("r:id") ?? "")) {
+            sld.parentNode?.removeChild(sld)
+            dropped = true
+        }
     if (dropped)
         zip.file("ppt/presentation.xml", serializeXml(pres))
 }
