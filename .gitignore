@@ -2,6 +2,7 @@ node_modules/
 dst/
 deploy/
 private-templates/
+demo/
 *.tsbuildinfo
 .DS_Store
 test/tmp/

@@ -3,29 +3,24 @@
 **  Copyright (c) 2026 Matthias Brusdeylins
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
-**  engine/seed: the seed-deck factory. pptx-automizer imports slides, not
-**  layouts -- so for every template we derive a "seed deck" once: a .pptx
-**  containing exactly one empty slide per slide layout (placeholders cloned
-**  from the layout). `slide.add` then imports seed slide N+1 for layout N.
-**  Seeds are cached by template content hash.
+**  engine/seed: slides and decks from layouts. `slideFromLayout` builds the
+**  empty slide `slide.add` puts into a deck (placeholders cloned from the
+**  layout, named `PptcPh-<idx>`); `buildEmptyDeck` derives the zero-slide
+**  deck `pptc new` starts from a template.
 */
 
 import JSZip from "jszip"
-import { readFileSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import type { Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
 import { seedPlaceholderName } from "../core/model.js"
-import { atomicWrite, cacheDir, contentHash } from "../infra/fs.js"
 import { cleanContentTypes, normalizeRelTargets } from "./parts.js"
 import { gcAssets } from "./post.js"
 import { NS_A, elements, firstElement, parseXml, serializeElement } from "./xml.js"
 
-/**  seed format generation: bump to invalidate all cached seeds  */
-const SEED_FORMAT = 5
-
 /**  clone the fillable placeholders of a layout onto an empty slide (DOM)  */
-const slideFromLayout = (layoutXml: string): string => {
+export const slideFromLayout = (layoutXml: string): string => {
     const layout = parseXml(layoutXml)
     const sps: string[] = []
     let nextId = 2
@@ -81,7 +76,7 @@ const stripSlides = (
 })
 
 /**  layout part paths in slide-master order  */
-const layoutOrder = async (zip: JSZip): Promise<string[]> => {
+export const layoutOrder = async (zip: JSZip): Promise<string[]> => {
     const order: string[] = []
 
     /*  masters in sldMasterIdLst order -- the order the reader (and so every
@@ -203,90 +198,6 @@ export const buildSeed = async (templateBytes: Buffer): Promise<{ bytes: Buffer,
         bytes: await zip.generateAsync({ type: "nodebuffer" }),
         layoutCount: order.length
     }
-}
-
-/**
- *  Get the cached seed deck for a template, building it on first use.
- *  The cache key is the template's content hash, so template edits
- *  invalidate the seed automatically.
- *
- *  @param templatePath - path of the .potx/.pptx template
- *  @returns absolute path of the cached seed deck
- */
-export const ensureSeed = async (templatePath: string): Promise<string> => {
-    const bytes = readFileSync(templatePath)
-    return await cachedSeed(`seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`, bytes)
-}
-
-/**  seeds unused for this long are dropped from the cache, and at most
-     this many seeds are kept (each can carry a template's full media)  */
-const SEED_MAX_AGE_MS = 14 * 24 * 3600 * 1000
-const SEED_MAX_COUNT  = 24
-
-/**  return the cached seed of a name, building it atomically on a miss (a
-     concurrent pptc never reads a half-written seed); every use refreshes
-     its mtime; stale seeds and orphaned temp files are pruned  */
-const cachedSeed = async (name: string, source: Buffer): Promise<string> => {
-    const dir = cacheDir()
-    const seedPath = path.join(dir, name)
-    try {
-        const now = new Date()
-        utimesSync(seedPath, now, now)
-    }
-    catch {
-        atomicWrite(seedPath, (await buildSeed(source)).bytes)
-    }
-    const seeds: { file: string, mtime: number }[] = []
-    for (const f of readdirSync(dir).filter((f) => f.startsWith("seed-")))
-        try {
-            const file = path.join(dir, f)
-            const mtime = statSync(file).mtimeMs
-            if (f.endsWith(".pptx") && file !== seedPath)
-                seeds.push({ file, mtime })
-            else if (!f.endsWith(".pptx") && Date.now() - mtime > 3600 * 1000)
-                rmSync(file, { force: true })
-        }
-        catch {
-            /*  another pptc pruned it first  */
-        }
-    seeds.sort((a, b) => b.mtime - a.mtime)
-    for (const [ i, seed ] of seeds.entries())
-        if (i >= SEED_MAX_COUNT - 1 || Date.now() - seed.mtime > SEED_MAX_AGE_MS)
-            rmSync(seed.file, { force: true })
-    return seedPath
-}
-
-/**
- *  Get the cached seed deck derived from an EXISTING deck's OWN embedded
- *  layouts -- used by `slide.add` when no external template is supplied.
- *  `pptc new` bakes the full template (masters, layouts, theme) into every
- *  deck and the post-pass never garbage-collects layouts, so the deck always
- *  carries the same layouts the template did. The cache key hashes only the
- *  design parts (masters, layouts, theme, presentation), so ordinary content
- *  edits do not rebuild the seed.
- *
- *  @param deckPath - path of the deck whose own layouts seed new slides
- *  @returns absolute path of the cached seed deck
- */
-export const ensureSeedFromDeck = async (deckPath: string): Promise<string> => {
-    const bytes = readFileSync(deckPath)
-    const zip = await JSZip.loadAsync(bytes)
-    const designParts = Object.keys(zip.files)
-        .filter((f) => /^ppt\/(slideMasters|slideLayouts|theme)\/[^/]+\.xml$/.test(f)
-            || f === "ppt/presentation.xml")
-        .sort()
-    const design: string[] = []
-
-    /*  the slide list and sections of presentation.xml change with every
-        slide add/remove but never affect the seed -- keep them out of the key  */
-    for (const part of designParts) {
-        let xml = await (zip.file(part) as JSZip.JSZipObject).async("string")
-        if (part === "ppt/presentation.xml")
-            xml = xml.replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, "")
-                .replace(/<p14:sectionLst[\s\S]*?<\/p14:sectionLst>/, "")
-        design.push(`${part}:${xml}`)
-    }
-    return await cachedSeed(`seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`, bytes)
 }
 
 /**

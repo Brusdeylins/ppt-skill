@@ -3,12 +3,11 @@
 **  Copyright (c) 2026 Matthias Brusdeylins
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
-**  Contract: the pptx-automizer patches (engine/automizer-patches.ts) are
-**  effective in the BUILT bundle, not only in the sources -- the reported
-**  regression (images added in separate applies overwriting each other)
-**  OLE objects of two slides collapsing into one file, and a BOM template's
-**  deck with an embedded Excel object, replayed through dst/pptc.mjs.
-**  `npm test` builds first.
+**  Contract: regressions found in 1.0.x hold in the BUILT bundle, not only
+**  in the sources -- images added in separate applies overwriting each
+**  other, OLE objects of two slides collapsing into one file, and a BOM
+**  template's deck with an embedded Excel object, replayed through
+**  dst/pptc.mjs. `npm test` builds first.
 */
 
 import { describe, expect, it } from "vitest"
@@ -27,14 +26,14 @@ const TMP = path.join(here, "..", "tmp")
 const run = (...argv: string[]): Record<string, unknown> =>
     JSON.parse(spawnSync("node", [ BIN, ...argv ], { encoding: "utf8" }).stdout) as Record<string, unknown>
 
-describe("automizer patches in the built bundle", () => {
+describe("1.0.x regressions in the built bundle", () => {
     it("keeps three SVG images added in three applies apart", async () => {
         mkdirSync(TMP, { recursive: true })
-        const deck = path.join(TMP, "bundle-patches.pptx")
+        const deck = path.join(TMP, "bundle-regressions.pptx")
         expect(run("new", deck, "--template", TEMPLATE, "--force").ok).toBe(true)
         const colors = [ "red", "green", "blue" ]
         for (const c of colors) {
-            const svg = path.join(TMP, `bundle-patches-${c}.svg`)
+            const svg = path.join(TMP, `bundle-regressions-${c}.svg`)
             writeFileSync(svg, `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="${c}"/></svg>`)
             const op = { op: "el.add", slide: "$s", elements: [ { type: "image", name: "B", frame: { x: 1, y: 1, w: 2, h: 2 }, path: svg } ] }
             const res = spawnSync("node", [ BIN, "apply", deck, "--ops", "-" ], { encoding: "utf8",
@@ -49,7 +48,7 @@ describe("automizer patches in the built bundle", () => {
 
     it("keeps the embedded OLE objects of two slides apart", async () => {
         mkdirSync(TMP, { recursive: true })
-        const deck = path.join(TMP, "bundle-patches-ole.pptx")
+        const deck = path.join(TMP, "bundle-regressions-ole.pptx")
         expect(run("new", deck, "--template", TEMPLATE, "--force").ok).toBe(true)
         const add = spawnSync("node", [ BIN, "apply", deck, "--ops", "-" ], { encoding: "utf8", input: JSON.stringify({ ops: [
             { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "A" } } },
@@ -90,12 +89,12 @@ describe("automizer patches in the built bundle", () => {
 
     it("edits a BOM template's deck with an embedded Excel object", async () => {
         mkdirSync(TMP, { recursive: true })
-        const template = path.join(TMP, "bundle-patches-bom.pptx")
+        const template = path.join(TMP, "bundle-regressions-bom.pptx")
         const tpl = await JSZip.loadAsync(readFileSync(TEMPLATE))
         for (const n of Object.keys(tpl.files).filter((f) => /\.(xml|rels)$/.test(f)))
             tpl.file(n, Buffer.concat([ Buffer.from([ 0xEF, 0xBB, 0xBF ]), await (tpl.file(n) as JSZip.JSZipObject).async("nodebuffer") ]))
         writeFileSync(template, await tpl.generateAsync({ type: "nodebuffer" }))
-        const deck = path.join(TMP, "bundle-patches-package.pptx")
+        const deck = path.join(TMP, "bundle-regressions-package.pptx")
         expect(run("new", deck, "--template", template, "--force").ok).toBe(true)
         expect(run("apply", deck, "-e", JSON.stringify({ op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "A" } } })).ok).toBe(true)
 

@@ -4,8 +4,8 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  core/model: the engine-free domain model of pptc. These types describe
-**  decks, slides, placeholders and layouts as plain data. No OOXML, no
-**  automizer types ever appear above this layer.
+**  decks, slides, placeholders and layouts as plain data. No OOXML or
+**  engine types ever appear above this layer.
 */
 
 /**  Geometry of a box on a slide, in inches (origin: top-left of the slide).  */

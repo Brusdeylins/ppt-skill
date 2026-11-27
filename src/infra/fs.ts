@@ -66,7 +66,7 @@ export const atomicWrite = (file: string, data: Buffer): void => {
 }
 
 /**
- *  Directory for cached seed decks, created on demand.
+ *  Scratch directory (staging of `pptc new`), created on demand.
  *
  *  @returns absolute path of the cache directory
  */

@@ -5,9 +5,9 @@
 **
 **  Integration: slide tags (<p:custDataLst> -> <p:tags r:id>, the carrier of
 **  think-cell chart links and other add-in metadata) must survive an apply.
-**  Regression guard for the defect where pptx-automizer's "unsupported tag"
-**  cleaning silently stripped the element and its /tags relationship from
-**  every re-imported slide -- unlinking think-cell charts deck-wide.
+**  Regression guard for the 1.0.x defect where the engine's rebuild silently
+**  stripped the element and its /tags relationship from every slide --
+**  unlinking think-cell charts deck-wide.
 */
 
 import { beforeAll, describe, expect, it } from "vitest"
@@ -67,14 +67,13 @@ describe("slide tags survive an apply", () => {
             ops: [{ op: "slide.fill", slide: "title:Tagged", placeholders: { body: { text: "edited" } } }]
         }, opts)
 
-        /*  automizer renumbers slide parts on re-import: locate the slide
-            part carrying the restored list instead of assuming slide1.xml  */
+        /*  locate the slide part instead of assuming slide1.xml  */
         const zip = await JSZip.loadAsync(readFileSync(DECK))
         const parts = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))
         expect(parts).toHaveLength(1)
         const part = parts[0] as string
         const slide = await (zip.file(part) as JSZip.JSZipObject).async("string")
-        const m = /<p:custDataLst><p:tags r:id="(rIdPptc\d+)"\/><\/p:custDataLst>/.exec(slide)
+        const m = /<p:custDataLst><p:tags r:id="([^"]+)"\/><\/p:custDataLst>/.exec(slide)
         expect(m).not.toBeNull()
         const rels = await (zip.file(`ppt/slides/_rels/${path.basename(part)}.rels`) as JSZip.JSZipObject).async("string")
         expect(rels).toContain(`Id="${m?.[1]}" Type="${TAGS_REL}" Target="../tags/tag1.xml"`)
@@ -96,7 +95,7 @@ describe("slide tags survive an apply", () => {
         const targets: string[] = []
         for (const part of parts) {
             const slide = await (zip.file(part) as JSZip.JSZipObject).async("string")
-            const m = /<p:custDataLst><p:tags r:id="(rIdPptc\d+)"\/><\/p:custDataLst>/.exec(slide)
+            const m = /<p:custDataLst><p:tags r:id="([^"]+)"\/><\/p:custDataLst>/.exec(slide)
             expect(m).not.toBeNull()
             const rels = await (zip.file(`ppt/slides/_rels/${path.basename(part)}.rels`) as JSZip.JSZipObject).async("string")
             const rel = new RegExp(`Id="${m?.[1]}" Type="[^"]*" Target="([^"]+)"`).exec(rels)
@@ -112,8 +111,7 @@ describe("slide tags survive an apply", () => {
 describe("presentation-level tags survive an apply", () => {
     it("keeps the presentation's p:custDataLst wired across a rebuild", async () => {
         /*  think-cell parks workbook-level data in the PRESENTATION's
-            custDataLst; automizer happens not to clean presentation.xml
-            today -- this guard turns a future regression into a test failure
+            custDataLst -- this guard turns a regression into a test failure
             instead of silent data loss  */
         const zipIn = await JSZip.loadAsync(readFileSync(DECK))
         zipIn.file("ppt/tags/tagPres.xml",

@@ -4,8 +4,9 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  Integration: slide visibility ("Hide Slide", show="0") must survive an
-**  apply. Regression guard for the defect where the automizer rebuild dropped
-**  the <p:sld show="0"> attribute and silently un-hid every hidden slide.
+**  apply. Regression guard for the 1.0.x defect where the engine's rebuild
+**  dropped the <p:sld show="0"> attribute and silently un-hid every hidden
+**  slide.
 */
 
 import { beforeAll, describe, expect, it } from "vitest"

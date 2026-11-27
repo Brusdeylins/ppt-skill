@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.1.0
+
+- **New engine: decks are edited in place.** Every apply used to rebuild
+  the whole deck through `pptx-automizer`, whose count-based, slide-local
+  part and id allocation kept moving media, notes, OLE objects, theme
+  overrides, SmartArt, tags, links and sections between slides (1.0.11
+  fixed the known cases with nine patches of automizer internals). The new
+  engine (`engine/inplace/`) changes only what the plan asks for: slides no
+  op touches are never re-imported, renamed or re-serialized -- every part
+  keeps its bytes. New slides are created from the deck's own layouts,
+  copies get their own notes, charts (with workbook), embeddings,
+  SmartArt, tags, comments and theme overrides, and every new part name,
+  relationship id and slide id continues above everything in use.
+  `pptx-automizer` and `engine/automizer-patches.ts` are gone; the bundle
+  shrinks from 2.6 MB to 1.9 MB, and a trivial apply on the demo deck
+  takes 1.8 s instead of 2.3 s.
+- **Untouched slides are checked byte for byte.** Before writing, the
+  engine proves that no part of an untouched slide changed; otherwise the
+  apply fails with `E_INTEGRITY` and the deck stays as it was. Edited and
+  copied slides keep the content check of 1.0.11.
+- **Content that would vanish blocks the write.** `W_CONTENT_LOST` is
+  gone: content of a slide that would get lost although no op removed it
+  now fails with `E_INTEGRITY`, like content that would move.
+- **Decks with repair triggers stay editable.** A slide whose input
+  carries PowerPoint repair triggers (duplicate shape ids, dead or
+  duplicate relationships, a notes part shared with another slide) is
+  repaired and reported with the new warning `W_REPAIRED`; all other
+  slides stay untouched.
+- **`el.rm` removes every matching shape.** Two existing shapes of the same
+  name were both addressed, but only the first one was removed.
+- **`el.add` elements are rendered once per apply.** PptxGenJS (now a
+  direct dependency, pinned to 3.12.0 -- the version 1.0.x bundled) builds
+  all elements of an apply into one deck; each shape moves into its slide
+  with its parts under fresh names. Shape names keep their `-<uuid>`
+  suffix, so `el.set`/`el.rm` address them as before.
+- **`apply --template` only checks the layouts.** New slides always come
+  from the deck's own layouts; the seed-deck cache is gone.
+- **Tests:** a golden test pins the engine results of fixed op sequences
+  over all ten ops (frozen from the 1.0.11 engine), a test asserts the
+  bytes of untouched slides, the semantic fuzz also checks sections and OLE
+  payloads and takes `PPTC_FUZZ_ROUNDS` / `PPTC_FUZZ_SEEDS` for long runs,
+  and `scripts/bench.mjs` measures a trivial apply.
+
 ## 1.0.11
 
 - **Fix: images added in a later apply overwrote media of other slides.**

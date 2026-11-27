@@ -281,10 +281,12 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   `W_ELEMENT_OVERLAP` (an `el.add` element covers a text-bearing shape,
   incl. the footer/slide-number area -- reposition it; prompt boxes are
   exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
-  readable minimum -- enlarge it). Not escalated, since it is found after
-  the write: `W_CONTENT_LOST` (the engine could not carry over content of a
-  slide no op touched, e.g. an image -- the deck is written, tell the user;
-  content of another slide appearing instead fails with `E_INTEGRITY`)
+  readable minimum -- enlarge it). Not escalated, since it is found during
+  the write: `W_REPAIRED` (the input deck carried PowerPoint repair
+  triggers on a slide -- duplicate shape ids, dead or duplicate
+  relationships, a shared notes part -- and pptc repaired that slide; the
+  deck is written, tell the user). Content of a slide that would vanish,
+  move or change although no op asked for it fails with `E_INTEGRITY`
 - `--min-font-pt N` -- readability floor for explicit font sizes (default
   `8`); runs or `el.add`/`el.set` elements below `N` raise
   `W_FONT_TOO_SMALL`. `0` disables the check. Footer/slide-number/date
@@ -445,26 +447,25 @@ Exactly one JSON document on stdout; logs (if any) on stderr.
 
 The codebase is layered strictly downward (`cli → commands → core → engine →
 infra`, see [ARCHITECTURE.md](ARCHITECTURE.md)). Inside the engine, the actual
-PPTX work is split across **three workhorses** -- two external libraries plus
-one deliberate own layer:
+PPTX work is split across **three parts**:
 
-1.  **[pptx-automizer](https://github.com/singerla/pptx-automizer)** -- the
-    heavy lifting: imports slides between decks (kept slides from the deck
-    itself, new slides from a per-template *seed deck*), carrying masters,
-    layouts and styles along.
+1.  **The in-place engine** (`engine/inplace/`) -- edits the deck package
+    directly: slides the plan does not touch are never re-imported, renamed
+    or re-serialized (their parts keep every byte), new slides are created
+    from the deck's own layouts, copies get their own notes, charts,
+    embeddings, SmartArt, tags and comments, and every fresh part name and
+    id continues above everything in use.
 2.  **[PptxGenJS](https://github.com/gitbrent/PptxGenJS)** -- element
-    generation: tables, charts, textboxes, shapes and images created via
-    `el.add` are built with PptxGenJS and merged in through automizer's
-    interop.
-3.  **The zip post-pass** (`engine/post.ts`, one file) -- everything the
-    libraries cannot express or get wrong: speaker notes, footer cloning,
-    backgrounds, images into placeholders, hyperlink relationships, slide
-    visibility (re-applying `show="0"` on kept hidden slides), document
-    properties -- plus deterministic cleanup after automizer (orphan parts,
-    stale relationships, duplicate shape ids).
+    generation only: tables, charts, textboxes, shapes and images created
+    via `el.add` are rendered by PptxGenJS and transplanted into their slide
+    together with their parts.
+3.  **The package-wide steps** (`engine/post.ts`) -- garbage collection,
+    sections, content types, document and app properties; deterministic
+    repairs apply to touched parts only.
 
-The principle: libraries for the 95%, a small deterministic repair layer for
-the 5% they cannot do -- never a self-built PPTX engine.
+The principle: an own, small engine for the package operations, libraries
+only as generators -- every apply changes exactly what the plan asks for,
+self-checked before the atomic write.
 
 ## Design Decisions
 
@@ -472,13 +473,11 @@ the 5% they cannot do -- never a self-built PPTX engine.
   producing one schema-validated JSON document than at sequencing a dozen
   correct shell invocations -- one validation pass surfaces all errors at
   once, and there is exactly one write schema to maintain.
-- **Seed decks.** The engine ([pptx-automizer](https://github.com/singerla/pptx-automizer))
-  imports slides, not layouts. For each template pptc derives a *seed deck*
-  (one empty cloned-placeholder slide per layout) on demand, cached by
-  template content hash -- `slide.add` works with any template. With no
-  template, pptc seeds from the deck's OWN embedded layouts instead, so
-  `slide.add` keeps working on an existing deck with no side file -- a deck
-  is self-contained.
+- **Slides from the deck's own layouts.** `slide.add` builds the new slide
+  from the deck's embedded layout (placeholders cloned, named
+  `PptcPh-<idx>`), so it keeps working on an existing deck with no side
+  file -- a deck is self-contained. `--template` on `apply` only checks
+  that the template's layouts equal the deck's.
 - **Two-phase apply.** Every op is a pure plan transformer; the engine session
   interprets the finished plan. `--dry-run` is "plan without commit", not a
   separate code path.

@@ -75,9 +75,9 @@ Execution Rules
   blindly. Exit 7 = lint failure: W_TEXT_OVERFLOW -> shorten or split,
   W_ELEMENT_OVERLAP -> reposition the element, W_FONT_TOO_SMALL -> enlarge
   the font (sizes come from the template, see content-rules.md). A
-  W_CONTENT_LOST warning on a successful apply means the engine dropped
-  content (named in `lost`) from a slide you did not touch -- tell the
-  user which slide and what, do not hide it.
+  W_REPAIRED warning on a successful apply means the deck carried
+  PowerPoint repair triggers on that slide and pptc repaired them -- tell
+  the user which slide, do not hide it.
 - **The user edits between turns.** Treat every deck as changed: begin
   EVERY write with a fresh `state` (rev + structure) and pass that rev to
   `apply --rev`. On exit 6 (E_REV_CONFLICT): re-read `state`, re-check your
@@ -452,9 +452,10 @@ with `E_TEMPLATE`; then drop `--template`.
     by apply</rev>.
 
     **Verify the write (mandatory).** `apply` self-checks its output --
-    against every known PowerPoint "repair" trigger, and that every slide
-    your ops did not touch keeps its content (notes, images, charts,
-    embedded objects) -- and refuses to write a deck that fails.
+    against every known PowerPoint "repair" trigger, that every slide your
+    ops did not touch keeps every byte, and that edited slides keep the
+    content your ops did not change (notes, images, charts, embedded
+    objects) -- and refuses to write a deck that fails.
     <if condition="exit 8 / E_INTEGRITY">the deck was NOT written and is unchanged; this is an engine defect, not a content
     problem. Recover once, in this order: (1) re-read `state`, then apply
     the same ops ONE op per apply (each with the new rev), so the steps

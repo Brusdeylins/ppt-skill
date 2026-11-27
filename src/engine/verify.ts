@@ -23,6 +23,45 @@ import { ASSET_PART } from "./post.js"
 import { normalizeRelTargets } from "./parts.js"
 
 /**
+ *  Repair triggers inside one slide part: duplicate `p:cNvPr` shape ids.
+ *
+ *  @param part - the slide part name
+ *  @param xml - its content
+ *  @returns findings, empty when clean
+ */
+export const shapeIdFindings = (part: string, xml: string): string[] => {
+    const ids = [...xml.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1])
+    const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))]
+    return dup.length > 0 ? [`${part}: duplicate cNvPr ids ${dup.join(",")}`] : []
+}
+
+/**
+ *  Repair triggers inside one relationships part: duplicate ids and dead
+ *  internal targets (targets in relative form).
+ *
+ *  @param relsPart - the rels part name
+ *  @param xml - its content
+ *  @param names - all part names of the package
+ *  @returns findings, empty when clean
+ */
+export const relsFindings = (relsPart: string, xml: string, names: Set<string>): string[] => {
+    const findings: string[] = []
+    const relIds = [...xml.matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1])
+    const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))]
+    if (dupIds.length > 0)
+        findings.push(`${relsPart}: duplicate relationship ids ${dupIds.join(",")}`)
+    const base = path.posix.dirname(path.posix.dirname(relsPart))
+    for (const m of xml.matchAll(/<Relationship [^>]*?\/>/g)) {
+        if (m[0].includes("TargetMode=\"External\""))
+            continue
+        const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""
+        if (!names.has(path.posix.normalize(path.posix.join(base, target))))
+            findings.push(`${relsPart}: dead relationship target ${target}`)
+    }
+    return findings
+}
+
+/**
  *  Validate an opened archive for the known PowerPoint repair triggers.
  *
  *  @param zip - the loaded .pptx archive
@@ -59,30 +98,13 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
 
     /*  2. cNvPr shape ids must be unique per slide  */
     for (const n of names)
-        if (/^ppt\/slides\/slide\d+\.xml$/.test(n)) {
-            const ids = [...(await text(n)).matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1])
-            const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))]
-            if (dup.length > 0)
-                findings.push(`${n}: duplicate cNvPr ids ${dup.join(",")}`)
-        }
+        if (/^ppt\/slides\/slide\d+\.xml$/.test(n))
+            findings.push(...shapeIdFindings(n, await text(n)))
 
     /*  3. every internal relationship target must exist; rel ids unique  */
     for (const n of names)
-        if (n.endsWith(".rels")) {
-            const relIds = [...(await text(n)).matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1])
-            const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))]
-            if (dupIds.length > 0)
-                findings.push(`${n}: duplicate relationship ids ${dupIds.join(",")}`)
-            const base = path.posix.dirname(path.posix.dirname(n))
-            for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
-                if (m[0].includes("TargetMode=\"External\""))
-                    continue
-                const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""
-                const full = path.posix.normalize(path.posix.join(base, target))
-                if (!names.has(full))
-                    findings.push(`${n}: dead relationship target ${target}`)
-            }
-        }
+        if (n.endsWith(".rels"))
+            findings.push(...relsFindings(n, await text(n), names))
 
     /*  4. content-type overrides: no dead parts, no duplicates  */
     const ct = await text("[Content_Types].xml")
@@ -130,11 +152,10 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
         && seq.indexOf("sldSz") > seq.indexOf("notesSz"))
         findings.push("presentation.xml: sldSz appears after notesSz (schema order violated)")
 
-    /*  7a. no dangling /slide relationship: automizer mints a fresh
-        "-created" slide rel on every re-import but wires only one into the
-        sldIdLst; the rest pile up pointing at parts that still exist, so the
-        dead-target check (#3) misses them, and a thousand-strong rels file
-        makes PowerPoint demand a repair. Every /slide rel must be live.  */
+    /*  7a. no dangling /slide relationship: a slide rel no sldId uses
+        points at a part that may still exist, so the dead-target check (#3)
+        misses it, and piled-up ones make PowerPoint demand a repair. Every
+        /slide rel must be live.  */
     const liveSlideRids = new Set([...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]))
     for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
         const id = /\bId="([^"]+)"/.exec(m[0])?.[1] ?? ""
@@ -149,8 +170,7 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
             findings.push(`presentation.xml: section references removed slide id ${m[1]}`)
 
     /*  7c. docProps/app.xml must declare the real slide count and a matching
-        title list. automizer leaves it stale when slides are added on a later
-        apply, and a deck claiming fewer slides than it has makes PowerPoint
+        title list: a deck claiming fewer slides than it has makes PowerPoint
         demand a repair on open.  */
     if (names.has("docProps/app.xml")) {
         const app = await text("docProps/app.xml")
@@ -170,9 +190,7 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
 
     /*  7d. a notesSlide must belong to exactly one slide. Two slides
         pointing at one notes part (it carries a single back-reference) is
-        invalid and makes PowerPoint demand a repair -- automizer renumbers
-        slide parts across applies, which can alias the basename-derived pptc
-        notes part name.  */
+        invalid and makes PowerPoint demand a repair.  */
     const notesRef = new Map<string, string[]>()
     for (const n of names)
         if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(n))

@@ -2913,8 +2913,8 @@ var require_utils = __commonJS({
       var result = transform2[inputType][outputType](input2);
       return result;
     };
-    exports.resolve = function(path12) {
-      var parts = path12.split("/");
+    exports.resolve = function(path15) {
+      var parts = path15.split("/");
       var result = [];
       for (var index = 0; index < parts.length; index++) {
         var part = parts[index];
@@ -8767,18 +8767,18 @@ var require_object = __commonJS({
       var object2 = new ZipObject(name, zipObjectContent, o);
       this.files[name] = object2;
     };
-    var parentFolder = function(path12) {
-      if (path12.slice(-1) === "/") {
-        path12 = path12.substring(0, path12.length - 1);
+    var parentFolder = function(path15) {
+      if (path15.slice(-1) === "/") {
+        path15 = path15.substring(0, path15.length - 1);
       }
-      var lastSlash = path12.lastIndexOf("/");
-      return lastSlash > 0 ? path12.substring(0, lastSlash) : "";
+      var lastSlash = path15.lastIndexOf("/");
+      return lastSlash > 0 ? path15.substring(0, lastSlash) : "";
     };
-    var forceTrailingSlash = function(path12) {
-      if (path12.slice(-1) !== "/") {
-        path12 += "/";
+    var forceTrailingSlash = function(path15) {
+      if (path15.slice(-1) !== "/") {
+        path15 += "/";
       }
-      return path12;
+      return path15;
     };
     var folderAdd = function(name, createFolders) {
       createFolders = typeof createFolders !== "undefined" ? createFolders : defaults.createFolders;
@@ -16256,8090 +16256,9 @@ var require_lib4 = __commonJS({
   }
 });
 
-// node_modules/pptx-automizer/dist/helper/logger.js
-var require_logger = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/logger.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.log = exports.runWithLogger = exports.NullLogger = exports.ConsoleLogger = void 0;
-    var async_hooks_1 = __require("async_hooks");
-    var ConsoleLogger = class {
-      constructor(verbosity = 1) {
-        this.verbosity = verbosity;
-      }
-      error(message, ...details) {
-        console.error("[pptx-automizer]", message, ...details);
-      }
-      warn(message, ...details) {
-        if (this.verbosity >= 1) {
-          console.warn("[pptx-automizer]", message, ...details);
-        }
-      }
-      info(message, ...details) {
-        if (this.verbosity >= 2) {
-          console.info("[pptx-automizer]", message, ...details);
-        }
-      }
-      debug(message, ...details) {
-        if (this.verbosity >= 2) {
-          console.debug("[pptx-automizer]", message, ...details);
-        }
-      }
-    };
-    exports.ConsoleLogger = ConsoleLogger;
-    var NullLogger = class {
-      error() {
-      }
-      warn() {
-      }
-      info() {
-      }
-      debug() {
-      }
-    };
-    exports.NullLogger = NullLogger;
-    var activeLogger = new async_hooks_1.AsyncLocalStorage();
-    var defaultLogger = new ConsoleLogger();
-    var runWithLogger = (logger, fn) => {
-      return activeLogger.run(logger, fn);
-    };
-    exports.runWithLogger = runWithLogger;
-    exports.log = {
-      error: (message, ...details) => {
-        var _a3;
-        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).error(message, ...details);
-      },
-      warn: (message, ...details) => {
-        var _a3;
-        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).warn(message, ...details);
-      },
-      info: (message, ...details) => {
-        var _a3;
-        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).info(message, ...details);
-      },
-      debug: (message, ...details) => {
-        var _a3;
-        return ((_a3 = activeLogger.getStore()) !== null && _a3 !== void 0 ? _a3 : defaultLogger).debug(message, ...details);
-      }
-    };
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xmldom-sax-patch.js
-var require_xmldom_sax_patch = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xmldom-sax-patch.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.patchXmldomSaxRegExpCache = patchXmldomSaxRegExpCache;
-    var applied = false;
-    function patchXmldomSaxRegExpCache() {
-      if (applied) {
-        return;
-      }
-      applied = true;
-      try {
-        const grammar = require_grammar();
-        if (typeof (grammar === null || grammar === void 0 ? void 0 : grammar.reg) !== "function") {
-          return;
-        }
-        const original = grammar.reg;
-        const cache = /* @__PURE__ */ new Map();
-        grammar.reg = function(...args) {
-          const key = args.map((part) => typeof part === "string" ? part : part.source).join("");
-          let compiled = cache.get(key);
-          if (!compiled) {
-            compiled = original.apply(this, args);
-            cache.set(key, compiled);
-          }
-          return compiled;
-        };
-      } catch (_a3) {
-      }
-    }
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/archive/archive.js
-var require_archive = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/archive/archive.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xmldom_1 = require_lib4();
-    var xmldom_sax_patch_1 = require_xmldom_sax_patch();
-    (0, xmldom_sax_patch_1.patchXmldomSaxRegExpCache)();
-    var Archive = class {
-      constructor(filename, params) {
-        this.buffer = /* @__PURE__ */ new Map();
-        this.options = {
-          type: "nodebuffer"
-        };
-        this.filename = filename;
-        this.params = params;
-      }
-      parseXml(xmlString) {
-        const dom = new xmldom_1.DOMParser();
-        return dom.parseFromString(xmlString, "application/xml");
-      }
-      serializeXml(xml) {
-        const s = new xmldom_1.XMLSerializer();
-        return s.serializeToString(xml);
-      }
-      writeBuffer(archiveType) {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const buffered of this.buffer.values()) {
-            const serialized = this.serializeXml(buffered.content);
-            yield archiveType.write(buffered.relativePath, serialized);
-          }
-        });
-      }
-      toBuffer(relativePath, content) {
-        this.buffer.set(relativePath, {
-          relativePath,
-          name: relativePath,
-          content
-        });
-      }
-      /**
-       * Serializes a buffered part back into the underlying archive and drops
-       * its DOM from the buffer. A parsed xmldom document costs ~25x its XML
-       * source size, so parts that are finished (an appended slide after
-       * cleanSlide, a master/layout after append) must not stay buffered for
-       * the rest of the run. Re-reading a flushed part re-parses it from the
-       * serialized content written here. No-op if the part is not buffered.
-       */
-      flushBuffered(archiveType, relativePath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const buffered = this.buffer.get(relativePath);
-          if (!buffered) {
-            return;
-          }
-          yield archiveType.write(relativePath, this.serializeXml(buffered.content));
-          this.buffer.delete(relativePath);
-        });
-      }
-      setOptions(params) {
-        if (params.compression > 0) {
-          this.options.compression = "DEFLATE";
-          this.options.compressionOptions = {
-            level: params.compression
-          };
-        }
-      }
-      fromBuffer(relativePath) {
-        return this.buffer.get(relativePath);
-      }
-    };
-    exports.default = Archive;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/archive/archive-jszip.js
-var require_archive_jszip = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/archive/archive-jszip.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var logger_1 = require_logger();
-    var archive_1 = __importDefault(require_archive());
-    var fs_1 = __importDefault(__require("fs"));
-    var jszip_1 = __importDefault(require_lib3());
-    var path_1 = __importDefault(__require("path"));
-    var ArchiveJszip = class _ArchiveJszip extends archive_1.default {
-      constructor(filename, params) {
-        super(filename, params);
-      }
-      /**
-       * Opens the underlying zip on first use. Idempotent; every method that
-       * needs the loaded archive awaits this. `extract()` creates instances with
-       * a preloaded `archive`, so an already present archive short-circuits.
-       */
-      ensureOpen() {
-        var _a3;
-        if (this.archive) {
-          return Promise.resolve(this);
-        }
-        this.opened = (_a3 = this.opened) !== null && _a3 !== void 0 ? _a3 : this.initialize();
-        return this.opened;
-      }
-      initialize() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (typeof this.filename !== "object") {
-            this.file = yield fs_1.default.promises.readFile(this.filename);
-          } else {
-            this.file = this.filename;
-          }
-          const zip = new jszip_1.default();
-          this.archive = yield zip.loadAsync(this.file);
-          return this;
-        });
-      }
-      fileExists(file2) {
-        if (this.archive === void 0 || this.archive.files[file2] === void 0) {
-          return false;
-        }
-        return true;
-      }
-      folder(dir) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          const files = [];
-          this.archive.folder(dir).forEach((relativePath, file2) => {
-            if (!relativePath.includes("/")) {
-              files.push({
-                name: file2.name,
-                relativePath
-              });
-            }
-          });
-          return files;
-        });
-      }
-      read(file2, type) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          if (!this.archive.files[file2]) {
-            if (typeof this.filename === "string") {
-              throw new Error("Could not find file " + file2 + "@" + path_1.default.basename(this.filename));
-            } else {
-              throw new Error("Could not find file " + file2);
-            }
-          }
-          return this.archive.files[file2].async(type || "string");
-        });
-      }
-      write(file2, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          this.archive.file(file2, data);
-          return this;
-        });
-      }
-      remove(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          this.archive.remove(file2);
-        });
-      }
-      extract(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contents = yield this.read(file2, "nodebuffer");
-          const zip = new jszip_1.default();
-          const newArchive = new _ArchiveJszip(file2, this.params);
-          newArchive.archive = yield zip.loadAsync(contents);
-          return newArchive;
-        });
-      }
-      output(location, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const content = yield this.getContent(params);
-          yield fs_1.default.promises.writeFile(location, content).catch((err) => {
-            logger_1.log.error(err);
-            throw new Error(`Could not write output file: ${location}`);
-          });
-        });
-      }
-      stream(params, options) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          this.setOptions(params);
-          yield this.writeBuffer(this);
-          const mergedOptions = Object.assign(Object.assign({}, this.options), options);
-          return this.archive.generateNodeStream(mergedOptions);
-        });
-      }
-      getFinalArchive() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          yield this.writeBuffer(this);
-          return this.archive;
-        });
-      }
-      getContent(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          this.setOptions(params);
-          yield this.writeBuffer(this);
-          return yield this.archive.generateAsync(this.options);
-        });
-      }
-      readXml(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const isBuffered = this.fromBuffer(file2);
-          if (!isBuffered) {
-            let xmlString = "";
-            if (this.params.decodeText) {
-              const buffer = yield this.read(file2, "nodebuffer");
-              xmlString = new TextDecoder().decode(buffer);
-            } else {
-              xmlString = yield this.read(file2, "string");
-            }
-            const XmlDocument = this.parseXml(xmlString);
-            this.toBuffer(file2, XmlDocument);
-            return XmlDocument;
-          } else {
-            return isBuffered.content;
-          }
-        });
-      }
-      writeXml(file2, XmlDocument) {
-        this.toBuffer(file2, XmlDocument);
-      }
-      flushXml(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.flushBuffered(this, file2);
-        });
-      }
-    };
-    exports.default = ArchiveJszip;
-  }
-});
-
-// node_modules/pptx-automizer/dist/errors.js
-var require_errors2 = __commonJS({
-  "node_modules/pptx-automizer/dist/errors.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.CallbackError = exports.OutputError = exports.ArchiveError = exports.ElementNotFoundError = exports.SlideNotFoundError = exports.TemplateNotFoundError = exports.AutomizerError = void 0;
-    var AutomizerError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = new.target.name;
-        Object.setPrototypeOf(this, new.target.prototype);
-      }
-    };
-    exports.AutomizerError = AutomizerError;
-    var TemplateNotFoundError = class extends AutomizerError {
-      constructor(file2, searchedDirs) {
-        super(`Template file not found: "${file2}". Searched in: ${searchedDirs.map((dir) => dir === "" ? "<working directory>" : dir).join(", ")}`);
-        this.file = file2;
-        this.searchedDirs = searchedDirs;
-      }
-    };
-    exports.TemplateNotFoundError = TemplateNotFoundError;
-    var SlideNotFoundError = class extends AutomizerError {
-      constructor(message, info) {
-        super(message);
-        this.slideIdentifier = info === null || info === void 0 ? void 0 : info.slideIdentifier;
-        this.templateName = info === null || info === void 0 ? void 0 : info.templateName;
-      }
-    };
-    exports.SlideNotFoundError = SlideNotFoundError;
-    var ElementNotFoundError = class extends AutomizerError {
-      constructor(message, info) {
-        super(message);
-        this.selector = info === null || info === void 0 ? void 0 : info.selector;
-        this.file = info === null || info === void 0 ? void 0 : info.file;
-      }
-    };
-    exports.ElementNotFoundError = ElementNotFoundError;
-    var ArchiveError = class extends AutomizerError {
-      constructor(message, info) {
-        super(message);
-        this.file = info === null || info === void 0 ? void 0 : info.file;
-      }
-    };
-    exports.ArchiveError = ArchiveError;
-    var OutputError = class extends AutomizerError {
-    };
-    exports.OutputError = OutputError;
-    var CallbackError = class extends AutomizerError {
-      constructor(element, slideFile, cause) {
-        const causeMessage = cause instanceof Error ? cause.message : String(cause);
-        super(`Modification callback failed on element "${element}" (${slideFile}): ${causeMessage}. Set params.continueOnError to true to log and skip failing callbacks instead.`);
-        this.element = element;
-        this.slideFile = slideFile;
-        this.cause = cause;
-      }
-    };
-    exports.CallbackError = CallbackError;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/jszip-helper.js
-var require_jszip_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/jszip-helper.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v });
-    }) : function(o, v) {
-      o["default"] = v;
-    });
-    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
-      var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function(o2) {
-          var ar = [];
-          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
-          return ar;
-        };
-        return ownKeys(o);
-      };
-      return function(mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) {
-          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        }
-        __setModuleDefault(result, mod);
-        return result;
-      };
-    })();
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.compressFolder = exports.extractToFolder = void 0;
-    var logger_1 = require_logger();
-    var fs_1 = __importStar(__require("fs"));
-    var promises_1 = __require("stream/promises");
-    var path_1 = __importDefault(__require("path"));
-    var jszip_1 = __importDefault(require_lib3());
-    var getFilePathsRecursively = (dir) => __awaiter(void 0, void 0, void 0, function* () {
-      const list = yield fs_1.promises.readdir(dir);
-      const statPromises = list.map((file2) => __awaiter(void 0, void 0, void 0, function* () {
-        const fullPath = path_1.default.resolve(dir, file2);
-        const stat = yield fs_1.promises.stat(fullPath);
-        if (stat && stat.isDirectory()) {
-          return getFilePathsRecursively(fullPath);
-        }
-        return fullPath;
-      }));
-      return (yield Promise.all(statPromises)).flat();
-    });
-    var createZipFromFolder = (dir) => __awaiter(void 0, void 0, void 0, function* () {
-      const absRoot = path_1.default.resolve(dir);
-      const filePaths = yield getFilePathsRecursively(dir);
-      return filePaths.reduce((z2, filePath) => {
-        const relative = filePath.replace(absRoot, "");
-        const zipFolder = path_1.default.dirname(relative).split(path_1.default.sep).reduce((zf, dirName) => zf.folder(dirName), z2);
-        zipFolder.file(path_1.default.basename(filePath), fs_1.default.createReadStream(filePath));
-        return z2;
-      }, new jszip_1.default());
-    });
-    var S_IFMT = 61440;
-    var S_IFLNK = 40960;
-    var isSymlinkEntry = (entry) => {
-      var _a3;
-      return (Number((_a3 = entry.unixPermissions) !== null && _a3 !== void 0 ? _a3 : 0) & S_IFMT) === S_IFLNK;
-    };
-    var extractToFolder = (srcFile, destDir) => __awaiter(void 0, void 0, void 0, function* () {
-      const root = path_1.default.resolve(destDir);
-      yield fs_1.promises.mkdir(root, { recursive: true });
-      const zip = yield new jszip_1.default().loadAsync(yield fs_1.promises.readFile(srcFile));
-      for (const entry of Object.values(zip.files)) {
-        if (path_1.default.isAbsolute(entry.name) || entry.name.startsWith("/") || entry.name.startsWith("\\") || /^[a-zA-Z]:/.test(entry.name)) {
-          throw new Error("Zip entry has an absolute path: " + entry.name);
-        }
-        const dest = path_1.default.resolve(root, entry.name);
-        if (dest !== root && !dest.startsWith(root + path_1.default.sep)) {
-          throw new Error("Zip entry resolves outside target directory: " + entry.name);
-        }
-        if (isSymlinkEntry(entry)) {
-          logger_1.log.warn("Skipping symlink entry in zip file: " + entry.name);
-          continue;
-        }
-        if (entry.dir) {
-          yield fs_1.promises.mkdir(dest, { recursive: true });
-        } else {
-          yield fs_1.promises.mkdir(path_1.default.dirname(dest), { recursive: true });
-          yield fs_1.promises.writeFile(dest, yield entry.async("nodebuffer"));
-        }
-      }
-    });
-    exports.extractToFolder = extractToFolder;
-    var compressFolder = (srcDir, destFile, options) => __awaiter(void 0, void 0, void 0, function* () {
-      const start = Date.now();
-      try {
-        const zip = yield createZipFromFolder(srcDir);
-        yield (0, promises_1.pipeline)(zip.generateNodeStream(Object.assign({ streamFiles: true }, options)), fs_1.default.createWriteStream(destFile));
-        logger_1.log.info("Zip written successfully:", Date.now() - start, "ms");
-      } catch (ex) {
-        logger_1.log.error("Error creating zip", ex);
-        throw ex;
-      }
-    });
-    exports.compressFolder = compressFolder;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/archive/archive-fs.js
-var require_archive_fs = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/archive/archive-fs.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var errors_1 = require_errors2();
-    var archive_1 = __importDefault(require_archive());
-    var fs_1 = __require("fs");
-    var jszip_1 = __importDefault(require_lib3());
-    var archive_jszip_1 = __importDefault(require_archive_jszip());
-    var file_helper_1 = require_file_helper();
-    var jszip_helper_1 = require_jszip_helper();
-    var ArchiveFs = class extends archive_1.default {
-      constructor(filename, params) {
-        super(filename, params);
-        this.dir = void 0;
-      }
-      /**
-       * Extracts the template and prepares the work dir on first use.
-       * Idempotent; every method touching the extracted files awaits this.
-       */
-      ensureOpen() {
-        var _a3;
-        if (this.archive) {
-          return Promise.resolve(this);
-        }
-        this.opened = (_a3 = this.opened) !== null && _a3 !== void 0 ? _a3 : this.initialize();
-        return this.opened;
-      }
-      initialize() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setPaths();
-          yield this.assertDirs();
-          yield this.extractFile(this.filename);
-          if (!this.params.name) {
-            yield this.prepareWorkDir(this.filename);
-            this.isRoot = true;
-          }
-          this.archive = true;
-          return this;
-        });
-      }
-      setPaths() {
-        this.dir = this.params.baseDir + "/";
-        this.templatesDir = this.dir + "templates/";
-        this.outputDir = this.dir + "output/";
-        this.templateDir = void 0;
-        this.workDir = this.outputDir + this.params.workDir + "/";
-      }
-      assertDirs() {
-        return __awaiter(this, void 0, void 0, function* () {
-          (0, file_helper_1.makeDirIfNotExists)(this.dir);
-          (0, file_helper_1.makeDirIfNotExists)(this.templatesDir);
-          (0, file_helper_1.makeDirIfNotExists)(this.outputDir);
-          (0, file_helper_1.makeDirIfNotExists)(this.workDir);
-        });
-      }
-      extractFile(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetDir = this.getTemplateDir(file2);
-          if ((0, file_helper_1.exists)(targetDir)) {
-            return;
-          }
-          yield (0, jszip_helper_1.extractToFolder)(file2, targetDir);
-        });
-      }
-      getTemplateDir(file2) {
-        const info = file_helper_1.FileHelper.getFileInfo(file2);
-        this.templateDir = this.templatesDir + info.base + "/";
-        return this.templateDir;
-      }
-      prepareWorkDir(templateDir) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.cleanupWorkDir();
-          const fromTemplate = this.getTemplateDir(templateDir);
-          yield (0, file_helper_1.copyDir)(fromTemplate, this.workDir);
-        });
-      }
-      fileExists(file2) {
-        return (0, file_helper_1.exists)(this.getPath(file2));
-      }
-      folder(dir) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          const path12 = this.getPath(dir);
-          const files = [];
-          if (!(0, file_helper_1.exists)(path12)) {
-            return files;
-          }
-          const entries = yield fs_1.promises.readdir(path12, { withFileTypes: true });
-          for (const entry of entries) {
-            if (!entry.isDirectory()) {
-              files.push({
-                name: dir + "/" + entry.name,
-                relativePath: entry.name
-              });
-            }
-          }
-          return files;
-        });
-      }
-      read(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          const path12 = this.getPath(file2);
-          return yield fs_1.promises.readFile(path12);
-        });
-      }
-      getPath(file2) {
-        if (this.isRoot) {
-          return this.workDir + file2;
-        }
-        return this.templateDir + file2;
-      }
-      write(file2, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          const filename = this.workDir + file2;
-          (0, file_helper_1.ensureDirectoryExistence)(filename);
-          yield fs_1.promises.writeFile(filename, data);
-          return this;
-        });
-      }
-      remove(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          const path12 = this.getPath(file2);
-          if ((0, file_helper_1.exists)(path12)) {
-            yield fs_1.promises.unlink(path12);
-          }
-        });
-      }
-      output(location, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.ensureOpen();
-          yield this.writeBuffer(this);
-          this.setOptions(params);
-          if ((0, file_helper_1.exists)(location)) {
-            yield fs_1.promises.rm(location);
-          }
-          yield (0, jszip_helper_1.compressFolder)(this.workDir, location, this.options);
-          if (this.params.cleanupWorkDir === true) {
-            yield this.cleanupWorkDir();
-          }
-        });
-      }
-      cleanupWorkDir() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!(0, file_helper_1.exists)(this.workDir)) {
-            return;
-          }
-          yield fs_1.promises.rm(this.workDir, { recursive: true, force: true });
-        });
-      }
-      readXml(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const isBuffered = this.fromBuffer(file2);
-          if (!isBuffered) {
-            const buffer = yield this.read(file2);
-            if (!buffer) {
-              throw new errors_1.ArchiveError("No buffer for file: " + file2, { file: file2 });
-            }
-            const xmlString = buffer.toString();
-            const XmlDocument = this.parseXml(xmlString);
-            this.toBuffer(file2, XmlDocument);
-            return XmlDocument;
-          } else {
-            return isBuffered.content;
-          }
-        });
-      }
-      writeXml(file2, XmlDocument) {
-        this.toBuffer(file2, XmlDocument);
-      }
-      flushXml(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.flushBuffered(this, file2);
-        });
-      }
-      /**
-       * Used for worksheets only
-       **/
-      extract(file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contents = yield this.read(file2);
-          const zip = new jszip_1.default();
-          const newArchive = new archive_jszip_1.default(file2, this.params);
-          newArchive.archive = yield zip.loadAsync(contents);
-          return newArchive;
-        });
-      }
-    };
-    exports.default = ArchiveFs;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/file-helper.js
-var require_file_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/file-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ensureDirectoryExistence = exports.copyDir = exports.makeDir = exports.makeDirIfNotExists = exports.exists = exports.FileHelper = void 0;
-    var fs_1 = __importDefault(__require("fs"));
-    var fs_2 = __require("fs");
-    var path_1 = __importDefault(__require("path"));
-    var archive_jszip_1 = __importDefault(require_archive_jszip());
-    var archive_fs_1 = __importDefault(require_archive_fs());
-    var FileHelper2 = class _FileHelper {
-      static importArchive(file2, params) {
-        if (typeof file2 !== "object") {
-          if (!fs_1.default.existsSync(file2)) {
-            throw new Error("File not found: " + file2);
-          }
-          switch (params.mode) {
-            case "jszip":
-              return new archive_jszip_1.default(file2, params);
-            case "fs":
-              return new archive_fs_1.default(file2, params);
-          }
-        } else {
-          return new archive_jszip_1.default(file2, params);
-        }
-      }
-      static removeFromDirectory(archive, dir, cb) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const removed = [];
-          const files = yield archive.folder(dir);
-          for (const file2 of files) {
-            if (cb(file2)) {
-              yield archive.remove(file2.name);
-              removed.push(file2.name);
-            }
-          }
-          return removed;
-        });
-      }
-      static getFileExtension(filename) {
-        return path_1.default.extname(filename).replace(".", "");
-      }
-      static getFileInfo(filename) {
-        return {
-          base: path_1.default.basename(filename),
-          dir: path_1.default.dirname(filename),
-          isDir: filename[filename.length - 1] === "/",
-          extension: path_1.default.extname(filename).replace(".", "")
-        };
-      }
-      static check(archive, file2) {
-        _FileHelper.isArchive(archive);
-        return _FileHelper.fileExistsInArchive(archive, file2);
-      }
-      static isArchive(archive) {
-        if (archive === void 0) {
-          throw new Error("Archive is invalid or empty.");
-        }
-      }
-      static fileExistsInArchive(archive, file2) {
-        return archive.fileExists(file2);
-      }
-      static zipCopyWithRelations(context, type, sourceNumber, targetNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const typePlural = type + "s";
-          yield _FileHelper.zipCopyByIndex(context, `ppt/${typePlural}/${type}`, sourceNumber, targetNumber);
-          yield _FileHelper.zipCopyByIndex(context, `ppt/${typePlural}/_rels/${type}`, sourceNumber, targetNumber, ".xml.rels");
-        });
-      }
-      static zipCopyByIndex(context, prefix, sourceId, targetId, suffix) {
-        return __awaiter(this, void 0, void 0, function* () {
-          suffix = suffix || ".xml";
-          return _FileHelper.zipCopy(context.sourceArchive, `${prefix}${sourceId}${suffix}`, context.targetArchive, `${prefix}${targetId}${suffix}`);
-        });
-      }
-      /**
-       * Copies a file from one archive to another. The new file can have a different name to the origin.
-       * @param {IArchive} sourceArchive - Source archive
-       * @param {string} sourceFile - file path and name inside source archive
-       * @param {IArchive} targetArchive - Target archive
-       * @param {string} targetFile - file path and name inside target archive
-       * @return {IArchive} targetArchive as an instance of IArchive
-       */
-      static zipCopy(sourceArchive, sourceFile, targetArchive, targetFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          _FileHelper.check(sourceArchive, sourceFile);
-          (_a3 = targetArchive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackFile(targetFile);
-          const content = yield sourceArchive.read(sourceFile, "nodebuffer").catch((e) => {
-            throw e;
-          });
-          return targetArchive.write(targetFile || sourceFile, content);
-        });
-      }
-    };
-    exports.FileHelper = FileHelper2;
-    var exists = (dir) => {
-      return fs_1.default.existsSync(dir);
-    };
-    exports.exists = exists;
-    var makeDirIfNotExists = (dir) => {
-      if (!(0, exports.exists)(dir)) {
-        (0, exports.makeDir)(dir);
-      }
-    };
-    exports.makeDirIfNotExists = makeDirIfNotExists;
-    var makeDir = (dir) => {
-      if (!fs_1.default.existsSync(dir)) {
-        fs_1.default.mkdirSync(dir);
-      }
-    };
-    exports.makeDir = makeDir;
-    var copyDir = (src, dest) => __awaiter(void 0, void 0, void 0, function* () {
-      yield fs_2.promises.mkdir(dest, { recursive: true });
-      const entries = yield fs_2.promises.readdir(src, { withFileTypes: true });
-      for (const entry of entries) {
-        const srcPath = path_1.default.join(src, entry.name);
-        const destPath = path_1.default.join(dest, entry.name);
-        if (entry.isDirectory()) {
-          yield (0, exports.copyDir)(srcPath, destPath);
-        } else {
-          yield fs_2.promises.copyFile(srcPath, destPath);
-        }
-      }
-    });
-    exports.copyDir = copyDir;
-    var ensureDirectoryExistence = (filePath) => {
-      const dirname = path_1.default.dirname(filePath);
-      if (fs_1.default.existsSync(dirname)) {
-        return;
-      }
-      (0, exports.ensureDirectoryExistence)(dirname);
-      fs_1.default.mkdirSync(dirname);
-    };
-    exports.ensureDirectoryExistence = ensureDirectoryExistence;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/ppt-paths.js
-var require_ppt_paths = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/ppt-paths.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PptPaths = void 0;
-    var PptPaths = class _PptPaths {
-      /**
-       * Generic numbered part: `ppt/<prefix>s/<prefix><n>.xml`.
-       * Covers slide, slideMaster, slideLayout and notesSlide.
-       */
-      static part(prefix, n) {
-        return `ppt/${prefix}s/${prefix}${n}.xml`;
-      }
-      /**
-       * Relationships file of a numbered part:
-       * `ppt/<prefix>s/_rels/<prefix><n>.xml.rels`.
-       */
-      static partRels(prefix, n) {
-        return `ppt/${prefix}s/_rels/${prefix}${n}.xml.rels`;
-      }
-      static slide(n) {
-        return _PptPaths.part("slide", n);
-      }
-      static slideRels(n) {
-        return _PptPaths.partRels("slide", n);
-      }
-      static slideMaster(n) {
-        return _PptPaths.part("slideMaster", n);
-      }
-      static slideMasterRels(n) {
-        return _PptPaths.partRels("slideMaster", n);
-      }
-      static slideLayout(n) {
-        return _PptPaths.part("slideLayout", n);
-      }
-      static slideLayoutRels(n) {
-        return _PptPaths.partRels("slideLayout", n);
-      }
-      static notesSlide(n) {
-        return _PptPaths.part("notesSlide", n);
-      }
-      static notesSlideRels(n) {
-        return _PptPaths.partRels("notesSlide", n);
-      }
-      static theme(n) {
-        return `ppt/theme/theme${n}.xml`;
-      }
-      /**
-       * Numbered part in `ppt/charts/`: pass 'chart', 'chartEx', 'style'
-       * or 'colors' as name.
-       */
-      static chartPart(name, n) {
-        return `ppt/charts/${name}${n}.xml`;
-      }
-      static chartPartRels(name, n) {
-        return `ppt/charts/_rels/${name}${n}.xml.rels`;
-      }
-      static media(filename) {
-        return `ppt/media/${filename}`;
-      }
-      static embedding(filename) {
-        return `ppt/embeddings/${filename}`;
-      }
-      /**
-       * `[Content_Types].xml` PartName attributes require a leading slash.
-       */
-      static partName(path12) {
-        return `/${path12}`;
-      }
-    };
-    exports.PptPaths = PptPaths;
-    PptPaths.presentation = "ppt/presentation.xml";
-    PptPaths.presentationRels = "ppt/_rels/presentation.xml.rels";
-    PptPaths.contentTypes = "[Content_Types].xml";
-    PptPaths.mediaDir = "ppt/media";
-    PptPaths.relative = {
-      slide: (n) => `../slides/slide${n}.xml`,
-      notesSlide: (n) => `../notesSlides/notesSlide${n}.xml`,
-      slideLayout: (n) => `../slideLayouts/slideLayout${n}.xml`,
-      slideMaster: (n) => `../slideMasters/slideMaster${n}.xml`,
-      theme: (n) => `../theme/theme${n}.xml`
-    };
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/general-helper.js
-var require_general_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/general-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.last = exports.vd = exports.GeneralHelper = void 0;
-    var GeneralHelper = class {
-      static arrayify(input2) {
-        if (Array.isArray(input2)) {
-          return input2;
-        } else if (input2 !== void 0) {
-          return [input2];
-        } else {
-          return [];
-        }
-      }
-      static propertyExists(object2, property) {
-        if (!object2 || typeof object2 !== "object")
-          return false;
-        return !!Object.getOwnPropertyDescriptor(object2, property);
-      }
-    };
-    exports.GeneralHelper = GeneralHelper;
-    var vd = (v, keys) => {
-      if (keys && typeof v === "object") {
-        v = Object.keys(v);
-      }
-      console.log("--------- [pptx-automizer] ---------");
-      console.log(new Error().stack.split("\n")[2].trim());
-      console.dir(v, { depth: 10 });
-    };
-    exports.vd = vd;
-    var last = (arr) => arr[arr.length - 1];
-    exports.last = last;
-  }
-});
-
-// node_modules/pptx-automizer/dist/constants/constants.js
-var require_constants2 = __commonJS({
-  "node_modules/pptx-automizer/dist/constants/constants.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.contentTrack = exports.hyperlinksTrack = exports.imagesTrack = exports.TargetByRelIdMap = void 0;
-    exports.TargetByRelIdMap = {
-      chart: {
-        relRootTag: "c:chart",
-        relAttribute: "r:id",
-        prefix: "../charts/chart"
-      },
-      chartEx: {
-        relRootTag: "cx:chart",
-        relAttribute: "r:id",
-        prefix: "../charts/chartEx"
-      },
-      diagram: {
-        relRootTag: "dgm:relIds",
-        relAttribute: "r:dm",
-        prefix: "../diagrams/data"
-      },
-      image: {
-        relRootTag: "a:blip",
-        relAttribute: "r:embed",
-        prefix: "../media/image"
-      },
-      "image:svg": {
-        relRootTag: "asvg:svgBlip",
-        relAttribute: "r:embed",
-        prefix: "../media/image"
-      },
-      "image:media": {
-        relRootTag: "p14:media",
-        relAttribute: "r:embed",
-        relType: "http://schemas.microsoft.com/office/2007/relationships/media",
-        prefix: "../media/media",
-        findAll: true
-      },
-      "image:audioFile": {
-        relRootTag: "a:audioFile",
-        relAttribute: "r:link",
-        prefix: "../media/media",
-        relType: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/audio",
-        findAll: true
-      },
-      "image:videoFile": {
-        relRootTag: "a:videoFile",
-        relAttribute: "r:link",
-        prefix: "../media/media",
-        relType: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/video",
-        findAll: true
-      },
-      hyperlink: {
-        relRootTag: "a:hlinkClick",
-        relAttribute: "r:id",
-        prefix: "",
-        findAll: true
-      },
-      oleObject: {
-        relRootTag: "p:oleObj",
-        relAttribute: "r:id",
-        prefix: "../embeddings/oleObject"
-      }
-    };
-    var imagesTrack = () => [
-      {
-        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-        tag: "a:blip",
-        role: "image",
-        attribute: "r:embed"
-      },
-      {
-        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-        tag: "asvg:svgBlip",
-        role: "image",
-        attribute: "r:embed"
-      }
-    ];
-    exports.imagesTrack = imagesTrack;
-    var hyperlinksTrack = () => [
-      {
-        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-        tag: "a:hlinkClick",
-        role: "hyperlink",
-        attribute: "r:id"
-      }
-    ];
-    exports.hyperlinksTrack = hyperlinksTrack;
-    var contentTrack = () => {
-      return [
-        {
-          source: "ppt/presentation.xml",
-          relationsKey: "ppt/_rels/presentation.xml.rels",
-          tags: [
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
-              tag: "p:sldMasterId",
-              role: "slideMaster"
-            },
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-              tag: "p:sldId",
-              role: "slide"
-            }
-          ]
-        },
-        {
-          source: "ppt/slides",
-          relationsKey: "ppt/slides/_rels",
-          isDir: true,
-          tags: [
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
-              tag: "c:chart",
-              role: "chart"
-            },
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout",
-              role: "slideLayout",
-              tag: null
-            },
-            ...(0, exports.imagesTrack)(),
-            ...(0, exports.hyperlinksTrack)()
-          ]
-        },
-        {
-          source: "ppt/charts",
-          relationsKey: "ppt/charts/_rels",
-          isDir: true,
-          tags: [
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package",
-              tag: "c:externalData",
-              role: "externalData"
-            }
-          ]
-        },
-        {
-          source: "ppt/slideMasters",
-          relationsKey: "ppt/slideMasters/_rels",
-          isDir: true,
-          tags: [
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout",
-              tag: "p:sldLayoutId",
-              role: "slideLayout"
-            },
-            ...(0, exports.imagesTrack)(),
-            ...(0, exports.hyperlinksTrack)()
-          ]
-        },
-        {
-          source: "ppt/slideLayouts",
-          relationsKey: "ppt/slideLayouts/_rels",
-          isDir: true,
-          tags: [
-            {
-              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
-              role: "slideMaster",
-              tag: null
-            },
-            ...(0, exports.imagesTrack)(),
-            ...(0, exports.hyperlinksTrack)()
-          ]
-        }
-      ];
-    };
-    exports.contentTrack = contentTrack;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-pretty-print.js
-var require_xml_pretty_print = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-pretty-print.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.XmlPrettyPrint = void 0;
-    var XmlPrettyPrint = class {
-      constructor(xmlStr) {
-        this.xmlStr = xmlStr;
-        this.TAB = "  ";
-      }
-      dump() {
-        console.log(this.prettify());
-      }
-      prettify() {
-        return this.parse(this.xmlStr).join("\n");
-      }
-      parse(xmlStr) {
-        const opener = /<(\w+)[^>]*?>/m;
-        const closer = /<\/[^>]*>/m;
-        let idx = 0;
-        let indent = 0;
-        let processing = "";
-        const tags = [];
-        const output2 = [];
-        while (idx < xmlStr.length) {
-          processing += xmlStr[idx];
-          const openToken = this.getToken(opener, processing);
-          const closeToken = this.getToken(closer, processing);
-          if (openToken) {
-            if (processing[processing.length - 2] != "/") {
-              this.addLine(output2, openToken.preContent, indent);
-              this.addLine(output2, openToken.match, indent);
-              tags.push(openToken.tag);
-              indent += 1;
-              processing = "";
-            } else {
-              this.addLine(output2, openToken.preContent, indent);
-              this.addLine(output2, openToken.match, indent);
-              processing = "";
-            }
-          } else if (closeToken) {
-            this.addLine(output2, closeToken.preContent, indent);
-            if (tags[tags.length] == closeToken.tag) {
-              tags.pop();
-              indent -= 1;
-            }
-            this.addLine(output2, closeToken.match, indent);
-            processing = "";
-          }
-          idx += 1;
-        }
-        if (tags.length) {
-          console.log("WARNING: xmlFile may be malformed. Not all opening tags were closed. Following tags were left open:");
-          console.log(tags);
-        }
-        return output2;
-      }
-      getToken(regex, str) {
-        if (regex.test(str)) {
-          const matches = regex.exec(str);
-          const match = matches[0];
-          const offset = str.length - match.length;
-          const preContent = str.substring(0, offset);
-          return {
-            match,
-            tag: matches[1],
-            offset,
-            preContent
-          };
-        }
-      }
-      addLine(output2, content, indent) {
-        content = content.replace(/^\s+|\s+$/, "");
-        if (content) {
-          let tabs = "";
-          while (indent--) {
-            tabs += this.TAB;
-          }
-          output2.push(tabs + content);
-        }
-      }
-    };
-    exports.XmlPrettyPrint = XmlPrettyPrint;
-  }
-});
-
-// node_modules/pptx-automizer/dist/enums/content-type-map.js
-var require_content_type_map = __commonJS({
-  "node_modules/pptx-automizer/dist/enums/content-type-map.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ContentTypeMap = void 0;
-    var ContentTypeMap;
-    (function(ContentTypeMap2) {
-      ContentTypeMap2["jpg"] = "image/jpeg";
-      ContentTypeMap2["jpeg"] = "image/jpeg";
-      ContentTypeMap2["png"] = "image/png";
-      ContentTypeMap2["gif"] = "image/gif";
-      ContentTypeMap2["svg"] = "image/svg+xml";
-      ContentTypeMap2["mp3"] = "audio/mp3";
-      ContentTypeMap2["m4v"] = "video/mp4";
-      ContentTypeMap2["mp4"] = "video/mp4";
-      ContentTypeMap2["emf"] = "image/x-emf";
-      ContentTypeMap2["wdp"] = "image/vnd.ms-photo";
-      ContentTypeMap2["xml"] = "application/xml";
-      ContentTypeMap2["bin"] = "application/vnd.openxmlformats-officedocument.oleObject";
-      ContentTypeMap2["vml"] = "application/vnd.openxmlformats-officedocument.vmlDrawing";
-    })(ContentTypeMap || (exports.ContentTypeMap = ContentTypeMap = {}));
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-helper.js
-var require_xml_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.XmlHelper = void 0;
-    var errors_1 = require_errors2();
-    var xmldom_1 = require_lib4();
-    var constants_1 = require_constants2();
-    var xml_pretty_print_1 = require_xml_pretty_print();
-    var logger_1 = require_logger();
-    var content_type_map_1 = require_content_type_map();
-    var XmlHelper2 = class _XmlHelper {
-      static modifyXmlInArchive(archive, file2, callbacks) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const fileProxy = yield archive;
-          const xml = yield _XmlHelper.getXmlFromArchive(fileProxy, file2);
-          let i = 0;
-          for (const callback of callbacks) {
-            yield callback(xml, i++, fileProxy);
-          }
-          _XmlHelper.writeXmlToArchive(yield archive, file2, xml);
-        });
-      }
-      static getXmlFromArchive(archive, file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return archive.readXml(file2);
-        });
-      }
-      static writeXmlToArchive(archive, file2, xml) {
-        archive.writeXml(file2, xml);
-      }
-      static appendIf(element) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield _XmlHelper.getXmlFromArchive(element.archive, element.file);
-          return element.clause !== void 0 && !element.clause(xml) ? false : _XmlHelper.append(element);
-        });
-      }
-      static append(element) {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          const xml = yield _XmlHelper.getXmlFromArchive(element.archive, element.file);
-          const newElement = xml.createElement(element.tag);
-          const attributes = element.attributes || {};
-          for (const attribute in attributes) {
-            const value = attributes[attribute];
-            const setValue = typeof value === "function" ? value(xml) : value;
-            newElement.setAttribute(attribute, String(setValue));
-          }
-          (_a3 = element.archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(element.file, element.attributes);
-          if (element.assert) {
-            element.assert(xml);
-          }
-          const parent = element.parent(xml);
-          parent.appendChild(newElement);
-          _XmlHelper.writeXmlToArchive(element.archive, element.file, xml);
-          return newElement;
-        });
-      }
-      static removeIf(element) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield _XmlHelper.getXmlFromArchive(element.archive, element.file);
-          const collection = xml.getElementsByTagName(element.tag);
-          const toRemove = [];
-          _XmlHelper.modifyCollection(collection, (item) => {
-            if (element.clause(xml, item)) {
-              toRemove.push(item);
-            }
-          });
-          toRemove.forEach((item) => {
-            _XmlHelper.remove(item);
-          });
-          _XmlHelper.writeXmlToArchive(element.archive, element.file, xml);
-          return toRemove;
-        });
-      }
-      static getNextRelId(rootArchive, file2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const presentationRelsXml = yield _XmlHelper.getXmlFromArchive(rootArchive, file2);
-          const increment = (max) => "rId" + max;
-          const relationNodes = presentationRelsXml.documentElement.childNodes;
-          const rid = _XmlHelper.getMaxId(relationNodes, "Id", true);
-          return increment(rid) + "-created";
-        });
-      }
-      static getMaxId(rels, attribute, increment, minId) {
-        let max = 0;
-        for (const i in rels) {
-          const rel = rels[i];
-          if (rel.getAttribute !== void 0 && rel.getAttribute(attribute)) {
-            const id = Number(rel.getAttribute(attribute).replace("rId", "").replace("-created", ""));
-            max = id > max ? id : max;
-          }
-        }
-        switch (typeof increment) {
-          case "boolean":
-            ++max;
-            break;
-        }
-        if (max < minId) {
-          return minId;
-        }
-        return max;
-      }
-      static getRelationshipTargetsByPrefix(archive, path12, prefix) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const prefixes = typeof prefix === "string" ? [prefix] : prefix;
-          return _XmlHelper.getRelationshipItems(archive, path12, (element, targets) => {
-            prefixes.forEach((prefix2) => {
-              const target = _XmlHelper.parseRelationTarget(element, prefix2);
-              if (target.prefix) {
-                targets.push(target);
-              }
-            });
-          });
-        });
-      }
-      static parseRelationTarget(element, prefix) {
-        const type = element.getAttribute("Type");
-        const file2 = element.getAttribute("Target");
-        const last = (arr) => arr[arr.length - 1];
-        const filename = last(file2.split("/"));
-        let subtype = last(prefix.split("/"));
-        const mapSubtype = {
-          data: "diagramData"
-        };
-        subtype = mapSubtype[subtype] || subtype;
-        const relType = last(type.split("/"));
-        const rId = element.getAttribute("Id");
-        const filenameExt = last(filename.split("."));
-        const filenameMatch = filename.replace("." + filenameExt, "").match(/^(.+?)(\d+)*$/);
-        const filenameBase = filenameMatch && filenameMatch[1] ? filenameMatch[1] : filename;
-        const number4 = filenameMatch && filenameMatch[2] ? Number(filenameMatch[2]) : 0;
-        const target = {
-          rId,
-          type,
-          file: file2,
-          filename,
-          filenameBase,
-          number: number4,
-          subtype,
-          relType,
-          element
-        };
-        if (prefix && _XmlHelper.targetMatchesRelationship(relType, subtype, file2, prefix)) {
-          return Object.assign(Object.assign({}, target), { prefix });
-        }
-        if (prefix && prefix.indexOf("../") === 0) {
-          return _XmlHelper.parseRelationTarget(element, prefix.replace("../", "/ppt/"));
-        }
-        return target;
-      }
-      static targetMatchesRelationship(relType, subtype, file2, prefix) {
-        if (relType === "package")
-          return true;
-        if (file2.indexOf("/ppt/") === 0) {
-          file2 = file2.replace("/ppt/", "../");
-        }
-        return relType === subtype && file2.indexOf(prefix) === 0;
-      }
-      static getTargetsByRelationshipType(archive, path12, type) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield _XmlHelper.getRelationshipItems(archive, path12, (element, rels) => {
-            const target = element.getAttribute("Type");
-            if (target === type) {
-              rels.push({
-                file: element.getAttribute("Target"),
-                rId: element.getAttribute("Id"),
-                element
-              });
-            }
-          });
-        });
-      }
-      static getRelationshipItems(archive, path12, cb, tag2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          tag2 = tag2 || "Relationship";
-          const xml = yield _XmlHelper.getXmlFromArchive(archive, path12);
-          const relationshipItems = xml.getElementsByTagName(tag2);
-          const rels = [];
-          for (const i in relationshipItems) {
-            if (relationshipItems[i].getAttribute) {
-              cb(relationshipItems[i], rels);
-            }
-          }
-          return rels;
-        });
-      }
-      static findByAttribute(xml, tagName, attributeName, attributeValue) {
-        const elements2 = xml.getElementsByTagName(tagName);
-        for (const i in elements2) {
-          const element = elements2[i];
-          if (element.getAttribute !== void 0) {
-            if (element.getAttribute(attributeName) === attributeValue) {
-              return true;
-            }
-          }
-        }
-        return false;
-      }
-      static replaceAttribute(archive, path12, tagName, attributeName, attributeValue, replaceValue, replaceAttributeName) {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          const xml = yield _XmlHelper.getXmlFromArchive(archive, path12);
-          const elements2 = xml.getElementsByTagName(tagName);
-          for (const i in elements2) {
-            const element = elements2[i];
-            if (element.getAttribute !== void 0 && element.getAttribute(attributeName) === attributeValue) {
-              element.setAttribute(replaceAttributeName || attributeName, replaceValue);
-            }
-            if (element.getAttribute !== void 0) {
-              (_a3 = archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(path12, {
-                Id: element.getAttribute("Id"),
-                Target: element.getAttribute("Target"),
-                Type: element.getAttribute("Type")
-              });
-            }
-          }
-          _XmlHelper.writeXmlToArchive(archive, path12, xml);
-        });
-      }
-      static getTargetByRelId(archive, relsPath, element, type) {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          const params = constants_1.TargetByRelIdMap[type];
-          if (params.findAll) {
-            const hyperlinks = element.getElementsByTagName(params.relRootTag);
-            if (hyperlinks.length > 0) {
-              const sourceRid = hyperlinks[0].getAttribute(params.relAttribute);
-              const allRels = yield _XmlHelper.getRelationshipItems(archive, relsPath, (element2, rels) => {
-                rels.push({
-                  rId: element2.getAttribute("Id"),
-                  type: element2.getAttribute("Type"),
-                  file: element2.getAttribute("Target"),
-                  filename: element2.getAttribute("Target"),
-                  element: element2,
-                  isExternal: element2.getAttribute("TargetMode") === "External"
-                });
-              });
-              const target = allRels.find((rel) => rel.rId === sourceRid);
-              return target;
-            }
-          } else {
-            const sourceRid = (_a3 = element.getElementsByTagName(params.relRootTag).item(0)) === null || _a3 === void 0 ? void 0 : _a3.getAttribute(params.relAttribute);
-            if (!sourceRid) {
-              throw new errors_1.ElementNotFoundError("No sourceRid for " + params.relRootTag, {
-                selector: params.relRootTag
-              });
-            }
-            const shapeRels = yield _XmlHelper.getRelationshipTargetsByPrefix(archive, relsPath, params.prefix);
-            const target = shapeRels.find((rel) => {
-              return rel.rId === sourceRid;
-            });
-            return target;
-          }
-        });
-      }
-      // Determine whether a given string is a creationId or a shape name
-      // Example creationId: '{EFC74B4C-D832-409B-9CF4-73C1EFF132D8}'
-      static isElementCreationId(selector) {
-        return selector.indexOf("{") === 0 && selector.split("-").length === 5;
-      }
-      static findByElementCreationId(archive, path12, creationId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideXml = yield _XmlHelper.getXmlFromArchive(archive, path12);
-          return _XmlHelper.findByCreationId(slideXml, creationId);
-        });
-      }
-      static findByElementName(archive, path12, name, nameIdx) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideXml = yield _XmlHelper.getXmlFromArchive(archive, path12);
-          return _XmlHelper.findByName(slideXml, name, nameIdx);
-        });
-      }
-      static findByName(doc, name, nameIdx) {
-        const names = doc.getElementsByTagName("p:cNvPr");
-        let matchCount = 0;
-        const targetIdx = nameIdx !== void 0 ? nameIdx : 0;
-        for (let i = 0; i < names.length; i++) {
-          const item = names.item(i);
-          if (item && item.getAttribute && item.getAttribute("name") === name) {
-            if (matchCount === targetIdx) {
-              return item.parentNode.parentNode;
-            }
-            matchCount++;
-          }
-        }
-        return null;
-      }
-      static findByCreationId(doc, creationId) {
-        const creationIds = doc.getElementsByTagName("a16:creationId");
-        for (const i in creationIds) {
-          if (creationIds[i].getAttribute && creationIds[i].getAttribute("id") === creationId) {
-            return creationIds[i].parentNode.parentNode.parentNode.parentNode.parentNode;
-          }
-        }
-        return null;
-      }
-      static findFirstByAttributeValue(nodes, attributeName, attributeValue) {
-        for (const i in nodes) {
-          const node2 = nodes[i];
-          if (node2.getAttribute && node2.getAttribute(attributeName) === attributeValue) {
-            return node2;
-          }
-        }
-        return null;
-      }
-      static findByAttributeValue(nodes, attributeName, attributeValue) {
-        const matchingNodes = [];
-        for (const i in nodes) {
-          const node2 = nodes[i];
-          if (node2.getAttribute && node2.getAttribute(attributeName) === attributeValue) {
-            matchingNodes.push(node2);
-          }
-        }
-        return matchingNodes;
-      }
-      static createContentTypeChild(archive, attributes) {
-        return {
-          archive,
-          file: `[Content_Types].xml`,
-          // `Types` is the document element; a live getElementsByTagName lookup
-          // would re-walk the whole (growing) part on every append.
-          parent: (xml) => xml.documentElement,
-          tag: "Override",
-          attributes
-        };
-      }
-      static createRelationshipChild(archive, targetRelFile, attributes) {
-        var _a3;
-        (_a3 = archive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(targetRelFile, attributes);
-        return {
-          archive,
-          file: targetRelFile,
-          // `Relationships` is the document element of a .rels part.
-          parent: (xml) => xml.documentElement,
-          tag: "Relationship",
-          attributes
-        };
-      }
-      static appendImageExtensionToContentType(targetArchive, extension) {
-        const contentType = content_type_map_1.ContentTypeMap[extension] ? content_type_map_1.ContentTypeMap[extension] : "image/" + extension;
-        return _XmlHelper.appendIf(Object.assign(Object.assign({}, _XmlHelper.createContentTypeChild(targetArchive, {
-          Extension: extension,
-          ContentType: contentType
-        })), { tag: "Default", clause: (xml) => !_XmlHelper.findByAttribute(xml, "Default", "Extension", extension) }));
-      }
-      static appendSharedString(sharedStrings, stringValue) {
-        const strings = sharedStrings.getElementsByTagName("sst")[0];
-        const newLabel = sharedStrings.createTextNode(_XmlHelper.sanitizeText(stringValue));
-        const newText = sharedStrings.createElement("t");
-        newText.appendChild(newLabel);
-        const newString = sharedStrings.createElement("si");
-        newString.appendChild(newText);
-        strings.appendChild(newString);
-        return strings.getElementsByTagName("si").length - 1;
-      }
-      /**
-       * Sanitize text for XML 1.0 compatibility.
-       * - Replace vertical tab (\u000B / \v) with a newline.
-       * - Remove other disallowed control characters (except TAB, LF, CR).
-       */
-      static sanitizeText(value) {
-        if (value == null)
-          return "";
-        return String(value).replace(/\u000B/g, "\n").replace(/[\u0000-\u0008\u000C\u000E-\u001F]/g, "");
-      }
-      /**
-       * Sanitize attribute values for XML 1.0. Uses same rules as sanitizeText.
-       */
-      static sanitizeAttr(value) {
-        return _XmlHelper.sanitizeText(value);
-      }
-      static insertAfter(newNode, referenceNode) {
-        return referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling);
-      }
-      /**
-       * Copies a node collection into a plain array. xmldom's LiveNodeList
-       * re-walks the entire document on `.length` access after a mutation,
-       * while indexed access returns entries from before it — snapshot before
-       * iterating whenever the loop (or its callback) mutates the tree.
-       */
-      static collectionToArray(collection) {
-        const items = [];
-        const length = collection.length;
-        for (let i = 0; i < length; i++) {
-          items.push(collection[i]);
-        }
-        return items;
-      }
-      static sliceCollection(collection, length, from) {
-        const items = _XmlHelper.collectionToArray(collection);
-        const removeItems = from !== void 0 ? items.slice(from, length) : items.slice(length);
-        removeItems.forEach((item) => _XmlHelper.remove(item));
-      }
-      /**
-       * Find the first *direct* child of an element matching one of the given
-       * tag names. Unlike getElementsByTagName, this will not descend into
-       * grandchildren - e.g. an <a:ln> inside <p:spPr> is the shape outline,
-       * while an <a:ln> found anywhere below <p:sp> might belong to a text run.
-       *
-       * @param element - The parent element to scan
-       * @param tagNames - Tag names to look for, in no particular order
-       * @returns The first matching child element, or undefined
-       */
-      static getFirstDirectChild(element, tagNames) {
-        for (let i = 0; i < element.childNodes.length; i++) {
-          const child = element.childNodes.item(i);
-          if (tagNames.includes(child.nodeName)) {
-            return child;
-          }
-        }
-      }
-      /**
-       * Insert a child element at the position required by an OOXML schema
-       * sequence. Most DrawingML property containers (`a:pPr`, `a:rPr`, `a:ln`, …)
-       * declare their children as an ordered <xsd:sequence>: appending in call
-       * order instead of schema order is what makes PowerPoint offer to repair the
-       * file.
-       *
-       * The new child is inserted before the first existing direct child that
-       * ranks *after* it in `order`. Tags missing from `order` are treated as
-       * "ranks last" and therefore never displace a known tag.
-       *
-       * @param parent - The property container
-       * @param child - The element to insert
-       * @param order - Tag names in schema sequence order
-       */
-      static insertInSchemaOrder(parent, child, order) {
-        const rank = (tagName) => {
-          const index = order.indexOf(tagName);
-          return index === -1 ? order.length : index;
-        };
-        const childRank = rank(child.nodeName);
-        for (let i = 0; i < parent.childNodes.length; i++) {
-          const existing = parent.childNodes.item(i);
-          if (existing.nodeType !== 1) {
-            continue;
-          }
-          if (rank(existing.nodeName) > childRank) {
-            return parent.insertBefore(child, existing);
-          }
-        }
-        return parent.appendChild(child);
-      }
-      /**
-       * Reorder the direct element children of a property container into the
-       * OOXML schema sequence given by `order`, keeping the relative order of
-       * equally-ranked and unknown tags (stable).
-       *
-       * Useful when several independent helpers append to the same container and
-       * no single one of them can know the final child set - e.g. `a:rPr`, which
-       * collects a fill, a highlight, a typeface and a hyperlink from four
-       * different code paths.
-       *
-       * @param parent - The property container
-       * @param order - Tag names in schema sequence order
-       */
-      static sortChildrenBySchema(parent, order) {
-        if (!(parent === null || parent === void 0 ? void 0 : parent.childNodes)) {
-          return;
-        }
-        const children = [];
-        for (let i = 0; i < parent.childNodes.length; i++) {
-          const child = parent.childNodes.item(i);
-          if (child.nodeType === 1) {
-            children.push(child);
-          }
-        }
-        const rank = (element) => {
-          const index = order.indexOf(element.nodeName);
-          return index === -1 ? order.length : index;
-        };
-        const sorted = children.map((child, index) => ({ child, index })).sort((a, b) => rank(a.child) - rank(b.child) || a.index - b.index).map((entry) => entry.child);
-        const alreadySorted = sorted.every((child, index) => child === children[index]);
-        if (alreadySorted) {
-          return;
-        }
-        sorted.forEach((child) => parent.appendChild(child));
-      }
-      static getClosestParent(tag2, element) {
-        if (element.parentNode) {
-          if (element.parentNode.nodeName === tag2) {
-            return element.parentNode;
-          }
-          return _XmlHelper.getClosestParent(tag2, element.parentNode);
-        }
-      }
-      static remove(toRemove) {
-        if (toRemove === null || toRemove === void 0 ? void 0 : toRemove.parentNode) {
-          toRemove.parentNode.removeChild(toRemove);
-        }
-      }
-      static removeAllChildren(element) {
-        if (element === null || element === void 0 ? void 0 : element.childNodes) {
-          while (element.childNodes.length > 0) {
-            element.removeChild(element.childNodes[0]);
-          }
-        }
-      }
-      static moveChild(childToMove, insertBefore) {
-        const parent = childToMove.parentNode;
-        parent.insertBefore(childToMove, insertBefore);
-      }
-      static appendClone(childToClone, parent) {
-        const clone2 = childToClone.cloneNode(true);
-        parent.appendChild(clone2);
-        return clone2;
-      }
-      static sortCollection(collection, order, callback) {
-        if (collection.length === 0) {
-          return;
-        }
-        const parent = collection[0].parentNode;
-        order.forEach((index, i) => {
-          if (!collection[index]) {
-            logger_1.log.warn("sortCollection index not found" + index);
-            return;
-          }
-          const item = collection[index];
-          if (callback) {
-            callback(item, i);
-          }
-          parent.appendChild(item);
-        });
-      }
-      static modifyCollection(collection, callback) {
-        const items = _XmlHelper.collectionToArray(collection);
-        for (let i = 0; i < items.length; i++) {
-          callback(items[i], i);
-        }
-      }
-      static modifyCollectionAsync(collection, callback) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const items = _XmlHelper.collectionToArray(collection);
-          for (let i = 0; i < items.length; i++) {
-            yield callback(items[i], i);
-          }
-        });
-      }
-      static dump(element) {
-        const s = new xmldom_1.XMLSerializer();
-        const xmlBuffer = s.serializeToString(element);
-        const p = new xml_pretty_print_1.XmlPrettyPrint(xmlBuffer);
-        p.dump();
-      }
-      /**
-       * Find an element with the given tag name, searching deeply through the structure
-       * @param element The root element to search in
-       * @param tagName The tag name to search for
-       * @returns The found element or null
-       */
-      static findElement(element, tagName) {
-        if (!element) {
-          return null;
-        }
-        const directMatch = element.getElementsByTagName(tagName)[0];
-        if (directMatch) {
-          return directMatch;
-        }
-        if (element.children && element.children.length) {
-          for (let i = 0; i < element.children.length; i++) {
-            const child = element.children[i];
-            if (child.nodeType === 1) {
-              const found = _XmlHelper.findElement(child, tagName);
-              if (found) {
-                return found;
-              }
-            }
-          }
-        }
-        return null;
-      }
-    };
-    exports.XmlHelper = XmlHelper2;
-    XmlHelper2.removeByTagName = (element, tagName, i = 0) => {
-      const tagToRemove = element.getElementsByTagName(tagName).item(i);
-      if (tagToRemove)
-        XmlHelper2.remove(tagToRemove);
-    };
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-relationship-helper.js
-var require_xml_relationship_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-relationship-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.XmlRelationshipHelper = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var general_helper_1 = require_general_helper();
-    var file_helper_1 = require_file_helper();
-    var crypto_1 = __require("crypto");
-    var XmlRelationshipHelper2 = class _XmlRelationshipHelper {
-      constructor(xml, tag2) {
-        this.xmlTargets = [];
-        this.targets = [];
-        if (xml) {
-          this.setXml(xml);
-        }
-        this.tag = tag2 || "Relationship";
-        return this;
-      }
-      initialize(archive, file2, path12, prefix) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.archive = archive;
-          this.file = file2;
-          this.path = path12 + "/";
-          this.xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, this.path + this.file);
-          yield this.readTargets();
-          if (prefix) {
-            return this.getTargetsByPrefix(prefix);
-          }
-          return this;
-        });
-      }
-      setXml(xml) {
-        this.xml = xml;
-        return this;
-      }
-      getTargetsByPrefix(prefix) {
-        const prefixes = typeof prefix === "string" ? [prefix] : prefix;
-        const targets = [];
-        this.xmlTargets.forEach((xmlTarget) => {
-          prefixes.forEach((prefix2) => {
-            const target = _XmlRelationshipHelper.parseRelationTarget(xmlTarget, prefix2, true);
-            if (target === null || target === void 0 ? void 0 : target.prefix) {
-              targets.push(target);
-            }
-          });
-        });
-        return targets;
-      }
-      getTargetsByType(type) {
-        const targets = [];
-        this.xmlTargets.forEach((xmlTarget) => {
-          const target = _XmlRelationshipHelper.parseRelationTarget(xmlTarget);
-          if ((target === null || target === void 0 ? void 0 : target.type) === type) {
-            targets.push(target);
-          }
-        });
-        return targets;
-      }
-      getTargetByRelId(findRid) {
-        const matchedTarget = this.xmlTargets.find((xmlTarget) => xmlTarget.getAttribute("Id") === findRid);
-        if (matchedTarget) {
-          return _XmlRelationshipHelper.parseRelationTarget(matchedTarget);
-        }
-      }
-      readTargets() {
-        if (this.xmlTargets.length) {
-          return this;
-        }
-        const relationshipItems = this.xml.getElementsByTagName(this.tag);
-        for (const i in relationshipItems) {
-          if (relationshipItems[i] && relationshipItems[i].getAttribute !== void 0) {
-            this.xmlTargets.push(relationshipItems[i]);
-          }
-        }
-        return this;
-      }
-      /**
-       * This will copy all unhandled related contents into
-       * the target archive.
-       *
-       * Pptx messages on opening a corrupted file are most likely
-       * caused by broken relations and this is going to prevent
-       * files from being missed.
-       *
-       * @param sourceArchive
-       * @param check
-       * @param assert
-       */
-      assertRelatedContent(sourceArchive, check2, assert2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const xmlTarget of this.xmlTargets) {
-            const targetFile = xmlTarget.getAttribute("Target");
-            const targetMode = xmlTarget.getAttribute("TargetMode");
-            const targetPath = targetFile.replace("../", "ppt/");
-            if (targetMode !== "External" && this.archive.fileExists(targetPath) === false) {
-              if (assert2) {
-                const target = _XmlRelationshipHelper.parseRelationTarget(xmlTarget);
-                const buf = (0, crypto_1.randomBytes)(5).toString("hex");
-                const targetSuffix = "-" + buf + "." + target.filenameExt;
-                yield file_helper_1.FileHelper.zipCopy(sourceArchive, targetPath, this.archive, targetPath + targetSuffix);
-                xmlTarget.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(targetFile + targetSuffix));
-                yield xml_helper_1.XmlHelper.appendImageExtensionToContentType(this.archive, target.filenameExt);
-              }
-            }
-          }
-        });
-      }
-      static parseRelationTarget(element, prefix, matchByPrefix) {
-        if (!element || element.getAttribute === void 0) {
-          return;
-        }
-        const type = element.getAttribute("Type");
-        const file2 = element.getAttribute("Target");
-        const rId = element.getAttribute("Id");
-        const filename = (0, general_helper_1.last)(file2.split("/"));
-        const relType = (0, general_helper_1.last)(type.split("/"));
-        const filenameExt = (0, general_helper_1.last)(filename.split("."));
-        const filenameMatch = filename.replace("." + filenameExt, "").match(/^(.+?)(\d+)*$/);
-        const number4 = filenameMatch && filenameMatch[2] ? Number(filenameMatch[2]) : 0;
-        const filenameBase = filenameMatch && filenameMatch[1] ? filenameMatch[1] : filename;
-        const target = {
-          rId,
-          type,
-          file: file2,
-          filename,
-          relType,
-          element,
-          filenameExt,
-          filenameMatch,
-          number: number4,
-          filenameBase,
-          getTargetValue: () => target.element.getAttribute("Target"),
-          updateTargetValue: (newTarget) => {
-            target.element.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
-          },
-          updateId: (newId) => {
-            target.element.setAttribute("Id", newId);
-          }
-        };
-        if (prefix) {
-          const subtype = (0, general_helper_1.last)(prefix.split("/"));
-          if (matchByPrefix && !_XmlRelationshipHelper.targetMatchesRelationship(relType, subtype, file2, prefix)) {
-            return;
-          }
-          return this.extendTarget(prefix, subtype, target);
-        }
-        return target;
-      }
-      static extendTarget(prefix, subtype, target) {
-        return Object.assign(Object.assign({}, target), {
-          prefix,
-          subtype,
-          updateTargetIndex: (newIndex) => {
-            target.element.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(`${prefix}${newIndex}.xml`));
-          }
-        });
-      }
-      static targetMatchesRelationship(relType, subtype, target, prefix) {
-        if (relType === "package")
-          return true;
-        return relType === subtype && target.indexOf(prefix) === 0;
-      }
-      static getSlideLayoutNumber(sourceArchive, slideId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideToLayouts = yield new _XmlRelationshipHelper().initialize(sourceArchive, `slide${slideId}.xml.rels`, `ppt/slides/_rels`, "../slideLayouts/slideLayout");
-          return slideToLayouts[0].number;
-        });
-      }
-      static getSlideMasterNumber(sourceArchive, slideLayoutId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const layoutToMaster = yield new _XmlRelationshipHelper().initialize(sourceArchive, `slideLayout${slideLayoutId}.xml.rels`, `ppt/slideLayouts/_rels`, "../slideMasters/slideMaster");
-          return layoutToMaster[0].number;
-        });
-      }
-    };
-    exports.XmlRelationshipHelper = XmlRelationshipHelper2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-placeholder-helper.js
-var require_xml_placeholder_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-placeholder-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_helper_1 = require_xml_helper();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var XmlPlaceholderHelper = class _XmlPlaceholderHelper {
-      constructor(slide, slideElements, sourceLayoutInfo, targetPlaceholders) {
-        this.mappingResult = {
-          usedPlaceholders: [],
-          unmatchedSourcePlaceholderElements: [],
-          matchedSourceElements: []
-        };
-        this.mapCandidates = {
-          body: ["textBox", "rectangle"],
-          title: ["textBox", "rectangle"],
-          subTitle: ["textBox", "rectangle"],
-          ctrTitle: ["textBox", "rectangle"],
-          pic: ["picture"]
-        };
-        this.slide = slide;
-        this.slideElements = slideElements;
-        this.sourceLayoutInfo = sourceLayoutInfo;
-        this.targetPlaceholders = targetPlaceholders;
-      }
-      run() {
-        this.performInitialPlaceholderMatching();
-        this.handleForceAssignmentPlaceholders([
-          "title",
-          "ctrTitle",
-          "subTitle",
-          "body",
-          "pic"
-        ]);
-        this.cleanupUnmatchedPlaceholders();
-      }
-      /**
-       * Performs the initial placeholder matching between source elements and target placeholders.
-       * Elements with exact placeholder type matches are processed first.
-       */
-      performInitialPlaceholderMatching() {
-        this.slideElements.forEach((element) => {
-          const placeholder = element.getPlaceholderInfo();
-          if (placeholder === null || placeholder === void 0 ? void 0 : placeholder.type) {
-            const matchesPlaceholder = this.applyPlaceholderToElement(this.targetPlaceholders, element, placeholder);
-            if (!matchesPlaceholder) {
-              this.mappingResult.unmatchedSourcePlaceholderElements.push(element);
-            } else {
-              this.mappingResult.matchedSourceElements.push(element);
-            }
-          }
-        });
-      }
-      /**
-       * Removes an element from the unmatched elements array.
-       *
-       * @param element - Element to remove
-       * @param unmatchedElements - Array to remove from
-       * @private
-       */
-      removeElementFromUnmatched(element, unmatchedElements) {
-        const index = unmatchedElements.indexOf(element);
-        if (index > -1) {
-          unmatchedElements.splice(index, 1);
-        }
-        return unmatchedElements;
-      }
-      /**
-       * Handles force assignment of placeholder types by finding the best matching
-       * unmatched slide elements for unassigned target placeholders.
-       *
-       * @param forceAssignPhTypes - Array of placeholder types that should be force assigned
-       */
-      handleForceAssignmentPlaceholders(forceAssignPhTypes) {
-        const mappingResult = this.mappingResult;
-        const usedElements = [];
-        forceAssignPhTypes.forEach((phType) => {
-          const unassignedTargetPlaceholders = this.targetPlaceholders.filter((ph) => ph.type === phType && !mappingResult.usedPlaceholders.includes(ph));
-          if (unassignedTargetPlaceholders.length === 0) {
-            return;
-          }
-          const unmatchedElements = this.slideElements.filter((ele) => {
-            return !mappingResult.matchedSourceElements.includes(ele);
-          });
-          const elementsGroups = _XmlPlaceholderHelper.groupElements(unmatchedElements);
-          unassignedTargetPlaceholders.forEach((ph) => {
-            const targetTypes = this.mapCandidates[ph.type];
-            const candidateElements = [];
-            targetTypes.forEach((targetType) => {
-              candidateElements.push(...elementsGroups[targetType] || []);
-            });
-            const filteredCandidates = candidateElements.filter((candidate) => {
-              return !usedElements.includes(candidate);
-            });
-            const bestCandidate = this.findBestCandidateElementForPlaceholder(filteredCandidates, ph);
-            if (bestCandidate) {
-              this.applyForceAssignedPlaceholderToElement(bestCandidate, ph, unmatchedElements);
-              usedElements.push(bestCandidate);
-            }
-          });
-        });
-      }
-      findBestCandidateElementForPlaceholder(candidateElements, ph) {
-        if (ph.type === "title") {
-          if (ph.position) {
-            return this.findClosestCandidate(ph, candidateElements);
-          }
-          return this.findFromTopCandidate(candidateElements, 1, true);
-        }
-        if (ph.type === "subTitle" || ph.type === "ctrTitle") {
-          return this.findFromTopCandidate(candidateElements, 2, false);
-        }
-        if (ph.type === "body") {
-          if (ph.position) {
-            return this.findClosestCandidate(ph, candidateElements);
-          }
-          return this.findLargestCandidate(candidateElements);
-        }
-        if (ph.type === "pic") {
-          return this.findLargestCandidate(candidateElements);
-        }
-        return null;
-      }
-      findClosestCandidate(ph, candidateElements) {
-        let highestScore = 0;
-        let bestCandidate = null;
-        candidateElements.forEach((ele) => {
-          const closestShapeScore = _XmlPlaceholderHelper.calculateDistanceScore(ele.position, ph.position);
-          if (closestShapeScore > highestScore) {
-            highestScore = closestShapeScore;
-            bestCandidate = ele;
-          }
-        });
-        return bestCandidate;
-      }
-      findLargestCandidate(candidateElements) {
-        let minSizeRank = Number.POSITIVE_INFINITY;
-        candidateElements.forEach((ele) => {
-          minSizeRank = ele.sizeRank < minSizeRank ? ele.sizeRank : minSizeRank;
-        });
-        return candidateElements.find((ele) => {
-          return ele.sizeRank === minSizeRank;
-        });
-      }
-      findFromTopCandidate(candidateElements, fromTopRank, equals) {
-        const bestCandidate = candidateElements.find((ele) => {
-          if (equals) {
-            return ele.fromTopRank === fromTopRank;
-          }
-          return ele.fromTopRank >= fromTopRank;
-        });
-        if (bestCandidate) {
-          return bestCandidate;
-        }
-      }
-      /**
-       * Cleans up elements that still don't have placeholder matches by removing
-       * their placeholder properties and applying fallback positioning.
-       */
-      cleanupUnmatchedPlaceholders() {
-        const sourcePlaceholders = this.sourceLayoutInfo.placeholders;
-        const unmatchedElements = this.mappingResult.unmatchedSourcePlaceholderElements;
-        unmatchedElements.forEach((element) => {
-          this.clearUnmatchedPlaceholder(element, sourcePlaceholders);
-        });
-      }
-      clearUnmatchedPlaceholder(element, sourcePlaceholders) {
-        const placeholder = element.getPlaceholderInfo();
-        const fallbackPh = sourcePlaceholders.find((ph) => ph.idx === placeholder.idx);
-        const fallbackPosition = (fallbackPh === null || fallbackPh === void 0 ? void 0 : fallbackPh.position) || {
-          x: 1e3,
-          y: 1e3,
-          cx: 5e6,
-          cy: 1e6
-        };
-        const callback = (element2) => {
-          _XmlPlaceholderHelper.removePlaceholder(element2, fallbackPosition);
-        };
-        this.postApplyModification(element, callback);
-      }
-      applyPlaceholderToElement(layoutPlaceholders, element, placeholder) {
-        const unusedPlaceholders = layoutPlaceholders.filter((ph) => !this.mappingResult.usedPlaceholders.includes(ph));
-        const matchPlaceholders = unusedPlaceholders.filter((ph) => {
-          return ph.type === (placeholder === null || placeholder === void 0 ? void 0 : placeholder.type);
-        });
-        if (matchPlaceholders.length) {
-          const bestMatch = _XmlPlaceholderHelper.findBestMatchingPlaceholder(element, matchPlaceholders);
-          this.applyPlaceholder(element, bestMatch);
-          return bestMatch;
-        }
-        return null;
-      }
-      applyPlaceholder(element, bestMatch) {
-        const applyPlaceholderCallback = (element2) => {
-          _XmlPlaceholderHelper.setPlaceholderDefaults(element2, bestMatch);
-        };
-        this.postApplyModification(element, applyPlaceholderCallback);
-        this.mappingResult.usedPlaceholders.push(bestMatch);
-      }
-      applyForceAssignedPlaceholderToElement(bestCandidate, bestMatch, unmatchedElements) {
-        this.applyPlaceholder(bestCandidate, bestMatch);
-        this.removeElementFromUnmatched(bestCandidate, unmatchedElements);
-        this.mappingResult.matchedSourceElements.push(bestCandidate);
-        this.mappingResult.unmatchedSourcePlaceholderElements = this.mappingResult.unmatchedSourcePlaceholderElements.filter((ele) => ele !== bestCandidate);
-      }
-      postApplyModification(element, callback) {
-        const selector = {
-          creationId: element.creationId,
-          nameIdx: element.nameIdx,
-          name: element.name
-        };
-        this.slide.modifyElement(selector, callback);
-      }
-      /**
-       * Extracts placeholder information from an XML element.
-       *
-       * This method parses a PowerPoint shape element to extract its placeholder properties,
-       * including placeholder type, size, index, position, and element type. It also attempts to merge
-       * position information from layout placeholders when available.
-       *
-       * @param element - The XML element representing a PowerPoint shape
-       * @param layoutPlaceholders - Optional array of placeholder info from the slide layout
-       * @returns PlaceholderInfo object containing all extracted placeholder data, or undefined if no placeholder found
-       */
-      static getPlaceholderInfo(element, layoutPlaceholders) {
-        var _a3;
-        const placeholderElement = element.getElementsByTagName("p:ph").item(0);
-        if (!placeholderElement) {
-          return void 0;
-        }
-        const slideElementParent = (_a3 = element.getElementsByTagName("p:spPr").item(0)) === null || _a3 === void 0 ? void 0 : _a3.parentNode;
-        const indexAttribute = placeholderElement.getAttribute("idx");
-        const placeholderIndex = (indexAttribute === null || indexAttribute === void 0 ? void 0 : indexAttribute.length) ? parseInt(indexAttribute, 10) : null;
-        const matchingLayoutPlaceholder = layoutPlaceholders === null || layoutPlaceholders === void 0 ? void 0 : layoutPlaceholders.find((layoutPh) => placeholderIndex !== null && layoutPh.idx === placeholderIndex);
-        const shapePosition = xml_slide_helper_1.XmlSlideHelper.parseShapeCoordinates(element, false);
-        const finalPosition = shapePosition || (matchingLayoutPlaceholder === null || matchingLayoutPlaceholder === void 0 ? void 0 : matchingLayoutPlaceholder.position);
-        const elementType = xml_slide_helper_1.XmlSlideHelper.getElementType(slideElementParent);
-        const phType = placeholderElement.getAttribute("type");
-        const type = !phType && elementType === "sp" ? "body" : phType;
-        const placeholderInfo = {
-          type: type || "unknown",
-          sz: placeholderElement.getAttribute("sz"),
-          idx: placeholderIndex,
-          elementType,
-          position: finalPosition
-        };
-        return placeholderInfo;
-      }
-      static setPlaceholderDefaults(element, layoutPlaceholder) {
-        let ph = element.getElementsByTagName("p:ph").item(0);
-        if (!ph) {
-          const nvPr = element.getElementsByTagName("p:nvPr").item(0);
-          if (nvPr) {
-            ph = element.ownerDocument.createElement("p:ph");
-            nvPr.appendChild(ph);
-          }
-        }
-        ["type", "sz", "idx"].forEach((tag2) => _XmlPlaceholderHelper.updatePlaceholderParams(tag2, ph, layoutPlaceholder));
-        [
-          // Force fallback to layout properties
-          "a:xfrm",
-          "p:style"
-        ].forEach((tag2) => {
-          const ele = element.getElementsByTagName(tag2).item(0);
-          if (ele) {
-            xml_helper_1.XmlHelper.remove(ele);
-          }
-        });
-        ["p:spPr", "a:bodyPr", "p:cNvSpPr"].forEach((tag2) => {
-          const ele = element.getElementsByTagName(tag2).item(0);
-          if (ele) {
-            xml_helper_1.XmlHelper.removeAllChildren(ele);
-          }
-        });
-      }
-      static updatePlaceholderParams(tag2, ph, layoutPlaceholder) {
-        const value = layoutPlaceholder[tag2];
-        if (value) {
-          ph.setAttribute(tag2, String(value));
-        } else {
-          ph.removeAttribute(tag2);
-        }
-      }
-      static removePlaceholder(element, fallbackPosition) {
-        const ph = element.getElementsByTagName("p:ph").item(0);
-        xml_helper_1.XmlHelper.remove(ph);
-        _XmlPlaceholderHelper.assertShapeCoordinates(element, fallbackPosition);
-      }
-      /**
-       * Finds the best matching target placeholder for a source placeholder based on multiple criteria.
-       *
-       * @returns The best matching target placeholder or null if no suitable match found
-       * @param sourceElement
-       * @param typeMatches
-       */
-      static findBestMatchingPlaceholder(sourceElement, typeMatches) {
-        const scoredMatches = typeMatches.map((target) => {
-          const score = _XmlPlaceholderHelper.calculatePlaceholderSimilarityScore(0, target, sourceElement);
-          return { target, score };
-        });
-        scoredMatches.sort((a, b) => b.score - a.score);
-        return scoredMatches.length > 0 ? scoredMatches[0].target : null;
-      }
-      static calculatePlaceholderSimilarityScore(score, availablePlaceholder, element) {
-        const placeholder = element.getPlaceholderInfo();
-        if ((placeholder === null || placeholder === void 0 ? void 0 : placeholder.sz) && availablePlaceholder.sz === placeholder.sz) {
-          score += 10;
-        }
-        const position = (placeholder === null || placeholder === void 0 ? void 0 : placeholder.position) || element.position;
-        if (position && availablePlaceholder.position) {
-          score += this.calculateDistanceScore(position, availablePlaceholder.position);
-        }
-        return score;
-      }
-      static calculateDistanceScore(pos1, pos2) {
-        const center1X = pos1.x + pos1.cx / 2;
-        const center1Y = pos1.y + pos1.cy / 2;
-        const center2X = pos2.x + pos2.cx / 2;
-        const center2Y = pos2.y + pos2.cy / 2;
-        const distance = Math.sqrt(Math.pow(center1X - center2X, 2) + Math.pow(center1Y - center2Y, 2)) / 1e5;
-        const distanceScore = Math.max(0, 10 - distance);
-        const area1 = pos1.cx * pos1.cy;
-        const area2 = pos2.cx * pos2.cy;
-        const sizeRatio = Math.min(area1, area2) / Math.max(area1, area2);
-        const sizeBonus = sizeRatio * 10;
-        return distanceScore + sizeBonus;
-      }
-      /**
-       * @param unmatchedElements - Elements that couldn't be matched initially
-       * @returns groupedByType
-       * @private
-       */
-      static groupElements(unmatchedElements) {
-        const groupedByType = {};
-        unmatchedElements.forEach((element) => {
-          if (!groupedByType[element.visualType]) {
-            groupedByType[element.visualType] = [];
-          }
-          element.fromTopRank = 0;
-          element.fromLeftRank = 0;
-          element.sizeRank = 0;
-          groupedByType[element.visualType].push(element);
-        });
-        Object.keys(groupedByType).forEach((shapeType2) => {
-          const elementsOfType = groupedByType[shapeType2];
-          const sortedByPosition = [...elementsOfType].sort((a, b) => {
-            if (a.position.y !== b.position.y) {
-              return a.position.y - b.position.y;
-            }
-            return a.position.x - b.position.x;
-          });
-          const sortedBySize = [...elementsOfType].sort((a, b) => {
-            const areaA = a.position.cx * a.position.cy;
-            const areaB = b.position.cx * b.position.cy;
-            return areaB - areaA;
-          });
-          const topRankMap = /* @__PURE__ */ new Map();
-          const leftRankMap = /* @__PURE__ */ new Map();
-          const sizeRankMap = /* @__PURE__ */ new Map();
-          sortedByPosition.forEach((element, index) => {
-            const elementKey = element.creationId || element.name + element.nameIdx;
-            topRankMap.set(elementKey, index + 1);
-            leftRankMap.set(elementKey, index + 1);
-          });
-          sortedBySize.forEach((element, index) => {
-            const elementKey = element.creationId || element.name + element.nameIdx;
-            sizeRankMap.set(elementKey, index + 1);
-          });
-          groupedByType[shapeType2] = elementsOfType.map((element) => {
-            const elementKey = element.creationId || element.name + element.nameIdx;
-            element.fromTopRank = topRankMap.get(elementKey) || 0;
-            element.fromLeftRank = leftRankMap.get(elementKey) || 0;
-            element.sizeRank = sizeRankMap.get(elementKey) || 0;
-            return element;
-          });
-        });
-        return groupedByType;
-      }
-      /**
-       * Adds or updates coordinates in a shape element
-       * @param element The XML element of the shape
-       * @param coords The coordinates to set
-       */
-      static assertShapeCoordinates(element, coords) {
-        let xfrm = element.getElementsByTagName("a:xfrm").item(0) || element.getElementsByTagName("p:xfrm").item(0);
-        const spPr = element.getElementsByTagName("p:spPr").item(0);
-        if (!spPr) {
-          return;
-        }
-        if (!xfrm) {
-          xfrm = element.ownerDocument.createElement("a:xfrm");
-          spPr.appendChild(xfrm);
-        }
-        let off = xfrm.getElementsByTagName("a:off").item(0);
-        if (!off) {
-          off = element.ownerDocument.createElement("a:off");
-          xfrm.appendChild(off);
-          if (coords.x !== void 0)
-            off.setAttribute("x", coords.x.toString());
-          if (coords.y !== void 0)
-            off.setAttribute("y", coords.y.toString());
-        }
-        let ext = xfrm.getElementsByTagName("a:ext").item(0);
-        if (!ext) {
-          ext = element.ownerDocument.createElement("a:ext");
-          xfrm.appendChild(ext);
-          if (coords.cx !== void 0)
-            ext.setAttribute("cx", coords.cx.toString());
-          if (coords.cy !== void 0)
-            ext.setAttribute("cy", coords.cy.toString());
-        }
-      }
-    };
-    exports.default = XmlPlaceholderHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-template-helper.js
-var require_xml_template_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-template-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.XmlTemplateHelper = void 0;
-    var logger_1 = require_logger();
-    var xml_helper_1 = require_xml_helper();
-    var xml_relationship_helper_1 = require_xml_relationship_helper();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
-    var ppt_paths_1 = require_ppt_paths();
-    var XmlTemplateHelper = class _XmlTemplateHelper {
-      constructor(archive) {
-        this.relType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
-        this.relTypeNotes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
-        this.relTypeLayout = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
-        this.archive = archive;
-        this.path = "ppt/_rels/presentation.xml.rels";
-        this.defaultSlideName = "untitled";
-      }
-      getCreationIds() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const archive = this.archive;
-          const relationships = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, this.path, this.relType);
-          const slideRels = yield this.filterVisibleSlides(relationships);
-          const creationIds = [];
-          for (const slideRel of slideRels) {
-            try {
-              const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "ppt/" + slideRel.file);
-              if (!slideXml) {
-                logger_1.log.warn(`slideXml is undefined for file ${slideRel.file}`);
-                continue;
-              }
-              const number4 = this.parseSlideRelFile(slideRel.file);
-              const slideHelper = new xml_slide_helper_1.XmlSlideHelper(slideXml, {
-                sourceArchive: archive,
-                slideNumber: number4
-              });
-              const creationIdSlide = slideHelper.getSlideCreationId();
-              if (!creationIdSlide) {
-                logger_1.log.warn(`No creationId found in ${slideRel.file}`);
-              }
-              const slideInfo = yield this.getSlideInfo(slideXml, archive, slideRel.file);
-              creationIds.push({
-                id: creationIdSlide,
-                number: number4,
-                elements: slideHelper.getAllElements([], slideInfo.layoutPlaceholders),
-                info: slideInfo
-              });
-            } catch (err) {
-              logger_1.log.error(`An error occurred while processing ${slideRel.file}:`, err);
-            }
-          }
-          return creationIds;
-        });
-      }
-      /**
-       * A .pptx can contain slide parts that are not part of the presentation:
-       * both PowerPoint and automizer's `removeExistingSlides` only drop the
-       * entries from `p:sldIdLst` in `ppt/presentation.xml`, while the slide part
-       * and its relationship remain in the archive. Listing slides by relationship
-       * alone would therefore also return these invisible leftovers (see #166).
-       *
-       * `p:sldIdLst` is the authoritative list: it contains the visible slides, in
-       * presentation order. It is used to filter and sort the incoming slide
-       * relationships; if it cannot be read (or is empty), all slide relationships
-       * are returned, sorted by slide number.
-       *
-       * @param relationships All slide targets of ppt/_rels/presentation.xml.rels
-       * @returns The visible slide targets, in presentation order
-       */
-      filterVisibleSlides(relationships) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const byNumber = () => [...relationships].sort((relA, relB) => this.parseSlideRelFile(relA.file) < this.parseSlideRelFile(relB.file) ? -1 : 1);
-          if (!this.archive.fileExists(ppt_paths_1.PptPaths.presentation)) {
-            return byNumber();
-          }
-          const presentationXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, ppt_paths_1.PptPaths.presentation);
-          const slideIds = presentationXml === null || presentationXml === void 0 ? void 0 : presentationXml.getElementsByTagName("p:sldId");
-          if (!(slideIds === null || slideIds === void 0 ? void 0 : slideIds.length)) {
-            return byNumber();
-          }
-          const visibleSlides = [];
-          for (let i = 0; i < slideIds.length; i++) {
-            const rId = slideIds[i].getAttribute("r:id");
-            const slideRel = relationships.find((relation) => relation.rId === rId);
-            if (!slideRel) {
-              logger_1.log.warn(`No slide relationship found for ${rId} in p:sldIdLst`);
-              continue;
-            }
-            visibleSlides.push(slideRel);
-          }
-          return visibleSlides;
-        });
-      }
-      parseSlideRelFile(slideRelFile) {
-        return Number(slideRelFile.replace("slides/slide", "").replace(".xml", ""));
-      }
-      getSlideInfo(slideXml, archive, slideRelFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          let name;
-          const slideLayoutXml = yield this.getSlideLayoutXml(archive, slideRelFile);
-          const layoutInfo = _XmlTemplateHelper.getLayoutInfo(slideLayoutXml);
-          const slideNoteRels = yield this.getSlideNoteRels(archive, slideRelFile);
-          if (slideNoteRels.length > 0) {
-            name = yield this.getSlideNameFromNotes(archive, slideNoteRels);
-          }
-          if (!name) {
-            name = this.getNameFromSlideInfo(slideXml);
-          }
-          name = !name ? this.defaultSlideName : name;
-          return {
-            name,
-            layoutName: layoutInfo.layoutName,
-            layoutPlaceholders: layoutInfo.placeholders
-          };
-        });
-      }
-      getSlideLayoutXml(archive, slideRelFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          try {
-            const relFileName = slideRelFile.replace("slides", "");
-            const relPath = `ppt/slides/_rels${relFileName}.rels`;
-            const layoutRels = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, relPath, this.relTypeLayout);
-            if (layoutRels.length > 0) {
-              const target = layoutRels[0].file;
-              if (target) {
-                const layoutPath = "ppt/" + target.replace("../", "");
-                const layoutXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, layoutPath);
-                if (layoutXml) {
-                  return layoutXml;
-                }
-              }
-            }
-          } catch (error62) {
-            logger_1.log.error(`Error getting slide layout information: ${error62.message}`);
-          }
-        });
-      }
-      static getLayoutInfo(layoutXml) {
-        let layoutName = "";
-        const placeholders = [];
-        const cSldElement = layoutXml.getElementsByTagName("p:cSld").item(0);
-        if (cSldElement && cSldElement.getAttribute("name")) {
-          layoutName = cSldElement.getAttribute("name");
-        }
-        const phElements = layoutXml.getElementsByTagName("p:ph");
-        for (let j = 0; j < phElements.length; j++) {
-          const ph = phElements.item(j);
-          const element = ph.parentNode.parentNode.parentNode;
-          const placeholderInfo = xml_placeholder_helper_1.default.getPlaceholderInfo(element);
-          placeholders.push(placeholderInfo);
-        }
-        return {
-          layoutName,
-          placeholders
-        };
-      }
-      getNameFromSlideInfo(slideXml) {
-        const slideTitle2 = slideXml.getElementsByTagName("p:ph");
-        if (slideTitle2.length && slideTitle2[0].getAttribute("type") === "title") {
-          const titleElement = slideTitle2[0].parentNode.parentNode.parentNode;
-          const nameFragments = this.parseTitleElement(titleElement);
-          if (nameFragments.length) {
-            return nameFragments.join(" ");
-          }
-        }
-      }
-      getSlideNoteRels(archive, slideRelFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relFileName = slideRelFile.replace("slides", "");
-          const slideRels = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, `ppt/slides/_rels${relFileName}.rels`, this.relTypeNotes);
-          return slideRels;
-        });
-      }
-      getSlideNameFromNotes(archive, slideNoteRels) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const notesFile = slideNoteRels[0].file.replace("../", "");
-          const notesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "ppt/" + notesFile);
-          const titleElements = notesXml.getElementsByTagName("a:p");
-          if (titleElements.length > 0) {
-            const nameFragments = this.parseTitleElement(titleElements[0]);
-            if (nameFragments.length) {
-              return nameFragments.join("");
-            }
-          }
-        });
-      }
-      parseTitleElement(titleElement) {
-        var _a3;
-        const nameFragments = [];
-        const titleText = titleElement.getElementsByTagName("a:t");
-        if (titleText.length) {
-          for (const titleTextNode in titleText) {
-            if ((_a3 = titleText[titleTextNode].firstChild) === null || _a3 === void 0 ? void 0 : _a3.nodeValue) {
-              nameFragments.push(titleText[titleTextNode].firstChild.nodeValue);
-            }
-          }
-        }
-        return nameFragments;
-      }
-      /**
-       * Returns the slide numbers of a given template as a sorted array of integers.
-       * @returns {Promise<number[]>} - A promise that resolves to a sorted array of slide numbers in the template.
-       */
-      getAllSlideNumbers() {
-        return __awaiter(this, void 0, void 0, function* () {
-          try {
-            const archive = this.archive;
-            const xmlRelationshipHelper = new xml_relationship_helper_1.XmlRelationshipHelper();
-            const allSlides = yield xmlRelationshipHelper.initialize(archive, "presentation.xml.rels", "ppt/_rels", "slides/slide");
-            const visibleSlides = yield this.filterVisibleSlides(allSlides);
-            const slideNumbers = visibleSlides.map((slide) => slide.number);
-            slideNumbers.sort((a, b) => a - b);
-            return slideNumbers;
-          } catch (error62) {
-            throw new Error(`Error getting slide numbers: ${error62.message}`);
-          }
-        });
-      }
-    };
-    exports.XmlTemplateHelper = XmlTemplateHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-slide-helper.js
-var require_xml_slide_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-slide-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.XmlSlideHelper = exports.mapUriType = exports.nsMain = void 0;
-    var logger_1 = require_logger();
-    var xml_helper_1 = require_xml_helper();
-    var xml_template_helper_1 = require_xml_template_helper();
-    var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
-    exports.nsMain = "http://schemas.openxmlformats.org/presentationml/2006/main";
-    exports.mapUriType = {
-      "http://schemas.openxmlformats.org/drawingml/2006/table": "table",
-      "http://schemas.openxmlformats.org/drawingml/2006/chart": "chart",
-      "http://schemas.microsoft.com/office/drawing/2014/chartex": "chartEx",
-      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject": "oleObject",
-      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink": "hyperlink"
-    };
-    var XmlSlideHelper = class _XmlSlideHelper {
-      /**
-       * Constructor for the XmlSlideHelper class.
-       * @param {XmlDocument} slideXml - The slide XML document to be used by the helper.
-       * @param params
-       */
-      constructor(slideXml, params) {
-        this.getAndExtractDimensions = (path12) => __awaiter(this, void 0, void 0, function* () {
-          try {
-            const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.sourceArchive, path12);
-            if (!xml)
-              return null;
-            const sldSz = xml.getElementsByTagName("p:sldSz")[0];
-            if (sldSz) {
-              const width = _XmlSlideHelper.parseCoordinate(sldSz, "cx");
-              const height = _XmlSlideHelper.parseCoordinate(sldSz, "cy");
-              return { width, height };
-            }
-            return null;
-          } catch (error62) {
-            logger_1.log.warn(`Error while fetching XML from path ${path12}: ${error62}`);
-            return null;
-          }
-        });
-        if (!slideXml) {
-          throw Error("Slide XML is not defined");
-        }
-        this.slideXml = slideXml;
-        this.sourceArchive = params.sourceArchive;
-        this.slideNumber = params.slideNumber;
-        this.sourceLayoutId = params.sourceLayoutId;
-      }
-      getSlideCreationId() {
-        const creationIdItem = this.slideXml.getElementsByTagName("p14:creationId").item(0);
-        if (!creationIdItem) {
-          return;
-        }
-        const creationIdSlide = creationIdItem.getAttribute("val");
-        if (!creationIdSlide) {
-          return;
-        }
-        return Number(creationIdSlide);
-      }
-      getSlideLayout() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield this.getSlideLayoutXml(this.sourceLayoutId);
-          return xml_template_helper_1.XmlTemplateHelper.getLayoutInfo(xml);
-        });
-      }
-      /**
-       * Get an ElementInfo object for the target element on the slide.
-       * @param selector
-       */
-      getElement(selector) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const shapeNode = xml_helper_1.XmlHelper.isElementCreationId(selector) ? xml_helper_1.XmlHelper.findByCreationId(this.slideXml, selector) : xml_helper_1.XmlHelper.findByName(this.slideXml, selector);
-          return _XmlSlideHelper.getElementInfo(shapeNode);
-        });
-      }
-      /**
-       * Get an array of ElementInfo objects for all named elements on a slide.
-       * @param filterTags Use an array of strings to filter the output array
-       * @param layoutPlaceholders
-       */
-      getAllElements(filterTags, layoutPlaceholders) {
-        const elementInfo = [];
-        try {
-          const shapeNodes = this.getNamedElements(filterTags);
-          shapeNodes.forEach((shapeNode) => {
-            elementInfo.push(_XmlSlideHelper.getElementInfo(shapeNode, layoutPlaceholders));
-          });
-        } catch (error62) {
-          logger_1.log.error(error62);
-          throw new Error(`Failed to retrieve elements: ${error62.message}`);
-        }
-        return elementInfo;
-      }
-      /**
-       * Get all text element IDs from the slide.
-       * @return {string[]} An array of text element IDs.
-       */
-      getAllTextElementIds(useCreationIds) {
-        const elementIds = [];
-        try {
-          elementIds.push(...this.getAllElements(["sp"]).filter((element) => element.hasTextBody).map((element) => useCreationIds ? element.id : element.name));
-        } catch (error62) {
-          logger_1.log.error(error62);
-          throw new Error(`Failed to retrieve text element IDs: ${error62.message}`);
-        }
-        return elementIds;
-      }
-      static getElementInfo(slideElement, layoutPlaceholders) {
-        const selector = this.getSelector(slideElement);
-        const position = _XmlSlideHelper.parseShapeCoordinates(slideElement);
-        const type = _XmlSlideHelper.getElementType(slideElement);
-        const visualType = _XmlSlideHelper.getElementVisualType(slideElement);
-        return {
-          name: selector.name,
-          id: selector.creationId,
-          creationId: selector.creationId,
-          nameIdx: selector.nameIdx,
-          type,
-          visualType,
-          position,
-          getPlaceholderInfo: () => {
-            return xml_placeholder_helper_1.default.getPlaceholderInfo(slideElement, layoutPlaceholders);
-          },
-          hasTextBody: !!_XmlSlideHelper.getTextBody(slideElement),
-          getXmlElement: () => slideElement,
-          getText: () => _XmlSlideHelper.parseTextFragments(slideElement),
-          getParagraphs: () => _XmlSlideHelper.parseTextParagraphs(slideElement),
-          getParagraphGroups: () => _XmlSlideHelper.parseParagraphGroups(slideElement),
-          getTableInfo: () => _XmlSlideHelper.readTableInfo(slideElement),
-          getAltText: () => _XmlSlideHelper.getImageAltText(slideElement),
-          getGroupInfo: () => _XmlSlideHelper.parseGroupInfo(slideElement)
-        };
-      }
-      /**
-       * Retrieves a list of all named elements on a slide. Automation requires at least a name.
-       * @param filterTags Use an array of strings to filter the output array
-       */
-      getNamedElements(filterTags) {
-        const skipTags = ["spTree"];
-        const nvPrs = this.slideXml.getElementsByTagNameNS(exports.nsMain, "cNvPr");
-        const namedElements = [];
-        xml_helper_1.XmlHelper.modifyCollection(nvPrs, (nvPr) => {
-          var _a3;
-          const parentNode = (_a3 = nvPr === null || nvPr === void 0 ? void 0 : nvPr.parentNode) === null || _a3 === void 0 ? void 0 : _a3.parentNode;
-          const parentTag = parentNode === null || parentNode === void 0 ? void 0 : parentNode.localName;
-          if (!skipTags.includes(parentTag) && (!(filterTags === null || filterTags === void 0 ? void 0 : filterTags.length) || filterTags.includes(parentTag))) {
-            namedElements.push(parentNode);
-          }
-        });
-        return namedElements;
-      }
-      static getTextBody(shapeNode) {
-        return shapeNode.getElementsByTagNameNS(exports.nsMain, "txBody").item(0);
-      }
-      static parseTextFragments(shapeNode) {
-        const txBody = _XmlSlideHelper.getTextBody(shapeNode);
-        const textFragments = [];
-        if (!txBody) {
-          return textFragments;
-        }
-        const texts = txBody.getElementsByTagName("a:t");
-        for (let t = 0; t < texts.length; t++) {
-          const text = texts.item(t);
-          textFragments.push(text.textContent);
-        }
-        return textFragments;
-      }
-      static parseParagraphGroups(shapeNode) {
-        const rawParagraphs = _XmlSlideHelper.parseTextParagraphs(shapeNode);
-        return _XmlSlideHelper.groupSimilarParagraphs(rawParagraphs);
-      }
-      static parseTextParagraphs(shapeNode) {
-        const textParagraphs = [];
-        const txBody = shapeNode.getElementsByTagName("p:txBody")[0] || shapeNode.getElementsByTagName("a:txBody")[0];
-        if (!txBody)
-          return textParagraphs;
-        const paragraphs = txBody.getElementsByTagName("a:p");
-        for (const p of Array.from(paragraphs)) {
-          const paragraph = { texts: [] };
-          const pPr = p.getElementsByTagName("a:pPr")[0];
-          if (pPr) {
-            _XmlSlideHelper.setParagraphProperties(pPr, paragraph);
-          }
-          const runs = p.getElementsByTagName("a:r");
-          const texts = [];
-          for (const run of Array.from(runs)) {
-            _XmlSlideHelper.setTextProperties(run, paragraph);
-            const textElements = run.getElementsByTagName("a:t");
-            for (const textElement of Array.from(textElements)) {
-              texts.push(textElement.textContent || "");
-            }
-            const nextSibling = run.nextSibling;
-            if (nextSibling && nextSibling.nodeName === "a:br") {
-              texts.push(`
-`);
-            }
-          }
-          if (texts.length > 0) {
-            paragraph.texts = texts;
-            textParagraphs.push(paragraph);
-          }
-        }
-        return textParagraphs;
-      }
-      static setTextProperties(run, paragraph) {
-        const rPr = run.getElementsByTagName("a:rPr")[0];
-        if (rPr) {
-          const isBold = rPr.getAttribute("b") === "1";
-          const isUnderlined = rPr.getAttribute("u");
-          const isItalic = rPr.getAttribute("i") === "1";
-          const fontSize = parseInt(rPr.getAttribute("sz") || "0") / 100;
-          if (isBold)
-            paragraph.isBold = true;
-          if (isItalic)
-            paragraph.isItalic = true;
-          if (isUnderlined)
-            paragraph.isUnderlined = true;
-          if (fontSize)
-            paragraph.fontSize = fontSize;
-        }
-      }
-      static setParagraphProperties(pPr, paragraph) {
-        const marL = pPr.getAttribute("marL");
-        if (marL) {
-          paragraph.indent = parseInt(marL);
-        }
-        const buChar = pPr.getElementsByTagName("a:buChar")[0];
-        if (buChar) {
-          paragraph.bullet = buChar.getAttribute("char");
-        }
-        const buAutoNum = pPr.getElementsByTagName("a:buAutoNum")[0];
-        if (buAutoNum) {
-          paragraph.isNumbered = true;
-          paragraph.numberingType = buAutoNum.getAttribute("type") || void 0;
-          paragraph.startAt = buAutoNum.getAttribute("startAt") || void 0;
-        }
-        const algn = pPr.getAttribute("algn");
-        if (algn) {
-          paragraph.align = algn;
-        }
-      }
-      static groupSimilarParagraphs(paragraphs) {
-        const groups = [];
-        let currentGroup = null;
-        const getDefinedProperties = (paragraph) => {
-          const properties = {};
-          const propertyKeys = [
-            "fontSize",
-            "isBold",
-            "isItalic",
-            "isUnderlined",
-            // 'indent',
-            "align",
-            "isNumbered",
-            "numberingType",
-            "bullet",
-            "startAt"
-          ];
-          for (const key of propertyKeys) {
-            if (paragraph[key] !== void 0) {
-              properties[key] = paragraph[key];
-            }
-          }
-          return properties;
-        };
-        for (const paragraph of paragraphs) {
-          const properties = getDefinedProperties(paragraph);
-          const propertiesMatch = (a, b) => {
-            return JSON.stringify(a) === JSON.stringify(b);
-          };
-          if (!currentGroup || !propertiesMatch(currentGroup.properties, properties)) {
-            currentGroup = {
-              properties,
-              texts: []
-            };
-            groups.push(currentGroup);
-          }
-          currentGroup.texts.push(paragraph.texts.join(""));
-        }
-        return groups;
-      }
-      static getNonVisibleProperties(shapeNode) {
-        return shapeNode.getElementsByTagNameNS(exports.nsMain, "cNvPr").item(0);
-      }
-      static getImageAltText(slideElement) {
-        const cNvPr = _XmlSlideHelper.getNonVisibleProperties(slideElement);
-        if (cNvPr) {
-          return cNvPr.getAttribute("descr");
-        }
-      }
-      static getElementName(slideElement) {
-        const cNvPr = _XmlSlideHelper.getNonVisibleProperties(slideElement);
-        if (cNvPr) {
-          return cNvPr.getAttribute("name");
-        }
-      }
-      static getElementCreationId(slideElement, stripBrackets) {
-        const cNvPr = _XmlSlideHelper.getNonVisibleProperties(slideElement);
-        if (cNvPr) {
-          const creationIdElement = cNvPr.getElementsByTagName("a16:creationId").item(0);
-          if (creationIdElement) {
-            const id = creationIdElement.getAttribute("id");
-            if (stripBrackets)
-              return id.replace("{", "").replace("}", "");
-            return id;
-          }
-        }
-      }
-      static getElementNameIdx(slideElement) {
-        const elementName = _XmlSlideHelper.getElementName(slideElement);
-        if (!elementName) {
-          return 0;
-        }
-        const currentNode = xml_helper_1.XmlHelper.getClosestParent("p:spTree", slideElement);
-        if (!currentNode) {
-          return 0;
-        }
-        const spTree = currentNode;
-        const namedElements = [];
-        const nvPrs = spTree.getElementsByTagNameNS(exports.nsMain, "cNvPr");
-        xml_helper_1.XmlHelper.modifyCollection(nvPrs, (nvPr) => {
-          const parentNode = nvPr.parentNode.parentNode;
-          const name = nvPr.getAttribute("name");
-          if (name === elementName) {
-            namedElements.push(parentNode);
-          }
-        });
-        for (let i = 0; i < namedElements.length; i++) {
-          if (namedElements[i] === slideElement) {
-            return i;
-          }
-        }
-        return 0;
-      }
-      /**
-       * Parses local tag name to specify element type in case it is a 'graphicFrame'.
-       * @param slideElementParent
-       */
-      static getElementType(slideElementParent) {
-        let type = slideElementParent === null || slideElementParent === void 0 ? void 0 : slideElementParent.localName;
-        const getUri = () => {
-          const graphicData = slideElementParent.getElementsByTagName("a:graphicData")[0];
-          return graphicData.getAttribute("uri");
-        };
-        switch (type) {
-          case "graphicFrame":
-            type = exports.mapUriType[getUri()] || type;
-            break;
-          case "oleObj":
-            type = "OLEObject";
-            break;
-        }
-        const hasHyperlink = slideElementParent.getElementsByTagName("a:hlinkClick");
-        if (hasHyperlink.length > 0) {
-          type = "Hyperlink";
-        }
-        return type;
-      }
-      static parseShapeCoordinates(slideElementParent, returnDefaults) {
-        const xFrmsA = slideElementParent.getElementsByTagName("a:xfrm");
-        const xFrmsP = slideElementParent.getElementsByTagName("p:xfrm");
-        const xFrms = xFrmsP.item(0) ? xFrmsP : xFrmsA;
-        const position = {
-          x: 0,
-          y: 0,
-          cx: 0,
-          cy: 0,
-          rot: 0
-        };
-        if (!xFrms.item(0)) {
-          if (returnDefaults === false) {
-            return null;
-          }
-          return position;
-        }
-        const xFrm = xFrms.item(0);
-        const Off = xFrm.getElementsByTagName("a:off").item(0);
-        const Ext = xFrm.getElementsByTagName("a:ext").item(0);
-        position.x = _XmlSlideHelper.parseCoordinate(Off, "x");
-        position.y = _XmlSlideHelper.parseCoordinate(Off, "y");
-        position.cx = _XmlSlideHelper.parseCoordinate(Ext, "cx");
-        position.cy = _XmlSlideHelper.parseCoordinate(Ext, "cy");
-        if (xFrm.getAttribute("rot")) {
-          position.rot = parseInt(xFrm.getAttribute("rot"));
-        }
-        return position;
-      }
-      getSlideLayoutXml(layoutId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return _XmlSlideHelper.getSlideLayoutXml(this.sourceArchive, layoutId);
-        });
-      }
-      static getSlideLayoutXml(sourceArchive, layoutId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const layoutPath = "ppt/slideLayouts/slideLayout" + layoutId + ".xml";
-          const layoutXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(sourceArchive, layoutPath);
-          if (layoutXml) {
-            return layoutXml;
-          }
-        });
-      }
-      /**
-       * Asynchronously retrieves the dimensions of a slide.
-       * Tries to find the dimensions from the slide XML, then from the layout, master, and presentation XMLs in order.
-       *
-       * @returns {Promise<{ width: number, height: number }>} The dimensions of the slide.
-       * @throws Error if unable to determine dimensions.
-       */
-      getDimensions() {
-        return __awaiter(this, void 0, void 0, function* () {
-          try {
-            const dimensions = yield this.getAndExtractDimensions("ppt/presentation.xml");
-            if (dimensions)
-              return dimensions;
-          } catch (error62) {
-            logger_1.log.error(`Error while fetching slide dimensions: ${error62}`);
-            throw error62;
-          }
-        });
-      }
-      /**
-       * Reconstruct the complete selector for a given xmlElement, including the
-       * n-th occurance of the shape name on the current slide
-       * @param slideElement
-       */
-      static getSelector(slideElement) {
-        const creationId = _XmlSlideHelper.getElementCreationId(slideElement, true);
-        const nameIdx = !creationId ? _XmlSlideHelper.getElementNameIdx(slideElement) : 0;
-        return {
-          name: _XmlSlideHelper.getElementName(slideElement),
-          creationId,
-          nameIdx
-        };
-      }
-      /**
-       * Determines the type of visual element in PowerPoint
-       * @param element The XML element to check
-       * @returns A string identifying the element type
-       */
-      static getElementVisualType(element) {
-        if (_XmlSlideHelper.getElementType(element) === "grpSp") {
-          return "group";
-        }
-        if (element.tagName === "p:graphicFrame") {
-          const graphicData = xml_helper_1.XmlHelper.findElement(element, "a:graphicData");
-          if (graphicData) {
-            const uri = graphicData.getAttribute("uri").toLowerCase();
-            if (uri && uri.includes("chart")) {
-              return "chart";
-            } else if (uri && (uri.includes("smartart") || uri.includes("diagram"))) {
-              return "smartArt";
-            } else if (uri && uri.includes("table")) {
-              return "table";
-            }
-          }
-          return "graphicFrame";
-        }
-        if (xml_helper_1.XmlHelper.findElement(element, "a:tbl") || element.getElementsByTagName("a:tbl")[0]) {
-          return "table";
-        }
-        if (xml_helper_1.XmlHelper.findElement(element, "a:svgBlip") || xml_helper_1.XmlHelper.findElement(element, "asvg:svgBlip")) {
-          return "svgImage";
-        }
-        const hasPicPr = !!element.getElementsByTagName("p:nvPicPr")[0];
-        if (hasPicPr) {
-          return "picture";
-        }
-        const hasBlipFill = !!xml_helper_1.XmlHelper.findElement(element, "a:blipFill");
-        if (hasBlipFill) {
-          return "imageFilledShape";
-        }
-        const hasGeometry = !!xml_helper_1.XmlHelper.findElement(element, "a:prstGeom") || !!xml_helper_1.XmlHelper.findElement(element, "a:custGeom");
-        if (hasGeometry) {
-          const prstGeomElement = xml_helper_1.XmlHelper.findElement(element, "a:prstGeom");
-          if (prstGeomElement) {
-            const prst = prstGeomElement.getAttribute("prst");
-            const linePresets = [
-              "line",
-              "lineInv",
-              "straightConnector1",
-              "bentConnector2",
-              "bentConnector3",
-              "bentConnector4",
-              "bentConnector5",
-              "curvedConnector2",
-              "curvedConnector3",
-              "curvedConnector4",
-              "curvedConnector5",
-              "callout1",
-              "callout2",
-              "callout3",
-              "accentCallout1",
-              "accentCallout2",
-              "accentCallout3",
-              "borderCallout1",
-              "borderCallout2",
-              "borderCallout3",
-              "accentBorderCallout1",
-              "accentBorderCallout2",
-              "accentBorderCallout3"
-            ];
-            if (prst && linePresets.includes(prst)) {
-              return "vectorLine";
-            }
-            if (prst && prst === "rect") {
-              const cNvSpPr = xml_helper_1.XmlHelper.findElement(element, "p:cNvSpPr");
-              if (cNvSpPr && cNvSpPr.getAttribute("txBox") === "1") {
-                return "textBox";
-              }
-              return "rectangle";
-            }
-          }
-          return "vectorShape";
-        }
-        if (element.tagName === "p:sp") {
-          const txBody = xml_helper_1.XmlHelper.findElement(element, "p:txBody");
-          if (txBody) {
-            return "textBox";
-          }
-        }
-        if (xml_helper_1.XmlHelper.findElement(element, "a:scene3d")) {
-          return "3dModel";
-        }
-        return "unknown";
-      }
-    };
-    exports.XmlSlideHelper = XmlSlideHelper;
-    XmlSlideHelper.parseCoordinate = (element, attributeName) => {
-      return parseInt(element.getAttribute(attributeName), 10);
-    };
-    XmlSlideHelper.parseGroupInfo = (element) => {
-      if (!(element === null || element === void 0 ? void 0 : element.parentNode)) {
-        return;
-      }
-      const isChild = element.parentNode && (element.parentNode.nodeName === "grpSp" || element.parentNode.nodeName.includes("grpSp"));
-      const isParent = element.localName === "grpSp" || element.nodeName.includes("grpSp");
-      const getParent = () => {
-        if (isChild && element.parentNode) {
-          return element.parentNode;
-        }
-        return null;
-      };
-      const getChildren = () => {
-        if (isParent) {
-          const children = Array.from(element.childNodes).filter((node2) => {
-            if (node2.nodeType !== 1)
-              return false;
-            const nodeName = node2.localName || node2.nodeName;
-            return !nodeName.includes("nvGrpSpPr") && !nodeName.includes("grpSpPr");
-          });
-          return children;
-        }
-        return [];
-      };
-      return {
-        isChild,
-        isParent,
-        getParent,
-        getChildren
-      };
-    };
-    XmlSlideHelper.readTableInfo = (element) => {
-      const info = [];
-      const rows = element.getElementsByTagName("a:tr");
-      if (!rows) {
-        logger_1.log.error("Can't find a table row.");
-        return info;
-      }
-      for (let r = 0; r < rows.length; r++) {
-        const row = rows.item(r);
-        const columns = row.getElementsByTagName("a:tc");
-        for (let c = 0; c < columns.length; c++) {
-          const cell = columns.item(c);
-          const gridSpan = cell.getAttribute("gridSpan");
-          const hMerge = cell.getAttribute("hMerge");
-          const texts = cell.getElementsByTagName("a:t");
-          const text = [];
-          for (let t = 0; t < texts.length; t++) {
-            text.push(texts.item(t).textContent);
-          }
-          info.push({
-            row: r,
-            column: c,
-            rowXml: row,
-            columnXml: cell,
-            text,
-            textContent: text.join(""),
-            gridSpan: Number(gridSpan),
-            hMerge: Number(hMerge)
-          });
-        }
-      }
-      return info;
-    };
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/content-type-registry.js
-var require_content_type_registry = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/content-type-registry.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ContentTypeRegistry = void 0;
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var nextRelIdByRelsDoc = /* @__PURE__ */ new WeakMap();
-    var listElementsByPresentationDoc = /* @__PURE__ */ new WeakMap();
-    var ContentTypeRegistry = class {
-      constructor(host) {
-        this.host = host;
-      }
-      /**
-       * Registers the host's target part (slide, slideMaster or slideLayout)
-       * with the presentation.
-       */
-      addToPresentation() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const relId = yield this.getNextPresentationRelId(host.targetArchive);
-          yield this.appendToSlideRel(host.targetArchive, relId, host.targetNumber);
-          if (host.targetType === "slide") {
-            yield this.appendToSlideList(host.targetArchive, relId);
-          } else if (host.targetType === "slideMaster") {
-            yield this.appendToSlideMasterList(host.targetArchive, relId);
-          } else if (host.targetType === "slideLayout") {
-          }
-          yield this.appendToContentType(host.targetArchive, host.targetNumber);
-        });
-      }
-      /**
-       * Cached equivalent of `XmlHelper.getNextRelId` for
-       * `ppt/_rels/presentation.xml.rels`: the max-rId scan runs once per parsed
-       * document, afterwards ids are incremented locally (the scan is O(n) in
-       * appended slides, so rescanning per append made large decks O(n²)).
-       */
-      getNextPresentationRelId(rootArchive) {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(rootArchive, ppt_paths_1.PptPaths.presentationRels);
-          const max = (_a3 = nextRelIdByRelsDoc.get(xml)) !== null && _a3 !== void 0 ? _a3 : xml_helper_1.XmlHelper.getMaxId(xml.documentElement.childNodes, "Id");
-          const next = max + 1;
-          nextRelIdByRelsDoc.set(xml, next);
-          return `rId${next}-created`;
-        });
-      }
-      /**
-       * Cached lookup of a list element of `ppt/presentation.xml`
-       * (`p:sldIdLst` / `p:sldMasterIdLst`). xmldom's live
-       * `getElementsByTagName` re-walks the whole document on every access.
-       */
-      getPresentationListElement(xml, tag2) {
-        let byTag = listElementsByPresentationDoc.get(xml);
-        if (!byTag) {
-          byTag = /* @__PURE__ */ new Map();
-          listElementsByPresentationDoc.set(xml, byTag);
-        }
-        let element = byTag.get(tag2);
-        if (!element || !element.parentNode) {
-          element = xml.getElementsByTagName(tag2)[0];
-          if (element) {
-            byTag.set(tag2, element);
-          } else {
-            byTag.delete(tag2);
-          }
-        }
-        return element;
-      }
-      appendToSlideRel(rootArchive, relId, slideCount) {
-        const targetType = this.host.targetType;
-        return xml_helper_1.XmlHelper.append({
-          archive: rootArchive,
-          file: ppt_paths_1.PptPaths.presentationRels,
-          // `Relationships` is the document element of a .rels part.
-          parent: (xml) => xml.documentElement,
-          tag: "Relationship",
-          attributes: {
-            Id: relId,
-            Type: `http://schemas.openxmlformats.org/officeDocument/2006/relationships/${targetType}`,
-            Target: `${targetType}s/${targetType}${slideCount}.xml`
-          }
-        });
-      }
-      /**
-       * Appends a new slide to slide list in presentation.xml.
-       * If rootArchive has no slides, a new node will be created.
-       * "id"-attribute of 'p:sldId'-element must be greater than 255.
-       */
-      appendToSlideList(rootArchive, relId) {
-        return xml_helper_1.XmlHelper.append({
-          archive: rootArchive,
-          file: ppt_paths_1.PptPaths.presentation,
-          assert: (xml) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.getPresentationListElement(xml, "p:sldIdLst")) {
-              xml_helper_1.XmlHelper.insertAfter(xml.createElement("p:sldIdLst"), this.getPresentationListElement(xml, "p:sldMasterIdLst"));
-            }
-          }),
-          parent: (xml) => this.getPresentationListElement(xml, "p:sldIdLst"),
-          tag: "p:sldId",
-          attributes: {
-            "r:id": relId
-          }
-        });
-      }
-      /**
-       * Appends a new slideMaster to the master list in presentation.xml.
-       */
-      appendToSlideMasterList(rootArchive, relId) {
-        return xml_helper_1.XmlHelper.append({
-          archive: rootArchive,
-          file: ppt_paths_1.PptPaths.presentation,
-          parent: (xml) => this.getPresentationListElement(xml, "p:sldMasterIdLst"),
-          tag: "p:sldMasterId",
-          attributes: {
-            "r:id": relId
-          }
-        });
-      }
-      appendToContentType(rootArchive, count) {
-        const targetType = this.host.targetType;
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(rootArchive, {
-          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.part(targetType, count)),
-          ContentType: `application/vnd.openxmlformats-officedocument.presentationml.${targetType}+xml`
-        }));
-      }
-      appendNotesToContentType(slideCount) {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.host.targetArchive, {
-          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.notesSlide(slideCount)),
-          ContentType: `application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml`
-        }));
-      }
-      appendThemeToContentType(themeCount) {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.host.targetArchive, {
-          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.theme(themeCount)),
-          ContentType: `application/vnd.openxmlformats-officedocument.theme+xml`
-        }));
-      }
-    };
-    exports.ContentTypeRegistry = ContentTypeRegistry;
-  }
-});
-
-// node_modules/pptx-automizer/dist/enums/element-type.js
-var require_element_type = __commonJS({
-  "node_modules/pptx-automizer/dist/enums/element-type.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ElementSubtype = exports.ElementType = void 0;
-    var ElementType;
-    (function(ElementType2) {
-      ElementType2["Chart"] = "Chart";
-      ElementType2["Image"] = "Image";
-      ElementType2["Diagram"] = "Diagram";
-      ElementType2["Shape"] = "Generic";
-      ElementType2["OLEObject"] = "OLEObject";
-      ElementType2["Hyperlink"] = "Hyperlink";
-    })(ElementType || (exports.ElementType = ElementType = {}));
-    var ElementSubtype;
-    (function(ElementSubtype2) {
-      ElementSubtype2["chart"] = "chart";
-      ElementSubtype2["chartEx"] = "chartEx";
-      ElementSubtype2["oleObject"] = "oleObject";
-      ElementSubtype2["hyperlink"] = "hyperlink";
-    })(ElementSubtype || (exports.ElementSubtype = ElementSubtype = {}));
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/hyperlink-processor.js
-var require_hyperlink_processor = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/hyperlink-processor.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.HyperlinkProcessor = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var logger_1 = require_logger();
-    var HyperlinkProcessor = class {
-      static isHyperlinkRelType(relType) {
-        return this.HYPERLINK_REL_TYPES.includes(relType);
-      }
-      /**
-       * Finds all hyperlink elements within a given element
-       */
-      static findHyperlinks(element) {
-        const hyperlinks = [];
-        try {
-          const shapeProps = element.getElementsByTagName("p:cNvPr");
-          for (let i = 0; i < shapeProps.length; i++) {
-            const prop = shapeProps[i];
-            const shapeHyperlinks = prop.getElementsByTagName(this.HYPERLINK_TAG);
-            for (let j = 0; j < shapeHyperlinks.length; j++) {
-              hyperlinks.push(shapeHyperlinks[j]);
-            }
-          }
-          const allHyperlinks = element.getElementsByTagName(this.HYPERLINK_TAG);
-          for (let i = 0; i < allHyperlinks.length; i++) {
-            const hlink = allHyperlinks[i];
-            const parent = hlink.parentNode;
-            if (parent && parent.nodeName === "a:rPr") {
-              if (!hyperlinks.includes(hlink)) {
-                hyperlinks.push(hlink);
-              }
-            }
-          }
-        } catch (error62) {
-          logger_1.log.warn(`Error finding hyperlinks: ${error62}`);
-        }
-        return hyperlinks;
-      }
-      /**
-       * Checks if an element contains hyperlinks
-       */
-      static hasHyperlinks(element) {
-        return this.findHyperlinks(element).length > 0;
-      }
-      /**
-       * Checks if an element contains multiple hyperlinks
-       */
-      static hasMultipleHyperlinks(element) {
-        return this.findHyperlinks(element).length > 1;
-      }
-      /**
-       * Determines if an element should be processed as a hyperlink element
-       * @param element - Element to analyze
-       * @returns True if element should be processed as hyperlink
-       */
-      static shouldProcessAsHyperlink(element) {
-        const hyperlinks = this.findHyperlinks(element);
-        return hyperlinks.length === 1;
-      }
-      /**
-       * Gets the primary hyperlink target from an element
-       * @param element - Element to analyze
-       * @returns Target information or null if no hyperlink found
-       */
-      static getPrimaryHyperlinkTarget(element) {
-        try {
-          const hyperlinks = this.findHyperlinks(element);
-          if (hyperlinks.length === 0) {
-            return null;
-          }
-          const firstHyperlink = hyperlinks[0];
-          const rId = firstHyperlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
-          if (!rId) {
-            return null;
-          }
-          return {
-            rId,
-            type: "hyperlink"
-          };
-        } catch (error62) {
-          logger_1.log.warn(`Error getting primary hyperlink target: ${error62}`);
-          return null;
-        }
-      }
-      /**
-       * Extracts hyperlink relationship IDs from an element
-       * @param element - The XML element to extract from
-       * @returns Array of relationship IDs
-       */
-      static extractHyperlinkRelationshipIds(element) {
-        const hyperlinks = this.findHyperlinks(element);
-        return hyperlinks.map((hlink) => hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE)).filter((rId) => rId !== null);
-      }
-      /**
-       * Updates hyperlink relationship IDs in an element
-       */
-      static updateHyperlinkRelationshipIds(element, relationshipMap) {
-        try {
-          const hyperlinks = this.findHyperlinks(element);
-          hyperlinks.forEach((hlink) => {
-            const currentRId = hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
-            if (currentRId && relationshipMap.has(currentRId)) {
-              const newRId = relationshipMap.get(currentRId);
-              if (newRId) {
-                hlink.setAttribute(this.RELATIONSHIP_ATTRIBUTE, newRId);
-              }
-            }
-          });
-        } catch (error62) {
-          logger_1.log.warn(`Error updating hyperlink relationship IDs: ${error62}`);
-        }
-      }
-      /**
-       * Processes hyperlinks for single-hyperlink elements
-       */
-      static processSingleHyperlink(element, newRid) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const hyperlinks = this.findHyperlinks(element);
-          if (hyperlinks.length !== 1) {
-            logger_1.log.warn(`Expected single hyperlink, found ${hyperlinks.length}`);
-            return;
-          }
-          const hyperlink = hyperlinks[0];
-          hyperlink.setAttribute(this.RELATIONSHIP_ATTRIBUTE, newRid);
-        });
-      }
-      /**
-       * Copies multiple hyperlinks from source to target slide
-       */
-      static copyMultipleHyperlinks(element, sourceArchive, sourceSlideNumber, targetArchive, targetSlideRelFile, sourceElement) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.hasHyperlinks(element)) {
-            return;
-          }
-          const hyperlinkRIds = this.extractHyperlinkRelationshipIds(element);
-          if (hyperlinkRIds.length === 0) {
-            return;
-          }
-          const importedRIds = new Set(sourceElement ? this.extractHyperlinkRelationshipIds(sourceElement) : hyperlinkRIds);
-          const sourceRelPath = `ppt/slides/_rels/slide${sourceSlideNumber}.xml.rels`;
-          const sourceRelDoc = yield xml_helper_1.XmlHelper.getXmlFromArchive(sourceArchive, sourceRelPath);
-          if (!sourceRelDoc) {
-            logger_1.log.warn(`Source relationships not found: ${sourceRelPath}`);
-            return;
-          }
-          const sourceRelationships = sourceRelDoc.getElementsByTagName("Relationship");
-          const targetRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(targetArchive, targetSlideRelFile);
-          if (!targetRelXml) {
-            logger_1.log.warn(`Target relationships not found: ${targetSlideRelFile}`);
-            return;
-          }
-          const relationshipMap = /* @__PURE__ */ new Map();
-          const processedTargets = /* @__PURE__ */ new Set();
-          for (let i = 0; i < hyperlinkRIds.length; i++) {
-            const rId = hyperlinkRIds[i];
-            if (!importedRIds.has(rId)) {
-              continue;
-            }
-            let sourceRel = null;
-            for (let j = 0; j < sourceRelationships.length; j++) {
-              if (sourceRelationships[j].getAttribute("Id") === rId) {
-                sourceRel = sourceRelationships[j];
-                break;
-              }
-            }
-            if (sourceRel) {
-              const relType = sourceRel.getAttribute("Type");
-              const target = sourceRel.getAttribute("Target");
-              const targetMode = sourceRel.getAttribute("TargetMode");
-              if (relType && target && this.isHyperlinkRelType(relType)) {
-                const relationshipKey = `${relType}:${target}:${targetMode || ""}`;
-                let newRId;
-                if (processedTargets.has(relationshipKey)) {
-                  const existingRels = targetRelXml.getElementsByTagName("Relationship");
-                  for (let k = 0; k < existingRels.length; k++) {
-                    const existingRel = existingRels[k];
-                    if (existingRel.getAttribute("Type") === relType && existingRel.getAttribute("Target") === target && existingRel.getAttribute("TargetMode") === targetMode) {
-                      newRId = existingRel.getAttribute("Id") || "";
-                      break;
-                    }
-                  }
-                } else {
-                  newRId = yield xml_helper_1.XmlHelper.getNextRelId(targetArchive, targetSlideRelFile);
-                  const newRelationship = targetRelXml.createElement("Relationship");
-                  newRelationship.setAttribute("Id", newRId);
-                  newRelationship.setAttribute("Type", relType);
-                  newRelationship.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(target));
-                  if (targetMode) {
-                    newRelationship.setAttribute("TargetMode", targetMode);
-                  }
-                  targetRelXml.documentElement.appendChild(newRelationship);
-                  processedTargets.add(relationshipKey);
-                }
-                relationshipMap.set(rId, newRId);
-              } else if (relType && !this.isHyperlinkRelType(relType)) {
-                logger_1.log.warn(`Hyperlink r:id="${rId}" resolves to a non-hyperlink relationship (${relType}) on source slide ${sourceSlideNumber} \u2014 not copied`);
-              }
-            }
-          }
-          const targetRelationships = targetRelXml.getElementsByTagName("Relationship");
-          const resolvesOnTarget = (rId) => {
-            for (let i = 0; i < targetRelationships.length; i++) {
-              if (targetRelationships[i].getAttribute("Id") === rId) {
-                return this.isHyperlinkRelType(targetRelationships[i].getAttribute("Type") || "");
-              }
-            }
-            return false;
-          };
-          this.findHyperlinks(element).forEach((hlink) => {
-            var _a3;
-            const rId = hlink.getAttribute(this.RELATIONSHIP_ATTRIBUTE);
-            if (!rId || relationshipMap.has(rId)) {
-              return;
-            }
-            if (!importedRIds.has(rId) && resolvesOnTarget(rId)) {
-              return;
-            }
-            logger_1.log.warn(`Dropping hyperlink with unresolvable r:id="${rId}"`);
-            (_a3 = hlink.parentNode) === null || _a3 === void 0 ? void 0 : _a3.removeChild(hlink);
-          });
-          this.updateHyperlinkRelationshipIds(element, relationshipMap);
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(targetArchive, targetSlideRelFile, targetRelXml);
-        });
-      }
-    };
-    exports.HyperlinkProcessor = HyperlinkProcessor;
-    HyperlinkProcessor.HYPERLINK_TAG = "a:hlinkClick";
-    HyperlinkProcessor.RELATIONSHIP_ATTRIBUTE = "r:id";
-    HyperlinkProcessor.HYPERLINK_REL_TYPES = [
-      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
-    ];
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/shape-type-detector.js
-var require_shape_type_detector = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/shape-type-detector.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.shapeTypeDetectors = void 0;
-    exports.analyzeElement = analyzeElement;
-    var element_type_1 = require_element_type();
-    var xml_helper_1 = require_xml_helper();
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var logger_1 = require_logger();
-    var containsTag = (tag2) => (element) => element.getElementsByTagName(tag2).length > 0;
-    exports.shapeTypeDetectors = [
-      {
-        match: containsTag("c:chart"),
-        type: element_type_1.ElementType.Chart,
-        relType: "chart"
-      },
-      {
-        match: containsTag("cx:chart"),
-        type: element_type_1.ElementType.Chart,
-        relType: "chartEx"
-      },
-      {
-        match: containsTag("p:nvPicPr"),
-        type: element_type_1.ElementType.Image,
-        relType: "image"
-      },
-      {
-        match: containsTag("dgm:relIds"),
-        type: element_type_1.ElementType.Diagram,
-        relType: "diagram"
-      },
-      {
-        match: containsTag("p:oleObj"),
-        type: element_type_1.ElementType.OLEObject,
-        relType: "oleObject"
-      },
-      {
-        match: (element) => hyperlink_processor_1.HyperlinkProcessor.hasHyperlinks(element),
-        type: element_type_1.ElementType.Hyperlink,
-        analyze: (element, sourceArchive, relsPath) => __awaiter(void 0, void 0, void 0, function* () {
-          if (hyperlink_processor_1.HyperlinkProcessor.hasMultipleHyperlinks(element)) {
-            return { type: element_type_1.ElementType.Shape };
-          }
-          try {
-            const target = yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, element, "hyperlink");
-            return {
-              type: element_type_1.ElementType.Hyperlink,
-              target,
-              element
-            };
-          } catch (error62) {
-            logger_1.log.warn("Error finding hyperlink target:", error62);
-            return { type: element_type_1.ElementType.Shape };
-          }
-        })
-      }
-    ];
-    function analyzeElement(sourceElement, sourceArchive, relsPath) {
-      return __awaiter(this, void 0, void 0, function* () {
-        for (const detector of exports.shapeTypeDetectors) {
-          if (!detector.match(sourceElement)) {
-            continue;
-          }
-          if (detector.analyze) {
-            return detector.analyze(sourceElement, sourceArchive, relsPath);
-          }
-          return {
-            type: detector.type,
-            target: detector.relType ? yield xml_helper_1.XmlHelper.getTargetByRelId(sourceArchive, relsPath, sourceElement, detector.relType) : void 0
-          };
-        }
-        return {
-          type: element_type_1.ElementType.Shape
-        };
-      });
-    }
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/shape.js
-var require_shape = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/shape.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Shape = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var general_helper_1 = require_general_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var logger_1 = require_logger();
-    var errors_1 = require_errors2();
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var content_type_map_1 = require_content_type_map();
-    var Shape = class {
-      constructor(shape, targetType) {
-        this.shape = shape;
-        this.mode = shape.mode;
-        this.name = shape.name;
-        this.targetType = targetType;
-        this.sourceArchive = shape.sourceArchive;
-        this.sourceSlideNumber = shape.sourceSlideNumber;
-        this.sourceSlideFile = ppt_paths_1.PptPaths.slide(this.sourceSlideNumber);
-        this.sourceElement = shape.sourceElement;
-        this.hasCreationId = shape.hasCreationId;
-        this.callbacks = general_helper_1.GeneralHelper.arrayify(shape.callback);
-        this.contentTypeMap = content_type_map_1.ContentTypeMap;
-        if (shape.target) {
-          this.sourceNumber = shape.target.number;
-          this.sourceRid = shape.target.rId;
-          this.subtype = shape.target.subtype;
-          this.target = shape.target;
-        }
-      }
-      setTarget(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetType = this.targetType;
-          this.targetTemplate = targetTemplate;
-          this.targetArchive = this.targetTemplate.archive;
-          this.targetSlideNumber = targetSlideNumber;
-          this.targetSlideFile = ppt_paths_1.PptPaths.part(targetType, this.targetSlideNumber);
-          this.targetSlideRelFile = ppt_paths_1.PptPaths.partRels(targetType, this.targetSlideNumber);
-        });
-      }
-      setTargetElement() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetElement = this.sourceElement.cloneNode(true);
-        });
-      }
-      appendToSlideTree() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideFile);
-          targetSlideXml.getElementsByTagName("p:spTree")[0].appendChild(this.targetElement);
-          if (this.relRootTag === "a:hlinkClick") {
-            yield this.processHyperlinks();
-          }
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideFile, targetSlideXml);
-        });
-      }
-      /**
-       * Rewrites the single a:hlinkClick r:id of this element to createdRid.
-       * Only used on append: on modify, Hyperlink.modify() manages the existing
-       * relationship in place via editTargetHyperlinkRel(), and overwriting its
-       * r:id here would leave it without a matching relationship entry.
-       */
-      processHyperlinks() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.targetElement || !this.createdRid)
-            return;
-          yield hyperlink_processor_1.HyperlinkProcessor.processSingleHyperlink(this.targetElement, this.createdRid);
-        });
-      }
-      replaceIntoSlideTree() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.modifySlideTree(true);
-        });
-      }
-      removeFromSlideTree() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.modifySlideTree(false);
-        });
-      }
-      modifySlideTree(insertBefore) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const archive = this.targetArchive;
-          const slideFile = this.targetSlideFile;
-          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slideFile);
-          const findMethod = this.hasCreationId ? "findByCreationId" : "findByName";
-          const selector = this.hasCreationId ? this.name : this.shape.selector.name;
-          const sourceElementOnTargetSlide = yield xml_helper_1.XmlHelper[findMethod](targetSlideXml, selector, this.shape.selector.nameIdx);
-          if (!(sourceElementOnTargetSlide === null || sourceElementOnTargetSlide === void 0 ? void 0 : sourceElementOnTargetSlide.parentNode)) {
-            logger_1.log.error(`Can't modify slide tree for ${this.name}`);
-            return;
-          }
-          if (insertBefore === true && this.targetElement) {
-            sourceElementOnTargetSlide.parentNode.insertBefore(this.targetElement, sourceElementOnTargetSlide);
-          }
-          sourceElementOnTargetSlide.parentNode.removeChild(sourceElementOnTargetSlide);
-          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slideFile, targetSlideXml);
-        });
-      }
-      updateElementsRelId(cb) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetSlideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideFile);
-          const targetElements = yield this.getElementsByRid(targetSlideXml, this.sourceRid);
-          targetElements.forEach((targetElement) => {
-            if (cb && typeof cb === "function") {
-              cb(targetElement);
-            } else {
-              this.relParent(targetElement).getElementsByTagName(this.relRootTag)[0].setAttribute(this.relAttribute, this.createdRid);
-            }
-          });
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideFile, targetSlideXml);
-        });
-      }
-      /*
-       * This will find all elements with a matching rId on a
-       * <p:cSld>, including related images at <p:bg> and <p:spTree>.
-       */
-      getElementsByRid(slideXml, rId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourceList = slideXml.getElementsByTagName("p:cSld")[0].getElementsByTagName(this.relRootTag);
-          return xml_helper_1.XmlHelper.findByAttributeValue(sourceList, this.relAttribute, rId);
-        });
-      }
-      updateTargetElementRelId() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetElement.getElementsByTagName(this.relRootTag).item(0).setAttribute(this.relAttribute, this.createdRid);
-        });
-      }
-      applyCallbacks(callbacks, element, relation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const callback of callbacks) {
-            if (typeof callback === "function") {
-              try {
-                yield callback(element, relation);
-              } catch (e) {
-                this.handleCallbackError(e);
-              }
-            }
-          }
-        });
-      }
-      applyChartCallbacks(callbacks, element, chart, workbook) {
-        callbacks.forEach((callback) => {
-          if (typeof callback === "function") {
-            try {
-              callback(element, chart, workbook);
-            } catch (e) {
-              this.handleCallbackError(e);
-            }
-          }
-        });
-      }
-      /**
-       * A throwing modification callback fails the run by default.
-       * With `AutomizerParams.continueOnError`, it is logged and skipped.
-       */
-      handleCallbackError(e) {
-        if (this.shape.continueOnError === true) {
-          logger_1.log.warn(`Modification callback failed on element "${this.name}" (${this.targetSlideFile}):`, e);
-          return;
-        }
-        throw new errors_1.CallbackError(this.name, this.targetSlideFile, e);
-      }
-      appendImageExtensionToContentType(extension) {
-        return xml_helper_1.XmlHelper.appendImageExtensionToContentType(this.targetArchive, extension);
-      }
-    };
-    exports.Shape = Shape;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/chart.js
-var require_chart = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/chart.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Chart = void 0;
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var path_1 = __importDefault(__require("path"));
-    var logger_1 = require_logger();
-    var Chart = class extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-        this.relRootTag = this.subtype === "chart" ? "c:chart" : "cx:chart";
-        this.relAttribute = "r:id";
-        this.relParent = this.subtype === "chart" ? (element) => element.parentNode.parentNode.parentNode : (element) => element.parentNode.parentNode.parentNode.parentNode.parentNode;
-        this.wbEmbeddingsPath = `../embeddings/`;
-        this.wbExtension = ".xlsx";
-        this.relTypeChartColorStyle = "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
-        this.relTypeChartStyle = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
-        this.relTypeChartImage = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
-        this.relTypeChartThemeOverride = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
-        this.relTypeChartUserShapes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
-        this.styleRelationFiles = {};
-        this.hasWorkbook = true;
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.clone();
-          yield this.replaceIntoSlideTree();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.clone();
-          yield this.appendToSlideTree();
-          return this;
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.updateElementsRelId();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          this.targetNumber = this.targetTemplate.incrementCounter("charts");
-          this.wbRelsPath = ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.sourceNumber);
-          yield this.copyFiles();
-          yield this.copyChartStyleFiles();
-          yield this.appendTypes();
-          yield this.appendToSlideRels();
-        });
-      }
-      clone() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTargetElement();
-          yield this.modifyChartData();
-          yield this.updateTargetElementRelId();
-        });
-      }
-      modifyChartData() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.hasWorkbook) {
-            return;
-          }
-          const chartXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber));
-          const workbook = yield this.readWorkbook();
-          this.applyChartCallbacks(this.callbacks, this.targetElement, chartXml, workbook);
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber), chartXml);
-          yield this.writeWorkbook(workbook);
-        });
-      }
-      readWorkbook() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const workbookFilename = ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
-          const archive = yield this.targetArchive.extract(workbookFilename);
-          const sheet = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/worksheets/sheet1.xml");
-          const table = file_helper_1.FileHelper.fileExistsInArchive(archive, "xl/tables/table1.xml") ? yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/tables/table1.xml") : void 0;
-          const sharedStrings = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, "xl/sharedStrings.xml");
-          return {
-            archive,
-            sheet,
-            sharedStrings,
-            table
-          };
-        });
-      }
-      writeWorkbook(workbook) {
-        return __awaiter(this, void 0, void 0, function* () {
-          xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/worksheets/sheet1.xml", workbook.sheet);
-          if (workbook.table) {
-            xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/tables/table1.xml", workbook.table);
-          }
-          xml_helper_1.XmlHelper.writeXmlToArchive(workbook.archive, "xl/sharedStrings.xml", workbook.sharedStrings);
-          const worksheet = yield workbook.archive.getContent({});
-          yield this.targetArchive.write(ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`), worksheet);
-        });
-      }
-      copyFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.copyChartFiles();
-          this.worksheetFilePrefix = yield this.getWorksheetFilePrefix(this.wbRelsPath);
-          if (this.hasWorkbook) {
-            const worksheets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.sourceArchive, this.wbRelsPath, `${this.wbEmbeddingsPath}${this.worksheetFilePrefix}`);
-            const worksheet = worksheets[0];
-            this.sourceWorksheet = worksheet.number === 0 ? "" : worksheet.number;
-            this.targetWorksheet = "-created-" + this.targetNumber;
-            yield this.copyWorksheetFile();
-          } else {
-            logger_1.log.info("Chart has no worksheet: " + this.wbRelsPath);
-          }
-          yield this.editTargetWorksheetRel();
-        });
-      }
-      getWorksheetFilePrefix(targetRelFile) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relationTargets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.sourceArchive, targetRelFile, this.wbEmbeddingsPath);
-          if (!relationTargets[0]) {
-            this.hasWorkbook = false;
-            return "";
-          }
-          return relationTargets[0].filenameBase;
-        });
-      }
-      /**
-       * Registers the copied chart parts in `[Content_Types].xml`.
-       *
-       * All style parts are optional: `copyChartStyleFiles` copies colors, style,
-       * themeOverride and user shapes only if the source chart relates to them.
-       * An Override for a part that was never copied stays behind as a dangling
-       * entry — PowerPoint ignores it, but OPC validators report one warning per
-       * orphan. `prepare` runs `copyChartStyleFiles` first, so the relations are
-       * known here.
-       */
-      appendTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.hasWorkbook) {
-            yield this.appendChartExtensionToContentType();
-          }
-          yield this.appendChartToContentType();
-          if (this.hasStyleRelation("relTypeChartUserShapes")) {
-            yield this.appendChartUserShapesToContentType();
-          }
-          if (this.hasStyleRelation("relTypeChartColorStyle")) {
-            yield this.appendColorToContentType();
-          }
-          if (this.hasStyleRelation("relTypeChartStyle")) {
-            yield this.appendStyleToContentType();
-          }
-          if (this.hasStyleRelation("relTypeChartThemeOverride")) {
-            yield this.appendThemeOverrideToContentType();
-          }
-        });
-      }
-      hasStyleRelation(styleType) {
-        var _a3;
-        return ((_a3 = this.styleRelationFiles[styleType]) === null || _a3 === void 0 ? void 0 : _a3.length) > 0;
-      }
-      copyChartFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber));
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.targetNumber));
-        });
-      }
-      copyChartStyleFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3, _b, _c, _d;
-          yield this.getChartStyles();
-          if ((_a3 = this.styleRelationFiles.relTypeChartStyle) === null || _a3 === void 0 ? void 0 : _a3.length) {
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.styleRelationFiles.relTypeChartStyle[0]}`, this.targetArchive, ppt_paths_1.PptPaths.chartPart("style", this.targetNumber));
-          }
-          if ((_b = this.styleRelationFiles.relTypeChartColorStyle) === null || _b === void 0 ? void 0 : _b.length) {
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/charts/${this.styleRelationFiles.relTypeChartColorStyle[0]}`, this.targetArchive, ppt_paths_1.PptPaths.chartPart("colors", this.targetNumber));
-          }
-          if (this.styleRelationFiles.relTypeChartImage) {
-            for (const relTypeChartImage of this.styleRelationFiles.relTypeChartImage) {
-              const imageInfo = this.getTargetChartImageUri(relTypeChartImage);
-              yield this.appendImageExtensionToContentType(imageInfo.extension);
-              yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, imageInfo.source, this.targetArchive, imageInfo.target);
-            }
-          }
-          if ((_c = this.styleRelationFiles.relTypeChartUserShapes) === null || _c === void 0 ? void 0 : _c.length) {
-            const sourceFile = this.styleRelationFiles.relTypeChartUserShapes[0].replace("../drawings/", "");
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/drawings/${sourceFile}`, this.targetArchive, `ppt/drawings/drawing${this.targetNumber}.xml`);
-          }
-          if ((_d = this.styleRelationFiles.relTypeChartThemeOverride) === null || _d === void 0 ? void 0 : _d.length) {
-            const sourceFile = this.styleRelationFiles.relTypeChartThemeOverride[0].replace("../theme/", "");
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/theme/${sourceFile}`, this.targetArchive, `ppt/theme/themeOverride${this.targetNumber}.xml`);
-          }
-        });
-      }
-      getChartStyles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const styleTypes = [
-            "relTypeChartStyle",
-            "relTypeChartColorStyle",
-            "relTypeChartImage",
-            "relTypeChartThemeOverride",
-            "relTypeChartUserShapes"
-          ];
-          for (const i in styleTypes) {
-            const styleType = styleTypes[i];
-            const styleRelation = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(this.sourceArchive, this.wbRelsPath, this[styleType]);
-            this.styleRelationFiles[styleType] = this.styleRelationFiles[styleType] || [];
-            if (styleRelation.length) {
-              styleRelation.forEach((styleRelation2) => {
-                this.styleRelationFiles[styleType].push(styleRelation2.file);
-              });
-            }
-          }
-        });
-      }
-      appendToSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-          const type = this.subtype === "chart" ? "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" : "http://schemas.microsoft.com/office/2014/relationships/chartEx";
-          const attributes = {
-            Id: this.createdRid,
-            Type: type,
-            Target: `../charts/${this.subtype}${this.targetNumber}.xml`
-          };
-          return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, this.targetSlideRelFile, attributes));
-        });
-      }
-      editTargetWorksheetRel() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = ppt_paths_1.PptPaths.chartPartRels(this.subtype, this.targetNumber);
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
-          const relations = relXml.getElementsByTagName("Relationship");
-          Object.keys(relations).map((key) => relations[Number(key)]).filter((element) => element && element.getAttribute).forEach((element) => {
-            var _a3;
-            const type = element.getAttribute("Type");
-            switch (type) {
-              case "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package":
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `${this.wbEmbeddingsPath}${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
-                break;
-              case this.relTypeChartColorStyle:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `colors${this.targetNumber}.xml`);
-                break;
-              case this.relTypeChartStyle:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `style${this.targetNumber}.xml`);
-                break;
-              case this.relTypeChartImage:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", this.getTargetChartImageUri(element.getAttribute("Target")).rel);
-                break;
-              case this.relTypeChartThemeOverride:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `../theme/themeOverride${this.targetNumber}.xml`);
-                break;
-              case this.relTypeChartUserShapes:
-                this.updateTargetWorksheetRelation(targetRelFile, element, "Target", `../drawings/drawing${this.targetNumber}.xml`);
-                break;
-            }
-            (_a3 = this.targetArchive.contentTracker) === null || _a3 === void 0 ? void 0 : _a3.trackRelation(targetRelFile, {
-              Id: element.getAttribute("Id"),
-              Target: element.getAttribute("Target"),
-              Type: element.getAttribute("Type")
-            });
-          });
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
-        });
-      }
-      updateTargetWorksheetRelation(targetRelFile, element, attribute, value) {
-        element.setAttribute(attribute, value);
-      }
-      getTargetChartImageUri(origin) {
-        const file2 = origin.replace("../media/", "");
-        const extension = path_1.default.extname(file2).replace(".", "");
-        return {
-          source: ppt_paths_1.PptPaths.media(file2),
-          target: ppt_paths_1.PptPaths.media(`${file2}-chart-${this.targetNumber}.${extension}`),
-          rel: `../media/${file2}-chart-${this.targetNumber}.${extension}`,
-          extension
-        };
-      }
-      copyWorksheetFile() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourceFile = ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.sourceWorksheet}${this.wbExtension}`);
-          const targetFile = ppt_paths_1.PptPaths.embedding(`${this.worksheetFilePrefix}${this.targetWorksheet}${this.wbExtension}`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourceFile, this.targetArchive, targetFile).catch((e) => {
-            logger_1.log.warn(e);
-          });
-        });
-      }
-      appendChartExtensionToContentType() {
-        return xml_helper_1.XmlHelper.appendIf(Object.assign(Object.assign({}, xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          Extension: `xlsx`,
-          ContentType: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-        })), { tag: "Default", clause: (xml) => !xml_helper_1.XmlHelper.findByAttribute(xml, "Default", "Extension", "xlsx") }));
-      }
-      appendChartToContentType() {
-        const contentType = this.subtype === "chart" ? "application/vnd.openxmlformats-officedocument.drawingml.chart+xml" : "application/vnd.ms-office.chartex+xml";
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.chartPart(this.subtype, this.targetNumber)),
-          ContentType: contentType
-        }));
-      }
-      appendColorToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.chartPart("colors", this.targetNumber)),
-          ContentType: `application/vnd.ms-office.chartcolorstyle+xml`
-        }));
-      }
-      appendStyleToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.chartPart("style", this.targetNumber)),
-          ContentType: `application/vnd.ms-office.chartstyle+xml`
-        }));
-      }
-      appendThemeOverrideToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/theme/themeOverride${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.themeOverride+xml`
-        }));
-      }
-      appendChartUserShapesToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/drawings/drawing${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml`
-        }));
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(archive, relsPath, [
-            "../charts/chart",
-            "../charts/chartEx"
-          ]);
-        });
-      }
-    };
-    exports.Chart = Chart;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/diagram.js
-var require_diagram = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/diagram.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Diagram = void 0;
-    var file_helper_1 = require_file_helper();
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var constants_1 = require_constants2();
-    var Diagram2 = class extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-        this.createdRids = {};
-        this.relRootTag = constants_1.TargetByRelIdMap.diagram.relRootTag;
-        this.relAttribute = constants_1.TargetByRelIdMap.diagram.relAttribute;
-        this.relParent = (element) => element.parentNode.parentNode.parentNode;
-        this.relTypeData = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData";
-        this.relTypeColors = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors";
-        this.relTypeLayout = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramLayout";
-        this.relTypeQuickStyle = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramQuickStyle";
-        this.relTypeDrawing = "http://schemas.microsoft.com/office/2007/relationships/diagramDrawing";
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.clone();
-          yield this.replaceIntoSlideTree();
-          yield this.updateRelIds();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.clone();
-          yield this.appendToSlideTree();
-          yield this.updateRelIds();
-          return this;
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.updateRelIds();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          this.targetNumber = this.targetTemplate.incrementCounter("diagrams");
-          yield this.copyFiles();
-          yield this.appendTypes();
-          yield this.appendToSlideRels(this.relTypeData, `../diagrams/data${this.targetNumber}.xml`);
-          yield this.appendToSlideRels(this.relTypeColors, `../diagrams/colors${this.targetNumber}.xml`);
-          yield this.appendToSlideRels(this.relTypeLayout, `../diagrams/layout${this.targetNumber}.xml`);
-          yield this.appendToSlideRels(this.relTypeQuickStyle, `../diagrams/quickStyle${this.targetNumber}.xml`);
-          yield this.appendToSlideRels(this.relTypeDrawing, `../diagrams/drawing${this.targetNumber}.xml`);
-        });
-      }
-      clone() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTargetElement();
-          yield this.applyCallbacks(this.callbacks, this.targetElement);
-        });
-      }
-      updateRelIds() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.updateElementsRelId((targetElement) => {
-            targetElement.setAttribute("r:dm", this.createdRids[this.relTypeData]);
-            targetElement.setAttribute("r:lo", this.createdRids[this.relTypeLayout]);
-            targetElement.setAttribute("r:qs", this.createdRids[this.relTypeQuickStyle]);
-            targetElement.setAttribute("r:cs", this.createdRids[this.relTypeColors]);
-          });
-        });
-      }
-      copyFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/diagrams/data${this.sourceNumber}.xml`, this.targetArchive, `ppt/diagrams/data${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/diagrams/colors${this.sourceNumber}.xml`, this.targetArchive, `ppt/diagrams/colors${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/diagrams/drawing${this.sourceNumber}.xml`, this.targetArchive, `ppt/diagrams/drawing${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/diagrams/layout${this.sourceNumber}.xml`, this.targetArchive, `ppt/diagrams/layout${this.targetNumber}.xml`);
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, `ppt/diagrams/quickStyle${this.sourceNumber}.xml`, this.targetArchive, `ppt/diagrams/quickStyle${this.targetNumber}.xml`);
-        });
-      }
-      appendTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.appendDataContentType();
-          yield this.appendColorsToContentType();
-          yield this.appendLyoutToContentType();
-          yield this.appendQuickStyleToContentType();
-          yield this.appendDrawingToContentType();
-        });
-      }
-      appendToSlideRels(type, target) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-          this.createdRids[type] = this.createdRid;
-          const attributes = {
-            Id: this.createdRid,
-            Type: type,
-            Target: target
-          };
-          return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, this.targetSlideRelFile, attributes));
-        });
-      }
-      appendDataContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/diagrams/data${this.targetNumber}.xml`,
-          ContentType: "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml"
-        }));
-      }
-      appendColorsToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/diagrams/colors${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml`
-        }));
-      }
-      appendLyoutToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/diagrams/layout${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.diagramLayout+xml`
-        }));
-      }
-      appendQuickStyleToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/diagrams/quickStyle${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.diagramQuickStyle+xml`
-        }));
-      }
-      appendDrawingToContentType() {
-        return xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createContentTypeChild(this.targetArchive, {
-          PartName: `/ppt/diagrams/drawing${this.targetNumber}.xml`,
-          ContentType: `application/vnd.openxmlformats-officedocument.drawingml.diagramDrawing+xml`
-        }));
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(archive, relsPath, [
-            "../diagrams/data"
-          ]);
-        });
-      }
-    };
-    exports.Diagram = Diagram2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/image.js
-var require_image = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/image.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Image = void 0;
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var element_type_1 = require_element_type();
-    var constants_1 = require_constants2();
-    var Image3 = class _Image extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-        this.sourceFile = shape.target.file.replace("../media/", "");
-        this.extension = file_helper_1.FileHelper.getFileExtension(this.sourceFile);
-        this.relAttribute = "r:embed";
-        this.relType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
-        if (!shape.sourceMode && this.extension === "svg") {
-          shape.sourceMode = "image:svg";
-        }
-        switch (shape.sourceMode) {
-          case "image:svg":
-            this.relRootTag = constants_1.TargetByRelIdMap["image:svg"].relRootTag;
-            this.relParent = (element) => element.parentNode;
-            break;
-          case "image:media":
-          case "image:audioFile":
-          case "image:videoFile":
-            this.relRootTag = constants_1.TargetByRelIdMap[shape.sourceMode].relRootTag;
-            this.relAttribute = constants_1.TargetByRelIdMap[shape.sourceMode].relAttribute;
-            this.relType = constants_1.TargetByRelIdMap[shape.sourceMode].relType;
-            this.relParent = (element) => element.parentNode;
-            break;
-          default:
-            this.relRootTag = "a:blip";
-            this.relParent = (element) => element.parentNode.parentNode;
-            break;
-        }
-      }
-      /*
-       * The copied slide already carries the source image relation; point its
-       * Target at the copied media file instead of appending a second relation.
-       * Appending would leave the source-named relation orphaned in the rels
-       * file, and PowerPoint asks to repair the file when such a Target does
-       * not exist in the output archive.
-       */
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          yield this.copyFiles();
-          yield this.appendTypes();
-          yield this.updateSlideRelTarget();
-          return this;
-        });
-      }
-      updateSlideRelTarget() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
-          const relations = relXml.getElementsByTagName("Relationship");
-          for (let i = 0; i < relations.length; i++) {
-            if (relations.item(i).getAttribute("Id") === this.sourceRid) {
-              relations.item(i).setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(`../media/${this.targetFile}`));
-              break;
-            }
-          }
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetSlideRelFile, relXml);
-        });
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.updateTargetElementRelId();
-          yield this.processImageRelations(targetTemplate, targetSlideNumber);
-          yield this.applyImageCallbacks();
-          yield this.replaceIntoSlideTree();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.updateTargetElementRelId();
-          yield this.processImageRelations(targetTemplate, targetSlideNumber);
-          yield this.applyImageCallbacks();
-          yield this.appendToSlideTree();
-          return this;
-        });
-      }
-      /**
-       * For audio/video and svg, some more relations need to be handled.
-       */
-      processImageRelations(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.hasSvgBlipRelation()) {
-            yield this.processRelatedContent(targetTemplate, targetSlideNumber, "image:svg");
-          }
-          if (this.hasAudioRelation()) {
-            yield this.processRelatedMediaContent(targetTemplate, targetSlideNumber, "image:audioFile");
-          }
-          if (this.hasVideoRelation()) {
-            yield this.processRelatedMediaContent(targetTemplate, targetSlideNumber, "image:videoFile");
-          }
-        });
-      }
-      processRelatedMediaContent(targetTemplate, targetSlideNumber, sourceMode) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.processRelatedContent(targetTemplate, targetSlideNumber, "image:media");
-          yield this.processRelatedContent(targetTemplate, targetSlideNumber, sourceMode);
-        });
-      }
-      processRelatedContent(targetTemplate, targetSlideNumber, sourceMode) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relsPath = ppt_paths_1.PptPaths.slideRels(this.sourceSlideNumber);
-          const target = yield xml_helper_1.XmlHelper.getTargetByRelId(this.sourceArchive, relsPath, this.targetElement, sourceMode);
-          yield new _Image({
-            mode: "append",
-            target,
-            sourceArchive: this.sourceArchive,
-            sourceSlideNumber: this.sourceSlideNumber,
-            type: element_type_1.ElementType.Image,
-            sourceMode
-          }, this.targetType).modifyMediaRelation(targetTemplate, targetSlideNumber, this.targetElement);
-        });
-      }
-      modifyMediaRelation(targetTemplate, targetSlideNumber, targetElement) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          this.targetElement = targetElement;
-          yield this.updateTargetElementRelId();
-          return this;
-        });
-      }
-      /*
-       * Apply all ShapeModificationCallbacks to target element.
-       * Third argument this.createdRelation is necessery to directly
-       * manipulate relation Target and change the image.
-       */
-      applyImageCallbacks() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.applyCallbacks(this.callbacks, this.targetElement, this.createdRelation);
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          yield this.copyFiles();
-          yield this.appendTypes();
-          yield this.appendToSlideRels();
-        });
-      }
-      /**
-       * Add the source media file to the output archive - unless an identical
-       * file is already there. Re-using it keeps the output small; the relation
-       * created by appendToSlideRels() is specific to this shape either way.
-       */
-      copyFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourcePath = ppt_paths_1.PptPaths.media(this.sourceFile);
-          const content = yield this.sourceArchive.read(sourcePath, "nodebuffer");
-          const existingFile = yield this.targetTemplate.mediaDeduplicator.find(content);
-          if (existingFile) {
-            this.targetFile = existingFile;
-            return;
-          }
-          this.targetNumber = this.targetTemplate.incrementCounter("images");
-          this.targetFile = this.getTargetFileName();
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourcePath, this.targetArchive, ppt_paths_1.PptPaths.media(this.targetFile));
-          this.targetTemplate.mediaDeduplicator.add(content, this.targetFile);
-        });
-      }
-      getTargetFileName() {
-        const targetFileType = this.target.file.includes("media") ? "media" : "image";
-        return targetFileType + this.targetNumber + "." + this.extension;
-      }
-      appendTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.appendImageExtensionToContentType(this.extension);
-        });
-      }
-      /**
-       * ToDo: This will always append a new relation, and never replace an
-       * existing relation. At the end of creation process, unused relations will
-       * remain existing in the .xml.rels file. PowerPoint will not complain, but
-       * integrity checks will not be valid by this.
-       */
-      appendToSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, targetRelFile);
-          const attributes = {
-            Id: this.createdRid,
-            Type: this.relType,
-            Target: `../media/${this.targetFile}`
-          };
-          this.createdRelation = yield xml_helper_1.XmlHelper.append(xml_helper_1.XmlHelper.createRelationshipChild(this.targetArchive, targetRelFile, attributes));
-        });
-      }
-      hasSvgBlipRelation() {
-        return this.targetElement.getElementsByTagName("asvg:svgBlip").length > 0;
-      }
-      hasAudioRelation() {
-        return this.targetElement.getElementsByTagName("a:audioFile").length > 0;
-      }
-      hasVideoRelation() {
-        return this.targetElement.getElementsByTagName("a:videoFile").length > 0;
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(archive, relsPath, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
-        });
-      }
-    };
-    exports.Image = Image3;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/generic.js
-var require_generic = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/generic.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.GenericShape = void 0;
-    var shape_1 = require_shape();
-    var xml_helper_1 = require_xml_helper();
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var image_1 = require_image();
-    var element_type_1 = require_element_type();
-    var ppt_paths_1 = require_ppt_paths();
-    var logger_1 = require_logger();
-    var GenericShape = class extends shape_1.Shape {
-      constructor(shape, targetType) {
-        super(shape, targetType);
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.replaceIntoSlideTree();
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.appendToSlideTree();
-          yield this.copyHyperlinkRelationships(targetSlideNumber);
-          yield this.copyImageRelationships(targetTemplate, targetSlideNumber);
-          return this;
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          const slideRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
-          yield this.applyCallbacks(this.callbacks, this.targetElement, slideRelXml.documentElement);
-        });
-      }
-      /**
-       * Copy hyperlink relationships from source slide to target slide
-       */
-      copyHyperlinkRelationships(_targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.targetElement)
-            return;
-          yield hyperlink_processor_1.HyperlinkProcessor.copyMultipleHyperlinks(
-            this.targetElement,
-            this.sourceArchive,
-            this.sourceSlideNumber,
-            this.targetArchive,
-            this.targetSlideRelFile,
-            // The unmutated source element separates imported hyperlink ids (to
-            // resolve against the source rels) from ids added by modification
-            // callbacks during prepare(), whose rels already live on the target.
-            this.sourceElement
-          );
-        });
-      }
-      /**
-       * Copy image relations from source slide to target slide.
-       *
-       * A generic shape can be filled with an image (`a:blipFill` inside
-       * `p:spPr`), and a group shape can contain any number of pictures. None of
-       * these are `p:pic` elements, so the Image shape class never sees them and
-       * their media files and relations would be missing on the target slide.
-       */
-      copyImageRelationships(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.targetElement)
-            return;
-          const blips = [
-            ...Array.from(this.targetElement.getElementsByTagName("a:blip")),
-            // An svg blip is nested inside the a:blip holding its png fallback and
-            // requires a relation of its own.
-            ...Array.from(this.targetElement.getElementsByTagName("asvg:svgBlip"))
-          ].filter((blip) => blip.getAttribute("r:embed"));
-          if (!blips.length)
-            return;
-          const sourceImages = yield image_1.Image.getAllOnSlide(this.sourceArchive, ppt_paths_1.PptPaths.slideRels(this.sourceSlideNumber));
-          for (const blip of blips) {
-            const sourceRid = blip.getAttribute("r:embed");
-            const target = sourceImages.find((image2) => image2.rId === sourceRid);
-            if (!target) {
-              logger_1.log.warn(`Can't find image relation ${sourceRid} of ${this.name} on slide ${this.sourceSlideNumber}`);
-              continue;
-            }
-            const image = new image_1.Image({
-              mode: "append",
-              target,
-              sourceArchive: this.sourceArchive,
-              sourceSlideNumber: this.sourceSlideNumber,
-              type: element_type_1.ElementType.Image
-            }, this.targetType);
-            yield image.prepare(targetTemplate, targetSlideNumber);
-            blip.setAttribute("r:embed", image.createdRid);
-          }
-        });
-      }
-    };
-    exports.GenericShape = GenericShape;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-hyperlink-element.js
-var require_modify_hyperlink_element = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-hyperlink-element.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_helper_1 = require_xml_helper();
-    var HyperlinkElement = class {
-      constructor(doc, relId, isInternal2) {
-        this.doc = doc;
-        this.relId = relId;
-        this.isInternal = isInternal2;
-      }
-      createHlinkClick() {
-        const hlinkClick = this.doc.createElement("a:hlinkClick");
-        hlinkClick.setAttribute("r:id", this.relId);
-        hlinkClick.setAttribute("xmlns:r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
-        if (this.isInternal) {
-          hlinkClick.setAttribute("action", "ppaction://hlinksldjump");
-          hlinkClick.setAttribute("xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main");
-          hlinkClick.setAttribute("xmlns:p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
-        }
-        return hlinkClick;
-      }
-      createTextRun(text) {
-        const run = this.doc.createElement("a:r");
-        const rPr = this.doc.createElement("a:rPr");
-        const t = this.doc.createElement("a:t");
-        rPr.appendChild(this.createHlinkClick());
-        t.textContent = xml_helper_1.XmlHelper.sanitizeText(text);
-        run.appendChild(rPr);
-        run.appendChild(t);
-        return run;
-      }
-    };
-    exports.default = HyperlinkElement;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-hyperlink-helper.js
-var require_modify_hyperlink_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-hyperlink-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var modify_hyperlink_element_1 = __importDefault(require_modify_hyperlink_element());
-    var hyperlink_processor_1 = require_hyperlink_processor();
-    var xml_helper_1 = require_xml_helper();
-    var logger_1 = require_logger();
-    var ModifyHyperlinkHelper = class {
-      static createRelationshipData(target, isInternal2) {
-        if (isInternal2) {
-          return {
-            Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-            Target: `../slides/${target}`,
-            Id: ""
-            // Will be set later
-          };
-        }
-        return {
-          Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-          Target: target.toString(),
-          TargetMode: "External",
-          Id: ""
-          // Will be set later
-        };
-      }
-      static addRelationship(relation, relData, relId) {
-        const relNodes = relation.getElementsByTagName("Relationship");
-        const newRelId = relId || `rId${xml_helper_1.XmlHelper.getMaxId(relNodes, "Id", true)}`;
-        const newRel = relation.ownerDocument.createElement("Relationship");
-        newRel.setAttribute("Id", newRelId);
-        Object.entries(relData).forEach(([key, value]) => {
-          if (value)
-            newRel.setAttribute(key, value);
-        });
-        relNodes.item(0).parentNode.appendChild(newRel);
-        return newRelId;
-      }
-      /**
-       * Returns the <Relationship> entry backing a relationship id, if any.
-       */
-      static getRelationshipById(relation, relId) {
-        const relNodes = relation.getElementsByTagName("Relationship");
-        return Array.from(relNodes).find((rel) => rel.getAttribute("Id") === relId) || null;
-      }
-      /**
-       * Checks if a relationship id is referenced by a hyperlink outside of the
-       * given element, e.g. by another shape on the same slide.
-       */
-      static isRelIdUsedElsewhere(element, relId) {
-        const slideXml = element.ownerDocument;
-        if (!slideXml)
-          return false;
-        return Array.from(slideXml.getElementsByTagName("a:hlinkClick")).some((hlink) => hlink.getAttribute("r:id") === relId && !element.contains(hlink));
-      }
-      static addHyperlinkToTextRuns(element, hyperlinkElement) {
-        const textRuns = element.getElementsByTagName("a:r");
-        Array.from(textRuns).forEach((run) => {
-          let rPr = run.getElementsByTagName("a:rPr")[0];
-          if (!rPr) {
-            rPr = element.ownerDocument.createElement("a:rPr");
-            const textElement = run.getElementsByTagName("a:t")[0];
-            if (textElement) {
-              run.insertBefore(rPr, textElement);
-            } else {
-              run.appendChild(rPr);
-            }
-          }
-          rPr.appendChild(hyperlinkElement.createHlinkClick());
-        });
-      }
-      static addHyperlinkToParagraph(paragraph, hyperlinkElement) {
-        const existingText = paragraph.getElementsByTagName("a:t")[0];
-        const text = (existingText === null || existingText === void 0 ? void 0 : existingText.textContent) || "Hyperlink";
-        if (existingText === null || existingText === void 0 ? void 0 : existingText.parentNode) {
-          paragraph.removeChild(existingText.parentNode);
-        }
-        const run = hyperlinkElement.createTextRun(text);
-        paragraph.appendChild(run);
-      }
-      static createNewTextStructure(txBody, hyperlinkElement) {
-        const p = txBody.ownerDocument.createElement("a:p");
-        const run = hyperlinkElement.createTextRun("Hyperlink");
-        p.appendChild(run);
-        txBody.appendChild(p);
-      }
-    };
-    _a3 = ModifyHyperlinkHelper;
-    ModifyHyperlinkHelper.setHyperlinkTarget = (target, isExternal = true) => (element, relation) => __awaiter(void 0, void 0, void 0, function* () {
-      if (!element || !relation) {
-        logger_1.log.debug("SetHyperlinkTarget: Missing element or relation");
-        return;
-      }
-      const hlinkClicks = element.getElementsByTagName("a:hlinkClick");
-      if (hlinkClicks.length === 0) {
-        logger_1.log.warn("No hyperlinks found to modify");
-        return;
-      }
-      const existingRIds = Array.from(hlinkClicks).map((hlink) => hlink.getAttribute("r:id")).filter(Boolean);
-      if (existingRIds.length === 0) {
-        logger_1.log.warn("No valid relationship IDs found in hyperlinks");
-        return;
-      }
-      const relData = _a3.createRelationshipData(target, !isExternal);
-      const newRelId = _a3.addRelationship(relation, relData);
-      Array.from(hlinkClicks).forEach((hlink) => {
-        hlink.setAttribute("r:id", newRelId);
-        if (!isExternal) {
-          hlink.setAttribute("action", "ppaction://hlinksldjump");
-          hlink.setAttribute("xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main");
-          hlink.setAttribute("xmlns:p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
-        } else {
-          hlink.removeAttribute("action");
-        }
-      });
-      const relationships = relation.getElementsByTagName("Relationship");
-      Array.from(relationships).forEach((rel) => {
-        const relId = rel.getAttribute("Id");
-        if (relId && existingRIds.includes(relId) && !_a3.isRelIdUsedElsewhere(element, relId)) {
-          relation.removeChild(rel);
-        }
-      });
-      logger_1.log.debug("SetHyperlinkTarget: Successfully updated hyperlink target");
-    });
-    ModifyHyperlinkHelper.addHyperlink = (target, isInternalLink) => (element, relation) => {
-      if (!element || !relation)
-        return;
-      if (typeof target === "number") {
-        target = `slide${target}.xml`;
-        isInternalLink = true;
-      }
-      const existingHlink = element.getElementsByTagName("a:hlinkClick").item(0);
-      if (existingHlink) {
-        const existingRid = existingHlink.getAttribute("r:id");
-        if (!existingRid) {
-          return;
-        }
-        const existingRel = _a3.getRelationshipById(relation, existingRid);
-        if (existingRel && hyperlink_processor_1.HyperlinkProcessor.isHyperlinkRelType(existingRel.getAttribute("Type") || "")) {
-          return;
-        }
-        if (existingRel) {
-          const relData3 = _a3.createRelationshipData(target, isInternalLink);
-          const freshRelId = _a3.addRelationship(relation, relData3);
-          Array.from(element.getElementsByTagName("a:hlinkClick")).forEach((hlink) => {
-            if (hlink.getAttribute("r:id") === existingRid) {
-              hlink.setAttribute("r:id", freshRelId);
-            }
-          });
-          logger_1.log.debug("AddHyperlink: existing r:id collided with a non-hyperlink relationship, assigned a fresh id");
-          return;
-        }
-        const relData2 = _a3.createRelationshipData(target, isInternalLink);
-        _a3.addRelationship(relation, relData2, existingRid);
-        logger_1.log.debug("AddHyperlink: Created missing relationship for existing hyperlink");
-        return;
-      }
-      const relData = _a3.createRelationshipData(target, isInternalLink);
-      const newRelId = _a3.addRelationship(relation, relData);
-      const hyperlinkElement = new modify_hyperlink_element_1.default(element.ownerDocument, newRelId, isInternalLink);
-      const textRuns = element.getElementsByTagName("a:r");
-      if (textRuns.length > 0) {
-        _a3.addHyperlinkToTextRuns(element, hyperlinkElement);
-      } else {
-        const paragraphs = element.getElementsByTagName("a:p");
-        if (paragraphs.length > 0) {
-          _a3.addHyperlinkToParagraph(paragraphs[0], hyperlinkElement);
-        } else {
-          const txBody = element.getElementsByTagName("p:txBody")[0] || element.getElementsByTagName("a:txBody")[0];
-          if (txBody) {
-            _a3.createNewTextStructure(txBody, hyperlinkElement);
-          } else {
-            logger_1.log.error("No suitable text element found to add hyperlink to");
-          }
-        }
-      }
-      logger_1.log.debug("AddHyperlink: Successfully completed");
-    };
-    ModifyHyperlinkHelper.removeHyperlink = () => (element, _relation) => __awaiter(void 0, void 0, void 0, function* () {
-      if (!element)
-        return;
-      try {
-        const hlinkClicks = element.getElementsByTagName("a:hlinkClick");
-        Array.from(hlinkClicks).forEach((hlink) => {
-          var _b;
-          return (_b = hlink.parentNode) === null || _b === void 0 ? void 0 : _b.removeChild(hlink);
-        });
-        logger_1.log.debug("RemoveHyperlink: Successfully completed");
-      } catch (error62) {
-        logger_1.log.error("Error in RemoveHyperlink:", error62);
-      }
-    });
-    exports.default = ModifyHyperlinkHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/hyperlink.js
-var require_hyperlink = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/hyperlink.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Hyperlink = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var modify_hyperlink_helper_1 = __importDefault(require_modify_hyperlink_helper());
-    var logger_1 = require_logger();
-    var HYPERLINK_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
-    var SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
-    var basename = (target) => target.split("/").pop();
-    var Hyperlink = class extends shape_1.Shape {
-      constructor(shape, targetType, sourceArchive, hyperlinkType = "external", hyperlinkTarget) {
-        super(shape, targetType);
-        this.sourceArchive = sourceArchive;
-        this.hyperlinkType = hyperlinkType;
-        this.hyperlinkTarget = hyperlinkTarget || "";
-        this.relRootTag = "a:hlinkClick";
-        this.relAttribute = "r:id";
-      }
-      modify(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.editTargetHyperlinkRel();
-          yield this.replaceIntoSlideTree();
-          const slideRelXml = yield this.getRelationsElement();
-          yield this.applyCallbacks(this.callbacks, this.targetElement, slideRelXml);
-          return this;
-        });
-      }
-      append(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.setTargetElement();
-          yield this.appendToSlideTree();
-          const slideRelXml = yield this.getRelationsElement();
-          modify_hyperlink_helper_1.default.addHyperlink(this.hyperlinkTarget, this.hyperlinkType === "internal")(this.targetElement, slideRelXml);
-          return this;
-        });
-      }
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          if (this.target && this.target.rId) {
-            this.sourceRid = this.target.rId;
-          }
-          const slideRelXml = yield this.getRelationsElement();
-          modify_hyperlink_helper_1.default.removeHyperlink()(this.targetElement, slideRelXml);
-          yield this.removeFromSlideTree();
-          return this;
-        });
-      }
-      getRelationsElement() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideRelXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetSlideRelFile);
-          return slideRelXml.documentElement;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          if (!this.createdRid) {
-            const baseId = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-            this.createdRid = baseId.endsWith("-created") ? baseId.slice(0, -8) : baseId;
-          }
-          if (this.shape && this.shape.target && this.shape.target.rId) {
-            this.sourceRid = this.shape.target.rId;
-          }
-          if (!this.hyperlinkTarget && this.shape && this.shape.target && this.shape.target.file) {
-            this.hyperlinkTarget = this.shape.target.file;
-            this.hyperlinkType = this.determineHyperlinkType(this.shape.target);
-          }
-        });
-      }
-      determineHyperlinkType(target) {
-        return target.isExternal || target.type === HYPERLINK_REL_TYPE ? "external" : "internal";
-      }
-      editTargetHyperlinkRel() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const isExternalLink = this.hyperlinkType === "external";
-          const rels = yield this.getRelationsElement();
-          if (this.hyperlinkRelIsUpToDate(rels)) {
-            return;
-          }
-          modify_hyperlink_helper_1.default.setHyperlinkTarget(this.hyperlinkTarget, isExternalLink)(this.targetElement, rels);
-        });
-      }
-      /**
-       * Checks whether the relationship referenced by the target element already
-       * points to the required hyperlink target.
-       */
-      hyperlinkRelIsUpToDate(rels) {
-        var _a3;
-        const hlinkClick = (_a3 = this.targetElement) === null || _a3 === void 0 ? void 0 : _a3.getElementsByTagName("a:hlinkClick").item(0);
-        const rId = hlinkClick === null || hlinkClick === void 0 ? void 0 : hlinkClick.getAttribute("r:id");
-        if (!rId || !this.hyperlinkTarget) {
-          return false;
-        }
-        const existingRel = xml_helper_1.XmlHelper.findByAttributeValue(rels.getElementsByTagName("Relationship"), "Id", rId)[0];
-        if (!existingRel) {
-          return false;
-        }
-        const isExternalLink = this.hyperlinkType === "external";
-        if (existingRel.getAttribute("Type") !== this.relationTypeUrl()) {
-          return false;
-        }
-        const existingTarget = existingRel.getAttribute("Target") || "";
-        return isExternalLink ? existingTarget === this.hyperlinkTarget : (
-          // Internal targets are stored either as `slide2.xml` or as
-          // `../slides/slide2.xml`, both resolving to the same slide.
-          basename(existingTarget) === basename(this.hyperlinkTarget)
-        );
-      }
-      relationTypeUrl() {
-        return this.hyperlinkType === "external" ? HYPERLINK_REL_TYPE : SLIDE_REL_TYPE;
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return xml_helper_1.XmlHelper.getRelationshipItems(archive, relsPath, (element, rels) => {
-            const type = element.getAttribute("Type");
-            if (type === HYPERLINK_REL_TYPE || type === SLIDE_REL_TYPE) {
-              rels.push({
-                rId: element.getAttribute("Id"),
-                type: element.getAttribute("Type"),
-                file: element.getAttribute("Target"),
-                filename: element.getAttribute("Target"),
-                element,
-                isExternal: element.getAttribute("TargetMode") === "External" || type === HYPERLINK_REL_TYPE
-              });
-            }
-          });
-        });
-      }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.target || !this.target.rId) {
-            logger_1.log.debug("modifyOnAddedSlide called on Hyperlink without a valid source target/rId.");
-            return;
-          }
-          this.sourceRid = this.target.rId;
-          this.hyperlinkTarget = this.target.file;
-          this.hyperlinkType = this.determineHyperlinkType(this.target);
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.editTargetHyperlinkRel();
-        });
-      }
-      static addHyperlinkToShape(archive, slidePath, slideRelsPath, shapeId, hyperlinkTarget) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slidePath);
-          const shape = xml_helper_1.XmlHelper.isElementCreationId(shapeId) ? xml_helper_1.XmlHelper.findByCreationId(slideXml, shapeId) : xml_helper_1.XmlHelper.findByName(slideXml, shapeId);
-          if (!shape) {
-            throw new Error(`Shape with ID/name "${shapeId}" not found`);
-          }
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, slideRelsPath);
-          modify_hyperlink_helper_1.default.addHyperlink(hyperlinkTarget, typeof hyperlinkTarget === "number")(shape, relXml.firstChild);
-          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slideRelsPath, relXml);
-          xml_helper_1.XmlHelper.writeXmlToArchive(archive, slidePath, slideXml);
-          return yield xml_helper_1.XmlHelper.getNextRelId(archive, slideRelsPath);
-        });
-      }
-    };
-    exports.Hyperlink = Hyperlink;
-  }
-});
-
-// node_modules/pptx-automizer/dist/shapes/ole.js
-var require_ole = __commonJS({
-  "node_modules/pptx-automizer/dist/shapes/ole.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.OLEObject = void 0;
-    var logger_1 = require_logger();
-    var errors_1 = require_errors2();
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var shape_1 = require_shape();
-    var path_1 = __importDefault(__require("path"));
-    var OLEObject2 = class _OLEObject extends shape_1.Shape {
-      constructor(shape, targetType, sourceArchive) {
-        var _a3;
-        super(shape, targetType);
-        this.sourceArchive = sourceArchive;
-        this.oleObjectPath = ppt_paths_1.PptPaths.embedding(`${this.sourceRid}${this.getFileExtension((_a3 = shape.target) === null || _a3 === void 0 ? void 0 : _a3.file)}`);
-        this.relRootTag = "p:oleObj";
-        this.relAttribute = "r:id";
-      }
-      getFileExtension(file2) {
-        if (!file2)
-          return ".bin";
-        const ext = path_1.default.extname(file2).toLowerCase();
-        return [".bin", ".xls", ".xlsx", ".doc", ".docx", ".ppt", ".pptx"].includes(ext) ? ext : ".bin";
-      }
-      /**
-       * Appending OLE objects is not supported; only remove() is implemented.
-       */
-      append() {
-        return __awaiter(this, void 0, void 0, function* () {
-          throw new errors_1.AutomizerError("OLE objects cannot be appended to a slide; only remove() is supported.");
-        });
-      }
-      /**
-       * Modifying OLE objects is not supported; only remove() is implemented.
-       */
-      modify() {
-        return __awaiter(this, void 0, void 0, function* () {
-          throw new errors_1.AutomizerError("OLE objects cannot be modified; only remove() is supported.");
-        });
-      }
-      // TODO: remove is not currently properly implemented,
-      //  suggest we delete the file from the archive as well as removing the relationship.
-      remove(targetTemplate, targetSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber);
-          yield this.removeFromSlideTree();
-          yield this.removeOleObjectFile();
-          yield this.removeFromContentTypes();
-          yield this.removeFromSlideRels();
-          return this;
-        });
-      }
-      prepare(targetTemplate, targetSlideNumber, oleObjects) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.setTarget(targetTemplate, targetSlideNumber);
-          const allOleObjects = oleObjects || (yield _OLEObject.getAllOnSlide(this.sourceArchive, this.targetSlideRelFile));
-          const oleObject = allOleObjects.find((obj) => obj.rId === this.sourceRid);
-          if (!oleObject) {
-            throw new Error(`OLE object with rId ${this.sourceRid} not found.`);
-          }
-          const sourceFilePath = ppt_paths_1.PptPaths.embedding(oleObject.file.split("/").pop());
-          this.createdRid = yield xml_helper_1.XmlHelper.getNextRelId(this.targetArchive, this.targetSlideRelFile);
-          yield this.copyOleObjectFile(sourceFilePath);
-          yield this.appendToContentTypes();
-          yield this.updateSlideRels();
-          yield this.updateSlideXml();
-        });
-      }
-      copyOleObjectFile(sourceFilePath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const fileExtension = this.getFileExtension(sourceFilePath);
-          const targetFileName = ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`);
-          try {
-            yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, sourceFilePath, this.targetArchive, targetFileName);
-          } catch (error62) {
-            logger_1.log.error("Error copying OLE object file:", error62);
-            throw error62;
-          }
-        });
-      }
-      appendToContentTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesPath = "[Content_Types].xml";
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, contentTypesPath);
-          const types = contentTypesXml.getElementsByTagName("Types")[0];
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const partName = ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`));
-          const existingOverride = Array.from(types.getElementsByTagName("Override")).find((override) => override.getAttribute("PartName") === partName);
-          if (!existingOverride) {
-            const newOverride = contentTypesXml.createElement("Override");
-            newOverride.setAttribute("PartName", partName);
-            newOverride.setAttribute("ContentType", this.getContentType(fileExtension));
-            types.appendChild(newOverride);
-            yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, contentTypesPath, contentTypesXml);
-          }
-        });
-      }
-      updateSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
-          const relationships = relXml.getElementsByTagName("Relationship");
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const newTarget = `../embeddings/oleObject${this.createdRid}${fileExtension}`;
-          let relationshipUpdated = false;
-          for (let i = 0; i < relationships.length; i++) {
-            if (relationships[i].getAttribute("Id") === this.sourceRid) {
-              relationships[i].setAttribute("Id", this.createdRid);
-              relationships[i].setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
-              relationshipUpdated = true;
-              break;
-            }
-          }
-          if (!relationshipUpdated) {
-            const newRel = relXml.createElement("Relationship");
-            newRel.setAttribute("Id", this.createdRid);
-            newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject");
-            newRel.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
-            relXml.documentElement.appendChild(newRel);
-          }
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
-        });
-      }
-      updateSlideXml() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideXmlPath = this.targetSlideFile;
-          const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, slideXmlPath);
-          const oleObjs = Array.from(slideXml.getElementsByTagName("p:oleObj"));
-          oleObjs.forEach((oleObj) => {
-            if (oleObj.getAttribute("r:id") === this.sourceRid) {
-              oleObj.setAttribute("r:id", this.createdRid);
-              const oleObjPr = oleObj.getElementsByTagName("p:oleObjPr")[0];
-              if (oleObjPr) {
-                const links = Array.from(oleObjPr.getElementsByTagName("a:link"));
-                links.forEach((link) => {
-                  link.setAttribute("r:id", this.createdRid);
-                });
-              }
-            }
-          });
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, slideXmlPath, slideXml);
-        });
-      }
-      getContentType(fileExtension) {
-        const contentTypes = {
-          ".bin": "application/vnd.openxmlformats-officedocument.oleObject",
-          ".xls": "application/vnd.ms-excel",
-          ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          ".doc": "application/msword",
-          ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          ".ppt": "application/vnd.ms-powerpoint",
-          ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        };
-        return contentTypes[fileExtension.toLowerCase()] || "application/vnd.openxmlformats-officedocument.oleObject";
-      }
-      removeOleObjectFile() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const fileName = ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`);
-          yield this.targetArchive.remove(fileName);
-        });
-      }
-      removeFromContentTypes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const contentTypesPath = "[Content_Types].xml";
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, contentTypesPath);
-          const types = contentTypesXml.getElementsByTagName("Types")[0];
-          const fileExtension = this.getFileExtension(this.oleObjectPath);
-          const partName = ppt_paths_1.PptPaths.partName(ppt_paths_1.PptPaths.embedding(`oleObject${this.createdRid}${fileExtension}`));
-          const overrideToRemove = Array.from(types.getElementsByTagName("Override")).find((override) => override.getAttribute("PartName") === partName);
-          if (overrideToRemove) {
-            types.removeChild(overrideToRemove);
-            yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, contentTypesPath, contentTypesXml);
-          }
-        });
-      }
-      removeFromSlideRels() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetRelFile = `ppt/${this.targetType}s/_rels/${this.targetType}${this.targetSlideNumber}.xml.rels`;
-          const relXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, targetRelFile);
-          const relationships = relXml.getElementsByTagName("Relationship");
-          for (let i = 0; i < relationships.length; i++) {
-            if (relationships[i].getAttribute("Id") === this.createdRid) {
-              relationships[i].parentNode.removeChild(relationships[i]);
-              break;
-            }
-          }
-          yield xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, targetRelFile, relXml);
-        });
-      }
-      static getAllOnSlide(archive, relsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const oleObjectType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
-          return xml_helper_1.XmlHelper.getRelationshipItems(archive, relsPath, (element, rels) => {
-            const type = element.getAttribute("Type");
-            if (type === oleObjectType) {
-              rels.push({
-                rId: element.getAttribute("Id"),
-                type: element.getAttribute("Type"),
-                file: element.getAttribute("Target"),
-                element
-              });
-            }
-          });
-        });
-      }
-      modifyOnAddedSlide(targetTemplate, targetSlideNumber, oleObjects) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.prepare(targetTemplate, targetSlideNumber, oleObjects);
-        });
-      }
-    };
-    exports.OLEObject = OLEObject2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/element-importer.js
-var require_element_importer = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/element-importer.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ElementImporter = void 0;
-    var errors_1 = require_errors2();
-    var logger_1 = require_logger();
-    var general_helper_1 = require_general_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var shape_type_detector_1 = require_shape_type_detector();
-    var xml_helper_1 = require_xml_helper();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var element_type_1 = require_element_type();
-    var chart_1 = require_chart();
-    var diagram_1 = require_diagram();
-    var generic_1 = require_generic();
-    var hyperlink_1 = require_hyperlink();
-    var image_1 = require_image();
-    var ole_1 = require_ole();
-    var ElementImporter = class {
-      constructor(host) {
-        this.host = host;
-        this.queue = [];
-      }
-      /**
-       * Queue an element action; executed on `automizer.write()`.
-       */
-      add(presName, slideNumber, selector, mode, callback) {
-        this.queue.push({
-          presName,
-          slideNumber,
-          selector,
-          mode,
-          callback
-        });
-      }
-      /**
-       * Import all queued elements, merging multiple modifications
-       * of the same source element.
-       */
-      importSelected() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const importElements = yield this.getUniqueImportedElements();
-          for (const element of importElements) {
-            const info = element.info;
-            const shape = info ? this.createShape(info) : void 0;
-            if (!shape) {
-              continue;
-            }
-            yield this.runAction(shape, info.mode);
-          }
-        });
-      }
-      /**
-       * Processes and updates the list of imported elements by ensuring their
-       * uniqueness based on a generated hash. If duplicate elements are found,
-       * their callbacks are merged.
-       */
-      getUniqueImportedElements() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const element of this.queue) {
-            const info = yield this.getElementInfo(element);
-            if (!info) {
-              continue;
-            }
-            if (element.mode === "append") {
-              element.info = info;
-              continue;
-            }
-            const selector = xml_slide_helper_1.XmlSlideHelper.getSelector(info.sourceElement);
-            const eleHash = JSON.stringify(selector);
-            const alreadyImported = this.queue.find((ele) => {
-              var _a3;
-              return ((_a3 = ele.info) === null || _a3 === void 0 ? void 0 : _a3.hash) === eleHash;
-            });
-            if (alreadyImported) {
-              const existingCallbacks = general_helper_1.GeneralHelper.arrayify(element.callback);
-              const pushCallbacks = general_helper_1.GeneralHelper.arrayify(alreadyImported.info.callback);
-              alreadyImported.info.callback = [
-                ...existingCallbacks,
-                ...pushCallbacks
-              ];
-            } else {
-              info.hash = eleHash;
-              element.info = info;
-            }
-          }
-          return this.queue.filter((ele) => {
-            return ele.info;
-          });
-        });
-      }
-      /**
-       * Instantiates the shape class matching the analyzed element type.
-       * Returns undefined for elements that cannot be dispatched
-       * (e.g. a hyperlink without a resolved target).
-       */
-      createShape(info) {
-        const targetType = this.host.targetType;
-        switch (info.type) {
-          case element_type_1.ElementType.Chart:
-            return new chart_1.Chart(info, targetType);
-          case element_type_1.ElementType.Image:
-            return new image_1.Image(info, targetType);
-          case element_type_1.ElementType.Shape:
-            return new generic_1.GenericShape(info, targetType);
-          case element_type_1.ElementType.Diagram:
-            return new diagram_1.Diagram(info, targetType);
-          case element_type_1.ElementType.OLEObject:
-            return new ole_1.OLEObject(info, targetType, this.host.sourceArchive);
-          case element_type_1.ElementType.Hyperlink:
-            if (!info.target) {
-              return void 0;
-            }
-            return new hyperlink_1.Hyperlink(info, targetType, this.host.sourceArchive, info.target.isExternal ? "external" : "internal", info.target.file);
-          default:
-            return void 0;
-        }
-      }
-      runAction(shape, mode) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targetTemplate = this.host.targetTemplate;
-          const targetNumber = this.host.targetNumber;
-          switch (mode) {
-            case "append":
-              yield shape.append(targetTemplate, targetNumber);
-              break;
-            case "modify":
-              yield shape.modify(targetTemplate, targetNumber);
-              break;
-            case "remove":
-              yield shape.remove(targetTemplate, targetNumber);
-              break;
-          }
-        });
-      }
-      /**
-       * Resolves a queued import to its source element and analyzed type.
-       */
-      getElementInfo(importElement) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const template = host.root.getTemplate(importElement.presName);
-          const slideNumber = importElement.mode === "append" ? host.getSlideNumber(template, importElement.slideNumber) : importElement.slideNumber;
-          let currentMode = "slideToSlide";
-          if (host.targetType === "slideMaster") {
-            if (importElement.mode === "append") {
-              currentMode = "slideToMaster";
-            } else {
-              currentMode = "onMaster";
-            }
-          }
-          const sourcePath = currentMode === "onMaster" ? ppt_paths_1.PptPaths.slideMaster(slideNumber) : ppt_paths_1.PptPaths.slide(slideNumber);
-          const sourceRelPath = currentMode === "onMaster" ? ppt_paths_1.PptPaths.slideMasterRels(slideNumber) : ppt_paths_1.PptPaths.slideRels(slideNumber);
-          const sourceArchive = template.archive;
-          const useCreationIds = template.useCreationIds === true && template.creationIds !== void 0;
-          const { sourceElement, selector, mode } = yield this.findElementOnSlide(importElement.selector, sourceArchive, sourcePath, useCreationIds);
-          if (!sourceElement) {
-            const message = `Can't find element on slide ${slideNumber} in ${importElement.presName} (selector: ${JSON.stringify(importElement.selector)})`;
-            if (host.presentation.params.continueOnError === true) {
-              logger_1.log.warn(message);
-              return;
-            }
-            throw new errors_1.ElementNotFoundError(message, {
-              selector: typeof importElement.selector === "string" ? importElement.selector : JSON.stringify(importElement.selector),
-              file: sourcePath
-            });
-          }
-          const appendElementParams = yield (0, shape_type_detector_1.analyzeElement)(sourceElement, sourceArchive, sourceRelPath);
-          return {
-            mode: importElement.mode,
-            name: selector,
-            selector: xml_slide_helper_1.XmlSlideHelper.getSelector(sourceElement),
-            hasCreationId: mode === "findByElementCreationId",
-            sourceArchive,
-            sourceSlideNumber: slideNumber,
-            sourceElement,
-            callback: importElement.callback,
-            target: appendElementParams.target,
-            type: appendElementParams.type,
-            continueOnError: host.presentation.params.continueOnError === true
-          };
-        });
-      }
-      /**
-       * Finds an element on a source slide by creationId and/or name.
-       */
-      findElementOnSlide(selector, sourceArchive, sourcePath, useCreationIds) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const strategies = [];
-          if (typeof selector === "string") {
-            if (useCreationIds) {
-              strategies.push({
-                mode: "findByElementCreationId",
-                selector
-              });
-            }
-            strategies.push({
-              mode: "findByElementName",
-              selector
-            });
-          } else {
-            if (selector.creationId) {
-              strategies.push({
-                mode: "findByElementCreationId",
-                selector: selector.creationId
-              });
-            }
-            strategies.push({
-              mode: "findByElementName",
-              selector: selector.name,
-              nameIdx: selector.nameIdx
-            });
-          }
-          for (const findElement of strategies) {
-            const mode = findElement.mode;
-            const sourceElement = yield xml_helper_1.XmlHelper[mode](sourceArchive, sourcePath, findElement.selector, findElement.nameIdx);
-            if (sourceElement) {
-              return { sourceElement, selector: findElement.selector, mode };
-            }
-          }
-          return { sourceElement: void 0, selector: JSON.stringify(selector) };
-        });
-      }
-    };
-    exports.ElementImporter = ElementImporter;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/placeholder-normalizer.js
-var require_placeholder_normalizer = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/placeholder-normalizer.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PlaceholderNormalizer = void 0;
-    var logger_1 = require_logger();
-    var xml_helper_1 = require_xml_helper();
-    var PlaceholderNormalizer2 = class {
-      constructor(host) {
-        this.host = host;
-      }
-      /**
-       * Removes all unsupported tags from slide xml and (with
-       * `params.cleanupPlaceholders`) normalizes placeholder shapes.
-       * E.g. added relations & tags by Thinkcell cannot be processed
-       * by pptx-automizer at the moment.
-       */
-      cleanSlide(targetPath, sourcePlaceholderTypes) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.host.targetArchive, targetPath);
-          if (this.host.cleanupPlaceholders && sourcePlaceholderTypes) {
-            this.removeDuplicatePlaceholders(xml, sourcePlaceholderTypes);
-            this.normalizePlaceholderShapes(xml, sourcePlaceholderTypes);
-          }
-          this.removeUnsupportedTags(xml);
-          xml_helper_1.XmlHelper.writeXmlToArchive(this.host.targetArchive, targetPath, xml);
-        });
-      }
-      /**
-       * Collects the placeholders present on the target slide.
-       */
-      parsePlaceholders() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.host.targetArchive, this.host.targetPath);
-          const placeholderTypes = [];
-          const placeholders = xml.getElementsByTagName("p:ph");
-          xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
-            placeholderTypes.push({
-              type: placeholder.getAttribute("type"),
-              id: placeholder.getAttribute("id"),
-              xml: placeholder
-            });
-          });
-          return placeholderTypes;
-        });
-      }
-      /**
-       * If you insert a placeholder shape on a target slide with an empty
-       * placeholder of the same type, we need to remove the existing
-       * placeholder.
-       */
-      removeDuplicatePlaceholders(xml, sourcePlaceholderTypes) {
-        const placeholders = xml.getElementsByTagName("p:ph");
-        const usedTypes = {};
-        xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
-          const type = placeholder.getAttribute("type");
-          usedTypes[type] = usedTypes[type] || 0;
-          usedTypes[type]++;
-        });
-        for (const usedType in usedTypes) {
-          const count = usedTypes[usedType];
-          if (count > 1) {
-            const removePlaceholders = sourcePlaceholderTypes.filter((sourcePlaceholder) => sourcePlaceholder.type === usedType);
-            removePlaceholders.forEach((removePlaceholder) => {
-              const parentShapeTag = "p:sp";
-              const parentShape = xml_helper_1.XmlHelper.getClosestParent(parentShapeTag, removePlaceholder.xml);
-              if (parentShape) {
-                xml_helper_1.XmlHelper.remove(parentShape);
-              }
-            });
-          }
-        }
-      }
-      /**
-       * If a placeholder shape was inserted on a slide without a corresponding
-       * placeholder, powerPoint will usually smash the shape's formatting.
-       * This function removes the placeholder tag.
-       */
-      normalizePlaceholderShapes(xml, sourcePlaceholderTypes) {
-        const placeholders = xml.getElementsByTagName("p:ph");
-        xml_helper_1.XmlHelper.modifyCollection(placeholders, (placeholder) => {
-          const usedType = placeholder.getAttribute("type");
-          const existingPlaceholder = sourcePlaceholderTypes.find((sourcePlaceholder) => sourcePlaceholder.type === usedType);
-          if (!existingPlaceholder) {
-            xml_helper_1.XmlHelper.remove(placeholder);
-          }
-        });
-      }
-      /**
-       * Removes unsupported tags and (optionally) their now-empty parents.
-       * Parents will be removed only if they become empty AND are NOT `p:nvPr`.
-       */
-      removeUnsupportedTags(xml) {
-        this.host.unsupportedTags.forEach((tag2) => {
-          const drop = xml_helper_1.XmlHelper.collectionToArray(xml.getElementsByTagName(tag2));
-          if (drop.length > 0) {
-            logger_1.log.debug("Cleaning unsupported tag " + tag2);
-            const parents = /* @__PURE__ */ new Set();
-            for (const item of drop) {
-              const parent = item.parentNode;
-              if (parent) {
-                parents.add(parent);
-              }
-            }
-            drop.forEach((item) => xml_helper_1.XmlHelper.remove(item));
-            parents.forEach((parent) => {
-              if (parent.childNodes.length === 0 && parent.nodeName !== "p:nvPr") {
-                xml_helper_1.XmlHelper.remove(parent);
-              }
-            });
-          }
-        });
-      }
-    };
-    exports.PlaceholderNormalizer = PlaceholderNormalizer2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/related-content-copier.js
-var require_related_content_copier = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/related-content-copier.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.RelatedContentCopier = void 0;
-    var chart_1 = require_chart();
-    var diagram_1 = require_diagram();
-    var hyperlink_1 = require_hyperlink();
-    var image_1 = require_image();
-    var ole_1 = require_ole();
-    var RelatedContentCopier = class {
-      constructor(host) {
-        this.host = host;
-      }
-      copy() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.copyCharts();
-          yield this.copyImages();
-          yield this.copyDiagrams();
-          yield this.copyOleObjects();
-          yield this.copyHyperlinks();
-        });
-      }
-      copyCharts() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const charts = yield chart_1.Chart.getAllOnSlide(host.sourceArchive, host.relsPath);
-          for (const chart of charts) {
-            yield new chart_1.Chart({
-              mode: "append",
-              target: chart,
-              sourceArchive: host.sourceArchive,
-              sourceSlideNumber: host.sourceNumber
-            }, host.targetType).modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
-          }
-        });
-      }
-      copyImages() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const images = yield image_1.Image.getAllOnSlide(host.sourceArchive, host.relsPath);
-          for (const image of images) {
-            yield new image_1.Image({
-              mode: "append",
-              target: image,
-              sourceArchive: host.sourceArchive,
-              sourceSlideNumber: host.sourceNumber
-            }, host.targetType).modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
-          }
-        });
-      }
-      copyDiagrams() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const diagrams = yield diagram_1.Diagram.getAllOnSlide(host.sourceArchive, host.relsPath);
-          for (const diagram of diagrams) {
-            yield new diagram_1.Diagram({
-              mode: "append",
-              target: diagram,
-              sourceArchive: host.sourceArchive,
-              sourceSlideNumber: host.sourceNumber
-            }, host.targetType).modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
-          }
-        });
-      }
-      copyOleObjects() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const oleObjects = yield ole_1.OLEObject.getAllOnSlide(host.sourceArchive, host.relsPath);
-          for (const oleObject of oleObjects) {
-            yield new ole_1.OLEObject({
-              mode: "append",
-              target: oleObject,
-              sourceArchive: host.sourceArchive,
-              sourceSlideNumber: host.sourceNumber
-            }, host.targetType, host.sourceArchive).modifyOnAddedSlide(host.targetTemplate, host.targetNumber, oleObjects);
-          }
-        });
-      }
-      copyHyperlinks() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const hyperlinks = yield hyperlink_1.Hyperlink.getAllOnSlide(host.sourceArchive, host.relsPath);
-          for (const hyperlink of hyperlinks) {
-            const hyperlinkInstance = new hyperlink_1.Hyperlink({
-              mode: "append",
-              target: hyperlink,
-              sourceArchive: host.sourceArchive,
-              sourceSlideNumber: host.sourceNumber,
-              sourceRid: hyperlink.rId
-            }, host.targetType, host.sourceArchive, hyperlink.isExternal ? "external" : "internal", hyperlink.file);
-            hyperlinkInstance.target = hyperlink;
-            yield hyperlinkInstance.modifyOnAddedSlide(host.targetTemplate, host.targetNumber);
-          }
-        });
-      }
-    };
-    exports.RelatedContentCopier = RelatedContentCopier;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/slide-notes-copier.js
-var require_slide_notes_copier = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/slide-notes-copier.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.SlideNotesCopier = void 0;
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var SlideNotesCopier = class {
-      constructor(host) {
-        this.host = host;
-      }
-      /**
-       * Copy the source slide's notes (if present) to the target slide,
-       * remap the mutual relationships and register the content type.
-       */
-      copySlideNotes() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourceNotesNumber = yield this.getSlideNoteSourceNumber();
-          if (sourceNotesNumber) {
-            yield this.copySlideNoteFiles(sourceNotesNumber);
-            yield this.updateSlideNoteFile(sourceNotesNumber);
-            yield this.host.contentTypes.appendNotesToContentType(this.host.targetNumber);
-          }
-        });
-      }
-      /**
-       * Find the proper enumeration of the source notesSlide xml file.
-       */
-      getSlideNoteSourceNumber() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          const targets = yield xml_helper_1.XmlHelper.getTargetsByRelationshipType(host.sourceArchive, ppt_paths_1.PptPaths.slideRels(host.sourceNumber), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide");
-          if (targets.length) {
-            const targetNumber = targets[0].file.replace("../notesSlides/notesSlide", "").replace(".xml", "");
-            return Number(targetNumber);
-          }
-        });
-      }
-      copySlideNoteFiles(sourceNotesNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          yield file_helper_1.FileHelper.zipCopy(host.sourceArchive, ppt_paths_1.PptPaths.notesSlide(sourceNotesNumber), host.targetArchive, ppt_paths_1.PptPaths.notesSlide(host.targetNumber));
-          yield file_helper_1.FileHelper.zipCopy(host.sourceArchive, ppt_paths_1.PptPaths.notesSlideRels(sourceNotesNumber), host.targetArchive, ppt_paths_1.PptPaths.notesSlideRels(host.targetNumber));
-        });
-      }
-      /**
-       * Point the copied notesSlide at the target slide and vice versa.
-       */
-      updateSlideNoteFile(sourceNotesNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const host = this.host;
-          yield xml_helper_1.XmlHelper.replaceAttribute(host.targetArchive, ppt_paths_1.PptPaths.notesSlideRels(host.targetNumber), "Relationship", "Target", ppt_paths_1.PptPaths.relative.slide(host.sourceNumber), ppt_paths_1.PptPaths.relative.slide(host.targetNumber));
-          yield xml_helper_1.XmlHelper.replaceAttribute(host.targetArchive, ppt_paths_1.PptPaths.slideRels(host.targetNumber), "Relationship", "Target", ppt_paths_1.PptPaths.relative.notesSlide(sourceNotesNumber), ppt_paths_1.PptPaths.relative.notesSlide(host.targetNumber));
-        });
-      }
-    };
-    exports.SlideNotesCopier = SlideNotesCopier;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/has-shapes.js
-var require_has_shapes = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/has-shapes.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var errors_1 = require_errors2();
-    var xml_relationship_helper_1 = require_xml_relationship_helper();
-    var xml_helper_1 = require_xml_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var content_type_registry_1 = require_content_type_registry();
-    var element_importer_1 = require_element_importer();
-    var placeholder_normalizer_1 = require_placeholder_normalizer();
-    var related_content_copier_1 = require_related_content_copier();
-    var slide_notes_copier_1 = require_slide_notes_copier();
-    var HasShapes = class {
-      constructor(params) {
-        this.unsupportedTags = [
-          "p:custDataLst",
-          // exclude bullet images
-          "a:buBlip"
-          // 'p:oleObj',
-          // 'mc:AlternateContent',
-          // 'a14:imgProps',
-          // 'a14:imgLayer'
-        ];
-        this.unsupportedRelationTypes = [
-          //  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject',
-          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing",
-          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags"
-        ];
-        this.cleanupPlaceholders = false;
-        this.sourceTemplate = params.template;
-        this.preparations = [];
-        this.modifications = [];
-        this.relModifications = [];
-        this.generateElements = [];
-        this.presentation = params.presentation;
-        this.status = params.presentation.status;
-        this.content = params.presentation.content;
-        this.cleanupPlaceholders = params.presentation.params.cleanupPlaceholders;
-        this.elementImporter = new element_importer_1.ElementImporter(this);
-        this.relatedContent = new related_content_copier_1.RelatedContentCopier(this);
-        this.notes = new slide_notes_copier_1.SlideNotesCopier(this);
-        this.placeholderNormalizer = new placeholder_normalizer_1.PlaceholderNormalizer(this);
-        this.contentTypes = new content_type_registry_1.ContentTypeRegistry(this);
-      }
-      /**
-       * Queued element imports/modifications/removals of this slide.
-       * @internal
-       */
-      get importElements() {
-        return this.elementImporter.queue;
-      }
-      /**
-       * Asynchronously retrieves all text element IDs from the slide.
-       * @returns {Promise<string[]>} A promise that resolves to an array of text element IDs.
-       */
-      getAllTextElementIds() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xmlSlideHelper = yield this.getSlideHelper();
-          return xmlSlideHelper.getAllTextElementIds(this.sourceTemplate.useCreationIds || false);
-        });
-      }
-      /**
-       * Asynchronously retrieves all elements from the slide.
-       * @param filterTags Use an array of strings to filter parent tags (e.g. 'sp')
-       * @param layoutPlaceholders
-       * @returns {Promise<ElementInfo[]>} A promise that resolves to an array of ElementInfo objects.
-       */
-      getAllElements(filterTags, layoutPlaceholders) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xmlSlideHelper = yield this.getSlideHelper();
-          return xmlSlideHelper.getAllElements(filterTags, layoutPlaceholders);
-        });
-      }
-      /**
-       * Asynchronously retrieves one element from the slide.
-       * @params selector Use shape name or creationId to find the shape
-       * @returns {Promise<ElementInfo>} A promise that resolves an ElementInfo object.
-       */
-      getElement(selector) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xmlSlideHelper = yield this.getSlideHelper();
-          return xmlSlideHelper.getElement(selector);
-        });
-      }
-      /**
-       * Asynchronously retrieves the dimensions of the slide.
-       * This function utilizes the XmlSlideHelper to get the slide dimensions.
-       *
-       * @returns {Promise<{width: number, height: number}>} A promise that resolves to an object containing the width and height of the slide.
-       */
-      getDimensions() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xmlSlideHelper = yield this.getSlideHelper();
-          return xmlSlideHelper.getDimensions();
-        });
-      }
-      /**
-       * Asynchronously retrieves an instance of XmlSlideHelper for slide.
-       * @returns {Promise<XmlSlideHelper>} An instance of XmlSlideHelper.
-       */
-      getSlideHelper() {
-        return __awaiter(this, void 0, void 0, function* () {
-          return this.getSlideHelperInstance(this.sourceTemplate.archive, this.sourcePath, this.sourceNumber);
-        });
-      }
-      getSlideHelperInstance(archive, path12, number4) {
-        return __awaiter(this, void 0, void 0, function* () {
-          try {
-            const slideXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, path12);
-            const sourceLayoutId = yield xml_relationship_helper_1.XmlRelationshipHelper.getSlideLayoutNumber(archive, number4);
-            return new xml_slide_helper_1.XmlSlideHelper(slideXml, {
-              sourceArchive: archive,
-              slideNumber: number4,
-              sourceLayoutId
-            });
-          } catch (error62) {
-            throw new Error(error62.message);
-          }
-        });
-      }
-      /**
-       * Push preparations list
-       * @internal
-       * @param callback
-       */
-      prepare(callback) {
-        this.preparations.push(callback);
-      }
-      /**
-       * Push modifications list
-       * @internal
-       * @param callback
-       */
-      modify(callback) {
-        this.modifications.push(callback);
-      }
-      /**
-       * Push relations modifications list
-       * @internal
-       * @param callback
-       */
-      modifyRelations(callback) {
-        this.relModifications.push(callback);
-      }
-      /**
-       * Select and modify a single element on an added slide.
-       * @param {string} selector - Element's name on the slide.
-       * Should be a unique string defined on the "Selection"-pane within ppt.
-       * @param {ShapeModificationCallback | ShapeModificationCallback[]} callback - One or more callback functions to apply.
-       * Depending on the shape type (e.g. chart or table), different arguments will be passed to the callback.
-       */
-      modifyElement(selector, callback) {
-        this.elementImporter.add(this.sourceTemplate.name, this.sourceNumber, selector, "modify", callback);
-        return this;
-      }
-      generate(generate, objectName) {
-        this.generateElements.push({
-          objectName,
-          callback: generate
-        });
-        return this;
-      }
-      getGeneratedElements() {
-        return this.generateElements;
-      }
-      /**
-       * Select, insert and (optionally) modify a single element to a slide.
-       * @param {string} presName - Filename or alias name of the template presentation.
-       * Must have been importet with Automizer.load().
-       * @param {number} slideNumber - Slide number within the specified template to search for the required element.
-       * @param {FindElementSelector} selector - a string or object to find the target element
-       * @param {ShapeModificationCallback | ShapeModificationCallback[]} callback - One or more callback functions to apply.
-       * Depending on the shape type (e.g. chart or table), different arguments will be passed to the callback.
-       */
-      addElement(presName, slideNumber, selector, callback) {
-        this.elementImporter.add(presName, slideNumber, selector, "append", callback);
-        return this;
-      }
-      /**
-       * Remove a single element from slide.
-       * @param {string} selector - Element's name on the slide.
-       */
-      removeElement(selector) {
-        this.elementImporter.add(this.sourceTemplate.name, this.sourceNumber, selector, "remove", void 0);
-        return this;
-      }
-      /**
-       * ToDo: Implement creationIds as well for slideMasters
-       *
-       * Try to convert a given slide's creationId to corresponding slide number.
-       * Used if automizer is run with useCreationIds: true
-       * @internal
-       * @param template
-       * @param slideIdentifier
-       */
-      getSlideNumber(template, slideIdentifier) {
-        if (template.useCreationIds === true && template.creationIds !== void 0) {
-          const matchCreationId = template.creationIds.find((slideInfo) => slideInfo.id === Number(slideIdentifier));
-          if (matchCreationId) {
-            return matchCreationId.number;
-          }
-          throw new errors_1.SlideNotFoundError("Could not find slide number for creationId: " + slideIdentifier + "@" + template.name, { slideIdentifier, templateName: template.name });
-        }
-        return slideIdentifier;
-      }
-      /**
-       * Imported selected elements while merging multiple element modifications
-       * @internal
-       */
-      importedSelectedElements() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.elementImporter.importSelected();
-        });
-      }
-      checkIntegrity(info, assert2) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (info || assert2) {
-            const masterRels = yield new xml_relationship_helper_1.XmlRelationshipHelper().initialize(this.targetArchive, `${this.targetType}${this.targetNumber}.xml.rels`, `ppt/${this.targetType}s/_rels`);
-            yield masterRels.assertRelatedContent(this.sourceArchive, info, assert2);
-          }
-        });
-      }
-      /**
-       * Adds slide to presentation
-       * @internal
-       * @returns slide to presentation
-       */
-      addToPresentation() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.contentTypes.addToPresentation();
-        });
-      }
-      /**
-       * Copys related content
-       * @internal
-       * @returns related content
-       */
-      copyRelatedContent() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.relatedContent.copy();
-        });
-      }
-      /**
-       * Applys slide preparation callbacks
-       * Will be executed before any shape modifications callback
-       * @internal
-       * @returns modifications
-       */
-      applyPreparations() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const modification of this.preparations) {
-            const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetPath);
-            yield modification(xml, this);
-            xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetPath, xml);
-          }
-        });
-      }
-      /**
-       * Applys slide modification callbacks
-       * Will be executed after all shape modifications callbacks
-       * @internal
-       * @returns modifications
-       */
-      applyModifications() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const modification of this.modifications) {
-            const xml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.targetArchive, this.targetPath);
-            yield modification(xml, this);
-            xml_helper_1.XmlHelper.writeXmlToArchive(this.targetArchive, this.targetPath, xml);
-          }
-        });
-      }
-      /**
-       * Apply modifications to slide relations
-       * @internal
-       * @returns modifications
-       */
-      applyRelModifications() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield xml_helper_1.XmlHelper.modifyXmlInArchive(this.targetArchive, ppt_paths_1.PptPaths.partRels(this.targetType, this.targetNumber), this.relModifications);
-        });
-      }
-      /**
-       * Removes all unsupported tags from slide xml and (optionally)
-       * normalizes placeholder shapes.
-       * @internal
-       */
-      cleanSlide(targetPath, sourcePlaceholderTypes) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.placeholderNormalizer.cleanSlide(targetPath, sourcePlaceholderTypes);
-        });
-      }
-      /**
-       * Removes all unsupported relations from _rels xml.
-       * @internal
-       */
-      cleanRelations(targetRelsPath) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield xml_helper_1.XmlHelper.removeIf({
-            archive: this.targetArchive,
-            file: targetRelsPath,
-            tag: "Relationship",
-            clause: (xml, item) => {
-              return this.unsupportedRelationTypes.includes(item.getAttribute("Type"));
-            }
-          });
-        });
-      }
-      parsePlaceholders() {
-        return __awaiter(this, void 0, void 0, function* () {
-          return this.placeholderNormalizer.parsePlaceholders();
-        });
-      }
-      /**
-       * Flushes this part's finished target XML (and its rels) out of the
-       * archive's DOM buffer. Called as the last step of append(): keeping every
-       * appended slide's parsed DOM alive made memory grow with deck size
-       * (~8 MB per large slide). Anything reading the part afterwards
-       * (e.g. `cleanup` at write time) re-parses it from the archive.
-       * @internal
-       */
-      flushTargetXml() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.targetArchive.flushXml(this.targetPath);
-          yield this.targetArchive.flushXml(this.targetRelsPath);
-        });
-      }
-    };
-    exports.default = HasShapes;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/layout.js
-var require_layout = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/layout.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Layout = void 0;
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var xml_relationship_helper_1 = require_xml_relationship_helper();
-    var has_shapes_1 = __importDefault(require_has_shapes());
-    var logger_1 = require_logger();
-    var Layout = class extends has_shapes_1.default {
-      constructor(params) {
-        super(params);
-        this.targetType = "slideLayout";
-        this.sourceNumber = Number(params.sourceIdentifier);
-        this.targetMaster = params.targetMaster;
-        this.sourcePath = ppt_paths_1.PptPaths.slideLayout(this.sourceNumber);
-        this.relsPath = ppt_paths_1.PptPaths.slideLayoutRels(this.sourceNumber);
-      }
-      /**
-       * Appends slideLayout
-       * @internal
-       * @param targetTemplate
-       * @returns append
-       */
-      append(targetTemplate) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetTemplate = targetTemplate;
-          this.targetArchive = targetTemplate.archive;
-          this.targetNumber = targetTemplate.incrementCounter("layouts");
-          this.targetPath = ppt_paths_1.PptPaths.slideLayout(this.targetNumber);
-          this.targetRelsPath = ppt_paths_1.PptPaths.slideLayoutRels(this.targetNumber);
-          this.sourceArchive = this.sourceTemplate.archive;
-          logger_1.log.info("Importing slideLayout " + this.targetNumber);
-          yield this.copySlideLayoutFiles();
-          yield this.copyRelatedContent();
-          yield this.addToPresentation();
-          yield this.updateRelation();
-          yield this.cleanSlide(this.targetPath);
-          yield this.cleanRelations(this.targetRelsPath);
-          yield this.checkIntegrity(true, true);
-          yield this.flushTargetXml();
-        });
-      }
-      /**
-       * Copys slide layout files
-       * @internal
-       */
-      copySlideLayoutFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideLayout(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideLayout(this.targetNumber));
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideLayoutRels(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideLayoutRels(this.targetNumber));
-        });
-      }
-      updateRelation() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const layoutToMaster = yield new xml_relationship_helper_1.XmlRelationshipHelper().initialize(this.targetArchive, `slideLayout${this.targetNumber}.xml.rels`, `ppt/slideLayouts/_rels`, "../slideMasters/slideMaster");
-          layoutToMaster[0].updateTargetIndex(this.targetMaster);
-        });
-      }
-      getName() {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          const slideLayoutXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(this.sourceArchive, ppt_paths_1.PptPaths.slideLayout(this.sourceNumber));
-          const layout = (_a3 = slideLayoutXml.getElementsByTagName("p:cSld")) === null || _a3 === void 0 ? void 0 : _a3.item(0);
-          if (layout) {
-            const name = layout.getAttribute("name");
-            return name;
-          }
-        });
-      }
-    };
-    exports.Layout = Layout;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/master.js
-var require_master = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/master.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Master = void 0;
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var xml_helper_1 = require_xml_helper();
-    var xml_relationship_helper_1 = require_xml_relationship_helper();
-    var has_shapes_1 = __importDefault(require_has_shapes());
-    var layout_1 = require_layout();
-    var logger_1 = require_logger();
-    var Master = class _Master extends has_shapes_1.default {
-      constructor(params) {
-        super(params);
-        this.targetType = "slideMaster";
-        this.sourceNumber = Number(params.sourceIdentifier);
-        this.key = _Master.getKey(this.sourceNumber, params.template.name);
-        this.sourcePath = ppt_paths_1.PptPaths.slideMaster(this.sourceNumber);
-        this.relsPath = ppt_paths_1.PptPaths.slideMasterRels(this.sourceNumber);
-      }
-      static getKey(slideLayoutNumber, templateName) {
-        return slideLayoutNumber + "@" + templateName;
-      }
-      /**
-       * Appends slide
-       * @internal
-       * @param targetTemplate
-       * @returns append
-       */
-      append(targetTemplate) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetTemplate = targetTemplate;
-          this.targetArchive = targetTemplate.archive;
-          this.targetNumber = targetTemplate.incrementCounter("masters");
-          this.targetPath = ppt_paths_1.PptPaths.slideMaster(this.targetNumber);
-          this.targetRelsPath = ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber);
-          this.sourceArchive = this.sourceTemplate.archive;
-          logger_1.log.info("Importing slideMaster " + this.targetNumber);
-          yield this.copySlideMasterFiles();
-          yield this.copyRelatedLayouts();
-          yield this.copyRelatedContent();
-          yield this.addToPresentation();
-          yield this.copyThemeFiles();
-          if (this.importElements.length) {
-            yield this.importedSelectedElements();
-          }
-          yield this.applyModifications();
-          yield this.applyRelModifications();
-          const info = this.targetTemplate.automizer.params.showIntegrityInfo;
-          const assert2 = this.targetTemplate.automizer.params.showIntegrityInfo;
-          yield this.checkIntegrity(info, assert2);
-          yield this.cleanSlide(this.targetPath);
-          yield this.flushTargetXml();
-        });
-      }
-      copyRelatedLayouts() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targets = yield new xml_relationship_helper_1.XmlRelationshipHelper().initialize(this.targetArchive, `slideMaster${this.targetNumber}.xml.rels`, `ppt/slideMasters/_rels`, "../slideLayouts/slideLayout");
-          for (const target of targets) {
-            const layout = new layout_1.Layout({
-              presentation: this.targetTemplate.automizer,
-              template: this.sourceTemplate,
-              sourceIdentifier: target.number,
-              targetMaster: this.targetNumber
-            });
-            yield this.targetTemplate.appendLayout(layout);
-            const layoutName = yield layout.getName();
-            this.targetTemplate.mapContents("slideLayout", this.sourceTemplate.name, target.number, layout.targetNumber, layoutName);
-            target.updateTargetIndex(layout.targetNumber);
-          }
-          return targets;
-        });
-      }
-      copyThemeFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targets = yield xml_helper_1.XmlHelper.getRelationshipTargetsByPrefix(this.targetArchive, ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber), "../theme/theme");
-          if (!targets.length) {
-            return;
-          }
-          const themeTarget = targets[0];
-          const themeSourceId = themeTarget.number;
-          const themeTargetId = this.targetTemplate.incrementCounter("themes");
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.theme(themeSourceId), this.targetArchive, ppt_paths_1.PptPaths.theme(themeTargetId));
-          yield this.contentTypes.appendThemeToContentType(themeTargetId);
-          yield xml_helper_1.XmlHelper.replaceAttribute(this.targetArchive, ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber), "Relationship", "Id", themeTarget.rId, ppt_paths_1.PptPaths.relative.theme(themeTargetId), "Target");
-        });
-      }
-      /**
-       * Copy slide master files
-       * @internal
-       */
-      copySlideMasterFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideMaster(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideMaster(this.targetNumber));
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideMasterRels(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideMasterRels(this.targetNumber));
-        });
-      }
-    };
-    exports.Master = Master;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-presentation-helper.js
-var require_modify_presentation_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-presentation-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_helper_1 = require_xml_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var file_helper_1 = require_file_helper();
-    var ModifyPresentationHelper = class {
-      /**
-       * The content tracker's files include all files that have been
-       * copied to the root template by automizer. We remove all other files.
-       */
-      static removeUnusedFiles(xml, i, archive) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const tracker = archive.contentTracker;
-          if (!tracker) {
-            return;
-          }
-          const skipDirs = [
-            "ppt/slideMasters",
-            "ppt/slideMasters/_rels",
-            "ppt/slideLayouts",
-            "ppt/slideLayouts/_rels"
-          ];
-          for (const dir in tracker.files) {
-            if (skipDirs.includes(dir)) {
-              continue;
-            }
-            const requiredFiles = tracker.files[dir];
-            yield file_helper_1.FileHelper.removeFromDirectory(archive, dir, (file2) => {
-              return !requiredFiles.includes(file2.relativePath);
-            });
-          }
-        });
-      }
-      /**
-       * PPT won't complain about unused items in [Content_Types].xml,
-       * but we remove them anyway in case the file mentioned in PartName-
-       * attribute does not exist.
-       */
-      static removeUnusedContentTypes(xml, i, archive) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield xml_helper_1.XmlHelper.removeIf({
-            archive,
-            file: `[Content_Types].xml`,
-            tag: "Override",
-            clause: (xml2, element) => {
-              const filename = element.getAttribute("PartName").substring(1);
-              const exists = file_helper_1.FileHelper.fileExistsInArchive(archive, filename);
-              return exists ? false : true;
-            }
-          });
-        });
-      }
-      static removedUnusedImages(xml, i, archive) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const tracker = archive.contentTracker;
-          if (!tracker) {
-            return;
-          }
-          yield tracker.analyzeContents(archive);
-          const extensions = ["jpg", "jpeg", "png", "gif", "svg", "emf"];
-          const keepFiles = [];
-          yield tracker.collect("ppt/slides", "image", keepFiles);
-          yield tracker.collect("ppt/slideMasters", "image", keepFiles);
-          yield tracker.collect("ppt/slideLayouts", "image", keepFiles);
-          yield file_helper_1.FileHelper.removeFromDirectory(archive, "ppt/media", (file2) => {
-            const info = file_helper_1.FileHelper.getFileInfo(file2.name);
-            return extensions.includes(info.extension.toLowerCase()) && !keepFiles.includes(info.base);
-          });
-        });
-      }
-    };
-    _a3 = ModifyPresentationHelper;
-    ModifyPresentationHelper.getSlidesCollection = (xml) => {
-      return xml.getElementsByTagName("p:sldId");
-    };
-    ModifyPresentationHelper.getSlideMastersCollection = (xml) => {
-      return xml.getElementsByTagName("p:sldMasterId");
-    };
-    ModifyPresentationHelper.sortSlides = (order) => (xml) => {
-      const slides = _a3.getSlidesCollection(xml);
-      order.map((index, i) => order[i]--);
-      xml_helper_1.XmlHelper.sortCollection(slides, order);
-    };
-    ModifyPresentationHelper.removeSlides = (numbers) => (xml) => {
-      const slides = _a3.getSlidesCollection(xml);
-      numbers.map((index, i) => numbers[i]--);
-      for (let i = 0; i <= slides.length; i++) {
-        if (numbers.includes(i)) {
-          xml_helper_1.XmlHelper.remove(slides[i]);
-        }
-      }
-    };
-    ModifyPresentationHelper.normalizeSlideIds = (xml) => {
-      const slides = _a3.getSlidesCollection(xml);
-      const firstId = 256;
-      xml_helper_1.XmlHelper.modifyCollection(slides, (slide, i) => {
-        slide.setAttribute("id", String(firstId + i));
-      });
-    };
-    ModifyPresentationHelper.normalizeSlideMasterIds = (xml, i, archive) => __awaiter(void 0, void 0, void 0, function* () {
-      const slides = _a3.getSlideMastersCollection(xml);
-      let currentId;
-      yield xml_helper_1.XmlHelper.modifyCollectionAsync(slides, (slide, i2) => __awaiter(void 0, void 0, void 0, function* () {
-        const masterId = i2 + 1;
-        if (i2 === 0) {
-          currentId = Number(slide.getAttribute("id"));
-        }
-        slide.setAttribute("id", String(currentId));
-        currentId++;
-        const slideMasterXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(archive, ppt_paths_1.PptPaths.slideMaster(masterId));
-        const slideLayouts = slideMasterXml.getElementsByTagName("p:sldLayoutId");
-        xml_helper_1.XmlHelper.modifyCollection(slideLayouts, (slideLayout) => {
-          slideLayout.setAttribute("id", String(currentId));
-          currentId++;
-        });
-      }));
-    });
-    exports.default = ModifyPresentationHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/slide.js
-var require_slide = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/slide.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Slide = void 0;
-    var file_helper_1 = require_file_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var general_helper_1 = require_general_helper();
-    var logger_1 = require_logger();
-    var xml_relationship_helper_1 = require_xml_relationship_helper();
-    var has_shapes_1 = __importDefault(require_has_shapes());
-    var master_1 = require_master();
-    var modify_presentation_helper_1 = __importDefault(require_modify_presentation_helper());
-    var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
-    var Slide = class extends has_shapes_1.default {
-      constructor(params) {
-        super(params);
-        this.targetType = "slide";
-        this.sourceNumber = this.getSlideNumber(params.template, params.slideIdentifier);
-        this.sourcePath = ppt_paths_1.PptPaths.slide(this.sourceNumber);
-        this.relsPath = ppt_paths_1.PptPaths.slideRels(this.sourceNumber);
-      }
-      /**
-       * Appends slide
-       * @internal
-       * @param targetTemplate
-       * @returns append
-       */
-      append(targetTemplate) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.targetTemplate = targetTemplate;
-          this.targetArchive = targetTemplate.archive;
-          this.targetNumber = targetTemplate.incrementCounter("slides");
-          this.targetPath = ppt_paths_1.PptPaths.slide(this.targetNumber);
-          this.targetRelsPath = ppt_paths_1.PptPaths.slideRels(this.targetNumber);
-          this.sourceArchive = this.sourceTemplate.archive;
-          this.status.info = "Appending slide " + this.targetNumber;
-          yield this.copySlideFiles();
-          yield this.copyRelatedContent();
-          yield this.addToPresentation();
-          yield this.notes.copySlideNotes();
-          const placeholderTypes = yield this.parsePlaceholders();
-          yield this.applyRelModifications();
-          yield this.applyPreparations();
-          if (this.importElements.length) {
-            yield this.importedSelectedElements();
-          }
-          yield this.applyModifications();
-          const info = this.targetTemplate.automizer.params.showIntegrityInfo;
-          const assert2 = this.targetTemplate.automizer.params.showIntegrityInfo;
-          yield this.checkIntegrity(info, assert2);
-          yield this.cleanSlide(this.targetPath, placeholderTypes);
-          yield this.flushTargetXml();
-          this.status.increment();
-        });
-      }
-      /**
-       * Additionally flushes the slide's copied notesSlide part, which shares
-       * the slide's target number.
-       * @internal
-       */
-      flushTargetXml() {
-        const _super = Object.create(null, {
-          flushTargetXml: { get: () => super.flushTargetXml }
-        });
-        return __awaiter(this, void 0, void 0, function* () {
-          yield _super.flushTargetXml.call(this);
-          yield this.targetArchive.flushXml(ppt_paths_1.PptPaths.notesSlide(this.targetNumber));
-          yield this.targetArchive.flushXml(ppt_paths_1.PptPaths.notesSlideRels(this.targetNumber));
-        });
-      }
-      /**
-       * Use another slide layout.
-       * @param layoutId
-       */
-      useSlideLayout(layoutId) {
-        this.relModifications.push((slideRelXml) => __awaiter(this, void 0, void 0, function* () {
-          let targetLayoutId;
-          if (typeof layoutId === "string") {
-            targetLayoutId = yield this.useNamedSlideLayout(layoutId);
-            if (!targetLayoutId) {
-              layoutId = null;
-            }
-          }
-          if (!layoutId || typeof layoutId === "number") {
-            targetLayoutId = yield this.useIndexedSlideLayout(layoutId);
-          }
-          if (targetLayoutId) {
-            this.targetLayoutId = targetLayoutId;
-            const slideLayouts = new xml_relationship_helper_1.XmlRelationshipHelper(slideRelXml).readTargets().getTargetsByPrefix("../slideLayouts/slideLayout");
-            if (slideLayouts.length) {
-              slideLayouts[0].updateTargetIndex(targetLayoutId);
-            }
-          } else {
-            logger_1.log.warn("Unable to use slide layout " + layoutId);
-          }
-        }));
-        return this;
-      }
-      /**
-       * Merges slide content into a specified slide layout by mapping placeholders.
-       * This method automatically handles placeholder matching and repositioning of elements
-       * that don't have corresponding placeholders in the target layout.
-       *
-       * @param targetFileName
-       * @param targetLayout - Name or identifier of the target slide layout to merge into
-       * @returns Promise<this> - Returns the slide instance for method chaining
-       */
-      mergeIntoSlideLayout(targetLayout) {
-        this.cleanupPlaceholders = false;
-        this.useSlideLayout(targetLayout);
-        this.prepare((_) => __awaiter(this, void 0, void 0, function* () {
-          const slideHelper = yield this.getSlideHelperInstance(this.targetArchive, this.targetPath, this.targetNumber);
-          const slideLayout = yield slideHelper.getSlideLayout();
-          const targetPlaceholders = slideLayout.placeholders || [];
-          const sourceLayoutInfo = yield this.getSourceLayoutInfo();
-          const slideElements = yield this.getAllElements([], targetPlaceholders);
-          new xml_placeholder_helper_1.default(this, slideElements, sourceLayoutInfo, targetPlaceholders).run();
-        }));
-        return this;
-      }
-      /**
-       * Retrieves information about the source slide layout.
-       *
-       * @returns Promise<{placeholders: PlaceholderInfo[]}> Source layout information
-       * @private
-       */
-      getSourceLayoutInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideHelper = yield this.getSlideHelper();
-          const sourceLayout = yield slideHelper.getSlideLayout();
-          return sourceLayout;
-        });
-      }
-      /**
-       * Find another slide layout by name.
-       * @param targetLayoutName
-       */
-      useNamedSlideLayout(targetLayoutName) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const templateName = this.sourceTemplate.name;
-          const sourceLayoutId = yield xml_relationship_helper_1.XmlRelationshipHelper.getSlideLayoutNumber(this.sourceArchive, this.sourceNumber);
-          yield this.autoImportSourceSlideMaster(templateName, sourceLayoutId);
-          const alreadyImported = this.targetTemplate.getNamedMappedContent("slideLayout", targetLayoutName);
-          if (!alreadyImported) {
-            logger_1.log.error('Could not find "' + targetLayoutName + '"@' + templateName + "@sourceLayoutId:" + sourceLayoutId);
-          }
-          return alreadyImported === null || alreadyImported === void 0 ? void 0 : alreadyImported.targetId;
-        });
-      }
-      /**
-       * Use another slide layout by index or detect original index.
-       * @param targetLayoutIndex
-       */
-      useIndexedSlideLayout(targetLayoutIndex) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!targetLayoutIndex) {
-            const sourceLayoutId = yield xml_relationship_helper_1.XmlRelationshipHelper.getSlideLayoutNumber(this.sourceArchive, this.sourceNumber);
-            const templateName = this.sourceTemplate.name;
-            const alreadyImported = this.targetTemplate.getMappedContent("slideLayout", templateName, sourceLayoutId);
-            if (alreadyImported) {
-              return alreadyImported.targetId;
-            } else {
-              return yield this.autoImportSourceSlideMaster(templateName, sourceLayoutId);
-            }
-          }
-          return targetLayoutIndex;
-        });
-      }
-      autoImportSourceSlideMaster(templateName, sourceLayoutId) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const sourceMasterId = yield xml_relationship_helper_1.XmlRelationshipHelper.getSlideMasterNumber(this.sourceArchive, sourceLayoutId);
-          const key = master_1.Master.getKey(sourceMasterId, templateName);
-          if (!this.targetTemplate.masters.find((master) => master.key === key)) {
-            yield this.targetTemplate.automizer.addMaster(templateName, sourceMasterId);
-            const previouslyAddedMaster = (0, general_helper_1.last)(this.targetTemplate.masters);
-            yield this.targetTemplate.appendMasterSlide(previouslyAddedMaster).catch((e) => {
-              throw e;
-            });
-          }
-          const alreadyImported = this.targetTemplate.getMappedContent("slideLayout", templateName, sourceLayoutId);
-          return alreadyImported === null || alreadyImported === void 0 ? void 0 : alreadyImported.targetId;
-        });
-      }
-      /**
-       * Copys slide files
-       * @internal
-       */
-      copySlideFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slide(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slide(this.targetNumber));
-          yield file_helper_1.FileHelper.zipCopy(this.sourceArchive, ppt_paths_1.PptPaths.slideRels(this.sourceNumber), this.targetArchive, ppt_paths_1.PptPaths.slideRels(this.targetNumber));
-        });
-      }
-      /**
-       * Remove a slide from presentation's slide list.
-       * ToDo: Find the current count for this slide;
-       * ToDo: this.targetNumber is undefined at this point.
-       */
-      remove(slide) {
-        this.root.modify(modify_presentation_helper_1.default.removeSlides([slide]));
-      }
-    };
-    exports.Slide = Slide;
-  }
-});
-
-// node_modules/pptx-automizer/dist/types/types.js
-var require_types = __commonJS({
-  "node_modules/pptx-automizer/dist/types/types.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getMediaBuffer = getMediaBuffer;
-    function getMediaBuffer(file2, fsReadFileSync) {
-      if (file2.source === "buffer") {
-        return file2.buffer;
-      }
-      return fsReadFileSync(file2.filepath);
-    }
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/content-tracker.js
-var require_content_tracker = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/content-tracker.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ContentTracker = void 0;
-    var file_helper_1 = require_file_helper();
-    var xml_helper_1 = require_xml_helper();
-    var constants_1 = require_constants2();
-    var ContentTracker = class {
-      constructor() {
-        this.files = {
-          "ppt/slideMasters": [],
-          "ppt/slideLayouts": [],
-          "ppt/slides": [],
-          "ppt/charts": [],
-          "ppt/embeddings": []
-        };
-        this.relations = {
-          // '.': [],
-          "ppt/slides/_rels": [],
-          "ppt/slideMasters/_rels": [],
-          "ppt/slideLayouts/_rels": [],
-          "ppt/charts/_rels": [],
-          "ppt/_rels": [],
-          ppt: []
-        };
-        this.relationTags = (0, constants_1.contentTrack)();
-      }
-      reset() {
-        [this.files, this.relations].forEach((section) => Object.keys(section).forEach((key) => {
-          section[key] = [];
-        }));
-        this.relationTags = (0, constants_1.contentTrack)();
-      }
-      trackFile(file2) {
-        const info = file_helper_1.FileHelper.getFileInfo(file2);
-        if (this.files[info.dir]) {
-          this.files[info.dir].push(info.base);
-        }
-      }
-      trackRelation(file2, attributes) {
-        const info = file_helper_1.FileHelper.getFileInfo(file2);
-        if (this.relations[info.dir]) {
-          this.relations[info.dir].push({
-            base: info.base,
-            attributes
-          });
-        }
-      }
-      analyzeContents(archive) {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setArchive(archive);
-          yield this.analyzeRelationships();
-          yield this.trackSlideMasters();
-          yield this.trackSlideLayouts();
-        });
-      }
-      setArchive(archive) {
-        this.archive = archive;
-      }
-      /**
-       * This will be replaced by future slideMaster handling.
-       */
-      trackSlideMasters() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const slideMasters = this.getRelationTag("ppt/presentation.xml").getTrackedRelations("slideMaster");
-          yield this.addAndAnalyze(slideMasters, "ppt/slideMasters");
-        });
-      }
-      trackSlideLayouts() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const usedSlideLayouts = this.getRelationTag("ppt/slideMasters").getTrackedRelations("slideLayout");
-          yield this.addAndAnalyze(usedSlideLayouts, "ppt/slideLayouts");
-        });
-      }
-      addAndAnalyze(trackedRelations, section) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const targets = yield this.getRelatedContents(trackedRelations);
-          targets.forEach((target) => {
-            this.trackFile(section + "/" + target.filename);
-          });
-          const relationTagInfo = this.getRelationTag(section);
-          yield this.analyzeRelationship(relationTagInfo);
-        });
-      }
-      getRelatedContents(trackedRelations) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const relatedContents = [];
-          for (const trackedRelation of trackedRelations) {
-            for (const target of trackedRelation.targets) {
-              const trackedRelationInfo = yield target.getRelatedContent();
-              if (!trackedRelationInfo)
-                continue;
-              relatedContents.push(trackedRelationInfo);
-            }
-          }
-          return relatedContents;
-        });
-      }
-      getRelationTag(source) {
-        return this.relationTags.find((relationTag) => relationTag.source === source);
-      }
-      analyzeRelationships() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const relationTagInfo of this.relationTags) {
-            yield this.analyzeRelationship(relationTagInfo);
-          }
-        });
-      }
-      analyzeRelationship(relationTagInfo) {
-        return __awaiter(this, void 0, void 0, function* () {
-          relationTagInfo.getTrackedRelations = (role) => {
-            return relationTagInfo.tags.filter((tag2) => tag2.role === role);
-          };
-          for (const relationTag of relationTagInfo.tags) {
-            relationTag.targets = relationTag.targets || [];
-            if (relationTagInfo.isDir === true) {
-              const files = this.files[relationTagInfo.source] || [];
-              if (!files.length) {
-              }
-              for (const file2 of files) {
-                yield this.pushRelationTagTargets(relationTagInfo.source + "/" + file2, file2, relationTag, relationTagInfo);
-              }
-            } else {
-              const pathInfo = file_helper_1.FileHelper.getFileInfo(relationTagInfo.source);
-              yield this.pushRelationTagTargets(relationTagInfo.source, pathInfo.base, relationTag, relationTagInfo);
-            }
-          }
-        });
-      }
-      pushRelationTagTargets(file2, filename, relationTag, relationTagInfo) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const attribute = relationTag.attribute || "r:id";
-          const addTargets = yield xml_helper_1.XmlHelper.getRelationshipItems(this.archive, file2, (element, rels) => {
-            const rId = element.getAttribute(attribute);
-            if (!rId)
-              return;
-            rels.push({
-              file: file2,
-              filename,
-              rId,
-              type: relationTag.type
-            });
-          }, relationTag.tag);
-          this.addCreatedRelationsFunctions(addTargets, this.relations[relationTagInfo.relationsKey], relationTagInfo);
-          relationTag.targets = [...relationTag.targets, ...addTargets];
-        });
-      }
-      addCreatedRelationsFunctions(addTargets, createdRelations, relationTagInfo) {
-        addTargets.forEach((addTarget) => {
-          addTarget.getCreatedContent = this.getCreatedContent(createdRelations, addTarget);
-          addTarget.getRelatedContent = this.addRelatedContent(relationTagInfo, addTarget);
-        });
-      }
-      getCreatedContent(createdRelations, addTarget) {
-        return () => {
-          return createdRelations.find((relation) => {
-            var _a3;
-            return relation.base === addTarget.filename + ".rels" && ((_a3 = relation.attributes) === null || _a3 === void 0 ? void 0 : _a3.Id) === addTarget.rId;
-          });
-        };
-      }
-      addRelatedContent(relationTagInfo, addTarget) {
-        return () => __awaiter(this, void 0, void 0, function* () {
-          if (addTarget.relatedContent)
-            return addTarget.relatedContent;
-          const relationsFile = relationTagInfo.isDir === true ? relationTagInfo.relationsKey + "/" + addTarget.filename + ".rels" : relationTagInfo.relationsKey;
-          const relationTarget = yield xml_helper_1.XmlHelper.getRelationshipItems(this.archive, relationsFile, (element, rels) => {
-            const rId = element.getAttribute("Id");
-            if (rId === addTarget.rId) {
-              const target = element.getAttribute("Target");
-              const targetMode = element.getAttribute("TargetMode");
-              const fileInfo = file_helper_1.FileHelper.getFileInfo(target);
-              if (targetMode !== "External") {
-                rels.push({
-                  file: target,
-                  filename: fileInfo.base,
-                  rId,
-                  type: element.getAttribute("Type")
-                });
-              }
-            }
-          });
-          addTarget.relatedContent = relationTarget.find((relationTarget2) => relationTarget2.rId === addTarget.rId);
-          return addTarget.relatedContent;
-        });
-      }
-      collect(section, role, collection) {
-        return __awaiter(this, void 0, void 0, function* () {
-          collection = collection || [];
-          const trackedRelationTag = this.getRelationTag(section);
-          const trackedRelations = trackedRelationTag.getTrackedRelations(role);
-          const relatedTargets = yield this.getRelatedContents(trackedRelations);
-          relatedTargets.forEach((relatedTarget) => collection.push(relatedTarget.filename));
-          return collection;
-        });
-      }
-      filterRelations(section, target) {
-        const relations = this.relations[section];
-        return relations.filter((rel) => rel.attributes.Target === target);
-      }
-    };
-    exports.ContentTracker = ContentTracker;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/count-helper.js
-var require_count_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/count-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.CountHelper = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var CountHelper2 = class _CountHelper {
-      constructor(name, template) {
-        this.name = name;
-        this.template = template;
-      }
-      static increment(name, counters) {
-        return _CountHelper.getCounterByName(name, counters)._increment();
-      }
-      /**
-       * Lower a counter, e.g. after slides have been removed from the archive.
-       */
-      static decrement(name, counters, by = 1) {
-        const counter = _CountHelper.getCounterByName(name, counters);
-        counter.count = Math.max(0, counter.count - by);
-        return counter.count;
-      }
-      static count(name, counters) {
-        return _CountHelper.getCounterByName(name, counters).get();
-      }
-      static reset(counters) {
-        counters.forEach((counter) => counter.count = void 0);
-      }
-      static getCounterByName(name, counters) {
-        const counter = counters.find((c) => c.name === name);
-        if (counter === void 0) {
-          throw new Error(`Counter ${name} not found.`);
-        }
-        return counter;
-      }
-      _increment() {
-        this.count++;
-        return this.count;
-      }
-      set() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.count = yield this.calculateCount(this.template.archive);
-        });
-      }
-      get() {
-        return this.count;
-      }
-      calculateCount(presentation) {
-        switch (this.name) {
-          case "slides":
-            return _CountHelper.countSlides(presentation);
-          case "masters":
-            return _CountHelper.countMasters(presentation);
-          case "layouts":
-            return _CountHelper.countLayouts(presentation);
-          case "themes":
-            return _CountHelper.countThemes(presentation);
-          case "charts":
-            return _CountHelper.countCharts(presentation);
-          case "images":
-            return _CountHelper.countImages(presentation);
-          case "diagrams":
-            return _CountHelper.countDiagrams(presentation);
-          case "oleObjects":
-            return _CountHelper.countOleObjects(presentation);
-        }
-        throw new Error(`No way to count ${this.name}.`);
-      }
-      static countSlides(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const presentationXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "ppt/presentation.xml");
-          return presentationXml.getElementsByTagName("p:sldId").length;
-        });
-      }
-      static countMasters(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const presentationXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "ppt/presentation.xml");
-          return presentationXml.getElementsByTagName("p:sldMasterId").length;
-        });
-      }
-      /**
-       * Counts the Override entries of [Content_Types].xml with the given
-       * ContentType.
-       */
-      static countContentTypeOverrides(presentation, contentType) {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          const contentTypesXml = yield xml_helper_1.XmlHelper.getXmlFromArchive(presentation, "[Content_Types].xml");
-          const overrides = contentTypesXml.getElementsByTagName("Override");
-          let count = 0;
-          for (let i = 0; i < overrides.length; i++) {
-            if (((_a3 = overrides.item(i)) === null || _a3 === void 0 ? void 0 : _a3.getAttribute("ContentType")) === contentType) {
-              count++;
-            }
-          }
-          return count;
-        });
-      }
-      static countLayouts(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml");
-        });
-      }
-      static countThemes(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.theme+xml");
-        });
-      }
-      static countCharts(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.drawingml.chart+xml");
-        });
-      }
-      static countOleObjects(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.oleObject");
-        });
-      }
-      static countImages(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          const mediaFiles = yield presentation.folder("ppt/media");
-          const count = mediaFiles.filter((file2) => file2.relativePath.indexOf("image") === 0).length;
-          return count;
-        });
-      }
-      static countDiagrams(presentation) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return _CountHelper.countContentTypeOverrides(presentation, "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml");
-        });
-      }
-    };
-    exports.CountHelper = CountHelper2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/media-deduplicator.js
-var require_media_deduplicator = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/media-deduplicator.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MediaDeduplicator = void 0;
-    var crypto_1 = __require("crypto");
-    var ppt_paths_1 = require_ppt_paths();
-    var MediaDeduplicator = class _MediaDeduplicator {
-      constructor(archive) {
-        this.files = /* @__PURE__ */ new Map();
-        this.archive = archive;
-      }
-      /**
-       * Find a media file with identical contents in the output archive.
-       * @param content Contents of the media file about to be copied
-       * @returns Filename inside ppt/media, or undefined if it is a new file
-       */
-      find(content) {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.indexExistingFiles();
-          return this.files.get(_MediaDeduplicator.checksum(content));
-        });
-      }
-      /**
-       * Add a media file that has been copied into the output archive.
-       */
-      add(content, filename) {
-        const checksum = _MediaDeduplicator.checksum(content);
-        if (!this.files.has(checksum)) {
-          this.files.set(checksum, filename);
-        }
-      }
-      /**
-       * Index the media files the output archive already contains, e.g. the ones
-       * coming with the root template. Runs on first use only.
-       */
-      indexExistingFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!this.indexed) {
-            this.indexed = this.readExistingFiles();
-          }
-          return this.indexed;
-        });
-      }
-      readExistingFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const mediaFiles = yield this.archive.folder(ppt_paths_1.PptPaths.mediaDir);
-          for (const mediaFile of mediaFiles) {
-            if (!mediaFile.relativePath || mediaFile.relativePath.endsWith("/")) {
-              continue;
-            }
-            const content = yield this.archive.read(mediaFile.name, "nodebuffer");
-            this.add(content, mediaFile.relativePath);
-          }
-        });
-      }
-      static checksum(content) {
-        return (0, crypto_1.createHash)("sha1").update(content).digest("hex");
-      }
-    };
-    exports.MediaDeduplicator = MediaDeduplicator;
-  }
-});
-
-// node_modules/pptx-automizer/node_modules/pptxgenjs/dist/pptxgen.cjs.js
+// node_modules/pptxgenjs/dist/pptxgen.cjs.js
 var require_pptxgen_cjs = __commonJS({
-  "node_modules/pptx-automizer/node_modules/pptxgenjs/dist/pptxgen.cjs.js"(exports, module) {
+  "node_modules/pptxgenjs/dist/pptxgen.cjs.js"(exports, module) {
     "use strict";
     var JSZip7 = require_lib3();
     function _interopDefaultLegacy(e) {
@@ -29314,10 +21233,10 @@ var require_pptxgen_cjs = __commonJS({
       return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'.concat(CRLF, '<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:normalViewPr horzBarState="maximized"><p:restoredLeft sz="15611"/><p:restoredTop sz="94610"/></p:normalViewPr><p:slideViewPr><p:cSldViewPr snapToGrid="0" snapToObjects="1"><p:cViewPr varScale="1"><p:scale><a:sx n="136" d="100"/><a:sy n="136" d="100"/></p:scale><p:origin x="216" y="312"/></p:cViewPr><p:guideLst/></p:cSldViewPr></p:slideViewPr><p:notesTextViewPr><p:cViewPr><p:scale><a:sx n="1" d="1"/><a:sy n="1" d="1"/></p:scale><p:origin x="0" y="0"/></p:cViewPr></p:notesTextViewPr><p:gridSpacing cx="76200" cy="76200"/></p:viewPr>');
     }
     var VERSION2 = "3.12.0";
-    var PptxGenJS = (
+    var PptxGenJS2 = (
       /** @class */
       (function() {
-        function PptxGenJS2() {
+        function PptxGenJS3() {
           var _this = this;
           this._version = VERSION2;
           this._alignH = AlignH;
@@ -29560,7 +21479,7 @@ var require_pptxgen_cjs = __commonJS({
             _slideObjects: []
           };
         }
-        Object.defineProperty(PptxGenJS2.prototype, "layout", {
+        Object.defineProperty(PptxGenJS3.prototype, "layout", {
           get: function() {
             return this._layout;
           },
@@ -29576,14 +21495,14 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "version", {
+        Object.defineProperty(PptxGenJS3.prototype, "version", {
           get: function() {
             return this._version;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "author", {
+        Object.defineProperty(PptxGenJS3.prototype, "author", {
           get: function() {
             return this._author;
           },
@@ -29593,7 +21512,7 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "company", {
+        Object.defineProperty(PptxGenJS3.prototype, "company", {
           get: function() {
             return this._company;
           },
@@ -29603,7 +21522,7 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "revision", {
+        Object.defineProperty(PptxGenJS3.prototype, "revision", {
           get: function() {
             return this._revision;
           },
@@ -29613,7 +21532,7 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "subject", {
+        Object.defineProperty(PptxGenJS3.prototype, "subject", {
           get: function() {
             return this._subject;
           },
@@ -29623,7 +21542,7 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "theme", {
+        Object.defineProperty(PptxGenJS3.prototype, "theme", {
           get: function() {
             return this._theme;
           },
@@ -29633,7 +21552,7 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "title", {
+        Object.defineProperty(PptxGenJS3.prototype, "title", {
           get: function() {
             return this._title;
           },
@@ -29643,7 +21562,7 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "rtlMode", {
+        Object.defineProperty(PptxGenJS3.prototype, "rtlMode", {
           get: function() {
             return this._rtlMode;
           },
@@ -29653,105 +21572,105 @@ var require_pptxgen_cjs = __commonJS({
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "masterSlide", {
+        Object.defineProperty(PptxGenJS3.prototype, "masterSlide", {
           get: function() {
             return this._masterSlide;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "slides", {
+        Object.defineProperty(PptxGenJS3.prototype, "slides", {
           get: function() {
             return this._slides;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "sections", {
+        Object.defineProperty(PptxGenJS3.prototype, "sections", {
           get: function() {
             return this._sections;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "slideLayouts", {
+        Object.defineProperty(PptxGenJS3.prototype, "slideLayouts", {
           get: function() {
             return this._slideLayouts;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "AlignH", {
+        Object.defineProperty(PptxGenJS3.prototype, "AlignH", {
           get: function() {
             return this._alignH;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "AlignV", {
+        Object.defineProperty(PptxGenJS3.prototype, "AlignV", {
           get: function() {
             return this._alignV;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "ChartType", {
+        Object.defineProperty(PptxGenJS3.prototype, "ChartType", {
           get: function() {
             return this._chartType;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "OutputType", {
+        Object.defineProperty(PptxGenJS3.prototype, "OutputType", {
           get: function() {
             return this._outputType;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "presLayout", {
+        Object.defineProperty(PptxGenJS3.prototype, "presLayout", {
           get: function() {
             return this._presLayout;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "SchemeColor", {
+        Object.defineProperty(PptxGenJS3.prototype, "SchemeColor", {
           get: function() {
             return this._schemeColor;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "ShapeType", {
+        Object.defineProperty(PptxGenJS3.prototype, "ShapeType", {
           get: function() {
             return this._shapeType;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "charts", {
+        Object.defineProperty(PptxGenJS3.prototype, "charts", {
           get: function() {
             return this._charts;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "colors", {
+        Object.defineProperty(PptxGenJS3.prototype, "colors", {
           get: function() {
             return this._colors;
           },
           enumerable: false,
           configurable: true
         });
-        Object.defineProperty(PptxGenJS2.prototype, "shapes", {
+        Object.defineProperty(PptxGenJS3.prototype, "shapes", {
           get: function() {
             return this._shapes;
           },
           enumerable: false,
           configurable: true
         });
-        PptxGenJS2.prototype.stream = function(props) {
+        PptxGenJS3.prototype.stream = function(props) {
           return __awaiter(this, void 0, void 0, function() {
             return __generator(this, function(_a3) {
               switch (_a3.label) {
@@ -29766,7 +21685,7 @@ var require_pptxgen_cjs = __commonJS({
             });
           });
         };
-        PptxGenJS2.prototype.write = function(props) {
+        PptxGenJS3.prototype.write = function(props) {
           return __awaiter(this, void 0, void 0, function() {
             var propsOutpType, propsCompress;
             return __generator(this, function(_a3) {
@@ -29784,7 +21703,7 @@ var require_pptxgen_cjs = __commonJS({
             });
           });
         };
-        PptxGenJS2.prototype.writeFile = function(props) {
+        PptxGenJS3.prototype.writeFile = function(props) {
           return __awaiter(this, void 0, void 0, function() {
             var fs, propsExpName, propsCompress, fileName;
             var _this = this;
@@ -29831,7 +21750,7 @@ var require_pptxgen_cjs = __commonJS({
             });
           });
         };
-        PptxGenJS2.prototype.addSection = function(section) {
+        PptxGenJS3.prototype.addSection = function(section) {
           if (!section)
             console.warn("addSection requires an argument");
           else if (!section.title)
@@ -29846,7 +21765,7 @@ var require_pptxgen_cjs = __commonJS({
           else
             this._sections.push(newSection);
         };
-        PptxGenJS2.prototype.addSlide = function(options) {
+        PptxGenJS3.prototype.addSlide = function(options) {
           var masterSlideName = typeof options === "string" ? options : (options === null || options === void 0 ? void 0 : options.masterName) ? options.masterName : "";
           var slideLayout = {
             _name: this.LAYOUTS[DEF_PRES_LAYOUT].name,
@@ -29898,7 +21817,7 @@ var require_pptxgen_cjs = __commonJS({
           }
           return newSlide;
         };
-        PptxGenJS2.prototype.defineLayout = function(layout) {
+        PptxGenJS3.prototype.defineLayout = function(layout) {
           if (!layout)
             console.warn("defineLayout requires `{name, width, height}`");
           else if (!layout.name)
@@ -29919,7 +21838,7 @@ var require_pptxgen_cjs = __commonJS({
             height: Math.round(Number(layout.height) * EMU)
           };
         };
-        PptxGenJS2.prototype.defineSlideMaster = function(props) {
+        PptxGenJS3.prototype.defineSlideMaster = function(props) {
           if (!props.title)
             throw new Error("defineSlideMaster() object argument requires a `title` value. (https://gitbrent.github.io/PptxGenJS/docs/masters.html)");
           var newLayout = {
@@ -29943,7 +21862,7 @@ var require_pptxgen_cjs = __commonJS({
           if (newLayout._slideNumberProps && !this.masterSlide._slideNumberProps)
             this.masterSlide._slideNumberProps = newLayout._slideNumberProps;
         };
-        PptxGenJS2.prototype.tableToSlides = function(eleId, options) {
+        PptxGenJS3.prototype.tableToSlides = function(eleId, options) {
           if (options === void 0) {
             options = {};
           }
@@ -29951,8432 +21870,10 @@ var require_pptxgen_cjs = __commonJS({
             return layout._name === options.masterSlideName;
           })[0] : null);
         };
-        return PptxGenJS2;
+        return PptxGenJS3;
       })()
     );
-    module.exports = PptxGenJS;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/generate/generate-pptxgenjs.js
-var require_generate_pptxgenjs = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/generate/generate-pptxgenjs.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var crypto_1 = __require("crypto");
-    var pptxgenjs_1 = __importDefault(require_pptxgen_cjs());
-    var GeneratePptxGenJs = class {
-      constructor(automizer, slides) {
-        this.countSlides = 0;
-        this.addSlideItems = (pgenSlide, generateElement, addedObjects) => {
-          const addObjectToList = (callbacks) => {
-            const objectName = (generateElement.objectName ? generateElement.objectName + "-" : "") + (0, crypto_1.randomUUID)();
-            addedObjects.push({
-              objectName,
-              callbacks
-            });
-            return objectName;
-          };
-          return {
-            addChart: (type, data, options) => {
-              pgenSlide.addChart(type, data, this.getOptions(options, addObjectToList()));
-            },
-            addImage: (options) => {
-              pgenSlide.addImage(this.getOptions(options, addObjectToList()));
-            },
-            addShape: (shapeName, options) => {
-              pgenSlide.addShape(shapeName, this.getOptions(options, addObjectToList()));
-            },
-            addTable: (tableRows, options) => {
-              pgenSlide.addTable(tableRows, this.getOptions(options, addObjectToList()));
-            },
-            addText: (text, options, callbacks) => {
-              pgenSlide.addText(text, this.getOptions(options, addObjectToList(callbacks)));
-            }
-          };
-        };
-        this.getOptions = (options, objectName) => {
-          return Object.assign(Object.assign({}, options || {}), { objectName });
-        };
-        this.automizer = automizer;
-        this.slides = slides;
-        this.create();
-      }
-      create() {
-        if (this.automizer.params.pptxGenJs) {
-          this.generator = this.automizer.params.pptxGenJs;
-        } else {
-          this.generator = new pptxgenjs_1.default();
-        }
-      }
-      generateSlides() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.tmpFile = (0, crypto_1.randomUUID)() + ".pptx";
-          for (const slide of this.slides) {
-            const generate = slide.getGeneratedElements();
-            if (generate.length) {
-              this.countSlides++;
-              const pgenSlide = this.appendPptxGenSlide();
-              yield this.generateElements(generate, pgenSlide, this.countSlides);
-            }
-          }
-          for (const slide of this.slides) {
-            const generate = slide.getGeneratedElements();
-            if (generate.length) {
-              this.addElements(generate, slide);
-            }
-          }
-          if (this.countSlides > 0) {
-            const data = yield this.generator.stream();
-            this.automizer.load(data, this.tmpFile);
-          }
-        });
-      }
-      generateElements(generate, pgenSlide, tmpSlideNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const generateElement of generate) {
-            generateElement.tmpSlideNumber = tmpSlideNumber;
-            const addedObjects = [];
-            yield generateElement.callback(this.addSlideItems(pgenSlide, generateElement, addedObjects), this.generator);
-            generateElement.addedObjects = [...addedObjects];
-          }
-        });
-      }
-      addElements(generate, slide) {
-        generate.forEach((generateElement) => {
-          generateElement.addedObjects.forEach((addedObject) => {
-            slide.addElement(this.tmpFile, generateElement.tmpSlideNumber, addedObject.objectName, addedObject.callbacks);
-          });
-        });
-      }
-      appendPptxGenSlide() {
-        return this.generator.addSlide();
-      }
-      cleanup() {
-        return __awaiter(this, void 0, void 0, function* () {
-        });
-      }
-    };
-    exports.default = GeneratePptxGenJs;
-  }
-});
-
-// node_modules/pptx-automizer/dist/classes/template.js
-var require_template = __commonJS({
-  "node_modules/pptx-automizer/dist/classes/template.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v });
-    }) : function(o, v) {
-      o["default"] = v;
-    });
-    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
-      var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function(o2) {
-          var ar = [];
-          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
-          return ar;
-        };
-        return ownKeys(o);
-      };
-      return function(mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) {
-          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        }
-        __setModuleDefault(result, mod);
-        return result;
-      };
-    })();
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.OutputTemplate = exports.SourceTemplate = exports.Template = void 0;
-    var file_helper_1 = require_file_helper();
-    var content_tracker_1 = require_content_tracker();
-    var count_helper_1 = require_count_helper();
-    var xml_template_helper_1 = require_xml_template_helper();
-    var xml_helper_1 = require_xml_helper();
-    var ppt_paths_1 = require_ppt_paths();
-    var media_deduplicator_1 = require_media_deduplicator();
-    var Template = class {
-      constructor(file2, params) {
-        this.file = file2;
-        this.archive = file_helper_1.FileHelper.importArchive(file2, params);
-      }
-      /**
-       * Factory: `params.name` decides the role — a named template is a source
-       * template containing importable slides; an unnamed one is the root
-       * (output) template.
-       */
-      static import(file2, params, automizer) {
-        if (params.name) {
-          return new SourceTemplate(file2, params);
-        }
-        return new OutputTemplate(file2, params, automizer);
-      }
-      getSlideIdList() {
-        return __awaiter(this, void 0, void 0, function* () {
-          return xml_helper_1.XmlHelper.getXmlFromArchive(this.archive, ppt_paths_1.PptPaths.presentation);
-        });
-      }
-    };
-    exports.Template = Template;
-    var SourceTemplate = class extends Template {
-      constructor(file2, params) {
-        super(file2, params);
-        this.name = params.name;
-      }
-      /**
-       * Returns the slide numbers of a given template as a sorted array of integers.
-       * @returns {Promise<number[]>} - A promise that resolves to a sorted array of slide numbers in the template.
-       */
-      getAllSlideNumbers() {
-        return __awaiter(this, void 0, void 0, function* () {
-          try {
-            const xmlTemplateHelper = new xml_template_helper_1.XmlTemplateHelper(this.archive);
-            this.slideNumbers = yield xmlTemplateHelper.getAllSlideNumbers();
-            return this.slideNumbers;
-          } catch (error62) {
-            throw new Error(error62.message);
-          }
-        });
-      }
-      setCreationIds() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xmlTemplateHelper = new xml_template_helper_1.XmlTemplateHelper(this.archive);
-          this.creationIds = yield xmlTemplateHelper.getCreationIds();
-          return this.creationIds;
-        });
-      }
-    };
-    exports.SourceTemplate = SourceTemplate;
-    var OutputTemplate = class extends Template {
-      constructor(file2, params, automizer) {
-        var _a3;
-        super(file2, params);
-        this.slides = [];
-        this.masters = [];
-        this.contentMap = [];
-        this.mediaFiles = [];
-        this.automizer = automizer;
-        this.counter = [
-          new count_helper_1.CountHelper("slides", this),
-          new count_helper_1.CountHelper("charts", this),
-          new count_helper_1.CountHelper("images", this),
-          new count_helper_1.CountHelper("diagrams", this),
-          new count_helper_1.CountHelper("masters", this),
-          new count_helper_1.CountHelper("layouts", this),
-          new count_helper_1.CountHelper("themes", this),
-          new count_helper_1.CountHelper("oleObjects", this)
-        ];
-        this.content = (_a3 = automizer === null || automizer === void 0 ? void 0 : automizer.content) !== null && _a3 !== void 0 ? _a3 : new content_tracker_1.ContentTracker();
-        this.archive.contentTracker = this.content;
-        this.mediaDeduplicator = new media_deduplicator_1.MediaDeduplicator(this.archive);
-      }
-      mapContents(type, key, sourceId, targetId, name) {
-        this.contentMap.push({
-          type,
-          key,
-          sourceId,
-          targetId,
-          name
-        });
-      }
-      getNamedMappedContent(type, name) {
-        return this.contentMap.find((map2) => map2.type === type && map2.name === name);
-      }
-      getMappedContent(type, key, sourceId) {
-        return this.contentMap.find((map2) => map2.type === type && map2.key === key && map2.sourceId === sourceId);
-      }
-      appendMasterSlide(slideMaster) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.counter[0].get() === void 0) {
-            yield this.initializeCounter();
-          }
-          yield slideMaster.append(this).catch((e) => {
-            throw e;
-          });
-        });
-      }
-      appendSlide(slide) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.counter[0].get() === void 0) {
-            yield this.initializeCounter();
-          }
-          yield slide.append(this).catch((e) => {
-            throw e;
-          });
-        });
-      }
-      appendLayout(slideLayout) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.counter[0].get() === void 0) {
-            yield this.initializeCounter();
-          }
-          yield slideLayout.append(this).catch((e) => {
-            throw e;
-          });
-        });
-      }
-      countExistingSlides() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const xml = yield this.getSlideIdList();
-          const sldIdLst = xml.getElementsByTagName("p:sldIdLst");
-          if (sldIdLst.length > 0) {
-            const existingSlides = sldIdLst[0].getElementsByTagName("p:sldId");
-            this.existingSlides = existingSlides.length;
-          }
-        });
-      }
-      /**
-       * Remove the slides that came with the root template from the presentation,
-       * keeping the slides added by automizer. Used by `removeExistingSlides`.
-       *
-       * Along with the `p:sldId` entries, the corresponding relationships in
-       * ppt/_rels/presentation.xml.rels are dropped: a slide part that is still
-       * related to the presentation counts as a slide for anything reading the
-       * output (including automizer's own `getInfo()`), even if it is not listed
-       * in `p:sldIdLst` (see #166). The slide parts themselves are removed by
-       * `ModifyPresentationHelper.removeUnusedFiles` if `cleanup` is enabled.
-       */
-      truncate() {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (this.existingSlides > 0) {
-            const xml = yield this.getSlideIdList();
-            const existingSlides = xml.getElementsByTagName("p:sldId");
-            const removedRelIds = [];
-            const removeCount = Math.min(this.existingSlides, existingSlides.length);
-            for (let i = 0; i < removeCount; i++) {
-              removedRelIds.push(existingSlides[i].getAttribute("r:id"));
-            }
-            xml_helper_1.XmlHelper.sliceCollection(existingSlides, this.existingSlides, 0);
-            xml_helper_1.XmlHelper.writeXmlToArchive(this.archive, ppt_paths_1.PptPaths.presentation, xml);
-            yield this.removeSlideRelations(removedRelIds);
-            count_helper_1.CountHelper.decrement("slides", this.counter, removeCount);
-          }
-        });
-      }
-      /**
-       * Remove the given relationship ids from ppt/_rels/presentation.xml.rels.
-       */
-      removeSlideRelations(removedRelIds) {
-        return __awaiter(this, void 0, void 0, function* () {
-          if (!removedRelIds.length) {
-            return;
-          }
-          yield xml_helper_1.XmlHelper.removeIf({
-            archive: this.archive,
-            file: ppt_paths_1.PptPaths.presentationRels,
-            tag: "Relationship",
-            clause: (xml, element) => removedRelIds.includes(element.getAttribute("Id"))
-          });
-        });
-      }
-      initializeCounter() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const c of this.counter) {
-            yield c.set();
-          }
-        });
-      }
-      incrementCounter(name) {
-        return count_helper_1.CountHelper.increment(name, this.counter);
-      }
-      count(name) {
-        return count_helper_1.CountHelper.count(name, this.counter);
-      }
-      runExternalGenerator() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const requiresGenerator = this.slides.some((slide) => slide.getGeneratedElements().length > 0);
-          if (!requiresGenerator) {
-            return;
-          }
-          const { default: GeneratePptxGenJs } = yield Promise.resolve().then(() => __importStar(require_generate_pptxgenjs()));
-          this.generator = new GeneratePptxGenJs(this.automizer, this.slides);
-          yield this.generator.generateSlides();
-        });
-      }
-      cleanupExternalGenerator() {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          yield (_a3 = this.generator) === null || _a3 === void 0 ? void 0 : _a3.cleanup();
-        });
-      }
-    };
-    exports.OutputTemplate = OutputTemplate;
-  }
-});
-
-// node_modules/slugify/slugify.js
-var require_slugify = __commonJS({
-  "node_modules/slugify/slugify.js"(exports, module) {
-    (function(name, root, factory) {
-      if (typeof exports === "object") {
-        module.exports = factory();
-        module.exports["default"] = factory();
-      } else if (typeof define === "function" && define.amd) {
-        define(factory);
-      } else {
-        root[name] = factory();
-      }
-    })("slugify", exports, function() {
-      var charMap = JSON.parse(`{"$":"dollar","%":"percent","&":"and","<":"less",">":"greater","|":"or","\xA2":"cent","\xA3":"pound","\xA4":"currency","\xA5":"yen","\xA9":"(c)","\xAA":"a","\xAE":"(r)","\xBA":"o","\xC0":"A","\xC1":"A","\xC2":"A","\xC3":"A","\xC4":"A","\xC5":"A","\xC6":"AE","\xC7":"C","\xC8":"E","\xC9":"E","\xCA":"E","\xCB":"E","\xCC":"I","\xCD":"I","\xCE":"I","\xCF":"I","\xD0":"D","\xD1":"N","\xD2":"O","\xD3":"O","\xD4":"O","\xD5":"O","\xD6":"O","\xD8":"O","\xD9":"U","\xDA":"U","\xDB":"U","\xDC":"U","\xDD":"Y","\xDE":"TH","\xDF":"ss","\xE0":"a","\xE1":"a","\xE2":"a","\xE3":"a","\xE4":"a","\xE5":"a","\xE6":"ae","\xE7":"c","\xE8":"e","\xE9":"e","\xEA":"e","\xEB":"e","\xEC":"i","\xED":"i","\xEE":"i","\xEF":"i","\xF0":"d","\xF1":"n","\xF2":"o","\xF3":"o","\xF4":"o","\xF5":"o","\xF6":"o","\xF8":"o","\xF9":"u","\xFA":"u","\xFB":"u","\xFC":"u","\xFD":"y","\xFE":"th","\xFF":"y","\u0100":"A","\u0101":"a","\u0102":"A","\u0103":"a","\u0104":"A","\u0105":"a","\u0106":"C","\u0107":"c","\u010C":"C","\u010D":"c","\u010E":"D","\u010F":"d","\u0110":"DJ","\u0111":"dj","\u0112":"E","\u0113":"e","\u0116":"E","\u0117":"e","\u0118":"e","\u0119":"e","\u011A":"E","\u011B":"e","\u011E":"G","\u011F":"g","\u0122":"G","\u0123":"g","\u0128":"I","\u0129":"i","\u012A":"i","\u012B":"i","\u012E":"I","\u012F":"i","\u0130":"I","\u0131":"i","\u0136":"k","\u0137":"k","\u013B":"L","\u013C":"l","\u013D":"L","\u013E":"l","\u0141":"L","\u0142":"l","\u0143":"N","\u0144":"n","\u0145":"N","\u0146":"n","\u0147":"N","\u0148":"n","\u014C":"O","\u014D":"o","\u0150":"O","\u0151":"o","\u0152":"OE","\u0153":"oe","\u0154":"R","\u0155":"r","\u0158":"R","\u0159":"r","\u015A":"S","\u015B":"s","\u015E":"S","\u015F":"s","\u0160":"S","\u0161":"s","\u0162":"T","\u0163":"t","\u0164":"T","\u0165":"t","\u0168":"U","\u0169":"u","\u016A":"u","\u016B":"u","\u016E":"U","\u016F":"u","\u0170":"U","\u0171":"u","\u0172":"U","\u0173":"u","\u0174":"W","\u0175":"w","\u0176":"Y","\u0177":"y","\u0178":"Y","\u0179":"Z","\u017A":"z","\u017B":"Z","\u017C":"z","\u017D":"Z","\u017E":"z","\u018F":"E","\u0192":"f","\u01A0":"O","\u01A1":"o","\u01AF":"U","\u01B0":"u","\u01C8":"LJ","\u01C9":"lj","\u01CB":"NJ","\u01CC":"nj","\u0218":"S","\u0219":"s","\u021A":"T","\u021B":"t","\u0259":"e","\u02DA":"o","\u0386":"A","\u0388":"E","\u0389":"H","\u038A":"I","\u038C":"O","\u038E":"Y","\u038F":"W","\u0390":"i","\u0391":"A","\u0392":"B","\u0393":"G","\u0394":"D","\u0395":"E","\u0396":"Z","\u0397":"H","\u0398":"8","\u0399":"I","\u039A":"K","\u039B":"L","\u039C":"M","\u039D":"N","\u039E":"3","\u039F":"O","\u03A0":"P","\u03A1":"R","\u03A3":"S","\u03A4":"T","\u03A5":"Y","\u03A6":"F","\u03A7":"X","\u03A8":"PS","\u03A9":"W","\u03AA":"I","\u03AB":"Y","\u03AC":"a","\u03AD":"e","\u03AE":"h","\u03AF":"i","\u03B0":"y","\u03B1":"a","\u03B2":"b","\u03B3":"g","\u03B4":"d","\u03B5":"e","\u03B6":"z","\u03B7":"h","\u03B8":"8","\u03B9":"i","\u03BA":"k","\u03BB":"l","\u03BC":"m","\u03BD":"n","\u03BE":"3","\u03BF":"o","\u03C0":"p","\u03C1":"r","\u03C2":"s","\u03C3":"s","\u03C4":"t","\u03C5":"y","\u03C6":"f","\u03C7":"x","\u03C8":"ps","\u03C9":"w","\u03CA":"i","\u03CB":"y","\u03CC":"o","\u03CD":"y","\u03CE":"w","\u0401":"Yo","\u0402":"DJ","\u0404":"Ye","\u0406":"I","\u0407":"Yi","\u0408":"J","\u0409":"LJ","\u040A":"NJ","\u040B":"C","\u040F":"DZ","\u0410":"A","\u0411":"B","\u0412":"V","\u0413":"G","\u0414":"D","\u0415":"E","\u0416":"Zh","\u0417":"Z","\u0418":"I","\u0419":"J","\u041A":"K","\u041B":"L","\u041C":"M","\u041D":"N","\u041E":"O","\u041F":"P","\u0420":"R","\u0421":"S","\u0422":"T","\u0423":"U","\u0424":"F","\u0425":"H","\u0426":"C","\u0427":"Ch","\u0428":"Sh","\u0429":"Sh","\u042A":"U","\u042B":"Y","\u042C":"","\u042D":"E","\u042E":"Yu","\u042F":"Ya","\u0430":"a","\u0431":"b","\u0432":"v","\u0433":"g","\u0434":"d","\u0435":"e","\u0436":"zh","\u0437":"z","\u0438":"i","\u0439":"j","\u043A":"k","\u043B":"l","\u043C":"m","\u043D":"n","\u043E":"o","\u043F":"p","\u0440":"r","\u0441":"s","\u0442":"t","\u0443":"u","\u0444":"f","\u0445":"h","\u0446":"c","\u0447":"ch","\u0448":"sh","\u0449":"sh","\u044A":"u","\u044B":"y","\u044C":"","\u044D":"e","\u044E":"yu","\u044F":"ya","\u0451":"yo","\u0452":"dj","\u0454":"ye","\u0456":"i","\u0457":"yi","\u0458":"j","\u0459":"lj","\u045A":"nj","\u045B":"c","\u045D":"u","\u045F":"dz","\u0490":"G","\u0491":"g","\u0492":"GH","\u0493":"gh","\u049A":"KH","\u049B":"kh","\u04A2":"NG","\u04A3":"ng","\u04AE":"UE","\u04AF":"ue","\u04B0":"U","\u04B1":"u","\u04BA":"H","\u04BB":"h","\u04D8":"AE","\u04D9":"ae","\u04E8":"OE","\u04E9":"oe","\u0531":"A","\u0532":"B","\u0533":"G","\u0534":"D","\u0535":"E","\u0536":"Z","\u0537":"E'","\u0538":"Y'","\u0539":"T'","\u053A":"JH","\u053B":"I","\u053C":"L","\u053D":"X","\u053E":"C'","\u053F":"K","\u0540":"H","\u0541":"D'","\u0542":"GH","\u0543":"TW","\u0544":"M","\u0545":"Y","\u0546":"N","\u0547":"SH","\u0549":"CH","\u054A":"P","\u054B":"J","\u054C":"R'","\u054D":"S","\u054E":"V","\u054F":"T","\u0550":"R","\u0551":"C","\u0553":"P'","\u0554":"Q'","\u0555":"O''","\u0556":"F","\u0587":"EV","\u0621":"a","\u0622":"aa","\u0623":"a","\u0624":"u","\u0625":"i","\u0626":"e","\u0627":"a","\u0628":"b","\u0629":"h","\u062A":"t","\u062B":"th","\u062C":"j","\u062D":"h","\u062E":"kh","\u062F":"d","\u0630":"th","\u0631":"r","\u0632":"z","\u0633":"s","\u0634":"sh","\u0635":"s","\u0636":"dh","\u0637":"t","\u0638":"z","\u0639":"a","\u063A":"gh","\u0641":"f","\u0642":"q","\u0643":"k","\u0644":"l","\u0645":"m","\u0646":"n","\u0647":"h","\u0648":"w","\u0649":"a","\u064A":"y","\u064B":"an","\u064C":"on","\u064D":"en","\u064E":"a","\u064F":"u","\u0650":"e","\u0652":"","\u0660":"0","\u0661":"1","\u0662":"2","\u0663":"3","\u0664":"4","\u0665":"5","\u0666":"6","\u0667":"7","\u0668":"8","\u0669":"9","\u067E":"p","\u0686":"ch","\u0698":"zh","\u06A9":"k","\u06AF":"g","\u06CC":"y","\u06F0":"0","\u06F1":"1","\u06F2":"2","\u06F3":"3","\u06F4":"4","\u06F5":"5","\u06F6":"6","\u06F7":"7","\u06F8":"8","\u06F9":"9","\u0E3F":"baht","\u10D0":"a","\u10D1":"b","\u10D2":"g","\u10D3":"d","\u10D4":"e","\u10D5":"v","\u10D6":"z","\u10D7":"t","\u10D8":"i","\u10D9":"k","\u10DA":"l","\u10DB":"m","\u10DC":"n","\u10DD":"o","\u10DE":"p","\u10DF":"zh","\u10E0":"r","\u10E1":"s","\u10E2":"t","\u10E3":"u","\u10E4":"f","\u10E5":"k","\u10E6":"gh","\u10E7":"q","\u10E8":"sh","\u10E9":"ch","\u10EA":"ts","\u10EB":"dz","\u10EC":"ts","\u10ED":"ch","\u10EE":"kh","\u10EF":"j","\u10F0":"h","\u1E62":"S","\u1E63":"s","\u1E80":"W","\u1E81":"w","\u1E82":"W","\u1E83":"w","\u1E84":"W","\u1E85":"w","\u1E9E":"SS","\u1EA0":"A","\u1EA1":"a","\u1EA2":"A","\u1EA3":"a","\u1EA4":"A","\u1EA5":"a","\u1EA6":"A","\u1EA7":"a","\u1EA8":"A","\u1EA9":"a","\u1EAA":"A","\u1EAB":"a","\u1EAC":"A","\u1EAD":"a","\u1EAE":"A","\u1EAF":"a","\u1EB0":"A","\u1EB1":"a","\u1EB2":"A","\u1EB3":"a","\u1EB4":"A","\u1EB5":"a","\u1EB6":"A","\u1EB7":"a","\u1EB8":"E","\u1EB9":"e","\u1EBA":"E","\u1EBB":"e","\u1EBC":"E","\u1EBD":"e","\u1EBE":"E","\u1EBF":"e","\u1EC0":"E","\u1EC1":"e","\u1EC2":"E","\u1EC3":"e","\u1EC4":"E","\u1EC5":"e","\u1EC6":"E","\u1EC7":"e","\u1EC8":"I","\u1EC9":"i","\u1ECA":"I","\u1ECB":"i","\u1ECC":"O","\u1ECD":"o","\u1ECE":"O","\u1ECF":"o","\u1ED0":"O","\u1ED1":"o","\u1ED2":"O","\u1ED3":"o","\u1ED4":"O","\u1ED5":"o","\u1ED6":"O","\u1ED7":"o","\u1ED8":"O","\u1ED9":"o","\u1EDA":"O","\u1EDB":"o","\u1EDC":"O","\u1EDD":"o","\u1EDE":"O","\u1EDF":"o","\u1EE0":"O","\u1EE1":"o","\u1EE2":"O","\u1EE3":"o","\u1EE4":"U","\u1EE5":"u","\u1EE6":"U","\u1EE7":"u","\u1EE8":"U","\u1EE9":"u","\u1EEA":"U","\u1EEB":"u","\u1EEC":"U","\u1EED":"u","\u1EEE":"U","\u1EEF":"u","\u1EF0":"U","\u1EF1":"u","\u1EF2":"Y","\u1EF3":"y","\u1EF4":"Y","\u1EF5":"y","\u1EF6":"Y","\u1EF7":"y","\u1EF8":"Y","\u1EF9":"y","\u2013":"-","\u2018":"'","\u2019":"'","\u201C":"\\"","\u201D":"\\"","\u201E":"\\"","\u2020":"+","\u2022":"*","\u2026":"...","\u20A0":"ecu","\u20A2":"cruzeiro","\u20A3":"french franc","\u20A4":"lira","\u20A5":"mill","\u20A6":"naira","\u20A7":"peseta","\u20A8":"rupee","\u20A9":"won","\u20AA":"new shequel","\u20AB":"dong","\u20AC":"euro","\u20AD":"kip","\u20AE":"tugrik","\u20AF":"drachma","\u20B0":"penny","\u20B1":"peso","\u20B2":"guarani","\u20B3":"austral","\u20B4":"hryvnia","\u20B5":"cedi","\u20B8":"kazakhstani tenge","\u20B9":"indian rupee","\u20BA":"turkish lira","\u20BD":"russian ruble","\u20BF":"bitcoin","\u2120":"sm","\u2122":"tm","\u2202":"d","\u2206":"delta","\u2211":"sum","\u221E":"infinity","\u2665":"love","\u5143":"yuan","\u5186":"yen","\uFDFC":"rial","\uFEF5":"laa","\uFEF7":"laa","\uFEF9":"lai","\uFEFB":"la"}`);
-      var locales = JSON.parse('{"bg":{"\u0419":"Y","\u0426":"Ts","\u0429":"Sht","\u042A":"A","\u042C":"Y","\u0439":"y","\u0446":"ts","\u0449":"sht","\u044A":"a","\u044C":"y"},"de":{"\xC4":"AE","\xE4":"ae","\xD6":"OE","\xF6":"oe","\xDC":"UE","\xFC":"ue","\xDF":"ss","%":"prozent","&":"und","|":"oder","\u2211":"summe","\u221E":"unendlich","\u2665":"liebe"},"es":{"%":"por ciento","&":"y","<":"menor que",">":"mayor que","|":"o","\xA2":"centavos","\xA3":"libras","\xA4":"moneda","\u20A3":"francos","\u2211":"suma","\u221E":"infinito","\u2665":"amor"},"fr":{"%":"pourcent","&":"et","<":"plus petit",">":"plus grand","|":"ou","\xA2":"centime","\xA3":"livre","\xA4":"devise","\u20A3":"franc","\u2211":"somme","\u221E":"infini","\u2665":"amour"},"pt":{"%":"porcento","&":"e","<":"menor",">":"maior","|":"ou","\xA2":"centavo","\u2211":"soma","\xA3":"libra","\u221E":"infinito","\u2665":"amor"},"uk":{"\u0418":"Y","\u0438":"y","\u0419":"Y","\u0439":"y","\u0426":"Ts","\u0446":"ts","\u0425":"Kh","\u0445":"kh","\u0429":"Shch","\u0449":"shch","\u0413":"H","\u0433":"h"},"vi":{"\u0110":"D","\u0111":"d"},"da":{"\xD8":"OE","\xF8":"oe","\xC5":"AA","\xE5":"aa","%":"procent","&":"og","|":"eller","$":"dollar","<":"mindre end",">":"st\xF8rre end"},"nb":{"&":"og","\xC5":"AA","\xC6":"AE","\xD8":"OE","\xE5":"aa","\xE6":"ae","\xF8":"oe"},"it":{"&":"e"},"nl":{"&":"en"},"sv":{"&":"och","\xC5":"AA","\xC4":"AE","\xD6":"OE","\xE5":"aa","\xE4":"ae","\xF6":"oe"}}');
-      function replace(string4, options) {
-        if (typeof string4 !== "string") {
-          throw new Error("slugify: string argument expected");
-        }
-        options = typeof options === "string" ? { replacement: options } : options || {};
-        var locale = locales[options.locale] || {};
-        var replacement = options.replacement === void 0 ? "-" : options.replacement;
-        var trim = options.trim === void 0 ? true : options.trim;
-        var slug = string4.normalize().split("").reduce(function(result, ch) {
-          var appendChar = locale[ch];
-          if (appendChar === void 0) appendChar = charMap[ch];
-          if (appendChar === void 0) appendChar = ch;
-          if (appendChar === replacement) appendChar = " ";
-          return result + appendChar.replace(options.remove || /[^\w\s$*_+~.()'"!\-:@]+/g, "");
-        }, "");
-        if (options.strict) {
-          slug = slug.replace(/[^A-Za-z0-9\s]/g, "");
-        }
-        if (trim) {
-          slug = slug.trim();
-        }
-        slug = slug.replace(/\s+/g, replacement);
-        if (options.lower) {
-          slug = slug.toLowerCase();
-        }
-        return slug;
-      }
-      replace.extend = function(customMap) {
-        Object.assign(charMap, customMap);
-      };
-      return replace;
-    });
-  }
-});
-
-// node_modules/pptx-automizer/dist/automizer.js
-var require_automizer = __commonJS({
-  "node_modules/pptx-automizer/dist/automizer.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v });
-    }) : function(o, v) {
-      o["default"] = v;
-    });
-    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
-      var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function(o2) {
-          var ar = [];
-          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
-          return ar;
-        };
-        return ownKeys(o);
-      };
-      return function(mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) {
-          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        }
-        __setModuleDefault(result, mod);
-        return result;
-      };
-    })();
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var slide_1 = require_slide();
-    var types_1 = require_types();
-    var template_1 = require_template();
-    var general_helper_1 = require_general_helper();
-    var logger_1 = require_logger();
-    var master_1 = require_master();
-    var path_1 = __importDefault(__require("path"));
-    var fs = __importStar(__require("fs"));
-    var xml_helper_1 = require_xml_helper();
-    var modify_presentation_helper_1 = __importDefault(require_modify_presentation_helper());
-    var content_tracker_1 = require_content_tracker();
-    var content_type_map_1 = require_content_type_map();
-    var errors_1 = require_errors2();
-    var slugify_1 = __importDefault(require_slugify());
-    var VALID_MEDIA_EXTENSIONS = Object.keys(content_type_map_1.ContentTypeMap);
-    function validateMediaExtension(extension, filename) {
-      if (!VALID_MEDIA_EXTENSIONS.includes(extension.toLowerCase())) {
-        throw new errors_1.AutomizerError(`Unsupported media extension '${extension}' for file '${filename}'. Supported extensions: ${VALID_MEDIA_EXTENSIONS.join(", ")}`);
-      }
-    }
-    function getValidatedExtension(filename) {
-      const extension = path_1.default.extname(filename).replace(".", "");
-      if (!extension) {
-        throw new errors_1.AutomizerError(`Filename must include extension: ${filename}. Example: 'logo.png'`);
-      }
-      validateMediaExtension(extension, filename);
-      return extension;
-    }
-    var Automizer2 = class {
-      /**
-       * Creates an instance of `pptx-automizer`.
-       * @param [params]
-       */
-      constructor(params) {
-        var _a3, _b, _c, _d, _f, _g, _h;
-        this.templates = [];
-        this.modifyPresentation = [];
-        this.params = params;
-        this.logger = (_a3 = params.logger) !== null && _a3 !== void 0 ? _a3 : new logger_1.ConsoleLogger((_b = params.verbosity) !== null && _b !== void 0 ? _b : 1);
-        this.templateDir = (params === null || params === void 0 ? void 0 : params.templateDir) ? params.templateDir + "/" : "";
-        this.templateFallbackDir = (params === null || params === void 0 ? void 0 : params.templateFallbackDir) ? params.templateFallbackDir + "/" : "";
-        this.outputDir = (params === null || params === void 0 ? void 0 : params.outputDir) ? params.outputDir + "/" : "";
-        this.archiveParams = {
-          mode: ((_c = params === null || params === void 0 ? void 0 : params.archiveType) === null || _c === void 0 ? void 0 : _c.mode) || "jszip",
-          baseDir: ((_d = params === null || params === void 0 ? void 0 : params.archiveType) === null || _d === void 0 ? void 0 : _d.baseDir) || __dirname + "/../cache",
-          workDir: ((_f = params === null || params === void 0 ? void 0 : params.archiveType) === null || _f === void 0 ? void 0 : _f.workDir) || "tmp",
-          cleanupWorkDir: (_g = params === null || params === void 0 ? void 0 : params.archiveType) === null || _g === void 0 ? void 0 : _g.cleanupWorkDir,
-          decodeText: (_h = params === null || params === void 0 ? void 0 : params.archiveType) === null || _h === void 0 ? void 0 : _h.decodeText
-        };
-        this.timer = Date.now();
-        this.setStatusTracker(params === null || params === void 0 ? void 0 : params.statusTracker);
-        this.content = new content_tracker_1.ContentTracker();
-        if (params.rootTemplate) {
-          let file2 = params.rootTemplate;
-          if (typeof file2 !== "object") {
-            file2 = this.getLocation(file2, "template");
-          }
-          this.rootTemplate = new template_1.OutputTemplate(file2, this.archiveParams, this);
-        }
-        if (params.presTemplates) {
-          this.params.presTemplates.forEach((file2, i) => {
-            let name;
-            if (typeof file2 !== "object") {
-              name = file2;
-              file2 = this.getLocation(file2, "template");
-            } else {
-              name = `${i}.pptx`;
-            }
-            const archiveParams = Object.assign(Object.assign({}, this.archiveParams), { name });
-            this.templates.push(new template_1.SourceTemplate(file2, archiveParams));
-          });
-        }
-      }
-      setStatusTracker(statusTracker) {
-        const defaultStatusTracker = (status) => {
-          this.logger.info(status.info + " (" + status.share + "%)");
-        };
-        this.status = {
-          current: 0,
-          max: 0,
-          share: 0,
-          info: void 0,
-          increment: () => {
-            this.status.current++;
-            const nextShare = this.status.max > 0 ? Math.round(this.status.current / this.status.max * 100) : 0;
-            if (this.status.share !== nextShare) {
-              this.status.share = nextShare;
-              this.status.next(this.status);
-            }
-          },
-          next: statusTracker || defaultStatusTracker
-        };
-      }
-      /**
-      
-         */
-      presentation() {
-        return __awaiter(this, void 0, void 0, function* () {
-          var _a3;
-          if (((_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.useCreationIds) === true) {
-            yield this.setCreationIds();
-          }
-          return this;
-        });
-      }
-      /**
-       * Load a pptx file and set it as root template.
-       * @param file - Filename, path to the template or Buffer containing the file.
-       * Filenames and paths will be prefixed with 'templateDir'
-       * @returns Instance of Automizer
-       */
-      loadRoot(file2) {
-        return this.loadTemplate(file2);
-      }
-      /**
-       * Load a template pptx file.
-       * @param file - Filename, path to the template or Buffer containing the file.
-       * Filenames and paths will be prefixed with 'templateDir'
-       * @param name - Optional short name for a template loaded from a file. If skipped, the template will be named by its location.
-       * if the file is a Buffer the name is required.
-       * @returns Instance of Automizer
-       */
-      load(file2, name) {
-        if (!name && typeof file2 !== "object") {
-          name = name === void 0 ? file2 : name;
-        } else if (typeof file2 === "object" && !name) {
-          throw new Error("Name is required when loading a template from a Buffer");
-        }
-        return this.loadTemplate(file2, name);
-      }
-      /**
-       * Loads a pptx file either as a root template as a template file.
-       * A name can be specified to give templates an alias.
-       * @param location
-       * @param [name]
-       * @returns template
-       */
-      loadTemplate(file2, name) {
-        if (typeof file2 !== "object") {
-          file2 = this.getLocation(file2, "template");
-        }
-        const alreadyLoaded = this.templates.find((template) => template.name === name);
-        if (alreadyLoaded) {
-          return this;
-        }
-        const importParams = Object.assign(Object.assign({}, this.archiveParams), { name });
-        const newTemplate = template_1.Template.import(file2, importParams, this);
-        if (newTemplate instanceof template_1.SourceTemplate) {
-          this.templates.push(newTemplate);
-        } else {
-          this.rootTemplate = newTemplate;
-        }
-        return this;
-      }
-      /**
-       * Load media files to output presentation.
-       * @returns Instance of Automizer
-       * @param filename Filename or path to the media file.
-       * @param dir Specify custom path for media instead of mediaDir from AutomizerParams.
-       */
-      loadMedia(filename, dir, prefix) {
-        const files = general_helper_1.GeneralHelper.arrayify(filename);
-        if (!this.rootTemplate) {
-          throw new errors_1.AutomizerError("Can't load media, you need to load a root template first");
-        }
-        files.forEach((file2) => {
-          const directory = dir || this.params.mediaDir;
-          const filepath = path_1.default.join(directory, file2);
-          const extension = getValidatedExtension(file2);
-          try {
-            fs.accessSync(filepath, fs.constants.F_OK);
-          } catch (_e) {
-            throw new errors_1.AutomizerError(`Can't load media: ${filepath} does not exist.`);
-          }
-          this.rootTemplate.mediaFiles.push({
-            source: "path",
-            file: file2,
-            directory,
-            filepath,
-            extension,
-            prefix
-          });
-        });
-        return this;
-      }
-      /**
-       * Load media files from buffers to output presentation.
-       * @returns Instance of Automizer
-       * @param filename Filename(s) to use (must include extension).
-       * @param buffer Buffer(s) containing the media data.
-       * @param prefix Optional prefix to prepend to filename in archive.
-       */
-      loadMediaBuffer(filename, buffer, prefix) {
-        const files = general_helper_1.GeneralHelper.arrayify(filename);
-        const buffers = general_helper_1.GeneralHelper.arrayify(buffer);
-        if (!this.rootTemplate) {
-          throw new errors_1.AutomizerError("Can't load media, you need to load a root template first");
-        }
-        if (files.length !== buffers.length) {
-          throw new errors_1.AutomizerError(`Mismatched arrays: ${files.length} filename(s) but ${buffers.length} buffer(s)`);
-        }
-        files.forEach((file2, index) => {
-          const buf = buffers[index];
-          if (!Buffer.isBuffer(buf)) {
-            throw new errors_1.AutomizerError(`Invalid buffer for file: ${file2}`);
-          }
-          if (buf.length === 0) {
-            throw new errors_1.AutomizerError(`Empty buffer provided for file: ${file2}`);
-          }
-          const extension = getValidatedExtension(file2);
-          this.rootTemplate.mediaFiles.push({
-            source: "buffer",
-            file: file2,
-            buffer: buf,
-            extension,
-            prefix
-          });
-        });
-        return this;
-      }
-      /**
-       * Parses all loaded templates and collects creationIds for slides and
-       * elements. This will make finding templates and elements independent
-       * of slide number and element name.
-       * @returns Promise<TemplateInfo[]>
-       */
-      setCreationIds() {
-        return __awaiter(this, void 0, void 0, function* () {
-          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
-            const templateCreationId = [];
-            for (const template of this.templates) {
-              const creationIds = template.creationIds || (yield template.setCreationIds());
-              template.useCreationIds = this.params.useCreationIds;
-              templateCreationId.push({
-                name: template.name,
-                slides: creationIds
-              });
-            }
-            return templateCreationId;
-          }));
-        });
-      }
-      /**
-       * Get some info about the imported templates
-       * @returns Promise<PresentationInfo>
-       */
-      getInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const creationIds = yield this.setCreationIds();
-          const info = {
-            templateByName: (tplName) => {
-              return creationIds.find((template) => template.name === tplName);
-            },
-            slidesByTemplate: (tplName) => {
-              var _a3;
-              return ((_a3 = info.templateByName(tplName)) === null || _a3 === void 0 ? void 0 : _a3.slides) || [];
-            },
-            slideByNumber: (tplName, slideNumber) => {
-              return info.slidesByTemplate(tplName).find((slide) => slide.number === slideNumber);
-            },
-            elementByName: (tplName, slideNumber, elementName) => {
-              var _a3;
-              return (_a3 = info.slideByNumber(tplName, slideNumber)) === null || _a3 === void 0 ? void 0 : _a3.elements.find((element) => elementName === element.name);
-            }
-          };
-          return info;
-        });
-      }
-      /**
-       * Add a slide from one of the imported templates by slide number or creationId.
-       * @param name - Name or alias of the template; must have been loaded with `Automizer.load()`
-       * @param slideIdentifier - Number or creationId of slide in template presentation
-       * @param callback - Executed after slide was added. The newly created slide will be passed to the callback as first argument.
-       * @returns Instance of Automizer
-       */
-      addSlide(name, slideIdentifier, callback) {
-        if (this.rootTemplate === void 0) {
-          throw new Error("You have to set a root template first.");
-        }
-        const template = this.getTemplate(name);
-        const newSlide = new slide_1.Slide({
-          presentation: this,
-          template,
-          slideIdentifier
-        });
-        if (this.params.autoImportSlideMasters) {
-          newSlide.useSlideLayout();
-        }
-        if (callback !== void 0) {
-          newSlide.root = this;
-          callback(newSlide);
-        }
-        this.rootTemplate.slides.push(newSlide);
-        return this;
-      }
-      /**
-       * Copy and modify a master and the associated layouts from template to output.
-       *
-       * @param name
-       * @param sourceIdentifier
-       * @param callback
-       */
-      addMaster(name, sourceIdentifier, callback) {
-        const key = sourceIdentifier + "@" + name;
-        if (this.rootTemplate.masters.find((master) => master.key === key)) {
-          this.logger.info("Already imported " + key);
-          return this;
-        }
-        const template = this.getTemplate(name);
-        const newMaster = new master_1.Master({
-          presentation: this,
-          template,
-          sourceIdentifier
-        });
-        if (callback !== void 0) {
-          newMaster.root = this;
-          callback(newMaster);
-        }
-        this.rootTemplate.masters.push(newMaster);
-        return this;
-      }
-      /**
-       * Searches this.templates to find template by given name.
-       * @internal
-       * @param name Alias name if given to loaded template.
-       * @returns template
-       */
-      getTemplate(name) {
-        const template = this.templates.find((t) => t.name === name);
-        if (template === void 0) {
-          throw new Error(`Template not found: ${name}`);
-        }
-        return template;
-      }
-      /**
-       * Write all imports and modifications to a file.
-       * @param location - Filename or path for the file. Will be prefixed with 'outputDir'
-       * @returns summary object.
-       */
-      write(location) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
-            yield this.finalizePresentation();
-            yield this.rootTemplate.archive.output(this.getLocation(location, "output"), this.params);
-            const duration3 = (Date.now() - this.timer) / 1e3;
-            return {
-              status: "finished",
-              duration: duration3,
-              file: location,
-              filename: path_1.default.basename(location),
-              templates: this.templates.length,
-              slides: this.rootTemplate.count("slides"),
-              charts: this.rootTemplate.count("charts"),
-              images: this.rootTemplate.count("images"),
-              masters: this.rootTemplate.count("masters")
-            };
-          }));
-        });
-      }
-      /**
-       * Create a ReadableStream from output pptx file.
-       * @param generatorOptions - JSZipGeneratorOptions for nodebuffer Output type
-       * @returns Promise<NodeJS.ReadableStream>
-       */
-      stream(generatorOptions) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
-            yield this.finalizePresentation();
-            if (!this.rootTemplate.archive.stream) {
-              throw new errors_1.OutputError("Streaming is not implemented for current archive type");
-            }
-            return this.rootTemplate.archive.stream(this.params, generatorOptions);
-          }));
-        });
-      }
-      /**
-       * Pass final JSZip instance.
-       * @returns Promise<NodeJS.ReadableStream>
-       */
-      getJSZip() {
-        return __awaiter(this, void 0, void 0, function* () {
-          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
-            yield this.finalizePresentation();
-            if (!this.rootTemplate.archive.getFinalArchive) {
-              throw new errors_1.OutputError("GetFinalArchive is not implemented for current archive type");
-            }
-            return this.rootTemplate.archive.getFinalArchive();
-          }));
-        });
-      }
-      finalizePresentation() {
-        return __awaiter(this, void 0, void 0, function* () {
-          return (0, logger_1.runWithLogger)(this.logger, () => __awaiter(this, void 0, void 0, function* () {
-            yield this.writeMasterSlides();
-            yield this.writeSlides();
-            yield this.writeMediaFiles();
-            yield this.normalizePresentation();
-            yield this.applyModifyPresentationCallbacks();
-            this.content.reset();
-          }));
-        });
-      }
-      /**
-       * Write all masterSlides to archive.
-       */
-      writeMasterSlides() {
-        return __awaiter(this, void 0, void 0, function* () {
-          for (const slide of this.rootTemplate.masters) {
-            yield this.rootTemplate.appendMasterSlide(slide);
-          }
-        });
-      }
-      /**
-       * Write all slides to archive.
-       */
-      writeSlides() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield this.rootTemplate.countExistingSlides();
-          this.status.max = this.rootTemplate.slides.length;
-          yield this.rootTemplate.runExternalGenerator();
-          for (const slide of this.rootTemplate.slides) {
-            yield this.rootTemplate.appendSlide(slide);
-          }
-          yield this.rootTemplate.cleanupExternalGenerator();
-          if (this.params.removeExistingSlides) {
-            yield this.rootTemplate.truncate();
-          }
-        });
-      }
-      /**
-       * Write all media files to archive.
-       */
-      writeMediaFiles() {
-        return __awaiter(this, void 0, void 0, function* () {
-          const mediaDir = "ppt/media/";
-          for (const file2 of this.rootTemplate.mediaFiles) {
-            const data = (0, types_1.getMediaBuffer)(file2, fs.readFileSync);
-            let archiveFilename = file2.file;
-            if (file2.prefix) {
-              archiveFilename = file2.prefix + file2.file;
-            }
-            archiveFilename = (0, slugify_1.default)(archiveFilename);
-            yield this.rootTemplate.archive.write(mediaDir + archiveFilename, data);
-            yield xml_helper_1.XmlHelper.appendImageExtensionToContentType(this.rootTemplate.archive, file2.extension);
-          }
-        });
-      }
-      /**
-       * Applies all callbacks in this.modifyPresentation-array.
-       * The callback array can be pushed by this.modify()
-       */
-      applyModifyPresentationCallbacks() {
-        return __awaiter(this, void 0, void 0, function* () {
-          yield xml_helper_1.XmlHelper.modifyXmlInArchive(this.rootTemplate.archive, `ppt/presentation.xml`, this.modifyPresentation);
-        });
-      }
-      /**
-       * Apply some callbacks to restore archive/xml structure
-       * and prevent corrupted pptx files.
-       *
-       * TODO: Use every imported image only once
-       * TODO: Check for lost relations
-       */
-      normalizePresentation() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.modify(modify_presentation_helper_1.default.normalizeSlideIds);
-          this.modify(modify_presentation_helper_1.default.normalizeSlideMasterIds);
-          if (this.params.cleanup) {
-            if (this.params.removeExistingSlides) {
-              this.modify(modify_presentation_helper_1.default.removeUnusedFiles);
-            }
-            this.modify(modify_presentation_helper_1.default.removedUnusedImages);
-            this.modify(modify_presentation_helper_1.default.removeUnusedContentTypes);
-          }
-        });
-      }
-      modify(cb) {
-        this.modifyPresentation.push(cb);
-        return this;
-      }
-      /**
-       * Applies path prefix to given location string.
-       * @param location path and/or filename
-       * @param [type] template or output
-       * @returns location
-       */
-      getLocation(location, type) {
-        switch (type) {
-          case "template":
-            if (fs.existsSync(this.templateDir + location)) {
-              return this.templateDir + location;
-            } else if (fs.existsSync(this.templateFallbackDir + location)) {
-              return this.templateFallbackDir + location;
-            } else {
-              throw new errors_1.TemplateNotFoundError(location, [
-                this.templateDir,
-                this.templateFallbackDir
-              ]);
-            }
-          case "output":
-            return this.outputDir + location;
-          default:
-            return location;
-        }
-      }
-    };
-    exports.default = Automizer2;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-helper.js
-var require_modify_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.EmuToPt = exports.PtToEmu = exports.DxaToCm = exports.CmToDxa = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var ModifyHelper = class {
-    };
-    ModifyHelper.setAttribute = (tagName, attribute, value, count) => (element) => {
-      const item = element.getElementsByTagName(tagName)[count || 0];
-      if (item.setAttribute !== void 0) {
-        item.setAttribute(attribute, String(value));
-      }
-    };
-    ModifyHelper.dump = (element) => {
-      xml_helper_1.XmlHelper.dump(element);
-    };
-    ModifyHelper.dumpChart = (element, chart) => {
-      xml_helper_1.XmlHelper.dump(chart);
-    };
-    exports.default = ModifyHelper;
-    var CmToDxa = (cm) => {
-      return Math.round(cm * 36e4);
-    };
-    exports.CmToDxa = CmToDxa;
-    var DxaToCm = (dxa) => {
-      return dxa / 36e4;
-    };
-    exports.DxaToCm = DxaToCm;
-    var PtToEmu = (pt) => {
-      return Math.round(pt * 12700);
-    };
-    exports.PtToEmu = PtToEmu;
-    var EmuToPt = (emu) => {
-      return emu / 12700;
-    };
-    exports.EmuToPt = EmuToPt;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml/lnLRTB.js
-var require_lnLRTB = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml/lnLRTB.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.lnLRTB = void 0;
-    exports.lnLRTB = `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?> 
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:spTree>
-      <p:graphicFrame>
-        <a:graphic>
-          <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
-            <a:tbl>
-              <a:tr h="370840">
-                <a:tc>
-                  <a:tcPr>
-                    <a:lnL w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnL>
-                    <a:lnR w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnR>
-                    <a:lnT w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnT>
-                    <a:lnB w="35000" cap="flat" cmpd="sng" algn="ctr">
-                      <a:solidFill>
-                        <a:srgbClr val="aacc00" /> 
-                      </a:solidFill>
-                      <a:prstDash val="solid" /> 
-                      <a:round /> 
-                      <a:headEnd type="none" w="med" len="med" /> 
-                      <a:tailEnd type="none" w="med" len="med" /> 
-                    </a:lnB>
-                  </a:tcPr>
-                </a:tc>
-              </a:tr>
-            </a:tbl>
-          </a:graphicData>
-        </a:graphic>
-      </p:graphicFrame>
-    </p:spTree>
-  </p:cSld>
-</p:sld>
-`;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/xml-elements.js
-var require_xml_elements = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/xml-elements.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.C_DLBLS_CHILD_ORDER = exports.A_SPPR_CHILD_ORDER = exports.C_DPT_CHILD_ORDER = exports.C_SER_CHILD_ORDER = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var xmldom_1 = require_lib4();
-    var lnLRTB_1 = require_lnLRTB();
-    var LINE_FILL_TAGS = [
-      "a:noFill",
-      "a:solidFill",
-      "a:gradFill",
-      "a:pattFill"
-    ];
-    var LINE_DASH_TAGS = ["a:prstDash", "a:custDash"];
-    var LINE_AFTER_DASH_TAGS = [
-      "a:round",
-      "a:bevel",
-      "a:miter",
-      "a:headEnd",
-      "a:tailEnd",
-      "a:extLst"
-    ];
-    exports.C_SER_CHILD_ORDER = [
-      "c:idx",
-      "c:order",
-      "c:tx",
-      "c:spPr",
-      "c:invertIfNegative",
-      "c:pictureOptions",
-      "c:explosion",
-      "c:marker",
-      "c:dPt",
-      "c:dLbls",
-      "c:trendline",
-      "c:errBars",
-      "c:cat",
-      "c:val",
-      "c:xVal",
-      "c:yVal",
-      "c:smooth",
-      "c:shape",
-      "c:bubbleSize",
-      "c:bubble3D",
-      "c:extLst"
-    ];
-    exports.C_DPT_CHILD_ORDER = [
-      "c:idx",
-      "c:invertIfNegative",
-      "c:marker",
-      "c:bubble3D",
-      "c:explosion",
-      "c:spPr",
-      "c:pictureOptions",
-      "c:extLst"
-    ];
-    exports.A_SPPR_CHILD_ORDER = [
-      "a:xfrm",
-      "a:custGeom",
-      "a:prstGeom",
-      "a:noFill",
-      "a:solidFill",
-      "a:gradFill",
-      "a:blipFill",
-      "a:pattFill",
-      "a:grpFill",
-      "a:ln",
-      "a:effectLst",
-      "a:effectDag",
-      "a:scene3d",
-      "a:sp3d",
-      "a:extLst"
-    ];
-    exports.C_DLBLS_CHILD_ORDER = [
-      "c:dLbl",
-      "c:delete",
-      "c:numFmt",
-      "c:spPr",
-      "c:txPr",
-      "c:dLblPos",
-      "c:showLegendKey",
-      "c:showVal",
-      "c:showCatName",
-      "c:showSerName",
-      "c:showPercent",
-      "c:showBubbleSize",
-      "c:separator",
-      "c:showLeaderLines",
-      "c:leaderLines",
-      "c:extLst"
-    ];
-    var XmlElements = class {
-      constructor(element, params) {
-        this.element = element;
-        this.document = element.ownerDocument;
-        this.params = params;
-        this.defaultValues = {
-          color: "CCCCCC",
-          size: "1000"
-        };
-      }
-      text() {
-        const r = this.document.createElement("a:r");
-        r.appendChild(this.textRangeProps());
-        r.appendChild(this.textContent());
-        let paragraphProps = this.element.getElementsByTagName("a:pPr").item(0);
-        if (!paragraphProps) {
-          paragraphProps = this.paragraphProps();
-        }
-        xml_helper_1.XmlHelper.insertAfter(r, paragraphProps);
-        return this;
-      }
-      createTextBody() {
-        let txBody = this.element.getElementsByTagName("p:txBody")[0];
-        if (!txBody) {
-          txBody = this.document.createElement("p:txBody");
-          this.element.appendChild(txBody);
-          const bodyPr = this.document.createElement("a:bodyPr");
-          txBody.appendChild(bodyPr);
-          const lstStyle = this.document.createElement("a:lstStyle");
-          txBody.appendChild(lstStyle);
-          this.paragraphTemplate = this.document.createElement("a:p");
-          txBody.appendChild(this.paragraphTemplate);
-          this.runTemplate = this.document.createElement("a:r");
-          const rPr = this.document.createElement("a:rPr");
-          this.runTemplate.appendChild(rPr);
-        } else {
-          let bodyPr = txBody.getElementsByTagName("a:bodyPr")[0];
-          if (!bodyPr) {
-            bodyPr = this.document.createElement("a:bodyPr");
-            txBody.insertBefore(bodyPr, txBody.firstChild);
-          }
-          let lstStyle = txBody.getElementsByTagName("a:lstStyle")[0];
-          if (!lstStyle) {
-            lstStyle = this.document.createElement("a:lstStyle");
-            txBody.insertBefore(lstStyle, bodyPr.nextSibling);
-          }
-          const paragraphs = txBody.getElementsByTagName("a:p");
-          this.paragraphTemplate = paragraphs[0];
-          xml_helper_1.XmlHelper.sliceCollection(paragraphs, 0);
-          const runs = this.paragraphTemplate.getElementsByTagName("a:r");
-          if (runs.length > 0) {
-            this.runTemplate = runs[0];
-          } else {
-            this.runTemplate = this.document.createElement("a:r");
-            const rPr = this.document.createElement("a:rPr");
-            this.runTemplate.appendChild(rPr);
-          }
-        }
-        return txBody;
-      }
-      createBodyProperties(txBody) {
-        const bodyPr = this.document.createElement("a:bodyPr");
-        txBody.appendChild(bodyPr);
-        return bodyPr;
-      }
-      addBulletList(list) {
-        const txBody = this.createTextBody();
-        this.createBodyProperties(txBody);
-        this.processList(txBody, list, 0);
-      }
-      processList(txBody, items, level) {
-        items.forEach((item) => {
-          if (Array.isArray(item)) {
-            this.processList(txBody, item, level + 1);
-          } else {
-            const p = this.createParagraph(level);
-            const r = this.createTextRun(String(item));
-            p.appendChild(r);
-            txBody.appendChild(p);
-          }
-        });
-      }
-      createParagraph(level) {
-        const p = this.paragraphTemplate.cloneNode(true);
-        const pPr = p.getElementsByTagName("a:pPr")[0];
-        if (pPr) {
-          if (level > 0) {
-            pPr.setAttribute("lvl", String(level));
-            pPr.removeAttribute("indent");
-            pPr.removeAttribute("marL");
-          } else {
-            pPr.removeAttribute("lvl");
-          }
-        } else {
-          const newPPr = this.document.createElement("a:pPr");
-          if (level > 0) {
-            newPPr.setAttribute("lvl", String(level));
-          }
-          p.insertBefore(newPPr, p.firstChild);
-        }
-        const runs = p.getElementsByTagName("a:r");
-        xml_helper_1.XmlHelper.sliceCollection(runs, 0);
-        return p;
-      }
-      createTextRun(text) {
-        const r = this.runTemplate.cloneNode(true);
-        const t = r.getElementsByTagName("a:t")[0];
-        if (t) {
-          t.textContent = xml_helper_1.XmlHelper.sanitizeText(text);
-        } else {
-          const newT = this.document.createElement("a:t");
-          newT.textContent = xml_helper_1.XmlHelper.sanitizeText(text);
-          r.appendChild(newT);
-        }
-        return r;
-      }
-      paragraphProps() {
-        const p = this.element.getElementsByTagName("a:p").item(0);
-        p.appendChild(this.document.createElement("a:pPr"));
-        const paragraphRangeProps = this.element.getElementsByTagName("a:pPr").item(0);
-        const endParaRPr = this.element.getElementsByTagName("a:endParaRPr").item(0);
-        xml_helper_1.XmlHelper.moveChild(endParaRPr);
-        return paragraphRangeProps;
-      }
-      textRangeProps() {
-        const rPr = this.document.createElement("a:rPr");
-        const endParaRPr = this.element.getElementsByTagName("a:endParaRPr")[0];
-        rPr.setAttribute("lang", endParaRPr.getAttribute("lang"));
-        rPr.setAttribute("sz", endParaRPr.getAttribute("sz") || this.defaultValues.size);
-        rPr.appendChild(this.line());
-        rPr.appendChild(this.effectLst());
-        rPr.appendChild(this.lineTexture());
-        rPr.appendChild(this.fillTexture());
-        return rPr;
-      }
-      textContent() {
-        const t = this.document.createElement("a:t");
-        t.textContent = " ";
-        return t;
-      }
-      effectLst() {
-        return this.document.createElement("a:effectLst");
-      }
-      lineTexture() {
-        return this.document.createElement("a:uLnTx");
-      }
-      fillTexture() {
-        return this.document.createElement("a:uFillTx");
-      }
-      line() {
-        const ln = this.document.createElement("a:ln");
-        const noFill = this.document.createElement("a:noFill");
-        ln.appendChild(noFill);
-        return ln;
-      }
-      /**
-       * Create an <a:ln> shape outline from this.params.outline
-       */
-      outline() {
-        const ln = this.document.createElement("a:ln");
-        return this.applyOutline(ln);
-      }
-      /**
-       * Apply this.params.outline to an existing (or freshly created) <a:ln>.
-       * Only given properties are touched, the rest is left to the template.
-       * Insertion respects the schema sequence of CT_LineProperties:
-       * fill -> dash -> join -> head/tailEnd -> extLst
-       *
-       * @param ln - The <a:ln> element to update
-       */
-      applyOutline(ln) {
-        var _a3;
-        const outline = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.outline;
-        if (!outline)
-          return ln;
-        if (outline.weight !== void 0) {
-          ln.setAttribute("w", String(Math.round(outline.weight)));
-        }
-        if (outline.color) {
-          this.params.color = outline.color;
-          const solidFill = this.solidFill();
-          const currentFill = xml_helper_1.XmlHelper.getFirstDirectChild(ln, LINE_FILL_TAGS);
-          if (currentFill) {
-            ln.replaceChild(solidFill, currentFill);
-          } else {
-            ln.insertBefore(solidFill, ln.firstChild);
-          }
-        }
-        if (outline.type) {
-          const prstDash = this.prstDash();
-          prstDash.setAttribute("val", outline.type);
-          const currentDash = xml_helper_1.XmlHelper.getFirstDirectChild(ln, LINE_DASH_TAGS);
-          if (currentDash) {
-            ln.replaceChild(prstDash, currentDash);
-          } else {
-            const anchor2 = xml_helper_1.XmlHelper.getFirstDirectChild(ln, LINE_AFTER_DASH_TAGS);
-            if (anchor2) {
-              ln.insertBefore(prstDash, anchor2);
-            } else {
-              ln.appendChild(prstDash);
-            }
-          }
-        }
-        return ln;
-      }
-      solidFill() {
-        const solidFill = this.document.createElement("a:solidFill");
-        const colorType = this.colorType();
-        solidFill.appendChild(colorType);
-        return solidFill;
-      }
-      colorType() {
-        var _a3, _b;
-        const tag2 = "a:" + (((_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.color) === null || _b === void 0 ? void 0 : _b.type) || "srgbClr");
-        const colorType = this.document.createElement(tag2);
-        this.colorValue(colorType);
-        return colorType;
-      }
-      colorValue(colorType) {
-        var _a3, _b, _c, _d;
-        colorType.setAttribute("val", ((_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.color) === null || _b === void 0 ? void 0 : _b.value) || this.defaultValues.color);
-        if (((_d = (_c = this.params) === null || _c === void 0 ? void 0 : _c.color) === null || _d === void 0 ? void 0 : _d.alpha) !== void 0) {
-          const alpha = this.document.createElement("a:alpha");
-          const rawAlpha = Number(this.params.color.alpha);
-          let alphaVal;
-          if (rawAlpha > 0 && rawAlpha < 1) {
-            alphaVal = Math.round(rawAlpha * 1e5);
-          } else if (rawAlpha >= 1 && rawAlpha <= 100) {
-            alphaVal = Math.round(rawAlpha * 1e3);
-          } else {
-            alphaVal = Math.round(rawAlpha);
-          }
-          alpha.setAttribute("val", String(alphaVal));
-          colorType.appendChild(alpha);
-        }
-      }
-      /**
-       * A minimal <c:dPt> shell: `c:idx`, `c:invertIfNegative` and `c:bubble3D`
-       * (which PowerPoint always writes) and nothing else. A data point carries
-       * no formatting the caller did not ask for — modifications create `c:spPr`
-       * etc. on demand. `c:invertIfNegative` must be written explicitly: OOXML
-       * defaults the absent element to *true*, which makes PowerPoint invert the
-       * fill of negative-value bars (white with a border) — silently overriding
-       * the very fill the caller styled the point for. LibreOffice ignores the
-       * flag, so pixel-based golden decks cannot catch this.
-       */
-      buildDataPoint() {
-        const dPt = this.document.createElement("c:dPt");
-        dPt.appendChild(this.idx());
-        const invertIfNegative = this.document.createElement("c:invertIfNegative");
-        invertIfNegative.setAttribute("val", "0");
-        dPt.appendChild(invertIfNegative);
-        const bubble3D = this.document.createElement("c:bubble3D");
-        bubble3D.setAttribute("val", "0");
-        dPt.appendChild(bubble3D);
-        return dPt;
-      }
-      dataPoint() {
-        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, this.buildDataPoint(), exports.C_SER_CHILD_ORDER);
-        return this;
-      }
-      /**
-       * An empty <c:spPr> shell in schema position: all children of
-       * CT_ShapeProperties are optional, and an absent property inherits from the
-       * series/theme defaults. Fills, lines etc. are added by the modifications
-       * that asked for them — the former grey solidFill + <a:ln><a:noFill/>
-       * default erased the segments of line charts.
-       */
-      shapeProperties() {
-        const spPr = this.document.createElement("c:spPr");
-        const parentTag = this.element.nodeName;
-        const order = parentTag === "c:dPt" ? exports.C_DPT_CHILD_ORDER : exports.C_SER_CHILD_ORDER;
-        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, spPr, order);
-      }
-      /**
-       * A bare <a:ln> in schema position — no fabricated <a:noFill>. Border
-       * modifications fill it with the properties the caller asked for.
-       */
-      plainLine() {
-        const ln = this.document.createElement("a:ln");
-        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, ln, exports.A_SPPR_CHILD_ORDER);
-      }
-      idx() {
-        const idx = this.document.createElement("c:idx");
-        idx.setAttribute("val", String(0));
-        return idx;
-      }
-      cellBorder(tag2) {
-        const border = this.document.createElement(tag2);
-        border.appendChild(this.solidFill());
-        border.appendChild(this.prstDash());
-        border.appendChild(this.round());
-        border.appendChild(this.lineEnd("headEnd"));
-        border.appendChild(this.lineEnd("tailEnd"));
-        return this;
-      }
-      prstDash() {
-        const prstDash = this.document.createElement("a:prstDash");
-        prstDash.setAttribute("val", "solid");
-        return prstDash;
-      }
-      round() {
-        const round = this.document.createElement("a:round");
-        return round;
-      }
-      lineEnd(type) {
-        const lineEnd = this.document.createElement(type);
-        lineEnd.setAttribute("type", "none");
-        lineEnd.setAttribute("w", "med");
-        lineEnd.setAttribute("len", "med");
-        return lineEnd;
-      }
-      /**
-       * An empty <c:dLbls>: all children of CT_DLbls are optional, and every
-       * label property (visibility included) is inherited from the chart's
-       * defaults. No fabricated formatting, no forced `showVal`.
-       */
-      dataPointLabels() {
-        const dLbls = this.document.createElement("c:dLbls");
-        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, dLbls, exports.C_SER_CHILD_ORDER);
-      }
-      /**
-       * A minimal <c:dLbl> point override: `c:idx` plus an empty `c:txPr`
-       * scaffold so that text styling modifications have a target — without
-       * opinionated defaults (no size, no fill, no `showVal`).
-       */
-      buildDataPointLabel() {
-        const dLbl = this.document.createElement("c:dLbl");
-        dLbl.appendChild(this.idx());
-        const txPr = this.document.createElement("c:txPr");
-        txPr.appendChild(this.document.createElement("a:bodyPr"));
-        txPr.appendChild(this.document.createElement("a:lstStyle"));
-        const p = this.document.createElement("a:p");
-        const pPr = this.document.createElement("a:pPr");
-        pPr.appendChild(this.document.createElement("a:defRPr"));
-        p.appendChild(pPr);
-        const endParaRPr = this.document.createElement("a:endParaRPr");
-        endParaRPr.setAttribute("lang", "en-US");
-        p.appendChild(endParaRPr);
-        txPr.appendChild(p);
-        dLbl.appendChild(txPr);
-        return dLbl;
-      }
-      dataPointLabel() {
-        xml_helper_1.XmlHelper.insertInSchemaOrder(this.element, this.buildDataPointLabel(), exports.C_DLBLS_CHILD_ORDER);
-      }
-      tableCellBorder(tag2) {
-        const doc = new xmldom_1.DOMParser().parseFromString(lnLRTB_1.lnLRTB, "application/xml");
-        const ele = doc.getElementsByTagName(tag2)[0];
-        const firstChild = this.element.firstChild;
-        this.element.insertBefore(ele.cloneNode(true), firstChild);
-      }
-    };
-    exports.default = XmlElements;
-  }
-});
-
-// node_modules/object-keys/isArguments.js
-var require_isArguments = __commonJS({
-  "node_modules/object-keys/isArguments.js"(exports, module) {
-    "use strict";
-    var toStr = Object.prototype.toString;
-    module.exports = function isArguments(value) {
-      var str = toStr.call(value);
-      var isArgs = str === "[object Arguments]";
-      if (!isArgs) {
-        isArgs = str !== "[object Array]" && value !== null && typeof value === "object" && typeof value.length === "number" && value.length >= 0 && toStr.call(value.callee) === "[object Function]";
-      }
-      return isArgs;
-    };
-  }
-});
-
-// node_modules/object-keys/implementation.js
-var require_implementation = __commonJS({
-  "node_modules/object-keys/implementation.js"(exports, module) {
-    "use strict";
-    var keysShim;
-    if (!Object.keys) {
-      has = Object.prototype.hasOwnProperty;
-      toStr = Object.prototype.toString;
-      isArgs = require_isArguments();
-      isEnumerable = Object.prototype.propertyIsEnumerable;
-      hasDontEnumBug = !isEnumerable.call({ toString: null }, "toString");
-      hasProtoEnumBug = isEnumerable.call(function() {
-      }, "prototype");
-      dontEnums = [
-        "toString",
-        "toLocaleString",
-        "valueOf",
-        "hasOwnProperty",
-        "isPrototypeOf",
-        "propertyIsEnumerable",
-        "constructor"
-      ];
-      equalsConstructorPrototype = function(o) {
-        var ctor = o.constructor;
-        return ctor && ctor.prototype === o;
-      };
-      excludedKeys = {
-        $applicationCache: true,
-        $console: true,
-        $external: true,
-        $frame: true,
-        $frameElement: true,
-        $frames: true,
-        $innerHeight: true,
-        $innerWidth: true,
-        $onmozfullscreenchange: true,
-        $onmozfullscreenerror: true,
-        $outerHeight: true,
-        $outerWidth: true,
-        $pageXOffset: true,
-        $pageYOffset: true,
-        $parent: true,
-        $scrollLeft: true,
-        $scrollTop: true,
-        $scrollX: true,
-        $scrollY: true,
-        $self: true,
-        $webkitIndexedDB: true,
-        $webkitStorageInfo: true,
-        $window: true
-      };
-      hasAutomationEqualityBug = (function() {
-        if (typeof window === "undefined") {
-          return false;
-        }
-        for (var k in window) {
-          try {
-            if (!excludedKeys["$" + k] && has.call(window, k) && window[k] !== null && typeof window[k] === "object") {
-              try {
-                equalsConstructorPrototype(window[k]);
-              } catch (e) {
-                return true;
-              }
-            }
-          } catch (e) {
-            return true;
-          }
-        }
-        return false;
-      })();
-      equalsConstructorPrototypeIfNotBuggy = function(o) {
-        if (typeof window === "undefined" || !hasAutomationEqualityBug) {
-          return equalsConstructorPrototype(o);
-        }
-        try {
-          return equalsConstructorPrototype(o);
-        } catch (e) {
-          return false;
-        }
-      };
-      keysShim = function keys(object2) {
-        var isObject2 = object2 !== null && typeof object2 === "object";
-        var isFunction = toStr.call(object2) === "[object Function]";
-        var isArguments = isArgs(object2);
-        var isString = isObject2 && toStr.call(object2) === "[object String]";
-        var theKeys = [];
-        if (!isObject2 && !isFunction && !isArguments) {
-          throw new TypeError("Object.keys called on a non-object");
-        }
-        var skipProto = hasProtoEnumBug && isFunction;
-        if (isString && object2.length > 0 && !has.call(object2, 0)) {
-          for (var i = 0; i < object2.length; ++i) {
-            theKeys.push(String(i));
-          }
-        }
-        if (isArguments && object2.length > 0) {
-          for (var j = 0; j < object2.length; ++j) {
-            theKeys.push(String(j));
-          }
-        } else {
-          for (var name in object2) {
-            if (!(skipProto && name === "prototype") && has.call(object2, name)) {
-              theKeys.push(String(name));
-            }
-          }
-        }
-        if (hasDontEnumBug) {
-          var skipConstructor = equalsConstructorPrototypeIfNotBuggy(object2);
-          for (var k = 0; k < dontEnums.length; ++k) {
-            if (!(skipConstructor && dontEnums[k] === "constructor") && has.call(object2, dontEnums[k])) {
-              theKeys.push(dontEnums[k]);
-            }
-          }
-        }
-        return theKeys;
-      };
-    }
-    var has;
-    var toStr;
-    var isArgs;
-    var isEnumerable;
-    var hasDontEnumBug;
-    var hasProtoEnumBug;
-    var dontEnums;
-    var equalsConstructorPrototype;
-    var excludedKeys;
-    var hasAutomationEqualityBug;
-    var equalsConstructorPrototypeIfNotBuggy;
-    module.exports = keysShim;
-  }
-});
-
-// node_modules/object-keys/index.js
-var require_object_keys = __commonJS({
-  "node_modules/object-keys/index.js"(exports, module) {
-    "use strict";
-    var slice = Array.prototype.slice;
-    var isArgs = require_isArguments();
-    var origKeys = Object.keys;
-    var keysShim = origKeys ? function keys(o) {
-      return origKeys(o);
-    } : require_implementation();
-    var originalKeys = Object.keys;
-    keysShim.shim = function shimObjectKeys() {
-      if (Object.keys) {
-        var keysWorksWithArguments = (function() {
-          var args = Object.keys(arguments);
-          return args && args.length === arguments.length;
-        })(1, 2);
-        if (!keysWorksWithArguments) {
-          Object.keys = function keys(object2) {
-            if (isArgs(object2)) {
-              return originalKeys(slice.call(object2));
-            }
-            return originalKeys(object2);
-          };
-        }
-      } else {
-        Object.keys = keysShim;
-      }
-      return Object.keys || keysShim;
-    };
-    module.exports = keysShim;
-  }
-});
-
-// node_modules/es-define-property/index.js
-var require_es_define_property = __commonJS({
-  "node_modules/es-define-property/index.js"(exports, module) {
-    "use strict";
-    var $defineProperty = Object.defineProperty || false;
-    if ($defineProperty) {
-      try {
-        $defineProperty({}, "a", { value: 1 });
-      } catch (e) {
-        $defineProperty = false;
-      }
-    }
-    module.exports = $defineProperty;
-  }
-});
-
-// node_modules/es-errors/syntax.js
-var require_syntax = __commonJS({
-  "node_modules/es-errors/syntax.js"(exports, module) {
-    "use strict";
-    module.exports = SyntaxError;
-  }
-});
-
-// node_modules/es-errors/type.js
-var require_type = __commonJS({
-  "node_modules/es-errors/type.js"(exports, module) {
-    "use strict";
-    module.exports = TypeError;
-  }
-});
-
-// node_modules/gopd/gOPD.js
-var require_gOPD = __commonJS({
-  "node_modules/gopd/gOPD.js"(exports, module) {
-    "use strict";
-    module.exports = Object.getOwnPropertyDescriptor;
-  }
-});
-
-// node_modules/gopd/index.js
-var require_gopd = __commonJS({
-  "node_modules/gopd/index.js"(exports, module) {
-    "use strict";
-    var $gOPD = require_gOPD();
-    if ($gOPD) {
-      try {
-        $gOPD([], "length");
-      } catch (e) {
-        $gOPD = null;
-      }
-    }
-    module.exports = $gOPD;
-  }
-});
-
-// node_modules/define-data-property/index.js
-var require_define_data_property = __commonJS({
-  "node_modules/define-data-property/index.js"(exports, module) {
-    "use strict";
-    var $defineProperty = require_es_define_property();
-    var $SyntaxError = require_syntax();
-    var $TypeError = require_type();
-    var gopd = require_gopd();
-    module.exports = function defineDataProperty(obj, property, value) {
-      if (!obj || typeof obj !== "object" && typeof obj !== "function") {
-        throw new $TypeError("`obj` must be an object or a function`");
-      }
-      if (typeof property !== "string" && typeof property !== "symbol") {
-        throw new $TypeError("`property` must be a string or a symbol`");
-      }
-      if (arguments.length > 3 && typeof arguments[3] !== "boolean" && arguments[3] !== null) {
-        throw new $TypeError("`nonEnumerable`, if provided, must be a boolean or null");
-      }
-      if (arguments.length > 4 && typeof arguments[4] !== "boolean" && arguments[4] !== null) {
-        throw new $TypeError("`nonWritable`, if provided, must be a boolean or null");
-      }
-      if (arguments.length > 5 && typeof arguments[5] !== "boolean" && arguments[5] !== null) {
-        throw new $TypeError("`nonConfigurable`, if provided, must be a boolean or null");
-      }
-      if (arguments.length > 6 && typeof arguments[6] !== "boolean") {
-        throw new $TypeError("`loose`, if provided, must be a boolean");
-      }
-      var nonEnumerable = arguments.length > 3 ? arguments[3] : null;
-      var nonWritable = arguments.length > 4 ? arguments[4] : null;
-      var nonConfigurable = arguments.length > 5 ? arguments[5] : null;
-      var loose = arguments.length > 6 ? arguments[6] : false;
-      var desc = !!gopd && gopd(obj, property);
-      if ($defineProperty) {
-        $defineProperty(obj, property, {
-          configurable: nonConfigurable === null && desc ? desc.configurable : !nonConfigurable,
-          enumerable: nonEnumerable === null && desc ? desc.enumerable : !nonEnumerable,
-          value,
-          writable: nonWritable === null && desc ? desc.writable : !nonWritable
-        });
-      } else if (loose || !nonEnumerable && !nonWritable && !nonConfigurable) {
-        obj[property] = value;
-      } else {
-        throw new $SyntaxError("This environment does not support defining a property as non-configurable, non-writable, or non-enumerable.");
-      }
-    };
-  }
-});
-
-// node_modules/has-property-descriptors/index.js
-var require_has_property_descriptors = __commonJS({
-  "node_modules/has-property-descriptors/index.js"(exports, module) {
-    "use strict";
-    var $defineProperty = require_es_define_property();
-    var hasPropertyDescriptors = function hasPropertyDescriptors2() {
-      return !!$defineProperty;
-    };
-    hasPropertyDescriptors.hasArrayLengthDefineBug = function hasArrayLengthDefineBug() {
-      if (!$defineProperty) {
-        return null;
-      }
-      try {
-        return $defineProperty([], "length", { value: 1 }).length !== 1;
-      } catch (e) {
-        return true;
-      }
-    };
-    module.exports = hasPropertyDescriptors;
-  }
-});
-
-// node_modules/define-properties/index.js
-var require_define_properties = __commonJS({
-  "node_modules/define-properties/index.js"(exports, module) {
-    "use strict";
-    var keys = require_object_keys();
-    var hasSymbols = typeof Symbol === "function" && typeof /* @__PURE__ */ Symbol("foo") === "symbol";
-    var toStr = Object.prototype.toString;
-    var concat = Array.prototype.concat;
-    var defineDataProperty = require_define_data_property();
-    var isFunction = function(fn) {
-      return typeof fn === "function" && toStr.call(fn) === "[object Function]";
-    };
-    var supportsDescriptors = require_has_property_descriptors()();
-    var defineProperty = function(object2, name, value, predicate) {
-      if (name in object2) {
-        if (predicate === true) {
-          if (object2[name] === value) {
-            return;
-          }
-        } else if (!isFunction(predicate) || !predicate()) {
-          return;
-        }
-      }
-      if (supportsDescriptors) {
-        defineDataProperty(object2, name, value, true);
-      } else {
-        defineDataProperty(object2, name, value);
-      }
-    };
-    var defineProperties = function(object2, map2) {
-      var predicates = arguments.length > 2 ? arguments[2] : {};
-      var props = keys(map2);
-      if (hasSymbols) {
-        props = concat.call(props, Object.getOwnPropertySymbols(map2));
-      }
-      for (var i = 0; i < props.length; i += 1) {
-        defineProperty(object2, props[i], map2[props[i]], predicates[props[i]]);
-      }
-    };
-    defineProperties.supportsDescriptors = !!supportsDescriptors;
-    module.exports = defineProperties;
-  }
-});
-
-// node_modules/es-object-atoms/index.js
-var require_es_object_atoms = __commonJS({
-  "node_modules/es-object-atoms/index.js"(exports, module) {
-    "use strict";
-    module.exports = Object;
-  }
-});
-
-// node_modules/es-errors/index.js
-var require_es_errors = __commonJS({
-  "node_modules/es-errors/index.js"(exports, module) {
-    "use strict";
-    module.exports = Error;
-  }
-});
-
-// node_modules/es-errors/eval.js
-var require_eval = __commonJS({
-  "node_modules/es-errors/eval.js"(exports, module) {
-    "use strict";
-    module.exports = EvalError;
-  }
-});
-
-// node_modules/es-errors/range.js
-var require_range = __commonJS({
-  "node_modules/es-errors/range.js"(exports, module) {
-    "use strict";
-    module.exports = RangeError;
-  }
-});
-
-// node_modules/es-errors/ref.js
-var require_ref = __commonJS({
-  "node_modules/es-errors/ref.js"(exports, module) {
-    "use strict";
-    module.exports = ReferenceError;
-  }
-});
-
-// node_modules/es-errors/uri.js
-var require_uri = __commonJS({
-  "node_modules/es-errors/uri.js"(exports, module) {
-    "use strict";
-    module.exports = URIError;
-  }
-});
-
-// node_modules/math-intrinsics/abs.js
-var require_abs = __commonJS({
-  "node_modules/math-intrinsics/abs.js"(exports, module) {
-    "use strict";
-    module.exports = Math.abs;
-  }
-});
-
-// node_modules/math-intrinsics/floor.js
-var require_floor = __commonJS({
-  "node_modules/math-intrinsics/floor.js"(exports, module) {
-    "use strict";
-    module.exports = Math.floor;
-  }
-});
-
-// node_modules/math-intrinsics/max.js
-var require_max = __commonJS({
-  "node_modules/math-intrinsics/max.js"(exports, module) {
-    "use strict";
-    module.exports = Math.max;
-  }
-});
-
-// node_modules/math-intrinsics/min.js
-var require_min = __commonJS({
-  "node_modules/math-intrinsics/min.js"(exports, module) {
-    "use strict";
-    module.exports = Math.min;
-  }
-});
-
-// node_modules/math-intrinsics/pow.js
-var require_pow = __commonJS({
-  "node_modules/math-intrinsics/pow.js"(exports, module) {
-    "use strict";
-    module.exports = Math.pow;
-  }
-});
-
-// node_modules/math-intrinsics/round.js
-var require_round = __commonJS({
-  "node_modules/math-intrinsics/round.js"(exports, module) {
-    "use strict";
-    module.exports = Math.round;
-  }
-});
-
-// node_modules/math-intrinsics/isNaN.js
-var require_isNaN = __commonJS({
-  "node_modules/math-intrinsics/isNaN.js"(exports, module) {
-    "use strict";
-    module.exports = Number.isNaN || function isNaN2(a) {
-      return a !== a;
-    };
-  }
-});
-
-// node_modules/math-intrinsics/sign.js
-var require_sign = __commonJS({
-  "node_modules/math-intrinsics/sign.js"(exports, module) {
-    "use strict";
-    var $isNaN = require_isNaN();
-    module.exports = function sign(number4) {
-      if ($isNaN(number4) || number4 === 0) {
-        return number4;
-      }
-      return number4 < 0 ? -1 : 1;
-    };
-  }
-});
-
-// node_modules/has-symbols/shams.js
-var require_shams = __commonJS({
-  "node_modules/has-symbols/shams.js"(exports, module) {
-    "use strict";
-    module.exports = function hasSymbols() {
-      if (typeof Symbol !== "function" || typeof Object.getOwnPropertySymbols !== "function") {
-        return false;
-      }
-      if (typeof Symbol.iterator === "symbol") {
-        return true;
-      }
-      var obj = {};
-      var sym = /* @__PURE__ */ Symbol("test");
-      var symObj = Object(sym);
-      if (typeof sym === "string") {
-        return false;
-      }
-      if (Object.prototype.toString.call(sym) !== "[object Symbol]") {
-        return false;
-      }
-      if (Object.prototype.toString.call(symObj) !== "[object Symbol]") {
-        return false;
-      }
-      var symVal = 42;
-      obj[sym] = symVal;
-      for (var _ in obj) {
-        return false;
-      }
-      if (typeof Object.keys === "function" && Object.keys(obj).length !== 0) {
-        return false;
-      }
-      if (typeof Object.getOwnPropertyNames === "function" && Object.getOwnPropertyNames(obj).length !== 0) {
-        return false;
-      }
-      var syms = Object.getOwnPropertySymbols(obj);
-      if (syms.length !== 1 || syms[0] !== sym) {
-        return false;
-      }
-      if (!Object.prototype.propertyIsEnumerable.call(obj, sym)) {
-        return false;
-      }
-      if (typeof Object.getOwnPropertyDescriptor === "function") {
-        var descriptor = (
-          /** @type {PropertyDescriptor} */
-          Object.getOwnPropertyDescriptor(obj, sym)
-        );
-        if (descriptor.value !== symVal || descriptor.enumerable !== true) {
-          return false;
-        }
-      }
-      return true;
-    };
-  }
-});
-
-// node_modules/has-symbols/index.js
-var require_has_symbols = __commonJS({
-  "node_modules/has-symbols/index.js"(exports, module) {
-    "use strict";
-    var origSymbol = typeof Symbol !== "undefined" && Symbol;
-    var hasSymbolSham = require_shams();
-    module.exports = function hasNativeSymbols() {
-      if (typeof origSymbol !== "function") {
-        return false;
-      }
-      if (typeof Symbol !== "function") {
-        return false;
-      }
-      if (typeof origSymbol("foo") !== "symbol") {
-        return false;
-      }
-      if (typeof /* @__PURE__ */ Symbol("bar") !== "symbol") {
-        return false;
-      }
-      return hasSymbolSham();
-    };
-  }
-});
-
-// node_modules/get-proto/Reflect.getPrototypeOf.js
-var require_Reflect_getPrototypeOf = __commonJS({
-  "node_modules/get-proto/Reflect.getPrototypeOf.js"(exports, module) {
-    "use strict";
-    module.exports = typeof Reflect !== "undefined" && Reflect.getPrototypeOf || null;
-  }
-});
-
-// node_modules/get-proto/Object.getPrototypeOf.js
-var require_Object_getPrototypeOf = __commonJS({
-  "node_modules/get-proto/Object.getPrototypeOf.js"(exports, module) {
-    "use strict";
-    var $Object = require_es_object_atoms();
-    module.exports = $Object.getPrototypeOf || null;
-  }
-});
-
-// node_modules/function-bind/implementation.js
-var require_implementation2 = __commonJS({
-  "node_modules/function-bind/implementation.js"(exports, module) {
-    "use strict";
-    var ERROR_MESSAGE = "Function.prototype.bind called on incompatible ";
-    var toStr = Object.prototype.toString;
-    var max = Math.max;
-    var funcType = "[object Function]";
-    var concatty = function concatty2(a, b) {
-      var arr = [];
-      for (var i = 0; i < a.length; i += 1) {
-        arr[i] = a[i];
-      }
-      for (var j = 0; j < b.length; j += 1) {
-        arr[j + a.length] = b[j];
-      }
-      return arr;
-    };
-    var slicy = function slicy2(arrLike, offset) {
-      var arr = [];
-      for (var i = offset || 0, j = 0; i < arrLike.length; i += 1, j += 1) {
-        arr[j] = arrLike[i];
-      }
-      return arr;
-    };
-    var joiny = function(arr, joiner) {
-      var str = "";
-      for (var i = 0; i < arr.length; i += 1) {
-        str += arr[i];
-        if (i + 1 < arr.length) {
-          str += joiner;
-        }
-      }
-      return str;
-    };
-    module.exports = function bind(that) {
-      var target = this;
-      if (typeof target !== "function" || toStr.apply(target) !== funcType) {
-        throw new TypeError(ERROR_MESSAGE + target);
-      }
-      var args = slicy(arguments, 1);
-      var bound;
-      var binder = function() {
-        if (this instanceof bound) {
-          var result = target.apply(
-            this,
-            concatty(args, arguments)
-          );
-          if (Object(result) === result) {
-            return result;
-          }
-          return this;
-        }
-        return target.apply(
-          that,
-          concatty(args, arguments)
-        );
-      };
-      var boundLength = max(0, target.length - args.length);
-      var boundArgs = [];
-      for (var i = 0; i < boundLength; i++) {
-        boundArgs[i] = "$" + i;
-      }
-      bound = Function("binder", "return function (" + joiny(boundArgs, ",") + "){ return binder.apply(this,arguments); }")(binder);
-      if (target.prototype) {
-        var Empty = function Empty2() {
-        };
-        Empty.prototype = target.prototype;
-        bound.prototype = new Empty();
-        Empty.prototype = null;
-      }
-      return bound;
-    };
-  }
-});
-
-// node_modules/function-bind/index.js
-var require_function_bind = __commonJS({
-  "node_modules/function-bind/index.js"(exports, module) {
-    "use strict";
-    var implementation = require_implementation2();
-    module.exports = Function.prototype.bind || implementation;
-  }
-});
-
-// node_modules/call-bind-apply-helpers/functionCall.js
-var require_functionCall = __commonJS({
-  "node_modules/call-bind-apply-helpers/functionCall.js"(exports, module) {
-    "use strict";
-    module.exports = Function.prototype.call;
-  }
-});
-
-// node_modules/call-bind-apply-helpers/functionApply.js
-var require_functionApply = __commonJS({
-  "node_modules/call-bind-apply-helpers/functionApply.js"(exports, module) {
-    "use strict";
-    module.exports = Function.prototype.apply;
-  }
-});
-
-// node_modules/call-bind-apply-helpers/reflectApply.js
-var require_reflectApply = __commonJS({
-  "node_modules/call-bind-apply-helpers/reflectApply.js"(exports, module) {
-    "use strict";
-    module.exports = typeof Reflect !== "undefined" && Reflect && Reflect.apply;
-  }
-});
-
-// node_modules/call-bind-apply-helpers/actualApply.js
-var require_actualApply = __commonJS({
-  "node_modules/call-bind-apply-helpers/actualApply.js"(exports, module) {
-    "use strict";
-    var bind = require_function_bind();
-    var $apply = require_functionApply();
-    var $call = require_functionCall();
-    var $reflectApply = require_reflectApply();
-    module.exports = $reflectApply || bind.call($call, $apply);
-  }
-});
-
-// node_modules/call-bind-apply-helpers/index.js
-var require_call_bind_apply_helpers = __commonJS({
-  "node_modules/call-bind-apply-helpers/index.js"(exports, module) {
-    "use strict";
-    var bind = require_function_bind();
-    var $TypeError = require_type();
-    var $call = require_functionCall();
-    var $actualApply = require_actualApply();
-    module.exports = function callBindBasic(args) {
-      if (args.length < 1 || typeof args[0] !== "function") {
-        throw new $TypeError("a function is required");
-      }
-      return $actualApply(bind, $call, args);
-    };
-  }
-});
-
-// node_modules/dunder-proto/get.js
-var require_get = __commonJS({
-  "node_modules/dunder-proto/get.js"(exports, module) {
-    "use strict";
-    var callBind = require_call_bind_apply_helpers();
-    var gOPD = require_gopd();
-    var hasProtoAccessor;
-    try {
-      hasProtoAccessor = /** @type {{ __proto__?: typeof Array.prototype }} */
-      [].__proto__ === Array.prototype;
-    } catch (e) {
-      if (!e || typeof e !== "object" || !("code" in e) || e.code !== "ERR_PROTO_ACCESS") {
-        throw e;
-      }
-    }
-    var desc = !!hasProtoAccessor && gOPD && gOPD(
-      Object.prototype,
-      /** @type {keyof typeof Object.prototype} */
-      "__proto__"
-    );
-    var $Object = Object;
-    var $getPrototypeOf = $Object.getPrototypeOf;
-    module.exports = desc && typeof desc.get === "function" ? callBind([desc.get]) : typeof $getPrototypeOf === "function" ? (
-      /** @type {import('./get')} */
-      function getDunder(value) {
-        return $getPrototypeOf(value == null ? value : $Object(value));
-      }
-    ) : false;
-  }
-});
-
-// node_modules/get-proto/index.js
-var require_get_proto = __commonJS({
-  "node_modules/get-proto/index.js"(exports, module) {
-    "use strict";
-    var reflectGetProto = require_Reflect_getPrototypeOf();
-    var originalGetProto = require_Object_getPrototypeOf();
-    var getDunderProto = require_get();
-    module.exports = reflectGetProto ? function getProto(O) {
-      return reflectGetProto(O);
-    } : originalGetProto ? function getProto(O) {
-      if (!O || typeof O !== "object" && typeof O !== "function") {
-        throw new TypeError("getProto: not an object");
-      }
-      return originalGetProto(O);
-    } : getDunderProto ? function getProto(O) {
-      return getDunderProto(O);
-    } : null;
-  }
-});
-
-// node_modules/hasown/index.js
-var require_hasown = __commonJS({
-  "node_modules/hasown/index.js"(exports, module) {
-    "use strict";
-    var call = Function.prototype.call;
-    var $hasOwn = Object.prototype.hasOwnProperty;
-    var bind = require_function_bind();
-    module.exports = bind.call(call, $hasOwn);
-  }
-});
-
-// node_modules/get-intrinsic/index.js
-var require_get_intrinsic = __commonJS({
-  "node_modules/get-intrinsic/index.js"(exports, module) {
-    "use strict";
-    var undefined2;
-    var $Object = require_es_object_atoms();
-    var $Error = require_es_errors();
-    var $EvalError = require_eval();
-    var $RangeError = require_range();
-    var $ReferenceError = require_ref();
-    var $SyntaxError = require_syntax();
-    var $TypeError = require_type();
-    var $URIError = require_uri();
-    var abs = require_abs();
-    var floor = require_floor();
-    var max = require_max();
-    var min = require_min();
-    var pow = require_pow();
-    var round = require_round();
-    var sign = require_sign();
-    var $Function = Function;
-    var getEvalledConstructor = function(expressionSyntax) {
-      try {
-        return $Function('"use strict"; return (' + expressionSyntax + ").constructor;")();
-      } catch (e) {
-      }
-    };
-    var $gOPD = require_gopd();
-    var $defineProperty = require_es_define_property();
-    var throwTypeError = function() {
-      throw new $TypeError();
-    };
-    var ThrowTypeError = $gOPD ? (function() {
-      try {
-        arguments.callee;
-        return throwTypeError;
-      } catch (calleeThrows) {
-        try {
-          return $gOPD(arguments, "callee").get;
-        } catch (gOPDthrows) {
-          return throwTypeError;
-        }
-      }
-    })() : throwTypeError;
-    var hasSymbols = require_has_symbols()();
-    var getProto = require_get_proto();
-    var $ObjectGPO = require_Object_getPrototypeOf();
-    var $ReflectGPO = require_Reflect_getPrototypeOf();
-    var $apply = require_functionApply();
-    var $call = require_functionCall();
-    var needsEval = {};
-    var TypedArray = typeof Uint8Array === "undefined" || !getProto ? undefined2 : getProto(Uint8Array);
-    var INTRINSICS = {
-      __proto__: null,
-      "%AggregateError%": typeof AggregateError === "undefined" ? undefined2 : AggregateError,
-      "%Array%": Array,
-      "%ArrayBuffer%": typeof ArrayBuffer === "undefined" ? undefined2 : ArrayBuffer,
-      "%ArrayIteratorPrototype%": hasSymbols && getProto ? getProto([][Symbol.iterator]()) : undefined2,
-      "%AsyncFromSyncIteratorPrototype%": undefined2,
-      "%AsyncFunction%": needsEval,
-      "%AsyncGenerator%": needsEval,
-      "%AsyncGeneratorFunction%": needsEval,
-      "%AsyncIteratorPrototype%": needsEval,
-      "%Atomics%": typeof Atomics === "undefined" ? undefined2 : Atomics,
-      "%BigInt%": typeof BigInt === "undefined" ? undefined2 : BigInt,
-      "%BigInt64Array%": typeof BigInt64Array === "undefined" ? undefined2 : BigInt64Array,
-      "%BigUint64Array%": typeof BigUint64Array === "undefined" ? undefined2 : BigUint64Array,
-      "%Boolean%": Boolean,
-      "%DataView%": typeof DataView === "undefined" ? undefined2 : DataView,
-      "%Date%": Date,
-      "%decodeURI%": decodeURI,
-      "%decodeURIComponent%": decodeURIComponent,
-      "%encodeURI%": encodeURI,
-      "%encodeURIComponent%": encodeURIComponent,
-      "%Error%": $Error,
-      "%eval%": eval,
-      // eslint-disable-line no-eval
-      "%EvalError%": $EvalError,
-      "%Float16Array%": typeof Float16Array === "undefined" ? undefined2 : Float16Array,
-      "%Float32Array%": typeof Float32Array === "undefined" ? undefined2 : Float32Array,
-      "%Float64Array%": typeof Float64Array === "undefined" ? undefined2 : Float64Array,
-      "%FinalizationRegistry%": typeof FinalizationRegistry === "undefined" ? undefined2 : FinalizationRegistry,
-      "%Function%": $Function,
-      "%GeneratorFunction%": needsEval,
-      "%Int8Array%": typeof Int8Array === "undefined" ? undefined2 : Int8Array,
-      "%Int16Array%": typeof Int16Array === "undefined" ? undefined2 : Int16Array,
-      "%Int32Array%": typeof Int32Array === "undefined" ? undefined2 : Int32Array,
-      "%isFinite%": isFinite,
-      "%isNaN%": isNaN,
-      "%IteratorPrototype%": hasSymbols && getProto ? getProto(getProto([][Symbol.iterator]())) : undefined2,
-      "%JSON%": typeof JSON === "object" ? JSON : undefined2,
-      "%Map%": typeof Map === "undefined" ? undefined2 : Map,
-      "%MapIteratorPrototype%": typeof Map === "undefined" || !hasSymbols || !getProto ? undefined2 : getProto((/* @__PURE__ */ new Map())[Symbol.iterator]()),
-      "%Math%": Math,
-      "%Number%": Number,
-      "%Object%": $Object,
-      "%Object.getOwnPropertyDescriptor%": $gOPD,
-      "%parseFloat%": parseFloat,
-      "%parseInt%": parseInt,
-      "%Promise%": typeof Promise === "undefined" ? undefined2 : Promise,
-      "%Proxy%": typeof Proxy === "undefined" ? undefined2 : Proxy,
-      "%RangeError%": $RangeError,
-      "%ReferenceError%": $ReferenceError,
-      "%Reflect%": typeof Reflect === "undefined" ? undefined2 : Reflect,
-      "%RegExp%": RegExp,
-      "%Set%": typeof Set === "undefined" ? undefined2 : Set,
-      "%SetIteratorPrototype%": typeof Set === "undefined" || !hasSymbols || !getProto ? undefined2 : getProto((/* @__PURE__ */ new Set())[Symbol.iterator]()),
-      "%SharedArrayBuffer%": typeof SharedArrayBuffer === "undefined" ? undefined2 : SharedArrayBuffer,
-      "%String%": String,
-      "%StringIteratorPrototype%": hasSymbols && getProto ? getProto(""[Symbol.iterator]()) : undefined2,
-      "%Symbol%": hasSymbols ? Symbol : undefined2,
-      "%SyntaxError%": $SyntaxError,
-      "%ThrowTypeError%": ThrowTypeError,
-      "%TypedArray%": TypedArray,
-      "%TypeError%": $TypeError,
-      "%Uint8Array%": typeof Uint8Array === "undefined" ? undefined2 : Uint8Array,
-      "%Uint8ClampedArray%": typeof Uint8ClampedArray === "undefined" ? undefined2 : Uint8ClampedArray,
-      "%Uint16Array%": typeof Uint16Array === "undefined" ? undefined2 : Uint16Array,
-      "%Uint32Array%": typeof Uint32Array === "undefined" ? undefined2 : Uint32Array,
-      "%URIError%": $URIError,
-      "%WeakMap%": typeof WeakMap === "undefined" ? undefined2 : WeakMap,
-      "%WeakRef%": typeof WeakRef === "undefined" ? undefined2 : WeakRef,
-      "%WeakSet%": typeof WeakSet === "undefined" ? undefined2 : WeakSet,
-      "%Function.prototype.call%": $call,
-      "%Function.prototype.apply%": $apply,
-      "%Object.defineProperty%": $defineProperty,
-      "%Object.getPrototypeOf%": $ObjectGPO,
-      "%Math.abs%": abs,
-      "%Math.floor%": floor,
-      "%Math.max%": max,
-      "%Math.min%": min,
-      "%Math.pow%": pow,
-      "%Math.round%": round,
-      "%Math.sign%": sign,
-      "%Reflect.getPrototypeOf%": $ReflectGPO
-    };
-    if (getProto) {
-      try {
-        null.error;
-      } catch (e) {
-        errorProto = getProto(getProto(e));
-        INTRINSICS["%Error.prototype%"] = errorProto;
-      }
-    }
-    var errorProto;
-    var doEval = function doEval2(name) {
-      var value;
-      if (name === "%AsyncFunction%") {
-        value = getEvalledConstructor("async function () {}");
-      } else if (name === "%GeneratorFunction%") {
-        value = getEvalledConstructor("function* () {}");
-      } else if (name === "%AsyncGeneratorFunction%") {
-        value = getEvalledConstructor("async function* () {}");
-      } else if (name === "%AsyncGenerator%") {
-        var fn = doEval2("%AsyncGeneratorFunction%");
-        if (fn) {
-          value = fn.prototype;
-        }
-      } else if (name === "%AsyncIteratorPrototype%") {
-        var gen = doEval2("%AsyncGenerator%");
-        if (gen && getProto) {
-          value = getProto(gen.prototype);
-        }
-      }
-      INTRINSICS[name] = value;
-      return value;
-    };
-    var LEGACY_ALIASES = {
-      __proto__: null,
-      "%ArrayBufferPrototype%": ["ArrayBuffer", "prototype"],
-      "%ArrayPrototype%": ["Array", "prototype"],
-      "%ArrayProto_entries%": ["Array", "prototype", "entries"],
-      "%ArrayProto_forEach%": ["Array", "prototype", "forEach"],
-      "%ArrayProto_keys%": ["Array", "prototype", "keys"],
-      "%ArrayProto_values%": ["Array", "prototype", "values"],
-      "%AsyncFunctionPrototype%": ["AsyncFunction", "prototype"],
-      "%AsyncGenerator%": ["AsyncGeneratorFunction", "prototype"],
-      "%AsyncGeneratorPrototype%": ["AsyncGeneratorFunction", "prototype", "prototype"],
-      "%BooleanPrototype%": ["Boolean", "prototype"],
-      "%DataViewPrototype%": ["DataView", "prototype"],
-      "%DatePrototype%": ["Date", "prototype"],
-      "%ErrorPrototype%": ["Error", "prototype"],
-      "%EvalErrorPrototype%": ["EvalError", "prototype"],
-      "%Float32ArrayPrototype%": ["Float32Array", "prototype"],
-      "%Float64ArrayPrototype%": ["Float64Array", "prototype"],
-      "%FunctionPrototype%": ["Function", "prototype"],
-      "%Generator%": ["GeneratorFunction", "prototype"],
-      "%GeneratorPrototype%": ["GeneratorFunction", "prototype", "prototype"],
-      "%Int8ArrayPrototype%": ["Int8Array", "prototype"],
-      "%Int16ArrayPrototype%": ["Int16Array", "prototype"],
-      "%Int32ArrayPrototype%": ["Int32Array", "prototype"],
-      "%JSONParse%": ["JSON", "parse"],
-      "%JSONStringify%": ["JSON", "stringify"],
-      "%MapPrototype%": ["Map", "prototype"],
-      "%NumberPrototype%": ["Number", "prototype"],
-      "%ObjectPrototype%": ["Object", "prototype"],
-      "%ObjProto_toString%": ["Object", "prototype", "toString"],
-      "%ObjProto_valueOf%": ["Object", "prototype", "valueOf"],
-      "%PromisePrototype%": ["Promise", "prototype"],
-      "%PromiseProto_then%": ["Promise", "prototype", "then"],
-      "%Promise_all%": ["Promise", "all"],
-      "%Promise_reject%": ["Promise", "reject"],
-      "%Promise_resolve%": ["Promise", "resolve"],
-      "%RangeErrorPrototype%": ["RangeError", "prototype"],
-      "%ReferenceErrorPrototype%": ["ReferenceError", "prototype"],
-      "%RegExpPrototype%": ["RegExp", "prototype"],
-      "%SetPrototype%": ["Set", "prototype"],
-      "%SharedArrayBufferPrototype%": ["SharedArrayBuffer", "prototype"],
-      "%StringPrototype%": ["String", "prototype"],
-      "%SymbolPrototype%": ["Symbol", "prototype"],
-      "%SyntaxErrorPrototype%": ["SyntaxError", "prototype"],
-      "%TypedArrayPrototype%": ["TypedArray", "prototype"],
-      "%TypeErrorPrototype%": ["TypeError", "prototype"],
-      "%Uint8ArrayPrototype%": ["Uint8Array", "prototype"],
-      "%Uint8ClampedArrayPrototype%": ["Uint8ClampedArray", "prototype"],
-      "%Uint16ArrayPrototype%": ["Uint16Array", "prototype"],
-      "%Uint32ArrayPrototype%": ["Uint32Array", "prototype"],
-      "%URIErrorPrototype%": ["URIError", "prototype"],
-      "%WeakMapPrototype%": ["WeakMap", "prototype"],
-      "%WeakSetPrototype%": ["WeakSet", "prototype"]
-    };
-    var bind = require_function_bind();
-    var hasOwn = require_hasown();
-    var $concat = bind.call($call, Array.prototype.concat);
-    var $spliceApply = bind.call($apply, Array.prototype.splice);
-    var $replace = bind.call($call, String.prototype.replace);
-    var $strSlice = bind.call($call, String.prototype.slice);
-    var $exec = bind.call($call, RegExp.prototype.exec);
-    var rePropName = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
-    var reEscapeChar = /\\(\\)?/g;
-    var stringToPath = function stringToPath2(string4) {
-      var first = $strSlice(string4, 0, 1);
-      var last = $strSlice(string4, -1);
-      if (first === "%" && last !== "%") {
-        throw new $SyntaxError("invalid intrinsic syntax, expected closing `%`");
-      } else if (last === "%" && first !== "%") {
-        throw new $SyntaxError("invalid intrinsic syntax, expected opening `%`");
-      }
-      var result = [];
-      $replace(string4, rePropName, function(match, number4, quote, subString) {
-        result[result.length] = quote ? $replace(subString, reEscapeChar, "$1") : number4 || match;
-      });
-      return result;
-    };
-    var getBaseIntrinsic = function getBaseIntrinsic2(name, allowMissing) {
-      var intrinsicName = name;
-      var alias;
-      if (hasOwn(LEGACY_ALIASES, intrinsicName)) {
-        alias = LEGACY_ALIASES[intrinsicName];
-        intrinsicName = "%" + alias[0] + "%";
-      }
-      if (hasOwn(INTRINSICS, intrinsicName)) {
-        var value = INTRINSICS[intrinsicName];
-        if (value === needsEval) {
-          value = doEval(intrinsicName);
-        }
-        if (typeof value === "undefined" && !allowMissing) {
-          throw new $TypeError("intrinsic " + name + " exists, but is not available. Please file an issue!");
-        }
-        return {
-          alias,
-          name: intrinsicName,
-          value
-        };
-      }
-      throw new $SyntaxError("intrinsic " + name + " does not exist!");
-    };
-    module.exports = function GetIntrinsic(name, allowMissing) {
-      if (typeof name !== "string" || name.length === 0) {
-        throw new $TypeError("intrinsic name must be a non-empty string");
-      }
-      if (arguments.length > 1 && typeof allowMissing !== "boolean") {
-        throw new $TypeError('"allowMissing" argument must be a boolean');
-      }
-      if ($exec(/^%?[^%]*%?$/, name) === null) {
-        throw new $SyntaxError("`%` may not be present anywhere but at the beginning and end of the intrinsic name");
-      }
-      var parts = stringToPath(name);
-      var intrinsicBaseName = parts.length > 0 ? parts[0] : "";
-      var intrinsic = getBaseIntrinsic("%" + intrinsicBaseName + "%", allowMissing);
-      var intrinsicRealName = intrinsic.name;
-      var value = intrinsic.value;
-      var skipFurtherCaching = false;
-      var alias = intrinsic.alias;
-      if (alias) {
-        intrinsicBaseName = alias[0];
-        $spliceApply(parts, $concat([0, 1], alias));
-      }
-      for (var i = 1, isOwn = true; i < parts.length; i += 1) {
-        var part = parts[i];
-        var first = $strSlice(part, 0, 1);
-        var last = $strSlice(part, -1);
-        if ((first === '"' || first === "'" || first === "`" || (last === '"' || last === "'" || last === "`")) && first !== last) {
-          throw new $SyntaxError("property names with quotes must have matching quotes");
-        }
-        if (part === "constructor" || !isOwn) {
-          skipFurtherCaching = true;
-        }
-        intrinsicBaseName += "." + part;
-        intrinsicRealName = "%" + intrinsicBaseName + "%";
-        if (hasOwn(INTRINSICS, intrinsicRealName)) {
-          value = INTRINSICS[intrinsicRealName];
-        } else if (value != null) {
-          if (!(part in value)) {
-            if (!allowMissing) {
-              throw new $TypeError("base intrinsic for " + name + " exists, but the property is not available.");
-            }
-            return void undefined2;
-          }
-          if ($gOPD && i + 1 >= parts.length) {
-            var desc = $gOPD(value, part);
-            isOwn = !!desc;
-            if (isOwn && "get" in desc && !("originalValue" in desc.get)) {
-              value = desc.get;
-            } else {
-              value = value[part];
-            }
-          } else {
-            isOwn = hasOwn(value, part);
-            value = value[part];
-          }
-          if (isOwn && !skipFurtherCaching) {
-            INTRINSICS[intrinsicRealName] = value;
-          }
-        }
-      }
-      return value;
-    };
-  }
-});
-
-// node_modules/set-function-length/index.js
-var require_set_function_length = __commonJS({
-  "node_modules/set-function-length/index.js"(exports, module) {
-    "use strict";
-    var GetIntrinsic = require_get_intrinsic();
-    var define2 = require_define_data_property();
-    var hasDescriptors = require_has_property_descriptors()();
-    var gOPD = require_gopd();
-    var $TypeError = require_type();
-    var $floor = GetIntrinsic("%Math.floor%");
-    module.exports = function setFunctionLength(fn, length) {
-      if (typeof fn !== "function") {
-        throw new $TypeError("`fn` is not a function");
-      }
-      if (typeof length !== "number" || length < 0 || length > 4294967295 || $floor(length) !== length) {
-        throw new $TypeError("`length` must be a positive 32-bit integer");
-      }
-      var loose = arguments.length > 2 && !!arguments[2];
-      var functionLengthIsConfigurable = true;
-      var functionLengthIsWritable = true;
-      if ("length" in fn && gOPD) {
-        var desc = gOPD(fn, "length");
-        if (desc && !desc.configurable) {
-          functionLengthIsConfigurable = false;
-        }
-        if (desc && !desc.writable) {
-          functionLengthIsWritable = false;
-        }
-      }
-      if (functionLengthIsConfigurable || functionLengthIsWritable || !loose) {
-        if (hasDescriptors) {
-          define2(
-            /** @type {Parameters<define>[0]} */
-            fn,
-            "length",
-            length,
-            true,
-            true
-          );
-        } else {
-          define2(
-            /** @type {Parameters<define>[0]} */
-            fn,
-            "length",
-            length
-          );
-        }
-      }
-      return fn;
-    };
-  }
-});
-
-// node_modules/call-bind-apply-helpers/applyBind.js
-var require_applyBind = __commonJS({
-  "node_modules/call-bind-apply-helpers/applyBind.js"(exports, module) {
-    "use strict";
-    var bind = require_function_bind();
-    var $apply = require_functionApply();
-    var actualApply = require_actualApply();
-    module.exports = function applyBind() {
-      return actualApply(bind, $apply, arguments);
-    };
-  }
-});
-
-// node_modules/call-bind/index.js
-var require_call_bind = __commonJS({
-  "node_modules/call-bind/index.js"(exports, module) {
-    "use strict";
-    var setFunctionLength = require_set_function_length();
-    var $defineProperty = require_es_define_property();
-    var callBindBasic = require_call_bind_apply_helpers();
-    var applyBind = require_applyBind();
-    module.exports = function callBind(originalFunction) {
-      var func = callBindBasic(arguments);
-      var adjustedLength = 1 + originalFunction.length - (arguments.length - 1);
-      return setFunctionLength(
-        func,
-        adjustedLength > 0 ? adjustedLength : 0,
-        true
-      );
-    };
-    if ($defineProperty) {
-      $defineProperty(module.exports, "apply", { value: applyBind });
-    } else {
-      module.exports.apply = applyBind;
-    }
-  }
-});
-
-// node_modules/call-bound/index.js
-var require_call_bound = __commonJS({
-  "node_modules/call-bound/index.js"(exports, module) {
-    "use strict";
-    var GetIntrinsic = require_get_intrinsic();
-    var callBindBasic = require_call_bind_apply_helpers();
-    var $indexOf = callBindBasic([GetIntrinsic("%String.prototype.indexOf%")]);
-    module.exports = function callBoundIntrinsic(name, allowMissing) {
-      var intrinsic = (
-        /** @type {(this: unknown, ...args: unknown[]) => unknown} */
-        GetIntrinsic(name, !!allowMissing)
-      );
-      if (typeof intrinsic === "function" && $indexOf(name, ".prototype.") > -1) {
-        return callBindBasic(
-          /** @type {const} */
-          [intrinsic]
-        );
-      }
-      return intrinsic;
-    };
-  }
-});
-
-// node_modules/math-intrinsics/isFinite.js
-var require_isFinite = __commonJS({
-  "node_modules/math-intrinsics/isFinite.js"(exports, module) {
-    "use strict";
-    var $isNaN = require_isNaN();
-    module.exports = function isFinite2(x) {
-      return (typeof x === "number" || typeof x === "bigint") && !$isNaN(x) && x !== Infinity && x !== -Infinity;
-    };
-  }
-});
-
-// node_modules/math-intrinsics/isInteger.js
-var require_isInteger = __commonJS({
-  "node_modules/math-intrinsics/isInteger.js"(exports, module) {
-    "use strict";
-    var $abs = require_abs();
-    var $floor = require_floor();
-    var $isNaN = require_isNaN();
-    var $isFinite = require_isFinite();
-    module.exports = function isInteger(argument) {
-      if (typeof argument !== "number" || $isNaN(argument) || !$isFinite(argument)) {
-        return false;
-      }
-      var absValue = $abs(argument);
-      return $floor(absValue) === absValue;
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/Number/toString.js
-var require_toString = __commonJS({
-  "node_modules/es-abstract/2024/Number/toString.js"(exports, module) {
-    "use strict";
-    var $TypeError = require_type();
-    var callBound = require_call_bound();
-    var isInteger = require_isInteger();
-    var $numberToString = callBound("Number.prototype.toString");
-    module.exports = function NumberToString(x, radix) {
-      if (typeof x !== "number") {
-        throw new $TypeError("Assertion failed: `x` must be a Number");
-      }
-      if (!isInteger(radix) || radix < 2 || radix > 36) {
-        throw new $TypeError("Assertion failed: `radix` must be an integer >= 2 and <= 36");
-      }
-      return $numberToString(x, radix);
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/StringIndexOf.js
-var require_StringIndexOf = __commonJS({
-  "node_modules/es-abstract/2024/StringIndexOf.js"(exports, module) {
-    "use strict";
-    var callBound = require_call_bound();
-    var $TypeError = require_type();
-    var isInteger = require_isInteger();
-    var $slice = callBound("String.prototype.slice");
-    module.exports = function StringIndexOf(string4, searchValue, fromIndex) {
-      if (typeof string4 !== "string") {
-        throw new $TypeError("Assertion failed: `string` must be a String");
-      }
-      if (typeof searchValue !== "string") {
-        throw new $TypeError("Assertion failed: `searchValue` must be a String");
-      }
-      if (!isInteger(fromIndex) || fromIndex < 0) {
-        throw new $TypeError("Assertion failed: `fromIndex` must be a non-negative integer");
-      }
-      var len = string4.length;
-      if (searchValue === "" && fromIndex <= len) {
-        return fromIndex;
-      }
-      var searchLen = searchValue.length;
-      for (var i = fromIndex; i <= len - searchLen; i += 1) {
-        var candidate = $slice(string4, i, i + searchLen);
-        if (candidate === searchValue) {
-          return i;
-        }
-      }
-      return -1;
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/StringPad.js
-var require_StringPad = __commonJS({
-  "node_modules/es-abstract/2024/StringPad.js"(exports, module) {
-    "use strict";
-    var $TypeError = require_type();
-    var callBound = require_call_bound();
-    var isInteger = require_isInteger();
-    var $strSlice = callBound("String.prototype.slice");
-    module.exports = function StringPad(S, maxLength, fillString, placement) {
-      if (typeof S !== "string") {
-        throw new $TypeError("Assertion failed: `S` must be a String");
-      }
-      if (!isInteger(maxLength) || maxLength < 0) {
-        throw new $TypeError("Assertion failed: `maxLength` must be a non-negative integer");
-      }
-      if (typeof fillString !== "string") {
-        throw new $TypeError("Assertion failed: `fillString` must be a String");
-      }
-      if (placement !== "start" && placement !== "end" && placement !== "START" && placement !== "END") {
-        throw new $TypeError("Assertion failed: `placement` must be ~START~ or ~END~");
-      }
-      var stringLength = S.length;
-      if (maxLength <= stringLength) {
-        return S;
-      }
-      if (fillString === "") {
-        return S;
-      }
-      var fillLen = maxLength - stringLength;
-      var truncatedStringFiller = "";
-      while (truncatedStringFiller.length < fillLen) {
-        truncatedStringFiller += fillString;
-      }
-      truncatedStringFiller = $strSlice(truncatedStringFiller, 0, fillLen);
-      if (placement === "start" || placement === "START") {
-        return truncatedStringFiller + S;
-      }
-      return S + truncatedStringFiller;
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/UnicodeEscape.js
-var require_UnicodeEscape = __commonJS({
-  "node_modules/es-abstract/2024/UnicodeEscape.js"(exports, module) {
-    "use strict";
-    var $TypeError = require_type();
-    var callBound = require_call_bound();
-    var $charCodeAt = callBound("String.prototype.charCodeAt");
-    var $numberToString = callBound("Number.prototype.toString");
-    var $toLowerCase = callBound("String.prototype.toLowerCase");
-    var StringPad = require_StringPad();
-    module.exports = function UnicodeEscape(C) {
-      if (typeof C !== "string" || C.length !== 1) {
-        throw new $TypeError("Assertion failed: `C` must be a single code unit");
-      }
-      var n = $charCodeAt(C, 0);
-      if (n > 65535) {
-        throw new $TypeError("`Assertion failed: numeric value of `C` must be <= 0xFFFF");
-      }
-      return "\\u" + StringPad($toLowerCase($numberToString(n, 16)), 4, "0", "start");
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/floor.js
-var require_floor2 = __commonJS({
-  "node_modules/es-abstract/2024/floor.js"(exports, module) {
-    "use strict";
-    var $floor = require_floor();
-    module.exports = function floor(x) {
-      if (typeof x === "bigint") {
-        return x;
-      }
-      return $floor(x);
-    };
-  }
-});
-
-// node_modules/math-intrinsics/mod.js
-var require_mod = __commonJS({
-  "node_modules/math-intrinsics/mod.js"(exports, module) {
-    "use strict";
-    var $floor = require_floor();
-    module.exports = function mod(number4, modulo) {
-      var remain = number4 % modulo;
-      return $floor(remain >= 0 ? remain : remain + modulo);
-    };
-  }
-});
-
-// node_modules/es-abstract/helpers/mod.js
-var require_mod2 = __commonJS({
-  "node_modules/es-abstract/helpers/mod.js"(exports, module) {
-    "use strict";
-    module.exports = require_mod();
-  }
-});
-
-// node_modules/es-abstract/2024/modulo.js
-var require_modulo = __commonJS({
-  "node_modules/es-abstract/2024/modulo.js"(exports, module) {
-    "use strict";
-    var mod = require_mod2();
-    module.exports = function modulo(x, y) {
-      return mod(x, y);
-    };
-  }
-});
-
-// node_modules/es-abstract/helpers/isCodePoint.js
-var require_isCodePoint = __commonJS({
-  "node_modules/es-abstract/helpers/isCodePoint.js"(exports, module) {
-    "use strict";
-    module.exports = function isCodePoint(cp) {
-      return typeof cp === "number" && cp >= 0 && cp <= 1114111 && (cp | 0) === cp;
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/UTF16EncodeCodePoint.js
-var require_UTF16EncodeCodePoint = __commonJS({
-  "node_modules/es-abstract/2024/UTF16EncodeCodePoint.js"(exports, module) {
-    "use strict";
-    var GetIntrinsic = require_get_intrinsic();
-    var $TypeError = require_type();
-    var $fromCharCode = GetIntrinsic("%String.fromCharCode%");
-    var floor = require_floor2();
-    var modulo = require_modulo();
-    var isCodePoint = require_isCodePoint();
-    module.exports = function UTF16EncodeCodePoint(cp) {
-      if (!isCodePoint(cp)) {
-        throw new $TypeError("Assertion failed: `cp` must be >= 0 and <= 0x10FFFF");
-      }
-      if (cp <= 65535) {
-        return $fromCharCode(cp);
-      }
-      var cu1 = $fromCharCode(floor((cp - 65536) / 1024) + 55296);
-      var cu2 = $fromCharCode(modulo(cp - 65536, 1024) + 56320);
-      return cu1 + cu2;
-    };
-  }
-});
-
-// node_modules/es-abstract/helpers/isLeadingSurrogate.js
-var require_isLeadingSurrogate = __commonJS({
-  "node_modules/es-abstract/helpers/isLeadingSurrogate.js"(exports, module) {
-    "use strict";
-    module.exports = function isLeadingSurrogate(charCode) {
-      return typeof charCode === "number" && charCode >= 55296 && charCode <= 56319;
-    };
-  }
-});
-
-// node_modules/es-abstract/helpers/isTrailingSurrogate.js
-var require_isTrailingSurrogate = __commonJS({
-  "node_modules/es-abstract/helpers/isTrailingSurrogate.js"(exports, module) {
-    "use strict";
-    module.exports = function isTrailingSurrogate(charCode) {
-      return typeof charCode === "number" && charCode >= 56320 && charCode <= 57343;
-    };
-  }
-});
-
-// node_modules/is-callable/index.js
-var require_is_callable = __commonJS({
-  "node_modules/is-callable/index.js"(exports, module) {
-    "use strict";
-    var fnToStr = Function.prototype.toString;
-    var reflectApply = typeof Reflect === "object" && Reflect !== null && Reflect.apply;
-    var badArrayLike;
-    var isCallableMarker;
-    if (typeof reflectApply === "function" && typeof Object.defineProperty === "function") {
-      try {
-        badArrayLike = Object.defineProperty({}, "length", {
-          get: function() {
-            throw isCallableMarker;
-          }
-        });
-        isCallableMarker = {};
-        reflectApply(function() {
-          throw 42;
-        }, null, badArrayLike);
-      } catch (_) {
-        if (_ !== isCallableMarker) {
-          reflectApply = null;
-        }
-      }
-    } else {
-      reflectApply = null;
-    }
-    var constructorRegex = /^\s*class\b/;
-    var isES6ClassFn = function isES6ClassFunction(value) {
-      try {
-        var fnStr = fnToStr.call(value);
-        return constructorRegex.test(fnStr);
-      } catch (e) {
-        return false;
-      }
-    };
-    var tryFunctionObject = function tryFunctionToStr(value) {
-      try {
-        if (isES6ClassFn(value)) {
-          return false;
-        }
-        fnToStr.call(value);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    };
-    var toStr = Object.prototype.toString;
-    var objectClass = "[object Object]";
-    var fnClass = "[object Function]";
-    var genClass = "[object GeneratorFunction]";
-    var ddaClass = "[object HTMLAllCollection]";
-    var ddaClass2 = "[object HTML document.all class]";
-    var ddaClass3 = "[object HTMLCollection]";
-    var hasToStringTag = typeof Symbol === "function" && !!Symbol.toStringTag;
-    var isIE68 = !(0 in [,]);
-    var isDDA = function isDocumentDotAll() {
-      return false;
-    };
-    if (typeof document === "object") {
-      all = document.all;
-      if (toStr.call(all) === toStr.call(document.all)) {
-        isDDA = function isDocumentDotAll(value) {
-          if ((isIE68 || !value) && (typeof value === "undefined" || typeof value === "object")) {
-            try {
-              var str = toStr.call(value);
-              return (str === ddaClass || str === ddaClass2 || str === ddaClass3 || str === objectClass) && value("") == null;
-            } catch (e) {
-            }
-          }
-          return false;
-        };
-      }
-    }
-    var all;
-    module.exports = reflectApply ? function isCallable(value) {
-      if (isDDA(value)) {
-        return true;
-      }
-      if (!value) {
-        return false;
-      }
-      if (typeof value !== "function" && typeof value !== "object") {
-        return false;
-      }
-      try {
-        reflectApply(value, null, badArrayLike);
-      } catch (e) {
-        if (e !== isCallableMarker) {
-          return false;
-        }
-      }
-      return !isES6ClassFn(value) && tryFunctionObject(value);
-    } : function isCallable(value) {
-      if (isDDA(value)) {
-        return true;
-      }
-      if (!value) {
-        return false;
-      }
-      if (typeof value !== "function" && typeof value !== "object") {
-        return false;
-      }
-      if (hasToStringTag) {
-        return tryFunctionObject(value);
-      }
-      if (isES6ClassFn(value)) {
-        return false;
-      }
-      var strClass = toStr.call(value);
-      if (strClass !== fnClass && strClass !== genClass && !/^\[object HTML/.test(strClass)) {
-        return false;
-      }
-      return tryFunctionObject(value);
-    };
-  }
-});
-
-// node_modules/for-each/index.js
-var require_for_each = __commonJS({
-  "node_modules/for-each/index.js"(exports, module) {
-    "use strict";
-    var isCallable = require_is_callable();
-    var toStr = Object.prototype.toString;
-    var hasOwnProperty = Object.prototype.hasOwnProperty;
-    var forEachArray = function forEachArray2(array2, iterator, receiver) {
-      for (var i = 0, len = array2.length; i < len; i++) {
-        if (hasOwnProperty.call(array2, i)) {
-          if (receiver == null) {
-            iterator(array2[i], i, array2);
-          } else {
-            iterator.call(receiver, array2[i], i, array2);
-          }
-        }
-      }
-    };
-    var forEachString = function forEachString2(string4, iterator, receiver) {
-      for (var i = 0, len = string4.length; i < len; i++) {
-        if (receiver == null) {
-          iterator(string4.charAt(i), i, string4);
-        } else {
-          iterator.call(receiver, string4.charAt(i), i, string4);
-        }
-      }
-    };
-    var forEachObject = function forEachObject2(object2, iterator, receiver) {
-      for (var k in object2) {
-        if (hasOwnProperty.call(object2, k)) {
-          if (receiver == null) {
-            iterator(object2[k], k, object2);
-          } else {
-            iterator.call(receiver, object2[k], k, object2);
-          }
-        }
-      }
-    };
-    function isArray(x) {
-      return toStr.call(x) === "[object Array]";
-    }
-    module.exports = function forEach(list, iterator, thisArg) {
-      if (!isCallable(iterator)) {
-        throw new TypeError("iterator must be a function");
-      }
-      var receiver;
-      if (arguments.length >= 3) {
-        receiver = thisArg;
-      }
-      if (isArray(list)) {
-        forEachArray(list, iterator, receiver);
-      } else if (typeof list === "string") {
-        forEachString(list, iterator, receiver);
-      } else {
-        forEachObject(list, iterator, receiver);
-      }
-    };
-  }
-});
-
-// node_modules/has-tostringtag/shams.js
-var require_shams2 = __commonJS({
-  "node_modules/has-tostringtag/shams.js"(exports, module) {
-    "use strict";
-    var hasSymbols = require_shams();
-    module.exports = function hasToStringTagShams() {
-      return hasSymbols() && !!Symbol.toStringTag;
-    };
-  }
-});
-
-// node_modules/is-regex/index.js
-var require_is_regex = __commonJS({
-  "node_modules/is-regex/index.js"(exports, module) {
-    "use strict";
-    var callBound = require_call_bound();
-    var hasToStringTag = require_shams2()();
-    var hasOwn = require_hasown();
-    var gOPD = require_gopd();
-    var fn;
-    if (hasToStringTag) {
-      $exec = callBound("RegExp.prototype.exec");
-      isRegexMarker = {};
-      throwRegexMarker = function() {
-        throw isRegexMarker;
-      };
-      badStringifier = {
-        toString: throwRegexMarker,
-        valueOf: throwRegexMarker
-      };
-      if (typeof Symbol.toPrimitive === "symbol") {
-        badStringifier[Symbol.toPrimitive] = throwRegexMarker;
-      }
-      fn = function isRegex(value) {
-        if (!value || typeof value !== "object") {
-          return false;
-        }
-        var descriptor = (
-          /** @type {NonNullable<typeof gOPD>} */
-          gOPD(
-            /** @type {{ lastIndex?: unknown }} */
-            value,
-            "lastIndex"
-          )
-        );
-        var hasLastIndexDataProperty = descriptor && hasOwn(descriptor, "value");
-        if (!hasLastIndexDataProperty) {
-          return false;
-        }
-        try {
-          $exec(
-            value,
-            /** @type {string} */
-            /** @type {unknown} */
-            badStringifier
-          );
-        } catch (e) {
-          return e === isRegexMarker;
-        }
-      };
-    } else {
-      $toString = callBound("Object.prototype.toString");
-      regexClass = "[object RegExp]";
-      fn = function isRegex(value) {
-        if (!value || typeof value !== "object" && typeof value !== "function") {
-          return false;
-        }
-        return $toString(value) === regexClass;
-      };
-    }
-    var $exec;
-    var isRegexMarker;
-    var throwRegexMarker;
-    var badStringifier;
-    var $toString;
-    var regexClass;
-    module.exports = fn;
-  }
-});
-
-// node_modules/safe-regex-test/index.js
-var require_safe_regex_test = __commonJS({
-  "node_modules/safe-regex-test/index.js"(exports, module) {
-    "use strict";
-    var callBound = require_call_bound();
-    var isRegex = require_is_regex();
-    var $exec = callBound("RegExp.prototype.exec");
-    var $TypeError = require_type();
-    module.exports = function regexTester(regex) {
-      if (!isRegex(regex)) {
-        throw new $TypeError("`regex` must be a RegExp");
-      }
-      return function test(s) {
-        return $exec(regex, s) !== null;
-      };
-    };
-  }
-});
-
-// node_modules/regexp.escape/aos/EncodeForRegExpEscape.js
-var require_EncodeForRegExpEscape = __commonJS({
-  "node_modules/regexp.escape/aos/EncodeForRegExpEscape.js"(exports, module) {
-    "use strict";
-    var NumberToString = require_toString();
-    var StringIndexOf = require_StringIndexOf();
-    var StringPad = require_StringPad();
-    var UnicodeEscape = require_UnicodeEscape();
-    var UTF16EncodeCodePoint = require_UTF16EncodeCodePoint();
-    var isLeadingSurrogate = require_isLeadingSurrogate();
-    var isTrailingSurrogate = require_isTrailingSurrogate();
-    var $TypeError = require_type();
-    var isCodePoint = require_isCodePoint();
-    var forEach = require_for_each();
-    var regexTester = require_safe_regex_test();
-    var isWhiteSpace = regexTester(/^\s$/);
-    var isLineTerminator = regexTester(/^[\n\r\u2028\u2029]$/);
-    var syntaxCharacter = "^$\\.*+?()[]{}|";
-    var otherPunctuators = ",-=<>#&!%:;@~'`\"";
-    var table64 = {
-      "	": "t",
-      "\n": "n",
-      "\v": "v",
-      "\f": "f",
-      "\r": "r",
-      __proto__: null
-    };
-    module.exports = function EncodeForRegExpEscape(c) {
-      if (!isCodePoint(c)) {
-        throw new $TypeError("Assertion failed: `c` must be a valid Unicode code point");
-      }
-      var encoded = UTF16EncodeCodePoint(c);
-      if (StringIndexOf(syntaxCharacter, encoded, 0) > -1 || encoded === "/") {
-        return "\\" + encoded;
-      } else if (encoded in table64) {
-        return "\\" + table64[encoded];
-      }
-      if (StringIndexOf(otherPunctuators, encoded, 0) > -1 || isWhiteSpace(encoded) || isLineTerminator(encoded) || isLeadingSurrogate(c) || isTrailingSurrogate(c)) {
-        if (c < 255) {
-          var hex3 = NumberToString(c, 16);
-          return "\\x" + StringPad(hex3, 2, "0", "START");
-        }
-        var escaped = "";
-        var codeUnits = encoded;
-        forEach(codeUnits, function(cu) {
-          escaped += UnicodeEscape(cu);
-        });
-        return escaped;
-      }
-      return encoded;
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/UTF16SurrogatePairToCodePoint.js
-var require_UTF16SurrogatePairToCodePoint = __commonJS({
-  "node_modules/es-abstract/2024/UTF16SurrogatePairToCodePoint.js"(exports, module) {
-    "use strict";
-    var GetIntrinsic = require_get_intrinsic();
-    var $TypeError = require_type();
-    var $fromCharCode = GetIntrinsic("%String.fromCharCode%");
-    var isLeadingSurrogate = require_isLeadingSurrogate();
-    var isTrailingSurrogate = require_isTrailingSurrogate();
-    module.exports = function UTF16SurrogatePairToCodePoint(lead, trail) {
-      if (!isLeadingSurrogate(lead) || !isTrailingSurrogate(trail)) {
-        throw new $TypeError("Assertion failed: `lead` must be a leading surrogate char code, and `trail` must be a trailing surrogate char code");
-      }
-      return $fromCharCode(lead) + $fromCharCode(trail);
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/CodePointAt.js
-var require_CodePointAt = __commonJS({
-  "node_modules/es-abstract/2024/CodePointAt.js"(exports, module) {
-    "use strict";
-    var $TypeError = require_type();
-    var callBound = require_call_bound();
-    var isLeadingSurrogate = require_isLeadingSurrogate();
-    var isTrailingSurrogate = require_isTrailingSurrogate();
-    var UTF16SurrogatePairToCodePoint = require_UTF16SurrogatePairToCodePoint();
-    var $charAt = callBound("String.prototype.charAt");
-    var $charCodeAt = callBound("String.prototype.charCodeAt");
-    module.exports = function CodePointAt(string4, position) {
-      if (typeof string4 !== "string") {
-        throw new $TypeError("Assertion failed: `string` must be a String");
-      }
-      var size = string4.length;
-      if (position < 0 || position >= size) {
-        throw new $TypeError("Assertion failed: `position` must be >= 0, and < the length of `string`");
-      }
-      var first = $charCodeAt(string4, position);
-      var cp = $charAt(string4, position);
-      var firstIsLeading = isLeadingSurrogate(first);
-      var firstIsTrailing = isTrailingSurrogate(first);
-      if (!firstIsLeading && !firstIsTrailing) {
-        return {
-          "[[CodePoint]]": cp,
-          "[[CodeUnitCount]]": 1,
-          "[[IsUnpairedSurrogate]]": false
-        };
-      }
-      if (firstIsTrailing || position + 1 === size) {
-        return {
-          "[[CodePoint]]": cp,
-          "[[CodeUnitCount]]": 1,
-          "[[IsUnpairedSurrogate]]": true
-        };
-      }
-      var second = $charCodeAt(string4, position + 1);
-      if (!isTrailingSurrogate(second)) {
-        return {
-          "[[CodePoint]]": cp,
-          "[[CodeUnitCount]]": 1,
-          "[[IsUnpairedSurrogate]]": true
-        };
-      }
-      return {
-        "[[CodePoint]]": UTF16SurrogatePairToCodePoint(first, second),
-        "[[CodeUnitCount]]": 2,
-        "[[IsUnpairedSurrogate]]": false
-      };
-    };
-  }
-});
-
-// node_modules/es-abstract/2024/StringToCodePoints.js
-var require_StringToCodePoints = __commonJS({
-  "node_modules/es-abstract/2024/StringToCodePoints.js"(exports, module) {
-    "use strict";
-    var $TypeError = require_type();
-    var CodePointAt = require_CodePointAt();
-    module.exports = function StringToCodePoints(string4) {
-      if (typeof string4 !== "string") {
-        throw new $TypeError("Assertion failed: `string` must be a String");
-      }
-      var codePoints = [];
-      var size = string4.length;
-      var position = 0;
-      while (position < size) {
-        var cp = CodePointAt(string4, position);
-        codePoints[codePoints.length] = cp["[[CodePoint]]"];
-        position += cp["[[CodeUnitCount]]"];
-      }
-      return codePoints;
-    };
-  }
-});
-
-// node_modules/call-bind/callBound.js
-var require_callBound = __commonJS({
-  "node_modules/call-bind/callBound.js"(exports, module) {
-    "use strict";
-    var GetIntrinsic = require_get_intrinsic();
-    var callBind = require_call_bind();
-    var $indexOf = callBind(GetIntrinsic("String.prototype.indexOf"));
-    module.exports = function callBoundIntrinsic(name, allowMissing) {
-      var intrinsic = GetIntrinsic(name, !!allowMissing);
-      if (typeof intrinsic === "function" && $indexOf(name, ".prototype.") > -1) {
-        return callBind(intrinsic);
-      }
-      return intrinsic;
-    };
-  }
-});
-
-// node_modules/regexp.escape/implementation.js
-var require_implementation3 = __commonJS({
-  "node_modules/regexp.escape/implementation.js"(exports, module) {
-    "use strict";
-    var EncodeForRegExpEscape = require_EncodeForRegExpEscape();
-    var NumberToString = require_toString();
-    var StringToCodePoints = require_StringToCodePoints();
-    var regexTester = require_safe_regex_test();
-    var forEach = require_for_each();
-    var $TypeError = require_type();
-    var isDecimalDigitOrASCIILetter = regexTester(/^[\da-zA-Z]$/);
-    var callBound = require_callBound();
-    var $charCodeAt = callBound("String.prototype.charCodeAt");
-    var codePointStringToNum = function codePointStringToNumber(c) {
-      var first = $charCodeAt(c, 0);
-      if (first < 55296 || first > 56319 || c.length === 1) {
-        return first;
-      }
-      var second = $charCodeAt(c, 1);
-      if (second < 56320 || second > 57343) {
-        return first;
-      }
-      return (first - 55296) * 1024 + (second - 56320) + 65536;
-    };
-    module.exports = function escape(S) {
-      if (typeof S !== "string") {
-        throw new $TypeError("`S` must be a String");
-      }
-      var escaped = "";
-      var cpList = StringToCodePoints(S);
-      forEach(cpList, function(c) {
-        if (escaped === "" && isDecimalDigitOrASCIILetter(c)) {
-          var hex3 = NumberToString(codePointStringToNum(c), 16);
-          escaped += "\\x" + hex3;
-        } else {
-          escaped += EncodeForRegExpEscape(codePointStringToNum(c));
-        }
-      });
-      return escaped;
-    };
-  }
-});
-
-// node_modules/regexp.escape/polyfill.js
-var require_polyfill = __commonJS({
-  "node_modules/regexp.escape/polyfill.js"(exports, module) {
-    "use strict";
-    var implementation = require_implementation3();
-    module.exports = function getPolyfill() {
-      return RegExp.escape || implementation;
-    };
-  }
-});
-
-// node_modules/regexp.escape/shim.js
-var require_shim = __commonJS({
-  "node_modules/regexp.escape/shim.js"(exports, module) {
-    "use strict";
-    var define2 = require_define_properties();
-    var escapePolyfill = require_polyfill()();
-    module.exports = function shimRegExpEscape() {
-      define2(RegExp, {
-        escape: escapePolyfill
-      });
-      return RegExp.escape;
-    };
-  }
-});
-
-// node_modules/regexp.escape/index.js
-var require_regexp = __commonJS({
-  "node_modules/regexp.escape/index.js"(exports, module) {
-    "use strict";
-    var define2 = require_define_properties();
-    var callBind = require_call_bind();
-    var implementation = require_implementation3();
-    var getPolyfill = require_polyfill();
-    var shim = require_shim();
-    var bound = callBind(implementation, null);
-    define2(bound, {
-      getPolyfill,
-      implementation,
-      method: implementation,
-      // TODO: remove at semver-major
-      shim
-    });
-    module.exports = bound;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/css-style-parser.js
-var require_css_style_parser = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/css-style-parser.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.parseCssTextAlign = exports.parseCssFontFamily = exports.parseCssTextDecoration = exports.parseCssFontStyle = exports.parseCssFontWeight = exports.parseCssFontSize = exports.normalizeCssColor = exports.parseInlineCss = void 0;
-    var PX_TO_PT = 0.75;
-    var NAMED_COLORS = {
-      aqua: "00FFFF",
-      black: "000000",
-      blue: "0000FF",
-      brown: "A52A2A",
-      cyan: "00FFFF",
-      darkblue: "00008B",
-      darkgray: "A9A9A9",
-      darkgreen: "006400",
-      darkgrey: "A9A9A9",
-      darkred: "8B0000",
-      fuchsia: "FF00FF",
-      gold: "FFD700",
-      gray: "808080",
-      green: "008000",
-      grey: "808080",
-      indigo: "4B0082",
-      lightblue: "ADD8E6",
-      lightgray: "D3D3D3",
-      lightgreen: "90EE90",
-      lightgrey: "D3D3D3",
-      lime: "00FF00",
-      magenta: "FF00FF",
-      maroon: "800000",
-      navy: "000080",
-      olive: "808000",
-      orange: "FFA500",
-      pink: "FFC0CB",
-      purple: "800080",
-      red: "FF0000",
-      silver: "C0C0C0",
-      teal: "008080",
-      turquoise: "40E0D0",
-      violet: "EE82EE",
-      white: "FFFFFF",
-      yellow: "FFFF00"
-    };
-    var parseInlineCss = (styleAttr) => {
-      const declarations = {};
-      if (!styleAttr) {
-        return declarations;
-      }
-      styleAttr.split(";").forEach((declaration) => {
-        const separator = declaration.indexOf(":");
-        if (separator === -1) {
-          return;
-        }
-        const property = declaration.slice(0, separator).trim().toLowerCase();
-        const value = declaration.slice(separator + 1).trim();
-        if (property && value) {
-          declarations[property] = value;
-        }
-      });
-      return declarations;
-    };
-    exports.parseInlineCss = parseInlineCss;
-    var normalizeCssColor = (input2) => {
-      if (!input2) {
-        return void 0;
-      }
-      const value = input2.trim().toLowerCase();
-      if (NAMED_COLORS[value]) {
-        return NAMED_COLORS[value];
-      }
-      const hexMatch = value.match(/^#?([0-9a-f]{3,8})$/);
-      if (hexMatch) {
-        const hex3 = hexMatch[1];
-        if (hex3.length === 3 || hex3.length === 4) {
-          return hex3.slice(0, 3).split("").map((char) => char + char).join("").toUpperCase();
-        }
-        if (hex3.length === 6 || hex3.length === 8) {
-          return hex3.slice(0, 6).toUpperCase();
-        }
-        return void 0;
-      }
-      const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/);
-      if (rgbMatch) {
-        const parts = rgbMatch[1].split(/[,/\s]+/).map((part) => part.trim()).filter((part) => part !== "");
-        if (parts.length < 3) {
-          return void 0;
-        }
-        const channels = parts.slice(0, 3).map((part) => {
-          const numeric = parseFloat(part);
-          if (isNaN(numeric)) {
-            return NaN;
-          }
-          const absolute = part.endsWith("%") ? numeric / 100 * 255 : numeric;
-          return Math.min(255, Math.max(0, Math.round(absolute)));
-        });
-        if (channels.some((channel) => isNaN(channel))) {
-          return void 0;
-        }
-        return channels.map((channel) => channel.toString(16).padStart(2, "0")).join("").toUpperCase();
-      }
-      return void 0;
-    };
-    exports.normalizeCssColor = normalizeCssColor;
-    var parseCssFontSize = (input2) => {
-      if (!input2) {
-        return void 0;
-      }
-      const match = input2.trim().toLowerCase().match(/^(-?[\d.]+)\s*(px|pt)?$/);
-      if (!match) {
-        return void 0;
-      }
-      const numeric = parseFloat(match[1]);
-      if (isNaN(numeric) || numeric <= 0) {
-        return void 0;
-      }
-      const points = match[2] === "pt" ? numeric : numeric * PX_TO_PT;
-      return Math.round(points * 100);
-    };
-    exports.parseCssFontSize = parseCssFontSize;
-    var parseCssFontWeight = (input2) => {
-      const value = input2.trim().toLowerCase();
-      if (value === "bold" || value === "bolder") {
-        return true;
-      }
-      if (value === "normal" || value === "lighter") {
-        return false;
-      }
-      const numeric = parseInt(value, 10);
-      if (isNaN(numeric)) {
-        return void 0;
-      }
-      return numeric >= 600;
-    };
-    exports.parseCssFontWeight = parseCssFontWeight;
-    var parseCssFontStyle = (input2) => {
-      const value = input2.trim().toLowerCase();
-      if (value === "italic" || value === "oblique") {
-        return true;
-      }
-      if (value === "normal") {
-        return false;
-      }
-      return void 0;
-    };
-    exports.parseCssFontStyle = parseCssFontStyle;
-    var parseCssTextDecoration = (input2) => {
-      const value = input2.trim().toLowerCase();
-      const result = {};
-      if (value.includes("none")) {
-        return { isUnderlined: false, isStrike: false };
-      }
-      if (value.includes("underline")) {
-        result.isUnderlined = true;
-      }
-      if (value.includes("line-through")) {
-        result.isStrike = true;
-      }
-      return result;
-    };
-    exports.parseCssTextDecoration = parseCssTextDecoration;
-    var parseCssFontFamily = (input2) => {
-      var _a3;
-      const first = (_a3 = input2.split(",")[0]) === null || _a3 === void 0 ? void 0 : _a3.trim();
-      if (!first) {
-        return void 0;
-      }
-      const unquoted = first.replace(/^["']|["']$/g, "").trim();
-      return unquoted === "" ? void 0 : unquoted;
-    };
-    exports.parseCssFontFamily = parseCssFontFamily;
-    var parseCssTextAlign = (input2) => {
-      switch (input2.trim().toLowerCase()) {
-        case "left":
-        case "start":
-          return "l";
-        case "center":
-          return "ctr";
-        case "right":
-        case "end":
-          return "r";
-        case "justify":
-          return "just";
-        default:
-          return void 0;
-      }
-    };
-    exports.parseCssTextAlign = parseCssTextAlign;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-color-helper.js
-var require_modify_color_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-color-helper.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_elements_1 = __importDefault(require_xml_elements());
-    var xml_helper_1 = require_xml_helper();
-    var css_style_parser_1 = require_css_style_parser();
-    var ModifyColorHelper = class _ModifyColorHelper {
-      /**
-       * Check if the given element has a background which is non-transparent
-       * @param element The XML element to check
-       * @returns ShapeBackgroundInfo
-       */
-      static elementHasBackground(element) {
-        const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
-        if (!spPr) {
-          return {
-            isDark: false
-          };
-        }
-        const solidFill = spPr.getElementsByTagName("a:solidFill")[0];
-        if (solidFill) {
-          const schemeClr = solidFill.getElementsByTagName("a:schemeClr")[0];
-          const srgbClr = solidFill.getElementsByTagName("a:srgbClr")[0];
-          if (schemeClr) {
-            const schemeValue = schemeClr.getAttribute("val");
-            return {
-              color: { type: "schemeClr", value: schemeValue || "bg1" },
-              isDark: _ModifyColorHelper.isSchemeColorDark(schemeValue || "bg1")
-            };
-          }
-          if (srgbClr) {
-            const rgbValue = srgbClr.getAttribute("val");
-            return {
-              color: { type: "srgbClr", value: rgbValue || "FFFFFF" },
-              isDark: _ModifyColorHelper.isRgbColorDark(rgbValue || "FFFFFF")
-            };
-          }
-          return {
-            isDark: false
-          };
-        }
-        const gradFill = spPr.getElementsByTagName("a:gradFill")[0];
-        if (gradFill) {
-          const gsLst = gradFill.getElementsByTagName("a:gsLst")[0];
-          if (gsLst) {
-            const firstGs = gsLst.getElementsByTagName("a:gs")[0];
-            if (firstGs) {
-              const schemeClr = firstGs.getElementsByTagName("a:schemeClr")[0];
-              const srgbClr = firstGs.getElementsByTagName("a:srgbClr")[0];
-              if (schemeClr) {
-                const schemeValue = schemeClr.getAttribute("val");
-                return {
-                  color: { type: "schemeClr", value: schemeValue || "bg1" },
-                  isDark: _ModifyColorHelper.isSchemeColorDark(schemeValue || "bg1")
-                };
-              }
-              if (srgbClr) {
-                const rgbValue = srgbClr.getAttribute("val");
-                return {
-                  color: { type: "srgbClr", value: rgbValue || "FFFFFF" },
-                  isDark: _ModifyColorHelper.isRgbColorDark(rgbValue || "FFFFFF")
-                };
-              }
-            }
-          }
-          return {
-            isDark: false
-          };
-        }
-        const pattFill = spPr.getElementsByTagName("a:pattFill")[0];
-        if (pattFill) {
-          const fgClr = pattFill.getElementsByTagName("a:fgClr")[0];
-          if (fgClr) {
-            const schemeClr = fgClr.getElementsByTagName("a:schemeClr")[0];
-            const srgbClr = fgClr.getElementsByTagName("a:srgbClr")[0];
-            if (schemeClr) {
-              const schemeValue = schemeClr.getAttribute("val");
-              return {
-                color: { type: "schemeClr", value: schemeValue || "bg1" },
-                isDark: _ModifyColorHelper.isSchemeColorDark(schemeValue || "bg1")
-              };
-            }
-            if (srgbClr) {
-              const rgbValue = srgbClr.getAttribute("val");
-              return {
-                color: { type: "srgbClr", value: rgbValue || "FFFFFF" },
-                isDark: _ModifyColorHelper.isRgbColorDark(rgbValue || "FFFFFF")
-              };
-            }
-          }
-        }
-        const noFill = spPr.getElementsByTagName("a:noFill")[0];
-        if (noFill) {
-          return {
-            isDark: false
-          };
-        }
-        return {
-          isDark: false
-        };
-      }
-      /**
-       * Determines if a scheme color is typically dark and would require light text
-       * @param schemeValue The scheme color value (e.g., 'dk1', 'lt1', 'accent1', etc.)
-       * @returns true if the color is typically dark
-       */
-      static isSchemeColorDark(schemeValue) {
-        const darkSchemeColors = [
-          "dk1",
-          // Dark 1 (usually black or very dark)
-          "dk2",
-          // Dark 2 (usually dark blue)
-          "accent1",
-          // Often darker colors
-          "accent2",
-          "accent4",
-          // Often purple/dark
-          "tx1",
-          // Text 1 (usually dark)
-          "tx2"
-          // Text 2 (usually dark)
-        ];
-        return darkSchemeColors.includes(schemeValue);
-      }
-      /**
-       * Determines if an RGB color is dark based on luminance
-       * @param rgbValue The RGB hex value (e.g., '000000', 'FF0000')
-       * @returns true if the color is dark
-       */
-      static isRgbColorDark(rgbValue) {
-        const hex3 = rgbValue.replace("#", "").toUpperCase();
-        if (hex3.length !== 6) {
-          return false;
-        }
-        const r = parseInt(hex3.substring(0, 2), 16);
-        const g = parseInt(hex3.substring(2, 4), 16);
-        const b = parseInt(hex3.substring(4, 6), 16);
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return luminance < 0.5;
-      }
-    };
-    ModifyColorHelper.solidFill = (color, index) => (element) => {
-      if (!color || !color.type || (element === null || element === void 0 ? void 0 : element.getElementsByTagName) === void 0)
-        return;
-      ModifyColorHelper.normalizeColorObject(color);
-      const solidFills = element.getElementsByTagName("a:solidFill");
-      if (!solidFills.length) {
-        const solidFill2 = new xml_elements_1.default(element, {
-          color
-        }).solidFill();
-        if (element.firstChild && index && index === 0) {
-          element.insertBefore(solidFill2, element.firstChild);
-        } else {
-          element.appendChild(solidFill2);
-        }
-        return;
-      }
-      const targetIndex = !index ? 0 : index === "last" ? solidFills.length - 1 : index;
-      const solidFill = solidFills[targetIndex];
-      const colorType = new xml_elements_1.default(element, {
-        color
-      }).colorType();
-      xml_helper_1.XmlHelper.sliceCollection(solidFill.childNodes, 0);
-      solidFill.appendChild(colorType);
-    };
-    ModifyColorHelper.removeNoFill = () => (element) => {
-      const hasNoFill = element.getElementsByTagName("a:noFill")[0];
-      if (hasNoFill) {
-        element.removeChild(hasNoFill);
-      }
-    };
-    ModifyColorHelper.normalizeColorObject = (color) => {
-      if ((color === null || color === void 0 ? void 0 : color.value) === void 0 || color.type !== "srgbClr") {
-        return color;
-      }
-      const normalized = (0, css_style_parser_1.normalizeCssColor)(String(color.value));
-      color.value = normalized !== null && normalized !== void 0 ? normalized : "CCCCCC";
-      return color;
-    };
-    exports.default = ModifyColorHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/cell-id-helper.js
-var require_cell_id_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/cell-id-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var CellIdHelper = class _CellIdHelper {
-      constructor(chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-        this._chars = chars;
-        this._nextId = [0];
-      }
-      start(index) {
-        this._nextId = [index];
-        return this;
-      }
-      next() {
-        const r = [];
-        for (const char of this._nextId) {
-          r.unshift(this._chars[char]);
-        }
-        this._increment();
-        return r.join("");
-      }
-      _increment() {
-        for (let i = 0; i < this._nextId.length; i++) {
-          const val = ++this._nextId[i];
-          if (val >= this._chars.length) {
-            this._nextId[i] = 0;
-          } else {
-            return;
-          }
-        }
-        this._nextId.push(0);
-      }
-      *[Symbol.iterator]() {
-        while (true) {
-          yield this.next();
-        }
-      }
-      static increment(letterNumber) {
-        const Generator = new this("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-        return Generator.start(letterNumber).next();
-      }
-      static setRange(range, colId, length) {
-        const info = range.split("!");
-        const spans = info[1].split(":");
-        const start = spans[0].split("$");
-        const startRow = Number(spans[0].split("$")[2]);
-        const colLetter = _CellIdHelper.increment(colId);
-        let endCell = "";
-        if (length !== void 0) {
-          const endRow = String(startRow + length - 1);
-          endCell = `:$${colLetter}$${endRow}`;
-        }
-        const newRange = `${info[0]}!$${colLetter}$${start[2]}${endCell}`;
-        return newRange;
-      }
-      static getSpanString(startColNumber, startRowNumber, cols, rows) {
-        const startColLetter = _CellIdHelper.increment(startColNumber);
-        const endColLetter = _CellIdHelper.increment(startColNumber + cols);
-        const endRowNumber = startRowNumber + rows;
-        return `${startColLetter}${startRowNumber}:${endColLetter}${endRowNumber}`;
-      }
-      static getCellAddressString(c, r) {
-        const colLetter = _CellIdHelper.increment(c);
-        return `${colLetter}${r + 1}`;
-      }
-      /**
-       * Extracts the zero-based column index from a cell address.
-       * e.g. "A1" => 0, "B12" => 1, "AA3" => 26
-       * Returns null if there are no leading letters to parse.
-       */
-      static getColumnIndex(address) {
-        const letters = address ? address.match(/^[A-Za-z]+/) : null;
-        if (!letters) {
-          return null;
-        }
-        const chars = letters[0].toUpperCase();
-        let index = 0;
-        for (let i = 0; i < chars.length; i++) {
-          index = index * 26 + (chars.charCodeAt(i) - 64);
-        }
-        return index - 1;
-      }
-      /**
-       * Extracts the row number from a cell address.
-       * e.g. "A1" => 1, "B12" => 12
-       * Returns null if there is no trailing number to parse.
-       */
-      static getRowNumber(address) {
-        const digits = address ? address.match(/\d+$/) : null;
-        return digits ? Number(digits[0]) : null;
-      }
-    };
-    exports.default = CellIdHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-xml-helper.js
-var require_modify_xml_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-xml-helper.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v });
-    }) : function(o, v) {
-      o["default"] = v;
-    });
-    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
-      var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function(o2) {
-          var ar = [];
-          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
-          return ar;
-        };
-        return ownKeys(o);
-      };
-      return function(mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) {
-          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        }
-        __setModuleDefault(result, mod);
-        return result;
-      };
-    })();
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var errors_1 = require_errors2();
-    var cell_id_helper_1 = __importDefault(require_cell_id_helper());
-    var general_helper_1 = require_general_helper();
-    var xml_helper_1 = require_xml_helper();
-    var xml_elements_1 = __importStar(require_xml_elements());
-    var logger_1 = require_logger();
-    var ModifyXmlHelper = class _ModifyXmlHelper {
-      constructor(root) {
-        this.root = root;
-        this.templates = {};
-      }
-      modify(tags, root) {
-        root = root || this.root;
-        for (const tag2 in tags) {
-          const modifier = tags[tag2];
-          if (modifier.all) {
-            this.modifyAll(tag2, modifier, root);
-          }
-          if (modifier.collection) {
-            const modifies = general_helper_1.GeneralHelper.arrayify(modifier.collection);
-            const collection = root.getElementsByTagName(tag2);
-            Object.values(modifies).forEach((modifyXml) => modifyXml(collection));
-            return;
-          }
-          const index = modifier.index || 0;
-          const isRequired = modifier.isRequired !== void 0 ? modifier.isRequired : true;
-          const element = modifier.matchIdx !== void 0 ? this.assertElementByIdx(tag2, root, modifier) : this.assertElement(root.getElementsByTagName(tag2), index, tag2, root, modifier);
-          if (element === false) {
-            const target = modifier.matchIdx !== void 0 ? tag2 + "@c:idx:" + modifier.matchIdx : tag2 + "@index:" + index;
-            if (isRequired === true) {
-              logger_1.log.warn("Could not assert required tag: " + target);
-            } else {
-              logger_1.log.debug("Skipped modification of absent optional tag: " + target);
-            }
-          } else {
-            if (modifier.modify) {
-              const modifies = general_helper_1.GeneralHelper.arrayify(modifier.modify);
-              Object.values(modifies).forEach((modifyXml) => modifyXml(element));
-            }
-            if (modifier.children) {
-              this.modify(modifier.children, element);
-            }
-          }
-        }
-      }
-      modifyAll(tag2, modifier, root) {
-        const elements2 = Array.from(root.getElementsByTagName(tag2));
-        elements2.forEach((element) => {
-          this.modify(modifier.children, element);
-        });
-      }
-      assertElement(collection, index, tag2, parent, modifier) {
-        if (!collection[index]) {
-          if (modifier.isRequired === false) {
-            return false;
-          }
-          if (collection[collection.length - 1] === void 0) {
-            this.createElement(parent, tag2);
-          } else {
-            const lastSibling = collection[collection.length - 1];
-            let sourceSibling = lastSibling;
-            const template = this.getFromIndexTemplate(collection, tag2, parent, modifier);
-            if (template) {
-              sourceSibling = template;
-            } else if (modifier.fromPrevious && collection.item(index - 1)) {
-              sourceSibling = collection.item(index - 1);
-            }
-            if ((!sourceSibling || modifier.forceCreate) && this.templates[tag2]) {
-              sourceSibling = this.templates[tag2];
-            }
-            const newChild = sourceSibling.cloneNode(true);
-            xml_helper_1.XmlHelper.insertAfter(newChild, lastSibling);
-          }
-        }
-        const element = parent.getElementsByTagName(tag2)[index];
-        if (element) {
-          this.templates[tag2] = this.templates[tag2] || element.cloneNode(true);
-          return element;
-        }
-        return false;
-      }
-      /**
-       * Resolve the target among a tag's elements by the value of their
-       * `<c:idx val="…"/>` child instead of by sibling position — the correct
-       * addressing for sparse chart collections (`c:dPt`, `c:dLbl`), where one
-       * element exists per *explicitly styled* point and `c:idx` names the
-       * category. See `Modification.matchIdx`.
-       *
-       * A missing element is created — cloned from the clean `fromIndex`
-       * template when given, built as a minimal shell otherwise — stamped with
-       * the requested idx and inserted so ascending `c:idx` order is kept.
-       */
-      assertElementByIdx(tag2, parent, modifier) {
-        const matchIdx = modifier.matchIdx;
-        const collection = parent.getElementsByTagName(tag2);
-        for (let i = 0; i < collection.length; i++) {
-          const element = collection.item(i);
-          if (_ModifyXmlHelper.getIdxValue(element) === matchIdx) {
-            return element;
-          }
-        }
-        if (modifier.isRequired === false) {
-          return false;
-        }
-        const template = this.getFromIndexTemplate(collection, tag2, parent, modifier);
-        const newElement = template ? template.cloneNode(true) : this.buildElement(parent, tag2);
-        if (!newElement) {
-          return false;
-        }
-        const idx = newElement.getElementsByTagName("c:idx").item(0);
-        if (!idx) {
-          return false;
-        }
-        idx.setAttribute("val", String(matchIdx));
-        const successor = Array.from(collection).find((sibling) => _ModifyXmlHelper.getIdxValue(sibling) > matchIdx);
-        if (successor) {
-          successor.parentNode.insertBefore(newElement, successor);
-        } else if (collection.length > 0) {
-          xml_helper_1.XmlHelper.insertAfter(newElement, collection.item(collection.length - 1));
-        } else {
-          const order = tag2 === "c:dLbl" ? xml_elements_1.C_DLBLS_CHILD_ORDER : xml_elements_1.C_SER_CHILD_ORDER;
-          xml_helper_1.XmlHelper.insertInSchemaOrder(parent, newElement, order);
-        }
-        return newElement;
-      }
-      static getIdxValue(element) {
-        const idx = element.getElementsByTagName("c:idx").item(0);
-        return idx ? Number(idx.getAttribute("val")) : NaN;
-      }
-      /**
-       * A clean clone of `collection[fromIndex]`, taken before that element got
-       * modified, so subsequent clones start from the original state. Cached per
-       * parent context: each c:dLbls within a different c:ser gets its own
-       * template.
-       */
-      getFromIndexTemplate(collection, tag2, parent, modifier) {
-        if (modifier.fromIndex === void 0 || modifier.fromIndex === null || !collection.item(modifier.fromIndex)) {
-          return null;
-        }
-        const parentId = parent.tagName || "root";
-        const parentIndex = this.getParentIndex(parent);
-        const fromIndexKey = parentId + "[" + parentIndex + "]:" + tag2 + ":fromIndex:" + modifier.fromIndex;
-        if (!this.templates[fromIndexKey]) {
-          this.templates[fromIndexKey] = collection.item(modifier.fromIndex).cloneNode(true);
-        }
-        return this.templates[fromIndexKey];
-      }
-      /**
-       * Index of `element` among all elements of its tag name in the whole
-       * document — a stable identifier for the template cache key, so equally
-       * named parents in different subtrees (e.g. the c:dLbls of each c:ser)
-       * do not collide.
-       */
-      getParentIndex(element) {
-        const scope = element.ownerDocument || element.parentNode;
-        if (!scope)
-          return 0;
-        const siblings = scope.getElementsByTagName(element.tagName);
-        for (let i = 0; i < siblings.length; i++) {
-          if (siblings[i] === element)
-            return i;
-        }
-        return 0;
-      }
-      /**
-       * Build a detached minimal element for `tag`, or null when the tag is not
-       * supported. Unlike `createElement`, insertion is left to the caller.
-       */
-      buildElement(parent, tag2) {
-        switch (tag2) {
-          case "c:dPt":
-            return new xml_elements_1.default(parent).buildDataPoint();
-          case "c:dLbl":
-            return new xml_elements_1.default(parent).buildDataPointLabel();
-        }
-        return null;
-      }
-      createElement(parent, tag2) {
-        switch (tag2) {
-          case "a:t":
-            new xml_elements_1.default(parent).text();
-            return true;
-          case "c:dPt":
-            new xml_elements_1.default(parent).dataPoint();
-            return true;
-          case "c:spPr":
-            new xml_elements_1.default(parent).shapeProperties();
-            return true;
-          case "a:ln":
-            new xml_elements_1.default(parent).plainLine();
-            return true;
-          case "c:dLbls":
-            new xml_elements_1.default(parent).dataPointLabels();
-            return true;
-          case "c:dLbl":
-            new xml_elements_1.default(parent).dataPointLabel();
-            return true;
-          case "a:lnL":
-          case "a:lnR":
-          case "a:lnT":
-          case "a:lnB":
-            new xml_elements_1.default(parent).tableCellBorder(tag2);
-            return true;
-        }
-        return false;
-      }
-    };
-    ModifyXmlHelper.getText = (element) => {
-      return element.firstChild.textContent;
-    };
-    ModifyXmlHelper.value = (value, index) => (element) => {
-      const valueElement = element.getElementsByTagName("c:v");
-      if (!valueElement.length) {
-        xml_helper_1.XmlHelper.dump(element);
-        throw new errors_1.ElementNotFoundError("Unable to set value @index: " + index, {
-          selector: "c:v"
-        });
-      }
-      if (!valueElement[0].firstChild) {
-        return;
-      }
-      valueElement[0].firstChild.textContent = xml_helper_1.XmlHelper.sanitizeText(value);
-      if (index !== void 0) {
-        element.setAttribute("idx", String(index));
-      }
-    };
-    ModifyXmlHelper.textContent = (value) => (element) => {
-      element.firstChild.textContent = xml_helper_1.XmlHelper.sanitizeText(value);
-    };
-    ModifyXmlHelper.attribute = (attribute, value) => (element) => {
-      if (value != void 0)
-        element.setAttribute(attribute, xml_helper_1.XmlHelper.sanitizeAttr(value));
-    };
-    ModifyXmlHelper.removeAttribute = (attribute) => (element) => {
-      element.removeAttribute(attribute);
-    };
-    ModifyXmlHelper.booleanAttribute = (attribute, state) => (element) => {
-      element.setAttribute(attribute, state === true ? "1" : "0");
-    };
-    ModifyXmlHelper.range = (series, length) => (element) => {
-      const range = element.firstChild.textContent;
-      element.firstChild.textContent = xml_helper_1.XmlHelper.sanitizeText(cell_id_helper_1.default.setRange(range, series, length));
-    };
-    exports.default = ModifyXmlHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/multitext-helper.js
-var require_multitext_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/multitext-helper.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MultiTextHelper = void 0;
-    var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    var xml_helper_1 = require_xml_helper();
-    var modify_hyperlink_element_1 = __importDefault(require_modify_hyperlink_element());
-    var PPR_CHILD_ORDER = [
-      "a:lnSpc",
-      "a:spcBef",
-      "a:spcAft",
-      "a:buClrTx",
-      "a:buClr",
-      "a:buSzTx",
-      "a:buSzPct",
-      "a:buSzPts",
-      "a:buFontTx",
-      "a:buFont",
-      "a:buNone",
-      "a:buAutoNum",
-      "a:buChar",
-      "a:tabLst",
-      "a:defRPr",
-      "a:extLst"
-    ];
-    var BULLET_INDENT = 228600;
-    var BULLET_FONT = "Arial";
-    var MultiTextHelper = class {
-      constructor(element, relationElement) {
-        this.element = element;
-        this.document = element.ownerDocument;
-        this.relationElement = relationElement;
-      }
-      /**
-       * Apply multi-text paragraphs to the element
-       */
-      run(paragraphs) {
-        const txBody = this.getOrCreateTxBody();
-        const defaultStyle = this.extractDefaultStyle(txBody);
-        this.clearExistingParagraphs(txBody);
-        this.createParagraphs(txBody, paragraphs, defaultStyle);
-      }
-      /**
-       * Extract the fallback style from the existing text, so generated runs keep
-       * the template's look where the caller says nothing.
-       *
-       * Restricted to size and color on purpose: bold/italic of the template's
-       * first run are a property of *that* text, not of the shape, and inheriting
-       * them made every generated run bold as soon as the placeholder was
-       * (e.g. a title). Callers who want bold pass it in their TextStyle.
-       */
-      extractDefaultStyle(txBody) {
-        const defaultStyle = {};
-        const existingParagraphs = txBody.getElementsByTagName("a:p");
-        if (existingParagraphs.length === 0) {
-          return defaultStyle;
-        }
-        const firstPara = existingParagraphs[0];
-        const firstRun = firstPara.getElementsByTagName("a:r")[0];
-        if (firstRun) {
-          const rPr = firstRun.getElementsByTagName("a:rPr")[0];
-          if (rPr) {
-            const fontSize = rPr.getAttribute("sz");
-            if (fontSize) {
-              defaultStyle.size = parseInt(fontSize);
-            }
-            const solidFill = rPr.getElementsByTagName("a:solidFill")[0];
-            if (solidFill) {
-              const srgbClr = solidFill.getElementsByTagName("a:srgbClr")[0];
-              if (srgbClr) {
-                const colorValue = srgbClr.getAttribute("val");
-                if (colorValue) {
-                  defaultStyle.color = {
-                    type: "srgbClr",
-                    value: colorValue
-                  };
-                }
-              }
-            }
-          }
-        }
-        return defaultStyle;
-      }
-      /**
-       * Find or create the txBody element and ensure it has required child elements
-       *
-       * Notes:
-       * - Text boxes / shapes use `p:txBody`
-       * - Table cells (`a:tc`) use `a:txBody`
-       */
-      getOrCreateTxBody() {
-        let txBody = this.element.getElementsByTagName("p:txBody")[0] || this.element.getElementsByTagName("a:txBody")[0];
-        if (!txBody) {
-          const isTableCell = this.element.tagName === "a:tc";
-          txBody = this.document.createElement(isTableCell ? "a:txBody" : "p:txBody");
-          this.element.appendChild(txBody);
-        }
-        let bodyPr = txBody.getElementsByTagName("a:bodyPr")[0];
-        if (!bodyPr) {
-          bodyPr = this.document.createElement("a:bodyPr");
-          txBody.insertBefore(bodyPr, txBody.firstChild);
-        }
-        let lstStyle = txBody.getElementsByTagName("a:lstStyle")[0];
-        if (!lstStyle) {
-          lstStyle = this.document.createElement("a:lstStyle");
-          const insertAfter = bodyPr.nextSibling;
-          if (insertAfter) {
-            txBody.insertBefore(lstStyle, insertAfter);
-          } else {
-            txBody.appendChild(lstStyle);
-          }
-        }
-        return txBody;
-      }
-      /**
-       * Remove all existing paragraph elements
-       */
-      clearExistingParagraphs(txBody) {
-        const existingParagraphs = txBody.getElementsByTagName("a:p");
-        const length = existingParagraphs.length;
-        for (let i = length - 1; i >= 0; i--) {
-          const paragraph = existingParagraphs[i];
-          paragraph.parentNode.removeChild(paragraph);
-        }
-      }
-      /**
-       * Create paragraph elements for each MultiTextParagraph
-       */
-      createParagraphs(txBody, paragraphs, defaultStyle = {}) {
-        paragraphs.forEach((para) => {
-          const p = this.document.createElement("a:p");
-          txBody.appendChild(p);
-          const pPr = this.document.createElement("a:pPr");
-          p.appendChild(pPr);
-          if (para.paragraph) {
-            this.applyParagraphProperties(pPr, para.paragraph);
-          }
-          if (para.textRuns && para.textRuns.length > 0) {
-            this.createTextRuns(p, para.textRuns, defaultStyle);
-          } else if (para.text !== void 0) {
-            const mergedStyle = this.mergeStyles(defaultStyle, para.style);
-            this.createSingleTextRun(p, para.text, mergedStyle);
-          }
-        });
-      }
-      /**
-       * Merge default style with provided style
-       */
-      mergeStyles(defaultStyle = {}, customStyle = {}) {
-        return Object.assign(Object.assign({}, defaultStyle), customStyle);
-      }
-      /**
-       * Apply paragraph styling properties
-       */
-      applyParagraphProperties(pPr, paragraphProps) {
-        var _a3;
-        const level = (_a3 = paragraphProps.level) !== null && _a3 !== void 0 ? _a3 : 0;
-        if (paragraphProps.level !== void 0) {
-          pPr.setAttribute("lvl", String(paragraphProps.level));
-        }
-        this.applyBulletConfiguration(pPr, paragraphProps);
-        if (paragraphProps.alignment !== void 0) {
-          pPr.setAttribute("algn", paragraphProps.alignment);
-        }
-        if (paragraphProps.indent !== void 0) {
-          pPr.setAttribute("indent", String(paragraphProps.indent));
-        } else if (paragraphProps.bullet) {
-          pPr.setAttribute("indent", String(-BULLET_INDENT));
-        }
-        if (paragraphProps.marginLeft !== void 0) {
-          pPr.setAttribute("marL", String(paragraphProps.marginLeft));
-        } else if (paragraphProps.bullet) {
-          pPr.setAttribute("marL", String((level + 1) * BULLET_INDENT));
-        }
-        this.applySpacingProperties(pPr, paragraphProps);
-        xml_helper_1.XmlHelper.sortChildrenBySchema(pPr, PPR_CHILD_ORDER);
-      }
-      /**
-       * Apply bullet configuration to paragraph properties.
-       *
-       * PPTX has no list object - a list item is a paragraph with bullet
-       * properties, either a literal glyph (`a:buChar`) or automatic numbering
-       * (`a:buAutoNum`).
-       */
-      applyBulletConfiguration(pPr, paragraphProps) {
-        if (paragraphProps.bullet) {
-          if (paragraphProps.bulletType === "number") {
-            const buAutoNum = this.document.createElement("a:buAutoNum");
-            buAutoNum.setAttribute("type", paragraphProps.autoNumberType || "arabicPeriod");
-            pPr.appendChild(buAutoNum);
-            return;
-          }
-          const buFont = this.document.createElement("a:buFont");
-          buFont.setAttribute("typeface", BULLET_FONT);
-          pPr.appendChild(buFont);
-          const buChar = this.document.createElement("a:buChar");
-          buChar.setAttribute("char", paragraphProps.bulletChar || "\u2022");
-          pPr.appendChild(buChar);
-          return;
-        }
-        if (paragraphProps.bullet === false || paragraphProps.level === 0) {
-          const buNone = this.document.createElement("a:buNone");
-          pPr.appendChild(buNone);
-        }
-      }
-      /**
-       * Apply spacing properties to paragraph properties
-       */
-      applySpacingProperties(pPr, paragraphProps) {
-        this.appendSpacing(pPr, "a:lnSpc", paragraphProps.lineSpacing);
-        this.appendSpacing(pPr, "a:spcBef", paragraphProps.spaceBefore);
-        this.appendSpacing(pPr, "a:spcAft", paragraphProps.spaceAfter);
-      }
-      /**
-       * Append one spacing element (`a:lnSpc`/`a:spcBef`/`a:spcAft`). A plain
-       * number is absolute points (`a:spcPts`, 100ths of a point); `{ percent }`
-       * scales with the line height (`a:spcPct`, thousandths of a percent).
-       */
-      appendSpacing(pPr, tagName, spacing) {
-        if (spacing === void 0) {
-          return;
-        }
-        const wrapper = this.document.createElement(tagName);
-        if (typeof spacing === "number") {
-          const spcPts = this.document.createElement("a:spcPts");
-          spcPts.setAttribute("val", String(Math.round(spacing * 100)));
-          wrapper.appendChild(spcPts);
-        } else {
-          const spcPct = this.document.createElement("a:spcPct");
-          spcPct.setAttribute("val", String(Math.round(spacing.percent * 1e3)));
-          wrapper.appendChild(spcPct);
-        }
-        pPr.appendChild(wrapper);
-      }
-      /**
-       * Create text runs for a paragraph
-       */
-      createTextRuns(p, textRuns, defaultStyle = {}) {
-        textRuns.forEach((run) => {
-          const mergedStyle = this.mergeStyles(defaultStyle, run.style);
-          if (run.break) {
-            this.appendLineBreak(p, mergedStyle);
-            return;
-          }
-          if ((mergedStyle === null || mergedStyle === void 0 ? void 0 : mergedStyle.hyperlink) && this.relationElement) {
-            this.createHyperlinkTextRun(p, run.text || "", mergedStyle);
-          } else {
-            this.createRegularTextRun(p, run.text || "", mergedStyle);
-          }
-        });
-      }
-      /**
-       * Create a single text run with the given text and style
-       */
-      createSingleTextRun(p, text, style) {
-        const textString = String(text || "");
-        if ((style === null || style === void 0 ? void 0 : style.hyperlink) && this.relationElement) {
-          this.createHyperlinkTextRun(p, textString, style);
-        } else {
-          this.createRegularTextRun(p, textString, style);
-        }
-      }
-      /**
-       * Create a regular text run without hyperlink
-       */
-      createRegularTextRun(p, text, style) {
-        this.forEachLine(p, text, style, (line) => {
-          const r = this.document.createElement("a:r");
-          p.appendChild(r);
-          const rPr = this.document.createElement("a:rPr");
-          r.appendChild(rPr);
-          this.applyRunStyle(rPr, style);
-          this.createTextElement(r, line);
-        });
-      }
-      /**
-       * Split text at soft line breaks and emit an `<a:br/>` between the segments.
-       *
-       * PPTX has no in-run line break: a soft break (Shift+Enter) is an `<a:br/>`
-       * element sitting *between* two `<a:r>` siblings. PowerPoint itself hands out
-       * U+000B (vertical tab) for such a break when text is read back from a shape,
-       * so `\v` is treated like `\n` here. A literal `\v` in `<a:t>` is not even
-       * valid XML 1.0 and used to produce a file PowerPoint offers to repair.
-       *
-       * Empty segments (consecutive breaks) do not get a run of their own — only
-       * text that was empty to begin with keeps its single empty run.
-       */
-      forEachLine(p, text, style, createRun) {
-        const lines = String(text !== null && text !== void 0 ? text : "").split(/\r\n|[\r\n\u000B]/);
-        lines.forEach((line, index) => {
-          if (index > 0) {
-            this.appendLineBreak(p, style);
-          }
-          if (line === "" && lines.length > 1) {
-            return;
-          }
-          createRun(line);
-        });
-      }
-      /**
-       * Append an `<a:br/>` carrying the surrounding run style, so the empty line
-       * keeps the font size (and therefore the line height) of its neighbours.
-       */
-      appendLineBreak(p, style) {
-        const br = this.document.createElement("a:br");
-        const rPr = this.document.createElement("a:rPr");
-        br.appendChild(rPr);
-        this.applyRunStyle(rPr, style);
-        p.appendChild(br);
-      }
-      /**
-       * Apply a TextStyle to an `<a:rPr>`, ignoring the hyperlink part
-       * (hyperlinks are an element inside rPr, added by HyperlinkElement)
-       */
-      applyRunStyle(rPr, style) {
-        if (!style)
-          return;
-        const styleWithoutHyperlink = Object.assign({}, style);
-        delete styleWithoutHyperlink.hyperlink;
-        modify_text_helper_1.default.style(styleWithoutHyperlink)(rPr);
-      }
-      /**
-       * Create a text element with the given content
-       */
-      createTextElement(r, text) {
-        const t = this.document.createElement("a:t");
-        r.appendChild(t);
-        if (text === "") {
-          t.setAttribute("xml:space", "preserve");
-        }
-        const sanitized = xml_helper_1.XmlHelper.sanitizeText(text);
-        const textNode = this.document.createTextNode(sanitized);
-        t.appendChild(textNode);
-      }
-      /**
-       * Create a hyperlinked text run using HyperlinkElement
-       */
-      createHyperlinkTextRun(p, text, style) {
-        if (!style.hyperlink || !this.relationElement) {
-          this.createRegularTextRun(p, text, style);
-          return;
-        }
-        const hyperlinkInfo = style.hyperlink;
-        const target = hyperlinkInfo.target;
-        const isInternal2 = hyperlinkInfo.isInternal;
-        if (!target) {
-          this.createRegularTextRun(p, text, style);
-          return;
-        }
-        const relData = this.createRelationshipData(target, isInternal2 || false);
-        const newRelId = this.addRelationship(this.relationElement, relData);
-        const hyperlinkElement = new modify_hyperlink_element_1.default(this.document, newRelId, isInternal2 || false);
-        this.forEachLine(p, text, style, (line) => {
-          const r = hyperlinkElement.createTextRun(line);
-          const rPr = r.getElementsByTagName("a:rPr")[0];
-          if (rPr) {
-            this.applyRunStyle(rPr, style);
-          }
-          p.appendChild(r);
-        });
-      }
-      /**
-       * Create relationship data for hyperlink (reused from ModifyHyperlinkHelper)
-       */
-      createRelationshipData(target, isInternal2) {
-        if (isInternal2) {
-          return {
-            Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-            Target: `../slides/${this.formatTarget(target)}`,
-            Id: ""
-            // Will be set later
-          };
-        }
-        return {
-          Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-          Target: target.toString(),
-          TargetMode: "External",
-          Id: ""
-          // Will be set later
-        };
-      }
-      formatTarget(target) {
-        let formattedTarget = target;
-        if (typeof target === "number") {
-          formattedTarget = `slide${target}.xml`;
-        } else if (typeof target === "string" && !target.includes(".xml")) {
-          formattedTarget = `slide${target}.xml`;
-        }
-        return formattedTarget;
-      }
-      /**
-       * Add relationship to the relation element (reused logic from ModifyHyperlinkHelper)
-       */
-      addRelationship(relation, relData) {
-        const relNodes = relation.getElementsByTagName("Relationship");
-        const maxId = xml_helper_1.XmlHelper.getMaxId(relNodes, "Id", true);
-        const newRelId = `rId${maxId}`;
-        const newRel = relation.ownerDocument.createElement("Relationship");
-        newRel.setAttribute("Id", newRelId);
-        Object.entries(relData).forEach(([key, value]) => {
-          if (value)
-            newRel.setAttribute(key, value);
-        });
-        relNodes.item(0).parentNode.appendChild(newRel);
-        return newRelId;
-      }
-    };
-    exports.MultiTextHelper = MultiTextHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/html-to-multitext-helper.js
-var require_html_to_multitext_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/html-to-multitext-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.HtmlToMultiTextHelper = void 0;
-    var xmldom_1 = require_lib4();
-    var logger_1 = require_logger();
-    var css_style_parser_1 = require_css_style_parser();
-    var PRESERVE_EMPTY_TAGS = ["p", "li", "h1", "h2", "h3", "h4", "h5", "h6"];
-    var INLINE_TAGS = [
-      "a",
-      "abbr",
-      "b",
-      "big",
-      "cite",
-      "code",
-      "del",
-      "em",
-      "font",
-      "i",
-      "ins",
-      "kbd",
-      "mark",
-      "q",
-      "s",
-      "samp",
-      "small",
-      "span",
-      "strike",
-      "strong",
-      "sub",
-      "sup",
-      "tt",
-      "u",
-      "var"
-    ];
-    var BLOCK_TAGS = [
-      "address",
-      "article",
-      "aside",
-      "blockquote",
-      "div",
-      "dd",
-      "dt",
-      "figcaption",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "header",
-      "footer",
-      "main",
-      "p",
-      "pre",
-      "section"
-    ];
-    var HEADING_SIZES = {
-      h1: 2400,
-      h2: 2e3,
-      h3: 1800,
-      h4: 1600,
-      h5: 1400,
-      h6: 1200
-    };
-    var MONOSPACE_FONT = "Consolas";
-    var MARGIN_TAGS = [
-      "p",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "blockquote",
-      "pre"
-    ];
-    var BLOCK_MARGIN_PERCENT = 100;
-    var AUTO_NUMBER_TYPES = [
-      "arabicPeriod",
-      "alphaLcPeriod",
-      "romanLcPeriod"
-    ];
-    var HtmlToMultiTextHelper = class {
-      constructor() {
-        this.paragraphs = [];
-        this.blockMeta = [];
-        this.listCounter = 0;
-      }
-      /**
-       * Converts an HTML string to a MultiTextParagraph array.
-       *
-       * The input contract is XHTML-ish markup as produced by WYSIWYG editors
-       * (CKEditor/TinyMCE): tags closed, attributes quoted. `@xmldom/xmldom` is an
-       * XML parser - real-world tag soup (unclosed `<br>`, bare `&nbsp;`) does not
-       * parse. Common editor quirks that *are* handled: sibling-nested lists
-       * (`<ul><li/><ul>…</ul></ul>`), block-inside-block, and inline styles on any
-       * element.
-       *
-       * @param html HTML string to convert
-       * @returns Array of MultiTextParagraph objects
-       */
-      run(html) {
-        this.paragraphs = [];
-        this.blockMeta = [];
-        this.listCounter = 0;
-        this.open = void 0;
-        const doc = new xmldom_1.DOMParser().parseFromString(html, "text/html");
-        const body = doc.getElementsByTagName("body")[0];
-        if (!body) {
-          logger_1.log.error("You need to provide a <body> tag for HtmlToMultiText");
-          return this.paragraphs;
-        }
-        const rootBlock = { listTypes: [], blockStyle: {} };
-        this.walkChildren(body, rootBlock, {});
-        this.flush();
-        this.applyBlockMargins();
-        return this.paragraphs;
-      }
-      /**
-       * Single traversal pass. Two accumulators travel down the tree:
-       * `block` (list depth, alignment, block styling) and `inline` (character
-       * properties). Neither is ever mutated in place - each level gets its own
-       * copy, which is what makes both list-nesting shapes converge.
-       */
-      walk(node2, block, inline) {
-        if (node2.nodeType === xmldom_1.Node.TEXT_NODE) {
-          this.appendText(node2.textContent || "", block, inline);
-          return;
-        }
-        if (node2.nodeType !== xmldom_1.Node.ELEMENT_NODE) {
-          return;
-        }
-        const element = node2;
-        const tagName = element.tagName.toLowerCase();
-        switch (true) {
-          case tagName === "br":
-            this.appendBreak(block, inline);
-            return;
-          case (tagName === "ul" || tagName === "ol"):
-            this.flush();
-            this.walkChildren(element, this.pushList(element, block, tagName), inline);
-            return;
-          case tagName === "li":
-          case BLOCK_TAGS.includes(tagName):
-            this.walkBlock(element, tagName, block, inline);
-            return;
-          case INLINE_TAGS.includes(tagName):
-            this.walkChildren(element, block, this.inlineStyleFor(element, tagName, inline));
-            return;
-          default:
-            this.walkChildren(element, block, inline);
-        }
-      }
-      /**
-       * A block element (incl. `<li>`) opens exactly one paragraph. If its children
-       * turn out to be blocks themselves, *they* become the paragraphs and this one
-       * stays empty - the innermost block wins, ancestors only contribute
-       * properties. Only a block that emitted nothing at all may end up as a
-       * deliberate blank line.
-       */
-      walkBlock(element, tagName, block, inline) {
-        this.flush();
-        const blockContext = this.blockContextFor(element, tagName, block);
-        const paragraphsBefore = this.paragraphs.length;
-        this.openParagraph(blockContext);
-        this.walkChildren(element, blockContext, inline);
-        const emittedNothing = this.paragraphs.length === paragraphsBefore;
-        this.flush(PRESERVE_EMPTY_TAGS.includes(tagName) && emittedNothing);
-      }
-      walkChildren(element, block, inline) {
-        Array.from(element.childNodes).forEach((child) => this.walk(child, block, inline));
-      }
-      /** Push one list level, taking the list type from the tag. */
-      pushList(element, block, tagName) {
-        const withCss = this.applyElementCss(element, block);
-        return Object.assign(Object.assign({}, withCss), {
-          listTypes: [...withCss.listTypes, tagName],
-          // A new top-level list gets its own identity; nested lists inherit it
-          listRoot: withCss.listTypes.length === 0 ? ++this.listCounter : withCss.listRoot
-        });
-      }
-      /** Block context of a non-list block element, incl. heading/pre styling. */
-      blockContextFor(element, tagName, block) {
-        const context = this.applyElementCss(element, block);
-        const blockStyle = Object.assign({}, context.blockStyle);
-        if (HEADING_SIZES[tagName]) {
-          blockStyle.size = HEADING_SIZES[tagName];
-          blockStyle.isBold = true;
-        }
-        if (tagName === "pre") {
-          blockStyle.fontFamily = MONOSPACE_FONT;
-        }
-        return Object.assign(Object.assign({}, context), { blockStyle, margin: context.margin || MARGIN_TAGS.includes(tagName) });
-      }
-      /** Merge an element's inline CSS into the block context (alignment, style). */
-      applyElementCss(element, block) {
-        const css = (0, css_style_parser_1.parseInlineCss)(element.getAttribute("style") || "");
-        if (Object.keys(css).length === 0) {
-          return block;
-        }
-        const alignment = css["text-align"] ? (0, css_style_parser_1.parseCssTextAlign)(css["text-align"]) : void 0;
-        return Object.assign(Object.assign({}, block), { alignment: alignment !== null && alignment !== void 0 ? alignment : block.alignment, blockStyle: this.cssToTextStyle(css, block.blockStyle) });
-      }
-      /** Character properties contributed by one inline element. */
-      inlineStyleFor(element, tagName, inline) {
-        const style = Object.assign({}, inline);
-        switch (tagName) {
-          case "strong":
-          case "b":
-            style.isBold = true;
-            break;
-          case "em":
-          case "i":
-          case "cite":
-          case "var":
-            style.isItalics = true;
-            break;
-          case "u":
-          case "ins":
-            style.isUnderlined = true;
-            break;
-          case "s":
-          case "strike":
-          case "del":
-            style.isStrike = true;
-            break;
-          case "sub":
-            style.isSubscript = true;
-            break;
-          case "sup":
-            style.isSuperscript = true;
-            break;
-          case "code":
-          case "kbd":
-          case "samp":
-          case "tt":
-            style.fontFamily = MONOSPACE_FONT;
-            break;
-          case "mark":
-            style.highlight = { type: "srgbClr", value: "FFFF00" };
-            break;
-          case "a":
-            this.applyHyperlink(element, style);
-            break;
-          case "font":
-            this.applyFontAttributes(element, style);
-            break;
-        }
-        return this.cssToTextStyle((0, css_style_parser_1.parseInlineCss)(element.getAttribute("style") || ""), style);
-      }
-      /** Map the supported CSS subset onto TextStyle. */
-      cssToTextStyle(css, base) {
-        var _a3, _b;
-        if (Object.keys(css).length === 0) {
-          return base;
-        }
-        const style = Object.assign({}, base);
-        const size = css["font-size"] ? (0, css_style_parser_1.parseCssFontSize)(css["font-size"]) : void 0;
-        if (size !== void 0) {
-          style.size = size;
-        }
-        const color = css["color"] ? (0, css_style_parser_1.normalizeCssColor)(css["color"]) : void 0;
-        if (color) {
-          style.color = { type: "srgbClr", value: color };
-        }
-        const highlight = css["background-color"] ? (0, css_style_parser_1.normalizeCssColor)(css["background-color"]) : void 0;
-        if (highlight) {
-          style.highlight = { type: "srgbClr", value: highlight };
-        }
-        const isBold = css["font-weight"] ? (0, css_style_parser_1.parseCssFontWeight)(css["font-weight"]) : void 0;
-        if (isBold !== void 0) {
-          style.isBold = isBold;
-        }
-        const isItalics = css["font-style"] ? (0, css_style_parser_1.parseCssFontStyle)(css["font-style"]) : void 0;
-        if (isItalics !== void 0) {
-          style.isItalics = isItalics;
-        }
-        const decoration = (_b = (_a3 = css["text-decoration"]) !== null && _a3 !== void 0 ? _a3 : css["text-decoration-line"]) !== null && _b !== void 0 ? _b : void 0;
-        if (decoration !== void 0) {
-          const { isUnderlined, isStrike } = (0, css_style_parser_1.parseCssTextDecoration)(decoration);
-          if (isUnderlined !== void 0) {
-            style.isUnderlined = isUnderlined;
-          }
-          if (isStrike !== void 0) {
-            style.isStrike = isStrike;
-          }
-        }
-        const fontFamily = css["font-family"] ? (0, css_style_parser_1.parseCssFontFamily)(css["font-family"]) : void 0;
-        if (fontFamily) {
-          style.fontFamily = fontFamily;
-        }
-        return style;
-      }
-      /**
-       * `<a href>`: a purely numeric href is treated as an internal slide number,
-       * anything else as an external target.
-       */
-      applyHyperlink(element, style) {
-        const href = element.getAttribute("href");
-        if (!href)
-          return;
-        if (/^\d+$/.test(href.trim())) {
-          style.hyperlink = {
-            target: parseInt(href, 10),
-            isInternal: true
-          };
-          return;
-        }
-        style.hyperlink = {
-          target: href,
-          isInternal: false
-        };
-      }
-      /** Legacy `<font color size face>` - still emitted by some editors. */
-      applyFontAttributes(element, style) {
-        const color = element.getAttribute("color");
-        if (color) {
-          const normalized = (0, css_style_parser_1.normalizeCssColor)(color);
-          if (normalized) {
-            style.color = { type: "srgbClr", value: normalized };
-          }
-        }
-        const face = element.getAttribute("face");
-        if (face) {
-          const fontFamily = (0, css_style_parser_1.parseCssFontFamily)(face);
-          if (fontFamily) {
-            style.fontFamily = fontFamily;
-          }
-        }
-      }
-      /**
-       * Append text to the open paragraph, applying CSS whitespace collapsing:
-       * runs of whitespace become a single space, and a space is dropped at the
-       * start of a paragraph. `&nbsp;` (U+00A0) is not whitespace and survives.
-       */
-      appendText(text, block, inline) {
-        const collapsed = text.replace(/[ \t\r\n\f]+/g, " ");
-        if (collapsed === "") {
-          return;
-        }
-        if (collapsed === " " && !this.open) {
-          return;
-        }
-        this.openParagraph(block);
-        const isParagraphStart = this.open.runs.length === 0;
-        const text_ = isParagraphStart ? collapsed.replace(/^ /, "") : collapsed;
-        if (text_ === "") {
-          return;
-        }
-        this.open.runs.push({ text: text_, style: this.runStyle(block, inline) });
-      }
-      appendBreak(block, inline) {
-        this.openParagraph(block);
-        this.open.runs.push({ break: true, style: this.runStyle(block, inline) });
-      }
-      /** Block styling is the base, inline styling wins. */
-      runStyle(block, inline) {
-        return Object.assign(Object.assign({}, block.blockStyle), inline);
-      }
-      openParagraph(block) {
-        if (this.open) {
-          return;
-        }
-        this.open = { block, runs: [] };
-      }
-      /**
-       * Close the open paragraph and project its block context onto the flat PPTX
-       * paragraph properties.
-       *
-       * @param allowEmpty - Emit the paragraph even without runs (blank line)
-       */
-      flush(allowEmpty = false) {
-        var _a3;
-        if (!this.open) {
-          return;
-        }
-        const { block, runs } = this.open;
-        this.open = void 0;
-        this.trimTrailingWhitespace(runs);
-        if ((_a3 = runs[runs.length - 1]) === null || _a3 === void 0 ? void 0 : _a3.break) {
-          runs.pop();
-          this.trimTrailingWhitespace(runs);
-        }
-        if (runs.length === 0) {
-          if (!allowEmpty) {
-            return;
-          }
-          runs.push({ text: "" });
-        }
-        const listDepth = block.listTypes.length;
-        const listType = block.listTypes[listDepth - 1];
-        const level = listDepth > 0 ? Math.min(listDepth - 1, 8) : 0;
-        this.paragraphs.push({
-          paragraph: Object.assign(Object.assign({ level, bullet: listDepth > 0 }, listType === "ol" ? {
-            bulletType: "number",
-            autoNumberType: AUTO_NUMBER_TYPES[level % AUTO_NUMBER_TYPES.length]
-          } : {}), block.alignment ? { alignment: block.alignment } : {}),
-          textRuns: runs
-        });
-        this.blockMeta.push({ margin: !!block.margin, listRoot: block.listRoot });
-      }
-      /** Trailing collapsed whitespace is layout, not content. */
-      trimTrailingWhitespace(runs) {
-        for (let i = runs.length - 1; i >= 0; i--) {
-          const run = runs[i];
-          if (run.text === void 0) {
-            return;
-          }
-          run.text = run.text.replace(/ +$/, "");
-          if (run.text !== "") {
-            return;
-          }
-          runs.pop();
-        }
-      }
-      /**
-       * Project the browser's default vertical margins onto `spaceBefore`.
-       *
-       * Items of the same list sit tight (nested lists carry no margin in the
-       * default stylesheet); every other boundary touching a margin-bearing block
-       * or a list edge - including the edge between two adjacent lists - gets one
-       * collapsed gap, carried by the later paragraph. The first paragraph gets
-       * none: there is no margin against the text frame.
-       */
-      applyBlockMargins() {
-        this.paragraphs.forEach((paragraph, index) => {
-          if (index === 0) {
-            return;
-          }
-          const previous = this.blockMeta[index - 1];
-          const current = this.blockMeta[index];
-          const sameList = current.listRoot !== void 0 && current.listRoot === previous.listRoot;
-          const touchesMargin = previous.margin || current.margin || previous.listRoot !== void 0 || current.listRoot !== void 0;
-          if (!sameList && touchesMargin) {
-            paragraph.paragraph.spaceBefore = { percent: BLOCK_MARGIN_PERCENT };
-          }
-        });
-      }
-    };
-    exports.HtmlToMultiTextHelper = HtmlToMultiTextHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-text-helper.js
-var require_modify_text_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-text-helper.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var modify_color_helper_1 = __importDefault(require_modify_color_helper());
-    var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
-    var xml_elements_1 = __importDefault(require_xml_elements());
-    var multitext_helper_1 = require_multitext_helper();
-    var html_to_multitext_helper_1 = require_html_to_multitext_helper();
-    var xml_helper_1 = require_xml_helper();
-    var RPR_CHILD_ORDER = [
-      "a:ln",
-      "a:noFill",
-      "a:solidFill",
-      "a:gradFill",
-      "a:blipFill",
-      "a:pattFill",
-      "a:grpFill",
-      "a:effectLst",
-      "a:effectDag",
-      "a:highlight",
-      "a:uLnTx",
-      "a:uLn",
-      "a:uFillTx",
-      "a:uFill",
-      "a:latin",
-      "a:ea",
-      "a:cs",
-      "a:sym",
-      "a:hlinkClick",
-      "a:hlinkMouseOver",
-      "a:rtl",
-      "a:extLst"
-    ];
-    var ModifyTextHelper = class {
-    };
-    _a3 = ModifyTextHelper;
-    ModifyTextHelper.setText = (text) => (element) => {
-      const paragraphs = element.getElementsByTagName("a:p");
-      const length = paragraphs.length;
-      for (let i = 0; i < length; i++) {
-        const paragraph = paragraphs[i];
-        if (i === 0) {
-          const blocks = element.getElementsByTagName("a:r");
-          const length2 = blocks.length;
-          for (let j = 0; j < length2; j++) {
-            const block = blocks[j];
-            if (j === 0) {
-              const textNode = block.getElementsByTagName("a:t")[0];
-              _a3.content(text)(textNode);
-            } else {
-              block.parentNode.removeChild(block);
-            }
-          }
-        } else {
-          paragraph.parentNode.removeChild(paragraph);
-        }
-      }
-    };
-    ModifyTextHelper.setMultiText = (paragraphs) => (element, relation) => {
-      new multitext_helper_1.MultiTextHelper(element, relation).run(paragraphs);
-    };
-    ModifyTextHelper.htmlToMultiText = (html) => {
-      const paragraphs = new html_to_multitext_helper_1.HtmlToMultiTextHelper().run(html);
-      return (element, relation) => {
-        _a3.setMultiText(paragraphs)(element, relation);
-      };
-    };
-    ModifyTextHelper.setBulletList = (list) => (element) => {
-      const xmlElements = new xml_elements_1.default(element);
-      xmlElements.addBulletList(list);
-    };
-    ModifyTextHelper.content = (label) => (element) => {
-      if (label === void 0)
-        return;
-      const text = xml_helper_1.XmlHelper.sanitizeText(label);
-      if (element.firstChild) {
-        element.firstChild.textContent = text;
-      } else {
-        element.appendChild(element.ownerDocument.createTextNode(text));
-      }
-    };
-    ModifyTextHelper.style = (style) => (element) => {
-      if (!style)
-        return;
-      if (style.color !== void 0) {
-        _a3.setColor(style.color)(element);
-      }
-      if (style.size !== void 0) {
-        _a3.setSize(style.size)(element);
-      }
-      if (style.isBold !== void 0) {
-        _a3.setBold(style.isBold)(element);
-      }
-      if (style.isItalics !== void 0) {
-        _a3.setItalics(style.isItalics)(element);
-      }
-      if (style.isUnderlined !== void 0) {
-        _a3.setUnderlined(style.isUnderlined)(element);
-      }
-      if (style.isSuperscript !== void 0) {
-        _a3.setSuperscript(style.isSuperscript)(element);
-      }
-      if (style.isSubscript !== void 0) {
-        _a3.setSubscript(style.isSubscript)(element);
-      }
-      if (style.isStrike !== void 0) {
-        _a3.setStrike(style.isStrike)(element);
-      }
-      if (style.fontFamily !== void 0) {
-        _a3.setFontFamily(style.fontFamily)(element);
-      }
-      if (style.highlight !== void 0) {
-        _a3.setHighlight(style.highlight)(element);
-      }
-      xml_helper_1.XmlHelper.sortChildrenBySchema(element, RPR_CHILD_ORDER);
-    };
-    ModifyTextHelper.setColor = (color) => (element) => {
-      modify_color_helper_1.default.solidFill(color)(element);
-    };
-    ModifyTextHelper.setSize = (size) => (element) => {
-      if (!size)
-        return;
-      element.setAttribute("sz", String(Math.round(size)));
-    };
-    ModifyTextHelper.setBold = (isBold) => (element) => {
-      modify_xml_helper_1.default.booleanAttribute("b", isBold)(element);
-    };
-    ModifyTextHelper.setItalics = (isItalics) => (element) => {
-      modify_xml_helper_1.default.booleanAttribute("i", isItalics)(element);
-    };
-    ModifyTextHelper.setUnderlined = (isUnderlined) => (element) => {
-      if (isUnderlined) {
-        element.setAttribute("u", "sng");
-      }
-    };
-    ModifyTextHelper.setSuperscript = (isSuperscript) => (element) => {
-      modify_xml_helper_1.default.attribute("baseline", isSuperscript ? "30000" : "0")(element);
-    };
-    ModifyTextHelper.setSubscript = (isSubscript) => (element) => {
-      modify_xml_helper_1.default.attribute("baseline", isSubscript ? "-25000" : "0")(element);
-    };
-    ModifyTextHelper.setStrike = (isStrike) => (element) => {
-      modify_xml_helper_1.default.attribute("strike", isStrike ? "sngStrike" : "noStrike")(element);
-    };
-    ModifyTextHelper.setFontFamily = (fontFamily) => (element) => {
-      if (!fontFamily)
-        return;
-      let latin = xml_helper_1.XmlHelper.getFirstDirectChild(element, ["a:latin"]);
-      if (!latin) {
-        latin = element.ownerDocument.createElement("a:latin");
-        xml_helper_1.XmlHelper.insertInSchemaOrder(element, latin, RPR_CHILD_ORDER);
-      }
-      latin.setAttribute("typeface", xml_helper_1.XmlHelper.sanitizeAttr(fontFamily));
-    };
-    ModifyTextHelper.setHighlight = (color) => (element) => {
-      if (!color || !color.type)
-        return;
-      modify_color_helper_1.default.normalizeColorObject(color);
-      let highlight = xml_helper_1.XmlHelper.getFirstDirectChild(element, ["a:highlight"]);
-      if (!highlight) {
-        highlight = element.ownerDocument.createElement("a:highlight");
-        xml_helper_1.XmlHelper.insertInSchemaOrder(element, highlight, RPR_CHILD_ORDER);
-      }
-      xml_helper_1.XmlHelper.removeAllChildren(highlight);
-      highlight.appendChild(new xml_elements_1.default(element, { color }).colorType());
-    };
-    ModifyTextHelper.setBulletType = (font, character) => (element) => {
-      const paragraphs = element.getElementsByTagName("a:p");
-      xml_helper_1.XmlHelper.modifyCollection(paragraphs, (paragraph) => {
-        const pPr = paragraph.getElementsByTagName("a:pPr")[0];
-        if (!pPr) {
-          return;
-        }
-        const existingBuFont = pPr.getElementsByTagName("a:buFont")[0];
-        if (existingBuFont) {
-          existingBuFont.setAttribute("typeface", font);
-        }
-        const existingBuChar = pPr.getElementsByTagName("a:buChar")[0];
-        if (existingBuChar) {
-          existingBuChar.setAttribute("char", character);
-        }
-        const existingBuBlip = pPr.getElementsByTagName("a:buBlip")[0];
-        if (existingBuBlip) {
-          xml_helper_1.XmlHelper.remove(existingBuBlip);
-        }
-      });
-    };
-    exports.default = ModifyTextHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/text-replace-helper.js
-var require_text_replace_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/text-replace-helper.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var general_helper_1 = require_general_helper();
-    var regexp_escape_1 = __importDefault(require_regexp());
-    var xml_helper_1 = require_xml_helper();
-    var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    var TextReplaceHelper = class {
-      constructor(options, element) {
-        const defaultOptions = {
-          openingTag: "{{",
-          closingTag: "}}"
-        };
-        this.options = !options ? defaultOptions : Object.assign(Object.assign({}, defaultOptions), options);
-        this.element = element;
-        this.expressions = {
-          openingTag: (0, regexp_escape_1.default)(this.options.openingTag),
-          closingTag: (0, regexp_escape_1.default)(this.options.closingTag)
-        };
-      }
-      isolateTaggedNodes() {
-        const paragraphs = this.element.getElementsByTagName("a:p");
-        const pattern = this.getRegExp();
-        for (let p = 0; p < paragraphs.length; p++) {
-          const blocks = paragraphs[p].getElementsByTagName("a:r");
-          for (let r = 0; r < blocks.length; r++) {
-            const block = blocks[r];
-            const textContent = this.getTextElement(block).textContent;
-            const match = textContent.matchAll(pattern);
-            const matches = [...match];
-            if (matches.length) {
-              this.splitTextBlock(block, matches, textContent);
-            }
-          }
-        }
-        return this;
-      }
-      splitTextBlock(block, matches, textContent) {
-        const split = this.getCharacterSplit(matches, textContent);
-        let lastBlock = block;
-        split.forEach((split2) => {
-          lastBlock = this.insertBlock(lastBlock, split2.text);
-        });
-        block.parentNode.removeChild(block);
-      }
-      getCharacterSplit(matches, textContent) {
-        let lastEnd;
-        const split = [];
-        matches.forEach((match, s) => {
-          const start = match.index;
-          const end = match.index + match[0].length;
-          if (s === 0 && start > 0) {
-            this.pushCharacterSplit(split, 0, start, textContent);
-          }
-          if (start > lastEnd) {
-            this.pushCharacterSplit(split, lastEnd, match.index, textContent);
-          }
-          this.pushCharacterSplit(split, start, end, textContent);
-          const length = textContent.length;
-          if (!matches[s + 1] && end < length) {
-            this.pushCharacterSplit(split, end, length, textContent);
-          }
-          lastEnd = end;
-        });
-        return split;
-      }
-      pushCharacterSplit(split, from, to, text) {
-        split.push({
-          from,
-          to,
-          text: text.slice(from, to)
-        });
-      }
-      insertBlock(block, text) {
-        const newBlock = block.cloneNode(true);
-        const newTextElement = this.getTextElement(newBlock);
-        modify_text_helper_1.default.content(text)(newTextElement);
-        xml_helper_1.XmlHelper.insertAfter(newBlock, block);
-        return newBlock;
-      }
-      applyReplacements(replaceTexts) {
-        const textBlocks = this.element.getElementsByTagName("a:r");
-        const length = textBlocks.length;
-        for (let i = 0; i < length; i++) {
-          const textBlock = textBlocks[i];
-          replaceTexts.forEach((item) => {
-            this.applyReplacement(item, textBlock, i);
-          });
-        }
-      }
-      applyReplacement(replaceText, textBlock, _currentIndex) {
-        var _a3;
-        const replace = this.options.openingTag + replaceText.replace + this.options.closingTag;
-        const textNode = this.getTextElement(textBlock);
-        const sourceText = (_a3 = textNode.firstChild) === null || _a3 === void 0 ? void 0 : _a3.textContent;
-        if (sourceText === null || sourceText === void 0 ? void 0 : sourceText.includes(replace)) {
-          const bys = general_helper_1.GeneralHelper.arrayify(replaceText.by);
-          const modifyBlocks = this.assertTextBlocks(bys.length, textBlock);
-          bys.forEach((by, blockIndex) => {
-            const textNode2 = modifyBlocks[blockIndex].getElementsByTagName("a:t")[0];
-            this.updateTextNode(textNode2, sourceText, replace, by);
-          });
-        }
-      }
-      assertTextBlocks(length, textBlock) {
-        const modifyBlocks = [];
-        if (length > 1) {
-          for (let i = 1; i < length; i++) {
-            const addedTextBlock = textBlock.cloneNode(true);
-            xml_helper_1.XmlHelper.insertAfter(addedTextBlock, textBlock);
-            modifyBlocks.push(addedTextBlock);
-          }
-        }
-        modifyBlocks.push(textBlock);
-        modifyBlocks.reverse();
-        return modifyBlocks;
-      }
-      updateTextNode(textNode, sourceText, replace, by) {
-        const replacedText = sourceText.replace(replace, by.text);
-        modify_text_helper_1.default.content(replacedText)(textNode);
-        if (by.style) {
-          const styleParent = textNode.parentNode;
-          const styleElement = styleParent.getElementsByTagName("a:rPr")[0];
-          modify_text_helper_1.default.style(by.style)(styleElement);
-        }
-      }
-      getTextElement(block) {
-        return block.getElementsByTagName("a:t")[0];
-      }
-      getRegExp() {
-        return new RegExp([
-          this.expressions.openingTag,
-          "[^",
-          this.expressions.openingTag,
-          this.expressions.closingTag,
-          "]+",
-          this.expressions.closingTag
-        ].join(""), "g");
-      }
-    };
-    exports.default = TextReplaceHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-shape-helper.js
-var require_modify_shape_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-shape-helper.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_elements_1 = __importDefault(require_xml_elements());
-    var general_helper_1 = require_general_helper();
-    var text_replace_helper_1 = __importDefault(require_text_replace_helper());
-    var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    var xml_helper_1 = require_xml_helper();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var xml_placeholder_helper_1 = __importDefault(require_xml_placeholder_helper());
-    var index_1 = require_dist();
-    var map2 = {
-      // X position mappings (left)
-      x: { tag: "a:off", attribute: "x" },
-      l: { tag: "a:off", attribute: "x" },
-      left: { tag: "a:off", attribute: "x" },
-      // Y position mappings (top)
-      y: { tag: "a:off", attribute: "y" },
-      t: { tag: "a:off", attribute: "y" },
-      top: { tag: "a:off", attribute: "y" },
-      // Width mappings
-      cx: { tag: "a:ext", attribute: "cx" },
-      w: { tag: "a:ext", attribute: "cx" },
-      width: { tag: "a:ext", attribute: "cx" },
-      // Height mappings
-      cy: { tag: "a:ext", attribute: "cy" },
-      h: { tag: "a:ext", attribute: "cy" },
-      height: { tag: "a:ext", attribute: "cy" }
-    };
-    var SPPR_AFTER_LINE_TAGS = [
-      "a:effectLst",
-      "a:effectDag",
-      "a:scene3d",
-      "a:sp3d",
-      "a:extLst"
-    ];
-    var ModifyShapeHelper = class {
-      /**
-       * Determines the type of visual element in PowerPoint
-       * @param element The XML element to check
-       * @returns A string identifying the element type
-       */
-      static getElementVisualType(element) {
-        return xml_slide_helper_1.XmlSlideHelper.getElementVisualType(element);
-      }
-      /**
-       * Forward placeholder info function
-       * @param element The XML element to check
-       * @returns The PlaceholderInfo object
-       */
-      static getElementPlaceholderInfo(element) {
-        return xml_placeholder_helper_1.default.getPlaceholderInfo(element);
-      }
-      /**
-       * Check if the given element has a background which is non-transparent
-       * @param element The XML element to check
-       * @returns ShapeBackgroundInfo
-       */
-      static elementHasBackground(element) {
-        return index_1.ModifyColorHelper.elementHasBackground(element);
-      }
-    };
-    ModifyShapeHelper.setSolidFill = (element) => {
-      element.getElementsByTagName("a:solidFill")[0].getElementsByTagName("a:schemeClr")[0].setAttribute("val", "accent6");
-    };
-    ModifyShapeHelper.setOutline = (outline) => (element) => {
-      const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
-      if (!spPr) {
-        return;
-      }
-      const existingLine = xml_helper_1.XmlHelper.getFirstDirectChild(spPr, ["a:ln"]);
-      if (existingLine) {
-        new xml_elements_1.default(spPr, { outline }).applyOutline(existingLine);
-        return;
-      }
-      const line = new xml_elements_1.default(spPr, { outline }).outline();
-      const anchor2 = xml_helper_1.XmlHelper.getFirstDirectChild(spPr, SPPR_AFTER_LINE_TAGS);
-      if (anchor2) {
-        spPr.insertBefore(line, anchor2);
-      } else {
-        spPr.appendChild(line);
-      }
-    };
-    ModifyShapeHelper.setText = (text) => (element) => {
-      modify_text_helper_1.default.setText(text)(element);
-    };
-    ModifyShapeHelper.setBulletList = (list) => (element) => {
-      modify_text_helper_1.default.setBulletList(list)(element);
-    };
-    ModifyShapeHelper.replaceText = (replaceText, options) => (element) => {
-      const replaceTexts = general_helper_1.GeneralHelper.arrayify(replaceText);
-      new text_replace_helper_1.default(options, element).isolateTaggedNodes().applyReplacements(replaceTexts);
-    };
-    ModifyShapeHelper.ensureTransformElements = (element) => {
-      let xfrm = element.getElementsByTagName("a:xfrm")[0];
-      if (!xfrm) {
-        xfrm = element.getElementsByTagName("p:xfrm")[0];
-      }
-      if (!xfrm) {
-        const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
-        if (!spPr) {
-          return null;
-        }
-        xfrm = element.ownerDocument.createElement("a:xfrm");
-        spPr.appendChild(xfrm);
-      }
-      if (!xfrm.getElementsByTagName("a:off")[0]) {
-        const newAOff = element.ownerDocument.createElement("a:off");
-        newAOff.setAttribute("x", "0");
-        newAOff.setAttribute("y", "0");
-        if (xfrm.hasChildNodes()) {
-          xfrm.insertBefore(newAOff, xfrm.firstChild);
-        } else {
-          xfrm.appendChild(newAOff);
-        }
-      }
-      if (!xfrm.getElementsByTagName("a:ext")[0]) {
-        const newAExt = element.ownerDocument.createElement("a:ext");
-        newAExt.setAttribute("cx", "1000000");
-        newAExt.setAttribute("cy", "1000000");
-        xfrm.appendChild(newAExt);
-      }
-      return xfrm;
-    };
-    ModifyShapeHelper.setPosition = (pos) => (element) => {
-      const xfrm = ModifyShapeHelper.ensureTransformElements(element);
-      if (!xfrm) {
-        return;
-      }
-      Object.keys(pos).forEach((key) => {
-        const mapped = map2[key];
-        let value = Math.round(pos[key]);
-        if (typeof value !== "number" || !mapped)
-          return;
-        value = value < 0 ? 0 : value;
-        xfrm.getElementsByTagName(mapped.tag)[0].setAttribute(mapped.attribute, String(value));
-      });
-    };
-    ModifyShapeHelper.updatePosition = (pos) => (element) => {
-      const xfrm = ModifyShapeHelper.ensureTransformElements(element);
-      if (!xfrm) {
-        return;
-      }
-      Object.keys(pos).forEach((key) => {
-        const mapped = map2[key];
-        let value = Math.round(pos[key]);
-        if (typeof value !== "number" || !mapped)
-          return;
-        const currentValue = xfrm.getElementsByTagName(mapped.tag)[0].getAttribute(mapped.attribute);
-        value += Number(currentValue);
-        xfrm.getElementsByTagName(mapped.tag)[0].setAttribute(mapped.attribute, String(value));
-      });
-    };
-    ModifyShapeHelper.rotate = (degrees) => (element) => {
-      const spPr = element.getElementsByTagName("p:spPr");
-      if (spPr) {
-        const xfrm = spPr.item(0).getElementsByTagName("a:xfrm").item(0);
-        degrees = degrees < 0 ? 360 + degrees : degrees;
-        xfrm.setAttribute("rot", String(Math.round(degrees * 6e4)));
-      }
-    };
-    ModifyShapeHelper.roundedCorners = (degree) => (element) => {
-      const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
-      if (!spPr) {
-        return;
-      }
-      const xfrm = ModifyShapeHelper.ensureTransformElements(element);
-      if (!xfrm) {
-        return;
-      }
-      const width = Number(xfrm.getElementsByTagName("a:ext")[0].getAttribute("cx"));
-      const height = Number(xfrm.getElementsByTagName("a:ext")[0].getAttribute("cy"));
-      const minDimension = Math.min(width, height);
-      const clampedDegree = Math.max(0, Math.min(degree, minDimension / 2));
-      const adjValue = Math.round(clampedDegree / minDimension * 1e5);
-      const existingPrstGeom = spPr.getElementsByTagName("a:prstGeom")[0];
-      if (existingPrstGeom) {
-        xml_helper_1.XmlHelper.remove(existingPrstGeom);
-      }
-      const prstGeom = element.ownerDocument.createElement("a:prstGeom");
-      prstGeom.setAttribute("prst", "roundRect");
-      const avLst = element.ownerDocument.createElement("a:avLst");
-      const gd = element.ownerDocument.createElement("a:gd");
-      gd.setAttribute("name", "adj");
-      gd.setAttribute("fmla", `val ${adjValue}`);
-      avLst.appendChild(gd);
-      prstGeom.appendChild(avLst);
-      const xfrmElement = spPr.getElementsByTagName("a:xfrm")[0];
-      if (xfrmElement && xfrmElement.nextSibling) {
-        spPr.insertBefore(prstGeom, xfrmElement.nextSibling);
-      } else {
-        spPr.appendChild(prstGeom);
-      }
-      const noFillElement = spPr.getElementsByTagName("a:noFill")[0];
-      if (noFillElement) {
-        xml_helper_1.XmlHelper.remove(noFillElement);
-      }
-    };
-    exports.default = ModifyShapeHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-cleanup-helper.js
-var require_modify_cleanup_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-cleanup-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var xml_helper_1 = require_xml_helper();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var index_1 = require_dist();
-    var ModifyCleanupHelper = class _ModifyCleanupHelper {
-      /**
-       * Removes unwanted visual effects from PowerPoint elements based on their type
-       * Preserves certain effects for drawings but removes distracting effects from photos
-       *
-       * @param element - The XML element to clean up
-       */
-      static removeEffects(element) {
-        _ModifyCleanupHelper.removeShapeStyle(element);
-        _ModifyCleanupHelper.removeColorAdjustment(element);
-        _ModifyCleanupHelper.removeShadowEffects(element);
-        _ModifyCleanupHelper.remove3dEffects(element);
-        _ModifyCleanupHelper.removeFillEffects(element);
-        _ModifyCleanupHelper.removeTextEffects(element);
-        _ModifyCleanupHelper.removeExtLst(element);
-        const elementType = xml_slide_helper_1.XmlSlideHelper.getElementVisualType(element);
-        switch (elementType) {
-          case "picture":
-          case "svgImage":
-          case "pictogram":
-            [
-              "a:duotone",
-              "a:artistic",
-              "a:colorChange",
-              "a:softEdge",
-              "a:prstTxWarp",
-              "a:sketch",
-              "ask:lineSketchStyleProps"
-            ].forEach((tag2) => {
-              xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-            });
-            break;
-          case "chart":
-            ["c:view3D", "c:perspective", "a:prstTxWarp"].forEach((tag2) => {
-              xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-            });
-            break;
-          default:
-            ["a:prstTxWarp", "a:sketch", "ask:lineSketchStyleProps"].forEach((tag2) => {
-              xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-            });
-        }
-      }
-      /**
-       * Removes text formatting effects
-       *
-       * @param element - The XML element containing text runs to clean up
-       */
-      static removeTextEffects(element) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          const latin = textRun.getElementsByTagName("a:latin").item(0);
-          const ea = textRun.getElementsByTagName("a:ea").item(0);
-          const cs = textRun.getElementsByTagName("a:cs").item(0);
-          xml_helper_1.XmlHelper.remove(latin);
-          xml_helper_1.XmlHelper.remove(ea);
-          xml_helper_1.XmlHelper.remove(cs);
-        });
-      }
-      /**
-       * Removes extension list (extLst) elements from PowerPoint shapes
-       *
-       * The extLst (Extension List) element in OOXML contains application-specific extensions
-       * and future compatibility features that may not be supported across all Office versions.
-       * These extensions can include:
-       * - Custom drawing effects and transformations
-       * - Third-party add-in specific properties
-       * - Version-specific features that may cause rendering inconsistencies
-       * - Experimental or preview features
-       *
-       * Removing extLst helps ensure cross-version compatibility and prevents rendering
-       * issues when the presentation is opened in different versions of PowerPoint or
-       * other OOXML-compatible applications.
-       *
-       * @param element - The XML element containing extension lists to remove
-       */
-      static removeExtLst(element) {
-        const extLst = element.getElementsByTagName("a:extLst").item(0);
-        xml_helper_1.XmlHelper.remove(extLst);
-      }
-      static clearTextUnderlineToBold(element) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          const isUnderlined = textRun.getAttribute("u");
-          if (textRun && isUnderlined) {
-            textRun.removeAttribute("u");
-            textRun.setAttribute("b", "1");
-          }
-        });
-      }
-      static clearTextItalicsToBold(element) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          const isItalics = textRun.getAttribute("i");
-          if (textRun && isItalics) {
-            textRun.removeAttribute("i");
-            textRun.setAttribute("b", "1");
-          }
-        });
-      }
-      static clearTextUnderline(element) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          textRun === null || textRun === void 0 ? void 0 : textRun.removeAttribute("u");
-        });
-      }
-      static clearTextBold(element) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          textRun === null || textRun === void 0 ? void 0 : textRun.removeAttribute("b");
-        });
-      }
-      static clearTextSize(element) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          textRun === null || textRun === void 0 ? void 0 : textRun.removeAttribute("sz");
-        });
-      }
-      static clearTextColor(element, color) {
-        const textRuns = element.getElementsByTagName("a:rPr");
-        xml_helper_1.XmlHelper.modifyCollection(textRuns, (textRun) => {
-          if (color) {
-            index_1.ModifyColorHelper.solidFill(color, 0)(textRun);
-          } else {
-            const solidFill = textRun.getElementsByTagName("a:solidFill")[0];
-            if (solidFill) {
-              xml_helper_1.XmlHelper.remove(solidFill);
-            }
-            const gradFill = textRun.getElementsByTagName("a:gradFill")[0];
-            if (gradFill) {
-              xml_helper_1.XmlHelper.remove(gradFill);
-            }
-            const pattFill = textRun.getElementsByTagName("a:pattFill")[0];
-            if (pattFill) {
-              xml_helper_1.XmlHelper.remove(pattFill);
-            }
-            const noFill = textRun.getElementsByTagName("a:noFill")[0];
-            if (noFill) {
-              xml_helper_1.XmlHelper.remove(noFill);
-            }
-            const highlight = textRun.getElementsByTagName("a:highlight")[0];
-            if (highlight) {
-              xml_helper_1.XmlHelper.remove(highlight);
-            }
-          }
-        });
-      }
-      static removeFillEffects(element) {
-        ["a:reflection", "a:glow", "a:gradFill", "a:pattFill", "a:grpFill"].forEach((tag2) => {
-          xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-        });
-        ["a:scene3d", "a:sp3d"].forEach((tag2) => {
-          xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-        });
-      }
-      static remove3dEffects(element) {
-        ["a:scene3d", "a:sp3d"].forEach((tag2) => {
-          xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-        });
-      }
-      static removeShadowEffects(element) {
-        [
-          "a:outerShdw",
-          "a:innerShdw",
-          "a:gradFill",
-          "a:pattFill",
-          "a:grpFill"
-        ].forEach((tag2) => {
-          xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-        });
-      }
-      static removeColorAdjustment(element) {
-        [
-          "a:alpha",
-          "a:alphaInv",
-          "a:alphaMod",
-          "a:alphaOff",
-          "a:blue",
-          "a:blueMod",
-          "a:blueOff",
-          "a:comp",
-          "a:gamma",
-          "a:gray",
-          "a:green",
-          "a:greenMod",
-          "a:greenOff",
-          "a:hue",
-          "a:hueMod",
-          "a:hueOff",
-          "a:inv",
-          "a:invGamma",
-          "a:lum",
-          "a:lumMod",
-          "a:lumOff",
-          "a:red",
-          "a:redMod",
-          "a:redOff",
-          "a:sat",
-          "a:satMod",
-          "a:satOff",
-          "a:shade",
-          "a:tint"
-        ].forEach((tag2) => {
-          xml_helper_1.XmlHelper.removeByTagName(element, tag2);
-        });
-      }
-    };
-    ModifyCleanupHelper.removeBackground = (element) => {
-      const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
-      if (!spPr) {
-        return;
-      }
-      const solidFill = spPr.getElementsByTagName("a:solidFill")[0];
-      if (solidFill) {
-        xml_helper_1.XmlHelper.remove(solidFill);
-      }
-      const gradFill = spPr.getElementsByTagName("a:gradFill")[0];
-      if (gradFill) {
-        xml_helper_1.XmlHelper.remove(gradFill);
-      }
-      const pattFill = spPr.getElementsByTagName("a:pattFill")[0];
-      if (pattFill) {
-        xml_helper_1.XmlHelper.remove(pattFill);
-      }
-      const grpFill = spPr.getElementsByTagName("a:grpFill")[0];
-      if (grpFill) {
-        xml_helper_1.XmlHelper.remove(grpFill);
-      }
-    };
-    ModifyCleanupHelper.removeShapeStyle = (element) => {
-      const styleElement = element.getElementsByTagName("p:style")[0];
-      if (!styleElement) {
-        return;
-      }
-      const fillRef = styleElement.getElementsByTagName("a:fillRef")[0];
-      let colorInfo = null;
-      if (fillRef) {
-        const schemeClr = fillRef.getElementsByTagName("a:schemeClr")[0];
-        if (schemeClr) {
-          const colorValue = schemeClr.getAttribute("val");
-          if (colorValue) {
-            colorInfo = {
-              type: "schemeClr",
-              value: colorValue
-            };
-          }
-        }
-        const srgbClr = fillRef.getElementsByTagName("a:srgbClr")[0];
-        if (srgbClr && !colorInfo) {
-          const colorValue = srgbClr.getAttribute("val");
-          if (colorValue) {
-            colorInfo = {
-              type: "srgbClr",
-              value: colorValue
-            };
-          }
-        }
-      }
-      xml_helper_1.XmlHelper.remove(styleElement);
-      if (colorInfo) {
-        index_1.ModifyColorHelper.solidFill(colorInfo)(element.getElementsByTagName("p:spPr").item(0));
-      }
-    };
-    ModifyCleanupHelper.removeBorder = (element) => {
-      const spPr = element.getElementsByTagName("p:spPr")[0] || element.getElementsByTagName("a:spPr")[0];
-      if (!spPr) {
-        return;
-      }
-      const ln = spPr.getElementsByTagName("a:ln")[0];
-      if (ln) {
-        xml_helper_1.XmlHelper.remove(ln);
-      }
-      const tableBorders = ["a:lnL", "a:lnR", "a:lnT", "a:lnB"];
-      tableBorders.forEach((borderTag) => {
-        const border = element.getElementsByTagName(borderTag)[0];
-        if (border) {
-          xml_helper_1.XmlHelper.remove(border);
-        }
-      });
-    };
-    exports.default = ModifyCleanupHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/modify/modify-table.js
-var require_modify_table = __commonJS({
-  "node_modules/pptx-automizer/dist/modify/modify-table.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ModifyTable = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
-    var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    var index_1 = require_dist();
-    var general_helper_1 = require_general_helper();
-    var ModifyTable = class {
-      constructor(table, data) {
-        var _a3;
-        this.maxCols = 0;
-        this.row = (index, children) => {
-          return {
-            "a:tr": {
-              forceCreate: true,
-              index,
-              children
-            }
-          };
-        };
-        this.column = (index, children) => {
-          var _a4;
-          return {
-            "a:tc": {
-              index,
-              children,
-              fromPrevious: !!((_a4 = this.params) === null || _a4 === void 0 ? void 0 : _a4.expand)
-            }
-          };
-        };
-        this.cell = (value, style) => {
-          return {
-            "a:txBody": {
-              children: {
-                "a:t": {
-                  modify: modify_text_helper_1.default.content(value)
-                },
-                "a:rPr": {
-                  modify: modify_text_helper_1.default.style(style)
-                },
-                "a:r": {
-                  collection: (collection) => {
-                    xml_helper_1.XmlHelper.sliceCollection(collection, 1);
-                    this.breakLines(collection.item(0));
-                  }
-                }
-              }
-            },
-            "a:tcPr": Object.assign({}, this.setCellStyle(style))
-          };
-        };
-        this.expandRows = (count, rowId) => {
-          const tplRow = this.xml.getElementsByTagName("a:tr").item(rowId);
-          for (let r = 1; r <= count; r++) {
-            const newRow = tplRow.cloneNode(true);
-            xml_helper_1.XmlHelper.insertAfter(newRow, tplRow);
-            this.updateId(newRow, "a16:rowId", r);
-          }
-        };
-        this.expandSpanColumns = (count, colId, gridSpan) => {
-          for (let cs = 1; cs <= count; cs++) {
-            const rows = this.xml.getElementsByTagName("a:tr");
-            for (let r = 0; r < rows.length; r++) {
-              const row = rows.item(r);
-              const columns = row.getElementsByTagName("a:tc");
-              const maxC = colId + gridSpan;
-              for (let c = colId; c < maxC; c++) {
-                const sourceCell = columns.item(c);
-                const insertAfter = columns.item(c + gridSpan - 1);
-                const clone2 = sourceCell.cloneNode(true);
-                xml_helper_1.XmlHelper.insertAfter(clone2, insertAfter);
-              }
-            }
-          }
-          this.expandGrid(count, colId, gridSpan);
-        };
-        this.expandColumns = (count, colId) => {
-          for (let cs = 1; cs <= count; cs++) {
-            const rows = this.xml.getElementsByTagName("a:tr");
-            for (let r = 0; r < rows.length; r++) {
-              const row = rows.item(r);
-              const columns = row.getElementsByTagName("a:tc");
-              const sourceCell = columns.item(colId);
-              const newCell = this.getExpandCellClone(columns, sourceCell, colId);
-              xml_helper_1.XmlHelper.insertAfter(newCell, sourceCell);
-            }
-          }
-          this.expandGrid(count, colId, 1);
-        };
-        this.expandGrid = (count, colId, gridSpan) => {
-          const tblGrid = this.xml.getElementsByTagName("a:tblGrid").item(0);
-          for (let cs = 1; cs <= count; cs++) {
-            const maxC = colId + gridSpan;
-            for (let c = colId; c < maxC; c++) {
-              const sourceTblGridCol = tblGrid.getElementsByTagName("a:gridCol").item(c);
-              const newCol = sourceTblGridCol.cloneNode(true);
-              xml_helper_1.XmlHelper.insertAfter(newCol, sourceTblGridCol);
-              this.updateId(newCol, "a16:colId", c * (cs + 1) * colId * 1e3);
-            }
-          }
-        };
-        this.updateId = (element, tag2, id) => {
-          const idElement = element.getElementsByTagName(tag2).item(0);
-          const previousId = Number(idElement.getAttribute("val"));
-          idElement.setAttribute("val", String(previousId + id));
-        };
-        this.data = data;
-        this.table = new modify_xml_helper_1.default(table);
-        this.xml = table;
-        (_a3 = this.data) === null || _a3 === void 0 ? void 0 : _a3.body.forEach((row) => {
-          this.maxCols = row.values.length > this.maxCols ? row.values.length : this.maxCols;
-        });
-      }
-      modify(params) {
-        this.params = params;
-        this.setRows();
-        this.setGridCols();
-        this.sliceRows();
-        this.sliceCols();
-        return this;
-      }
-      setRows() {
-        var _a3, _b;
-        const alreadyExpanded = (_b = (_a3 = this.params) === null || _a3 === void 0 ? void 0 : _a3.expand) === null || _b === void 0 ? void 0 : _b.find((expand) => expand.mode === "column");
-        this.data.body.forEach((row, r) => {
-          row.values.forEach((cell, c) => {
-            var _a4;
-            const rowStyles = row.styles && row.styles[c] ? row.styles[c] : {};
-            this.table.modify(this.row(r, this.column(c, this.cell(cell, rowStyles))));
-            this.table.modify({
-              "a16:rowId": {
-                index: r,
-                modify: modify_xml_helper_1.default.attribute("val", r)
-              }
-            });
-            if (((_a4 = this.params) === null || _a4 === void 0 ? void 0 : _a4.expand) && !alreadyExpanded) {
-              this.expandOtherMergedCellsInColumn(c, r);
-            }
-          });
-        });
-      }
-      expandOtherMergedCellsInColumn(c, r) {
-        const rows = this.xml.getElementsByTagName("a:tr");
-        for (let rs = 0; rs < rows.length; rs++) {
-          if (r !== rs) {
-            const row = rows.item(r);
-            const columns = row.getElementsByTagName("a:tc");
-            const sourceCell = columns.item(c);
-            this.expandGridSpan(sourceCell);
-          }
-        }
-      }
-      setGridCols() {
-        for (let c = 0; c <= this.maxCols; c++) {
-          this.table.modify({
-            "a:gridCol": {
-              index: c
-            },
-            "a16:colId": {
-              index: c,
-              modify: modify_xml_helper_1.default.attribute("val", c)
-            }
-          });
-        }
-      }
-      sliceRows() {
-        this.table.modify({
-          "a:tbl": this.slice("a:tr", this.data.body.length)
-        });
-      }
-      sliceCols() {
-        this.table.modify({
-          "a:tblGrid": this.slice("a:gridCol", this.maxCols)
-        });
-        this.fitRowsToGrid();
-      }
-      /**
-       * Make every <a:tr> hold exactly one <a:tc> per <a:gridCol>. Surplus
-       * template cells are ignored by PowerPoint, but LibreOffice then draws the
-       * table at the top edge of the slide instead of at its <a:off>.
-       *
-       * A spanned cell is followed by one hMerge="1" <a:tc> per covered column,
-       * so each <a:tc> is one grid position. A gridSpan reaching past the new
-       * grid width is clamped; rows shorter than the grid are padded with an
-       * empty clone of their last cell.
-       */
-      fitRowsToGrid() {
-        const rows = this.xml.getElementsByTagName("a:tr");
-        for (let r = 0; r < rows.length; r++) {
-          const row = rows.item(r);
-          const cells = Array.from(row.childNodes).filter((node2) => node2.tagName === "a:tc");
-          cells.forEach((cell, position) => {
-            if (position >= this.maxCols) {
-              xml_helper_1.XmlHelper.remove(cell);
-              return;
-            }
-            const gridSpan = Number(cell.getAttribute("gridSpan"));
-            if (gridSpan > 1 && position + gridSpan > this.maxCols) {
-              const clamped = this.maxCols - position;
-              if (clamped > 1) {
-                cell.setAttribute("gridSpan", String(clamped));
-              } else {
-                cell.removeAttribute("gridSpan");
-              }
-            }
-          });
-          const lastCell = cells[Math.min(cells.length, this.maxCols) - 1];
-          for (let c = cells.length; lastCell && c < this.maxCols; c++) {
-            const padCell = lastCell.cloneNode(true);
-            ["gridSpan", "rowSpan", "hMerge", "vMerge"].forEach((attribute) => padCell.removeAttribute(attribute));
-            Array.from(padCell.getElementsByTagName("a:t")).forEach((text) => text.textContent = "");
-            Array.from(padCell.getElementsByTagName("a:br")).forEach((br) => xml_helper_1.XmlHelper.remove(br));
-            xml_helper_1.XmlHelper.insertAfter(padCell, lastCell);
-          }
-        }
-      }
-      /**
-       * Turn line breaks in a cell value into soft line breaks.
-       *
-       * A cell is written into its first run only (the others are sliced away
-       * before), so `<a:t>` may now hold a `\n` - or `\u000B`, which
-       * `XmlHelper.sanitizeText` already maps to `\n`. PPTX has no in-run line
-       * break: each line becomes a clone of the run, separated by an `<a:br/>`
-       * that carries a copy of the run's `<a:rPr>`, all in the same paragraph.
-       *
-       * Soft breaks separated the runs that were sliced away, so they go too;
-       * otherwise a cell cloned from a broken neighbour would keep dangling
-       * breaks. As in `MultiTextHelper`, an empty line gets no run of its own.
-       */
-      breakLines(run) {
-        const paragraph = run === null || run === void 0 ? void 0 : run.parentNode;
-        if (!paragraph)
-          return;
-        const txBody = paragraph.parentNode;
-        Array.from((txBody || paragraph).getElementsByTagName("a:br")).forEach((br) => xml_helper_1.XmlHelper.remove(br));
-        const text = run.getElementsByTagName("a:t").item(0);
-        const lines = ((text === null || text === void 0 ? void 0 : text.textContent) || "").split(/\r\n|[\r\n\u000B]/);
-        if (lines.length < 2)
-          return;
-        const rPr = xml_helper_1.XmlHelper.getFirstDirectChild(run, ["a:rPr"]);
-        let previous = run;
-        lines.forEach((line, index) => {
-          if (index > 0) {
-            const br = run.ownerDocument.createElement("a:br");
-            if (rPr) {
-              br.appendChild(rPr.cloneNode(true));
-            }
-            previous = xml_helper_1.XmlHelper.insertAfter(br, previous);
-          }
-          if (line === "")
-            return;
-          const lineRun = index === 0 ? run : run.cloneNode(true);
-          modify_text_helper_1.default.content(line)(lineRun.getElementsByTagName("a:t")[0]);
-          if (index > 0) {
-            previous = xml_helper_1.XmlHelper.insertAfter(lineRun, previous);
-          }
-        });
-        if (lines[0] === "") {
-          xml_helper_1.XmlHelper.remove(run);
-        }
-      }
-      setCellStyle(style) {
-        const cellProps = {
-          modify: [],
-          children: {}
-        };
-        if (style.background) {
-          cellProps.modify.push(index_1.ModifyColorHelper.solidFill(style.background, "last"));
-        }
-        if (style.border) {
-          cellProps.children = this.setCellBorder(style);
-        }
-        return cellProps;
-      }
-      setCellBorder(style) {
-        const borders = general_helper_1.GeneralHelper.arrayify(style.border);
-        const sortBorderTags = ["lnB", "lnT", "lnR", "lnL"];
-        const modifications = {};
-        borders.sort((b1, b2) => sortBorderTags.indexOf(b1.tag) < sortBorderTags.indexOf(b2.tag) ? -1 : 1).forEach((border) => {
-          const tag2 = "a:" + border.tag;
-          const modifyCell = [];
-          if (border.color) {
-            modifyCell.push(index_1.ModifyColorHelper.solidFill(border.color));
-          }
-          if (border.weight) {
-            modifyCell.push(modify_xml_helper_1.default.attribute("w", border.weight));
-          }
-          modifications[tag2] = {
-            modify: modifyCell
-          };
-          if (border.type) {
-            modifications[tag2].children = {
-              "a:prstDash": {
-                modify: modify_xml_helper_1.default.attribute("val", border.type)
-              }
-            };
-          }
-        });
-        return modifications;
-      }
-      slice(tag2, length) {
-        return {
-          children: {
-            [tag2]: {
-              collection: (collection) => {
-                xml_helper_1.XmlHelper.sliceCollection(collection, length);
-              }
-            }
-          }
-        };
-      }
-      adjustHeight() {
-        const tableHeight = this.getTableSize("cy");
-        const rowHeight = tableHeight / this.data.body.length;
-        this.data.body.forEach((row, r) => {
-          this.table.modify({
-            "a:tr": {
-              index: r,
-              modify: modify_xml_helper_1.default.attribute("h", Math.round(rowHeight))
-            }
-          });
-        });
-        return this;
-      }
-      adjustWidth() {
-        var _a3, _b, _c;
-        const tableWidth = this.getTableSize("cx");
-        const rowWidth = tableWidth / ((_b = (_a3 = this.data.body[0]) === null || _a3 === void 0 ? void 0 : _a3.values) === null || _b === void 0 ? void 0 : _b.length) || 1;
-        (_c = this.data.body[0]) === null || _c === void 0 ? void 0 : _c.values.forEach((cell, c) => {
-          this.table.modify({
-            "a:gridCol": {
-              index: c,
-              modify: modify_xml_helper_1.default.attribute("w", Math.round(rowWidth))
-            }
-          });
-        });
-        return this;
-      }
-      updateColumnWidth(c, size) {
-        const tableWidth = this.getTableSize("cx");
-        const targetSize = Math.round(size);
-        let currentSize = 0;
-        this.table.modify({
-          "a:gridCol": {
-            index: c,
-            modify: [
-              (ele) => {
-                currentSize = Number(ele.getAttribute("w"));
-              },
-              modify_xml_helper_1.default.attribute("w", targetSize)
-            ]
-          }
-        });
-        const diff = currentSize - targetSize;
-        const targetWidth = tableWidth - diff;
-        this.setSize("cx", targetWidth);
-        return this;
-      }
-      updateRowHeight(r, size) {
-        const tableSize = this.getTableSize("cy");
-        const targetSize = Math.round(size);
-        let currentSize = 0;
-        this.table.modify({
-          "a:tr": {
-            index: r,
-            modify: [
-              (ele) => {
-                currentSize = Number(ele.getAttribute("h"));
-              },
-              modify_xml_helper_1.default.attribute("h", targetSize)
-            ]
-          }
-        });
-        const diff = currentSize - targetSize;
-        const targetTableSize = tableSize - diff;
-        this.setSize("cy", targetTableSize);
-        return this;
-      }
-      setSize(orientation, size) {
-        const sizeElement = this.xml.getElementsByTagName("p:xfrm")[0].getElementsByTagName("a:ext")[0];
-        sizeElement.setAttribute(orientation, String(size));
-      }
-      getTableSize(orientation) {
-        return Number(this.xml.getElementsByTagName("p:xfrm")[0].getElementsByTagName("a:ext")[0].getAttribute(orientation));
-      }
-      getExpandCellClone(columns, sourceCell, colId) {
-        const hasGridSpan = this.expandGridSpan(sourceCell);
-        if (hasGridSpan) {
-          return columns.item(colId + 1).cloneNode(true);
-        }
-        const hMerge = sourceCell.getAttribute("hMerge");
-        if (hMerge) {
-          for (let findCol = colId - 1; colId >= 0; colId--) {
-            const previousSibling = columns.item(findCol);
-            if (!previousSibling) {
-              break;
-            }
-            const siblingHasSpan = this.expandGridSpan(previousSibling);
-            if (siblingHasSpan) {
-              break;
-            }
-          }
-        }
-        return sourceCell.cloneNode(true);
-      }
-      expandGridSpan(sourceCell) {
-        const gridSpan = sourceCell.getAttribute("gridSpan");
-        if (gridSpan) {
-          const incrementGridSpan = Number(gridSpan) + 1;
-          sourceCell.setAttribute("gridSpan", String(incrementGridSpan));
-          return true;
-        }
-      }
-    };
-    exports.ModifyTable = ModifyTable;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-table-helper.js
-var require_modify_table_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-table-helper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var modify_table_1 = require_modify_table();
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    var xml_helper_1 = require_xml_helper();
-    var ModifyTableHelper = class {
-    };
-    ModifyTableHelper.setTable = (data, params) => (element) => {
-      const modTable = new modify_table_1.ModifyTable(element, data);
-      if (params === null || params === void 0 ? void 0 : params.expand) {
-        params === null || params === void 0 ? void 0 : params.expand.forEach((expand) => {
-          const tableInfo = xml_slide_helper_1.XmlSlideHelper.readTableInfo(element);
-          const targetCell = tableInfo.find((infoCell) => infoCell.textContent === expand.tag);
-          if (targetCell) {
-            if (expand.mode === "row") {
-              modTable.expandRows(expand.count, targetCell.row);
-            } else {
-              if (targetCell.gridSpan) {
-                modTable.expandSpanColumns(expand.count, targetCell.column, targetCell.gridSpan);
-              } else {
-                modTable.expandColumns(expand.count, targetCell.column);
-              }
-            }
-          }
-        });
-      }
-      modTable.modify(params);
-      if (params === null || params === void 0 ? void 0 : params.setHeight) {
-        modTable.setSize("cy", params.setHeight);
-      }
-      if (params === null || params === void 0 ? void 0 : params.setWidth) {
-        modTable.setSize("cx", params.setWidth);
-      }
-      if (!params || (params === null || params === void 0 ? void 0 : params.adjustHeight)) {
-        modTable.adjustHeight();
-      }
-      if (!params || (params === null || params === void 0 ? void 0 : params.adjustWidth)) {
-        modTable.adjustWidth();
-      }
-    };
-    ModifyTableHelper.setTableData = (data) => (element) => {
-      const modTable = new modify_table_1.ModifyTable(element, data);
-      modTable.modify();
-    };
-    ModifyTableHelper.adjustHeight = (data) => (element) => {
-      const modTable = new modify_table_1.ModifyTable(element, data);
-      modTable.adjustHeight();
-    };
-    ModifyTableHelper.adjustWidth = (data) => (element) => {
-      const modTable = new modify_table_1.ModifyTable(element, data);
-      modTable.adjustWidth();
-    };
-    ModifyTableHelper.updateColumnWidth = (index, size) => (element) => {
-      const modTable = new modify_table_1.ModifyTable(element);
-      modTable.updateColumnWidth(index, size);
-    };
-    ModifyTableHelper.updateRowHeight = (index, size) => (element) => {
-      const modTable = new modify_table_1.ModifyTable(element);
-      modTable.updateRowHeight(index, size);
-    };
-    ModifyTableHelper.setTableStyle = (styleId, attribs) => (element) => {
-      const tblPr = element.getElementsByTagName("a:tblPr").item(0);
-      const setTableStyleId = (tableStyleId, id) => {
-        tableStyleId.textContent = xml_helper_1.XmlHelper.sanitizeText(id);
-      };
-      const createTableStyleId = (tblPr2) => {
-        const tableStyleId = tblPr2.ownerDocument.createElement("a:tableStyleId");
-        tblPr2.appendChild(tableStyleId);
-        return tableStyleId;
-      };
-      const updateTable = (tblPr2) => {
-        [
-          "firstRow",
-          "firstCol",
-          "lastRow",
-          "lastCol",
-          "bandRow",
-          "bandCol"
-        ].forEach((attrib) => {
-          if (attribs.includes(attrib)) {
-            tblPr2.setAttribute(attrib, "1");
-          } else {
-            tblPr2.removeAttribute(attrib);
-          }
-        });
-        const tableStyleId = element.getElementsByTagName("a:tableStyleId").item(0) || createTableStyleId(tblPr2);
-        if (tableStyleId) {
-          setTableStyleId(tableStyleId, styleId);
-        }
-      };
-      if (tblPr) {
-        updateTable(tblPr);
-      }
-    };
-    exports.default = ModifyTableHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/modify/modify-chart.js
-var require_modify_chart = __commonJS({
-  "node_modules/pptx-automizer/dist/modify/modify-chart.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ModifyChart = void 0;
-    var xml_helper_1 = require_xml_helper();
-    var cell_id_helper_1 = __importDefault(require_cell_id_helper());
-    var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
-    var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    var modify_color_helper_1 = __importDefault(require_modify_color_helper());
-    var index_1 = require_dist();
-    var modify_chart_helper_1 = __importDefault(require_modify_chart_helper());
-    var ModifyChart = class {
-      constructor(chart, workbook, data, slot) {
-        this.sharedStringCache = {};
-        this.setSeriesDataLabels = () => {
-          this.data.series.forEach((series, s) => {
-            var _a3, _b, _c;
-            if ((_a3 = series.style) === null || _a3 === void 0 ? void 0 : _a3.label) {
-              this.chart.modify(this.series(s, this.seriesDataLabel(s, (_b = series.style) === null || _b === void 0 ? void 0 : _b.label)));
-              index_1.modify.setDataLabelAttributes(Object.assign({ applyToSeries: s }, (_c = series.style) === null || _c === void 0 ? void 0 : _c.label))(null, this.chart.root);
-            }
-            this.data.categories.forEach((category, c) => {
-              this.chart.modify(this.series(s, this.seriesDataLabelsRange(c, category.label)));
-            });
-          });
-        };
-        this.series = (index, children) => {
-          return {
-            "c:ser": {
-              index,
-              children
-            }
-          };
-        };
-        this.chartPoint = (idx, style) => {
-          const children = Object.assign(Object.assign({}, this.chartPointSpPr(style)), this.chartPointMarker(style === null || style === void 0 ? void 0 : style.marker));
-          if (!Object.keys(children).length)
-            return;
-          return {
-            "c:dPt": {
-              // c:dPt is sparse: one element per explicitly styled point, addressed
-              // by its <c:idx> payload — never by sibling position.
-              matchIdx: idx,
-              children
-            }
-          };
-        };
-        this.chartPointSpPr = (style) => {
-          var _a3;
-          const modify = [];
-          if ((_a3 = style === null || style === void 0 ? void 0 : style.color) === null || _a3 === void 0 ? void 0 : _a3.type) {
-            modify.push(modify_color_helper_1.default.solidFill(style.color));
-          }
-          const border = this.chartPointBorder(style === null || style === void 0 ? void 0 : style.border);
-          if (!modify.length && !border)
-            return;
-          return {
-            "c:spPr": {
-              modify,
-              children: border
-            }
-          };
-        };
-        this.chartPointMarker = (markerStyle) => {
-          var _a3;
-          if (!((_a3 = markerStyle === null || markerStyle === void 0 ? void 0 : markerStyle.color) === null || _a3 === void 0 ? void 0 : _a3.type))
-            return;
-          return {
-            "c:marker": {
-              isRequired: false,
-              children: {
-                "c:spPr": {
-                  modify: modify_color_helper_1.default.solidFill(markerStyle.color)
-                }
-              }
-            }
-          };
-        };
-        this.chartPointBorder = (style) => {
-          var _a3;
-          if (!style)
-            return;
-          const modify = [];
-          if ((_a3 = style.color) === null || _a3 === void 0 ? void 0 : _a3.type) {
-            modify.push(modify_color_helper_1.default.solidFill(style.color));
-            modify.push(modify_color_helper_1.default.removeNoFill());
-          }
-          if (style.weight) {
-            modify.push(modify_xml_helper_1.default.attribute("w", style.weight));
-          }
-          if (!modify.length)
-            return;
-          return {
-            "a:ln": {
-              modify
-            }
-          };
-        };
-        this.chartPointLabel = (idx, labelStyle) => {
-          if (!labelStyle)
-            return;
-          const suffixModify = labelStyle.suffix ? [
-            (element) => {
-              modify_chart_helper_1.default.setPointLabelSuffix(element, idx, labelStyle);
-            }
-          ] : [];
-          return {
-            "c:dLbls": {
-              children: {
-                "c:dLbl": {
-                  // Like c:dPt, c:dLbl is a sparse per-point override addressed by
-                  // its <c:idx> payload. A missing label is cloned from the clean
-                  // state of the first existing one.
-                  matchIdx: idx,
-                  fromIndex: 0,
-                  modify: suffixModify,
-                  children: {
-                    // Template content is styled where present, never fabricated.
-                    "a:pPr": {
-                      isRequired: false,
-                      children: {
-                        "a:defRPr": {
-                          isRequired: false,
-                          modify: [
-                            modify_color_helper_1.default.solidFill(labelStyle === null || labelStyle === void 0 ? void 0 : labelStyle.color),
-                            modify_text_helper_1.default.style(labelStyle)
-                          ]
-                        }
-                      }
-                    },
-                    "a:fld": {
-                      isRequired: false,
-                      children: {
-                        "a:rPr": {
-                          isRequired: false,
-                          modify: [
-                            modify_color_helper_1.default.solidFill(labelStyle === null || labelStyle === void 0 ? void 0 : labelStyle.color),
-                            modify_text_helper_1.default.style(labelStyle)
-                          ]
-                        },
-                        "a:defRPr": {
-                          isRequired: false,
-                          modify: [
-                            modify_color_helper_1.default.solidFill(labelStyle === null || labelStyle === void 0 ? void 0 : labelStyle.color),
-                            modify_text_helper_1.default.style(labelStyle)
-                          ]
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          };
-        };
-        this.seriesId = (series) => {
-          return {
-            "c:idx": {
-              modify: modify_xml_helper_1.default.attribute("val", series)
-            },
-            "c:order": {
-              modify: modify_xml_helper_1.default.attribute("val", series + 1)
-            }
-          };
-        };
-        this.seriesLabel = (label, series) => {
-          return {
-            "c:f": {
-              modify: modify_xml_helper_1.default.range(series + 1)
-            },
-            "c:v": {
-              modify: modify_text_helper_1.default.content(label)
-            }
-          };
-        };
-        this.extSeriesLabel = (label, series) => {
-          return {
-            "cx:f": {
-              modify: modify_xml_helper_1.default.range(series + 1)
-            },
-            "cx:v": {
-              modify: modify_text_helper_1.default.content(label)
-            }
-          };
-        };
-        this.seriesStyle = (series) => {
-          var _a3;
-          if (!(series === null || series === void 0 ? void 0 : series.style))
-            return;
-          return {
-            "c:spPr": {
-              modify: modify_color_helper_1.default.solidFill(series.style.color)
-            },
-            "c:marker": {
-              isRequired: false,
-              children: {
-                "c:spPr": {
-                  isRequired: false,
-                  modify: modify_color_helper_1.default.solidFill((_a3 = series.style.marker) === null || _a3 === void 0 ? void 0 : _a3.color)
-                }
-              }
-            }
-          };
-        };
-        this.seriesDataLabelsRange = (r, value) => {
-          return {
-            "c15:datalabelsRange": {
-              isRequired: false,
-              children: {
-                "c:pt": {
-                  index: r,
-                  modify: modify_xml_helper_1.default.value(value, r)
-                },
-                "c15:f": {
-                  modify: modify_xml_helper_1.default.range(0, this.height)
-                },
-                "c:ptCount": {
-                  modify: modify_xml_helper_1.default.attribute("val", this.height)
-                }
-              }
-            }
-          };
-        };
-        this.seriesDataLabel = (s, style) => {
-          return {
-            "c:dLbls": {
-              isRequired: false,
-              children: {
-                "a:pPr": {
-                  modify: modify_color_helper_1.default.solidFill(style === null || style === void 0 ? void 0 : style.color),
-                  children: {
-                    "a:defRPr": {
-                      modify: modify_text_helper_1.default.style(style)
-                    }
-                  }
-                }
-              }
-            }
-          };
-        };
-        this.extPoint = (r, c, value) => {
-          return {
-            children: {
-              "cx:pt": {
-                index: r,
-                modify: [
-                  modify_xml_helper_1.default.attribute("idx", r),
-                  modify_xml_helper_1.default.textContent(value)
-                ]
-              },
-              "cx:f": {
-                modify: modify_xml_helper_1.default.range(c, this.height)
-              },
-              "cx:lvl": {
-                modify: modify_xml_helper_1.default.attribute("ptCount", this.height)
-              }
-            }
-          };
-        };
-        this.extSeries = (index, children) => {
-          return {
-            "cx:series": {
-              index,
-              children
-            }
-          };
-        };
-        this.point = (r, c, value) => {
-          return {
-            children: {
-              "c:pt": {
-                index: r,
-                modify: modify_xml_helper_1.default.value(modify_chart_helper_1.default.parseCellValue(value), r)
-              },
-              "c:f": {
-                modify: modify_xml_helper_1.default.range(c, this.height)
-              },
-              "c:ptCount": {
-                modify: modify_xml_helper_1.default.attribute("val", this.height)
-              }
-            }
-          };
-        };
-        this.data = data;
-        this.chart = new modify_xml_helper_1.default(chart);
-        this.workbook = new modify_xml_helper_1.default(workbook.sheet);
-        this.workbookTable = workbook.table ? new modify_xml_helper_1.default(workbook.table) : null;
-        this.sharedStrings = workbook.sharedStrings;
-        this.columns = this.setColumns(slot);
-        this.height = this.data.categories.length;
-        this.width = this.columns.length;
-      }
-      modify() {
-        this.setValues();
-        this.setSeries();
-        this.setSeriesDataLabels();
-        this.setPointStyles();
-        this.sliceChartSpace();
-        this.modifyWorkbook();
-      }
-      modifyExtended() {
-        this.setExtData();
-        this.setExtSeries();
-        this.sliceExtChartSpace();
-        this.modifyWorkbook();
-      }
-      modifyWorkbook() {
-        this.prepareWorkbook();
-        this.setWorkbook();
-        this.sliceWorkbook();
-        if (this.workbookTable) {
-          this.setWorkbookTable();
-          this.sliceWorkbookTable();
-        }
-      }
-      setColumns(slots) {
-        const columns = [];
-        slots.forEach((slot) => {
-          const series = slot.series;
-          const index = slot.index;
-          const targetCol = slot.targetCol;
-          const targetYCol = slot.targetYCol || 1;
-          const label = slot.label ? slot.label : series.label;
-          const mapData = slot.mapData !== void 0 ? slot.mapData : (point) => point;
-          const isStrRef = slot.isStrRef !== void 0 ? slot.isStrRef : true;
-          const worksheetCb = (point, r, category) => {
-            return this.workbook.modify(this.rowValues(r, targetCol, mapData(point, category)));
-          };
-          const slotHandler = slot.type !== void 0 ? this[slot.type] : void 0;
-          const chartCb = typeof slotHandler === "function" ? (point, r, category) => {
-            return slotHandler.call(this, r, targetCol, point, category, slot.tag, mapData, targetYCol);
-          } : null;
-          const column = {
-            series: index,
-            label,
-            worksheet: worksheetCb,
-            chart: chartCb,
-            isStrRef
-          };
-          columns.push(column);
-        });
-        return columns;
-      }
-      setValues() {
-        this.setValuesByCategory((col) => {
-          return this.series(col.series, col.modTags);
-        });
-      }
-      setExtData() {
-        this.setValuesByCategory((col) => {
-          return {
-            "cx:data": {
-              children: col.modTags
-            }
-          };
-        });
-      }
-      setValuesByCategory(cb) {
-        this.data.categories.forEach((category, c) => {
-          this.columns.filter((col) => col.chart).forEach((col) => {
-            if (category.values[col.series] === void 0) {
-              throw new Error(`No value for category "${category.label}" at series "${col.label}".`);
-            }
-            col.modTags = col.chart(category.values[col.series], c, category);
-            this.chart.modify(cb(col));
-          });
-        });
-      }
-      setPointStyles() {
-        this.data.categories.forEach((category, c) => {
-          if (category.styles) {
-            category.styles.forEach((style, s) => {
-              if (style === null || !Object.values(style).length)
-                return;
-              const pointTags = this.chartPoint(c, style);
-              if (pointTags) {
-                this.chart.modify(this.series(s, pointTags));
-              }
-              if (style.label) {
-                this.chart.modify(this.series(s, this.chartPointLabel(c, style.label)));
-              }
-            });
-          }
-        });
-      }
-      setSeries() {
-        this.columns.forEach((column, colId) => {
-          if (column.isStrRef === true) {
-            this.chart.modify(this.series(column.series, Object.assign(Object.assign(Object.assign({}, this.seriesId(column.series)), this.seriesLabel(column.label, colId)), this.seriesStyle(this.data.series[column.series]))));
-          }
-        });
-      }
-      setExtSeries() {
-        this.columns.forEach((column, colId) => {
-          if (column.isStrRef === true) {
-            this.chart.modify(this.extSeries(column.series, Object.assign({}, this.extSeriesLabel(column.label, colId))));
-          }
-        });
-      }
-      sliceChartSpace() {
-        this.chart.modify({
-          "c:plotArea": this.slice("c:ser", this.data.series.length)
-        });
-        this.columns.filter((column) => column.modTags).forEach((column) => {
-          const sliceMod = {};
-          Object.keys(column.modTags).forEach((tag2) => {
-            sliceMod[tag2] = this.slice("c:pt", this.height);
-          });
-          this.chart.modify(this.series(column.series, sliceMod));
-        });
-      }
-      sliceExtChartSpace() {
-        this.chart.modify({
-          "cx:plotArea": this.slice("cx:series", this.data.series.length)
-        });
-        this.columns.filter((column) => column.modTags).forEach((column) => {
-          const sliceMod = {};
-          Object.keys(column.modTags).forEach((tag2) => {
-            sliceMod[tag2] = this.slice("cx:pt", this.height);
-          });
-          this.chart.modify({
-            "cx:data": { index: column.series, children: sliceMod }
-          });
-        });
-      }
-      /*
-        There might be rows in an excel workbook that appear to be empty, but
-        contain either no cells or none with a "v"-tag. These rows are removed
-        by prepareWorkbook(). See https://github.com/singerla/pptx-automizer/issues/11
-       */
-      prepareWorkbook() {
-        const rows = this.workbook.root.getElementsByTagName("row");
-        for (const r in rows) {
-          if (!rows[r].getElementsByTagName)
-            continue;
-          const values = rows[r].getElementsByTagName("v");
-          if (values.length === 0) {
-            const toRemove = rows[r];
-            toRemove.parentNode.removeChild(toRemove);
-          }
-        }
-        this.normalizeCellPositions();
-      }
-      /*
-        Excel skips the <c>-tag of an empty cell, e.g. a chart worksheet with an
-        empty top left cell has no <c r="A1"/> at all. All worksheet modifications
-        address a cell by its position inside a <row>, so any gap would shift all
-        following cells and finally create duplicate cell addresses.
-        Inserting a blank cell for each gap restores "nth cell equals nth column".
-        See https://github.com/singerla/pptx-automizer/issues/39
-       */
-      normalizeCellPositions() {
-        const rows = this.workbook.root.getElementsByTagName("row");
-        for (let r = 0; r < rows.length; r++) {
-          this.insertMissingCells(rows[r]);
-        }
-      }
-      insertMissingCells(row) {
-        const cells = Array.from(row.getElementsByTagName("c"));
-        const rowNumber = this.getRowNumber(row, cells);
-        if (rowNumber === null) {
-          return;
-        }
-        let expectedColumn = 0;
-        cells.forEach((cell) => {
-          const column = cell_id_helper_1.default.getColumnIndex(cell.getAttribute("r"));
-          if (column === null || column < expectedColumn) {
-            expectedColumn++;
-            return;
-          }
-          while (expectedColumn < column) {
-            row.insertBefore(this.blankCell(expectedColumn, rowNumber), cell);
-            expectedColumn++;
-          }
-          expectedColumn = column + 1;
-        });
-      }
-      getRowNumber(row, cells) {
-        const rowNumber = Number(row.getAttribute("r"));
-        if (rowNumber) {
-          return rowNumber;
-        }
-        for (const cell of cells) {
-          const cellRow = cell_id_helper_1.default.getRowNumber(cell.getAttribute("r"));
-          if (cellRow) {
-            return cellRow;
-          }
-        }
-        return null;
-      }
-      blankCell(c, rowNumber) {
-        const doc = this.workbook.root.ownerDocument || this.workbook.root;
-        const label = this.blankCellLabel(c, rowNumber);
-        const value = doc.createElement("v");
-        value.appendChild(doc.createTextNode(String(this.getSharedString(label))));
-        const cell = doc.createElement("c");
-        cell.setAttribute("r", cell_id_helper_1.default.getCellAddressString(c, rowNumber - 1));
-        cell.setAttribute("t", "s");
-        cell.appendChild(value);
-        return cell;
-      }
-      /*
-        A blank cell holds a single space, just like PowerPoint does for the empty
-        top left cell of a default chart worksheet. If the worksheet contains a
-        table, a header cell needs to match the name of its tableColumn, otherwise
-        Excel is going to repair the workbook.
-       */
-      blankCellLabel(c, rowNumber) {
-        if (rowNumber !== 1 || !this.workbookTable) {
-          return " ";
-        }
-        const column = this.workbookTable.root.getElementsByTagName("tableColumn")[c];
-        return column ? column.getAttribute("name") : " ";
-      }
-      /*
-        Re-uses an existing shared string to not grow the worksheet on each
-        inserted cell.
-       */
-      getSharedString(label) {
-        if (this.sharedStringCache[label] === void 0) {
-          const strings = this.sharedStrings.getElementsByTagName("si");
-          for (let i = 0; i < strings.length; i++) {
-            if (strings[i].textContent === label) {
-              this.sharedStringCache[label] = i;
-              return i;
-            }
-          }
-          this.sharedStringCache[label] = xml_helper_1.XmlHelper.appendSharedString(this.sharedStrings, label);
-        }
-        return this.sharedStringCache[label];
-      }
-      setWorkbook() {
-        this.workbook.modify(this.spanString());
-        this.workbook.modify(this.rowAttributes(0, 1));
-        this.data.categories.forEach((category, c) => {
-          const r = c + 1;
-          this.workbook.modify(this.rowLabels(r, category.label));
-          this.workbook.modify(this.rowAttributes(r, r + 1));
-          this.columns.forEach((addCol) => addCol.worksheet(category.values[addCol.series], r, category));
-        });
-        this.columns.forEach((addCol, s) => {
-          this.workbook.modify(this.colLabel(s + 1, addCol.label));
-        });
-      }
-      sliceWorkbook() {
-        this.data.categories.forEach((category, c) => {
-          const r = c + 1;
-          this.workbook.modify({
-            row: Object.assign({ index: r }, this.slice("c", this.width + 1))
-          });
-        });
-        this.workbook.modify({
-          row: Object.assign({}, this.slice("c", this.width + 1))
-        });
-        this.workbook.modify({
-          sheetData: this.slice("row", this.height + 1)
-        });
-      }
-      defaultSeries(r, targetCol, point, category) {
-        return {
-          "c:val": this.point(r, targetCol, point),
-          "c:cat": this.point(r, 0, category.label)
-        };
-      }
-      xySeries(r, targetCol, point, category, tag2, mapData, targetYCol) {
-        return {
-          "c:xVal": this.point(r, targetCol, point),
-          "c:yVal": this.point(r, targetYCol, category.y)
-        };
-      }
-      customSeries(r, targetCol, point, category, tag2, mapData) {
-        return {
-          [tag2]: this.point(r, targetCol, mapData(point, category))
-        };
-      }
-      extendedSeries(r, targetCol, point, category) {
-        return {
-          "cx:strDim": this.extPoint(r, 0, category.label),
-          "cx:numDim": this.extPoint(r, targetCol, point)
-        };
-      }
-      colLabel(c, label) {
-        return {
-          row: {
-            modify: modify_xml_helper_1.default.attribute("spans", `1:${this.width}`),
-            children: {
-              c: {
-                index: c,
-                modify: [
-                  modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(c, 0)),
-                  // A label always refers to a shared string.
-                  modify_xml_helper_1.default.attribute("t", "s")
-                ],
-                children: this.sharedString(label)
-              }
-            }
-          }
-        };
-      }
-      rowAttributes(r, rowId) {
-        return {
-          row: {
-            index: r,
-            fromPrevious: true,
-            modify: [
-              modify_xml_helper_1.default.attribute("spans", `1:${this.width}`),
-              modify_xml_helper_1.default.attribute("r", String(rowId))
-            ]
-          }
-        };
-      }
-      rowLabels(r, label) {
-        return {
-          row: {
-            index: r,
-            fromPrevious: true,
-            children: {
-              c: {
-                modify: [
-                  modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(0, r)),
-                  // A label always refers to a shared string.
-                  modify_xml_helper_1.default.attribute("t", "s")
-                ],
-                children: this.sharedString(label)
-              }
-            }
-          }
-        };
-      }
-      rowValues(r, c, value) {
-        return {
-          row: {
-            index: r,
-            fromPrevious: true,
-            children: {
-              c: {
-                index: c,
-                fromPrevious: true,
-                modify: [
-                  modify_xml_helper_1.default.attribute("r", cell_id_helper_1.default.getCellAddressString(c, r)),
-                  // A chart value is numeric, it must not point to a shared string,
-                  // e.g. if the cell was blank in the source worksheet.
-                  modify_xml_helper_1.default.removeAttribute("t")
-                ],
-                children: this.cellValue(modify_chart_helper_1.default.parseCellValue(value))
-              }
-            }
-          }
-        };
-      }
-      slice(tag2, length) {
-        return {
-          children: {
-            [tag2]: {
-              collection: (collection) => {
-                xml_helper_1.XmlHelper.sliceCollection(collection, length);
-              }
-            }
-          }
-        };
-      }
-      spanString() {
-        return {
-          dimension: {
-            modify: modify_xml_helper_1.default.attribute("ref", cell_id_helper_1.default.getSpanString(0, 1, this.width, this.height))
-          }
-        };
-      }
-      cellValue(value) {
-        return {
-          v: {
-            modify: modify_text_helper_1.default.content(value)
-          }
-        };
-      }
-      sharedString(label) {
-        return this.cellValue(xml_helper_1.XmlHelper.appendSharedString(this.sharedStrings, label));
-      }
-      setWorkbookTable() {
-        this.workbookTable.modify({
-          table: {
-            modify: modify_xml_helper_1.default.attribute("ref", cell_id_helper_1.default.getSpanString(0, 1, this.width, this.height))
-          },
-          tableColumns: {
-            modify: modify_xml_helper_1.default.attribute("count", this.width + 1)
-          }
-        });
-        this.setWorkbookTableFirstColumn();
-        this.columns.forEach((addCol, s) => {
-          this.setWorkbookTableColumn(s + 1, addCol.label);
-        });
-      }
-      setWorkbookTableFirstColumn() {
-        this.workbookTable.modify({
-          tableColumn: {
-            index: 0,
-            modify: modify_xml_helper_1.default.attribute("id", 1)
-          }
-        });
-      }
-      setWorkbookTableColumn(c, label) {
-        this.workbookTable.modify({
-          tableColumn: {
-            index: c,
-            fromPrevious: true,
-            modify: [
-              modify_xml_helper_1.default.attribute("id", c + 1),
-              modify_xml_helper_1.default.attribute("name", label)
-            ]
-          }
-        });
-      }
-      sliceWorkbookTable() {
-        this.workbookTable.modify({
-          table: this.slice("tableColumn", this.width + 1)
-        });
-      }
-    };
-    exports.ModifyChart = ModifyChart;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-chart-helper.js
-var require_modify_chart_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-chart-helper.js"(exports) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var logger_1 = require_logger();
-    var modify_chart_1 = require_modify_chart();
-    var modify_xml_helper_1 = __importDefault(require_modify_xml_helper());
-    var xml_helper_1 = require_xml_helper();
-    var modify_color_helper_1 = __importDefault(require_modify_color_helper());
-    var ModifyChartHelper = class {
-      // Prevent a "null" from being written to the xml file.
-      static parseCellValue(value) {
-        if (value === null)
-          return "";
-        return String(value);
-      }
-    };
-    _a3 = ModifyChartHelper;
-    ModifyChartHelper.setChartData = (data) => (element, chart, workbook) => {
-      const slots = [];
-      data.series.forEach((series, s) => {
-        slots.push({
-          index: s,
-          series,
-          targetCol: s + 1,
-          type: "defaultSeries"
-        });
-      });
-      new modify_chart_1.ModifyChart(chart, workbook, data, slots).modify();
-    };
-    ModifyChartHelper.setChartVerticalLines = (data) => (element, chart, workbook) => {
-      const slots = [];
-      slots.push({
-        label: `Y-Values`,
-        mapData: (point, category) => category.y,
-        targetCol: 1
-      });
-      data.series.forEach((series, s) => {
-        slots.push({
-          index: s,
-          series,
-          targetCol: s + 2,
-          type: "xySeries"
-        });
-      });
-      new modify_chart_1.ModifyChart(chart, workbook, data, slots).modify();
-    };
-    ModifyChartHelper.setChartScatter = (data) => (element, chart, workbook) => {
-      const slots = [];
-      data.series.forEach((series, s) => {
-        const colId = s * 2;
-        slots.push({
-          index: s,
-          series,
-          targetCol: colId + 1,
-          type: "customSeries",
-          tag: "c:xVal",
-          mapData: (point) => point.x
-        });
-        slots.push({
-          label: `${series.label}-Y-Value`,
-          index: s,
-          series,
-          targetCol: colId + 2,
-          type: "customSeries",
-          tag: "c:yVal",
-          mapData: (point) => point.y,
-          isStrRef: false
-        });
-      });
-      new modify_chart_1.ModifyChart(chart, workbook, data, slots).modify();
-    };
-    ModifyChartHelper.setChartCombo = (data) => (element, chart, workbook) => {
-      const slots = [];
-      slots.push({
-        index: 0,
-        series: data.series[0],
-        targetCol: 1,
-        type: "defaultSeries"
-      });
-      slots.push({
-        index: 1,
-        label: `Y-Values`,
-        mapData: (point, category) => category.y,
-        targetCol: 2
-      });
-      data.series.forEach((series, s) => {
-        if (s > 0)
-          slots.push({
-            index: s,
-            series,
-            targetCol: s + 2,
-            targetYCol: 2,
-            type: "xySeries"
-          });
-      });
-      new modify_chart_1.ModifyChart(chart, workbook, data, slots).modify();
-      _a3.setAxisRange({
-        axisIndex: 1,
-        min: 0,
-        max: data.categories.length
-      })(element, chart);
-    };
-    ModifyChartHelper.setChartBubbles = (data) => (element, chart, workbook) => {
-      const slots = [];
-      data.series.forEach((series, s) => {
-        const colId = s * 3;
-        slots.push({
-          index: s,
-          series,
-          targetCol: colId + 1,
-          type: "customSeries",
-          tag: "c:xVal",
-          mapData: (point) => point.x
-        });
-        slots.push({
-          label: `${series.label}-Y-Value`,
-          index: s,
-          series,
-          targetCol: colId + 2,
-          type: "customSeries",
-          tag: "c:yVal",
-          mapData: (point) => point.y,
-          isStrRef: false
-        });
-        slots.push({
-          label: `${series.label}-Size`,
-          index: s,
-          series,
-          targetCol: colId + 3,
-          type: "customSeries",
-          tag: "c:bubbleSize",
-          mapData: (point) => point.size,
-          isStrRef: false
-        });
-      });
-      new modify_chart_1.ModifyChart(chart, workbook, data, slots).modify();
-    };
-    ModifyChartHelper.setExtendedChartData = (data) => (element, chart, workbook) => {
-      const slots = [];
-      data.series.forEach((series, s) => {
-        slots.push({
-          index: s,
-          series,
-          targetCol: s + 1,
-          type: "extendedSeries"
-        });
-      });
-      new modify_chart_1.ModifyChart(chart, workbook, data, slots).modifyExtended();
-    };
-    ModifyChartHelper.readWorkbookData = (data) => (element, chart, workbook) => {
-      const getSharedString = (index) => {
-        var _b;
-        return (_b = workbook.sharedStrings.getElementsByTagName("si").item(index)) === null || _b === void 0 ? void 0 : _b.textContent;
-      };
-      const parseCell = (cell) => {
-        const type = cell.getAttribute("t");
-        const cellValue = cell.getElementsByTagName("v").item(0).textContent;
-        if (type === "s") {
-          return getSharedString(Number(cellValue));
-        } else {
-          return Number(cellValue);
-        }
-      };
-      const rows = workbook.sheet.getElementsByTagName("row");
-      for (let r = 0; r < rows.length; r++) {
-        const row = rows.item(r);
-        const columns = row.getElementsByTagName("c");
-        const rowData = [];
-        for (let c = 0; c < columns.length; c++) {
-          rowData.push(parseCell(columns.item(c)));
-        }
-        data.push(rowData);
-      }
-    };
-    ModifyChartHelper.readChartInfo = (info) => (element, chart, _workbook) => {
-      const series = chart.getElementsByTagName("c:ser");
-      xml_helper_1.XmlHelper.modifyCollection(series, (tmpSeries, s) => {
-        const solidFill = tmpSeries.getElementsByTagName("a:solidFill").item(0);
-        if (!solidFill) {
-          return;
-        }
-        const schemeClr = solidFill.getElementsByTagName("a:schemeClr").item(0);
-        const srgbClr = solidFill.getElementsByTagName("a:srgbClr").item(0);
-        const colorElement = schemeClr ? schemeClr : srgbClr;
-        info.series.push({
-          seriesId: s,
-          colorType: colorElement.tagName,
-          colorValue: colorElement.getAttribute("val")
-        });
-      });
-      const chartTagName = series.item(0).parentNode.nodeName;
-      info.chartType = chartTagName === null || chartTagName === void 0 ? void 0 : chartTagName.split(":")[1];
-    };
-    ModifyChartHelper.setAxisRange = (range) => (element, chart) => {
-      const axis = chart.getElementsByTagName("c:valAx")[range.axisIndex || 0];
-      if (!axis)
-        return;
-      _a3.setAxisAttribute(axis, "c:majorUnit", range.majorUnit);
-      _a3.setAxisAttribute(axis, "c:minorUnit", range.minorUnit);
-      _a3.setAxisAttribute(axis, "c:numFmt", range.formatCode, "formatCode");
-      _a3.setAxisAttribute(axis, "c:numFmt", range.sourceLinked, "sourceLinked");
-      const scaling = axis.getElementsByTagName("c:scaling")[0];
-      _a3.setAxisAttribute(scaling, "c:min", range.min);
-      _a3.setAxisAttribute(scaling, "c:max", range.max);
-    };
-    ModifyChartHelper.setAxisAttribute = (element, tag2, value, attribute) => {
-      if (value === void 0 || !element)
-        return;
-      const target = element.getElementsByTagName(tag2);
-      if (target.length > 0) {
-        attribute = attribute || "val";
-        if (typeof value === "boolean") {
-          modify_xml_helper_1.default.booleanAttribute(attribute, value)(target[0]);
-        } else {
-          modify_xml_helper_1.default.attribute(attribute, value)(target[0]);
-        }
-      }
-    };
-    ModifyChartHelper.minimizeChartLegend = () => (element, chart, workbook) => {
-      _a3.setLegendPosition({
-        w: 0,
-        h: 0,
-        x: 0,
-        y: 0
-      })(element, chart, workbook);
-    };
-    ModifyChartHelper.removeChartLegend = () => (element, chart) => {
-      if (chart.getElementsByTagName("c:legend")) {
-        xml_helper_1.XmlHelper.remove(chart.getElementsByTagName("c:legend")[0]);
-      }
-    };
-    ModifyChartHelper.setLegendPosition = (legendArea) => (element, chart) => {
-      const modifyXmlHelper = new modify_xml_helper_1.default(chart);
-      modifyXmlHelper.modify({
-        "c:legend": {
-          children: {
-            "c:manualLayout": {
-              children: {
-                "c:w": {
-                  modify: [modify_xml_helper_1.default.attribute("val", legendArea.w)]
-                },
-                "c:h": {
-                  modify: [modify_xml_helper_1.default.attribute("val", legendArea.h)]
-                },
-                "c:x": {
-                  modify: [modify_xml_helper_1.default.attribute("val", legendArea.x)]
-                },
-                "c:y": {
-                  modify: [modify_xml_helper_1.default.attribute("val", legendArea.y)]
-                }
-              }
-            }
-          }
-        }
-      });
-    };
-    ModifyChartHelper.setPlotArea = (plotArea) => (element, chart) => {
-      const modifyXmlHelper = new modify_xml_helper_1.default(chart);
-      if (!chart.getElementsByTagName("c:plotArea")[0].getElementsByTagName("c:manualLayout")[0]) {
-        logger_1.log.error("Can't update plot area. No c:manualLayout found.");
-        return;
-      }
-      modifyXmlHelper.modify({
-        "c:plotArea": {
-          children: {
-            "c:manualLayout": {
-              children: {
-                "c:w": {
-                  // Finally, we attach ModifyCallbacks to all
-                  // matching elements
-                  modify: [
-                    modify_xml_helper_1.default.attribute("val", plotArea.w)
-                    // ...
-                  ]
-                },
-                "c:h": {
-                  modify: [modify_xml_helper_1.default.attribute("val", plotArea.h)]
-                },
-                "c:x": {
-                  modify: [modify_xml_helper_1.default.attribute("val", plotArea.x)]
-                },
-                "c:y": {
-                  modify: [modify_xml_helper_1.default.attribute("val", plotArea.y)]
-                }
-              }
-            }
-          }
-        }
-      });
-    };
-    ModifyChartHelper.setWaterFallColumnTotalToLast = (TotalColumnIDX) => (element, chart) => {
-      var _b, _c, _d, _e, _f;
-      const plotArea = chart.getElementsByTagName("cx:plotArea")[0];
-      const subTotals = (_b = plotArea === null || plotArea === void 0 ? void 0 : plotArea.getElementsByTagName("cx:layoutPr")[0]) === null || _b === void 0 ? void 0 : _b.getElementsByTagName("cx:subtotals")[0];
-      if (subTotals) {
-        if (!TotalColumnIDX) {
-          const GetTotalPoints = (_f = (_e = (_d = (_c = chart.getElementsByTagName("cx:chartData")[0]) === null || _c === void 0 ? void 0 : _c.getElementsByTagName("cx:data")[0]) === null || _d === void 0 ? void 0 : _d.getElementsByTagName("cx:strDim")[0]) === null || _e === void 0 ? void 0 : _e.getElementsByTagName("cx:lvl")[0]) === null || _f === void 0 ? void 0 : _f.getAttribute("ptCount");
-          if (GetTotalPoints) {
-            TotalColumnIDX = Number(GetTotalPoints) - 1;
-          }
-        }
-        if (TotalColumnIDX !== void 0) {
-          const stIndexes = Array.from(subTotals.getElementsByTagName("cx:idx"));
-          stIndexes.forEach((sTValue, index) => {
-            modify_xml_helper_1.default.attribute("val", TotalColumnIDX.toString())(sTValue);
-            if (index > 0) {
-              subTotals.removeChild(sTValue);
-            }
-          });
-        }
-      }
-    };
-    ModifyChartHelper.setChartTitle = (newTitle) => (element, chart) => {
-      const chartTitle = chart.getElementsByTagName("c:title").item(0);
-      const chartTitleText = chartTitle === null || chartTitle === void 0 ? void 0 : chartTitle.getElementsByTagName("a:t").item(0);
-      if (chartTitleText) {
-        chartTitleText.textContent = xml_helper_1.XmlHelper.sanitizeText(newTitle);
-      }
-    };
-    ModifyChartHelper.removeDataLabels = () => (element, chart) => {
-      const dLbls = chart.getElementsByTagName("c:dLbls");
-      Array.from(dLbls).forEach((dLbl) => {
-        dLbl.parentNode.removeChild(dLbl);
-      });
-    };
-    ModifyChartHelper.setPointLabelSuffix = (element, idx, labelStyle) => {
-      const doc = element.ownerDocument;
-      const txPr = element.getElementsByTagName("c:txPr")[0];
-      if (txPr) {
-        const tx = doc.createElement("c:tx");
-        const rich = doc.createElement("c:rich");
-        while (txPr.firstChild) {
-          rich.appendChild(txPr.firstChild);
-        }
-        tx.appendChild(rich);
-        txPr.parentNode.insertBefore(tx, txPr);
-        txPr.parentNode.removeChild(txPr);
-      }
-      const paragraphs = element.getElementsByTagName("a:p");
-      if (!paragraphs.length)
-        return;
-      const p = paragraphs[0];
-      const existingRuns = Array.from(p.getElementsByTagName("a:r"));
-      existingRuns.forEach((run) => run.parentNode.removeChild(run));
-      const existingFlds = Array.from(p.getElementsByTagName("a:fld"));
-      existingFlds.forEach((fld2) => fld2.parentNode.removeChild(fld2));
-      const endParaRPr = p.getElementsByTagName("a:endParaRPr")[0];
-      const defRPr = p.getElementsByTagName("a:defRPr")[0];
-      const fld = doc.createElement("a:fld");
-      fld.setAttribute("type", "VALUE");
-      fld.setAttribute("id", "{AABBCCDD-1234-5678-9012-" + String(idx).padStart(12, "0") + "}");
-      const fldRPr = doc.createElement("a:rPr");
-      fldRPr.setAttribute("lang", "en-US");
-      if (defRPr) {
-        Array.from(defRPr.childNodes).forEach((child) => {
-          fldRPr.appendChild(child.cloneNode(true));
-        });
-        Array.from(defRPr.attributes).forEach((attr) => {
-          if (attr.name !== "sz" && attr.name !== "b") {
-            fldRPr.setAttribute(attr.name, attr.value);
-          }
-        });
-      }
-      fld.appendChild(fldRPr);
-      const fldT = doc.createElement("a:t");
-      fldT.textContent = "[VALUE]";
-      fld.appendChild(fldT);
-      if (endParaRPr) {
-        p.insertBefore(fld, endParaRPr);
-      } else {
-        p.appendChild(fld);
-      }
-      const r = doc.createElement("a:r");
-      const rPr = doc.createElement("a:rPr");
-      rPr.setAttribute("lang", "en-US");
-      rPr.setAttribute("dirty", "0");
-      if (labelStyle.suffix.color) {
-        const color = Object.assign({}, labelStyle.suffix.color);
-        if (color.value.indexOf("#") === 0) {
-          color.value = color.value.replace("#", "");
-        }
-        const solidFill = doc.createElement("a:solidFill");
-        const colorEl = doc.createElement("a:" + color.type);
-        colorEl.setAttribute("val", color.value);
-        solidFill.appendChild(colorEl);
-        rPr.appendChild(solidFill);
-      }
-      r.appendChild(rPr);
-      const t = doc.createElement("a:t");
-      t.textContent = labelStyle.suffix.text;
-      r.appendChild(t);
-      const endParaRPr2 = p.getElementsByTagName("a:endParaRPr")[0];
-      if (endParaRPr2) {
-        p.insertBefore(r, endParaRPr2);
-      } else {
-        p.appendChild(r);
-      }
-      const bodyPrs = element.getElementsByTagName("a:bodyPr");
-      if (bodyPrs.length) {
-        bodyPrs[0].setAttribute("wrap", "none");
-      }
-      if (!element.getElementsByTagName("c:numFmt").length) {
-        const dLbls = element.parentNode;
-        if (dLbls && dLbls.nodeName === "c:dLbls") {
-          const numFmt = dLbls.getElementsByTagName("c:numFmt")[0];
-          if (numFmt) {
-            element.insertBefore(numFmt.cloneNode(true), element.firstChild);
-          }
-        }
-      }
-    };
-    ModifyChartHelper.setDataLabelAttributes = (dataLabel) => (element, chart) => {
-      const modifyXmlHelper = new modify_xml_helper_1.default(chart);
-      const applyToSeries = typeof dataLabel.applyToSeries === "number" ? {
-        index: dataLabel.applyToSeries
-      } : {
-        all: true
-      };
-      modifyXmlHelper.modify({
-        "c:ser": Object.assign(Object.assign({}, applyToSeries), { children: {
-          "c:dLbls": {
-            // Modify label attributes only where the template carries
-            // labels — never fabricate a c:dLbls into a series.
-            isRequired: false,
-            children: _a3.setDataPointLabelAttributes(dataLabel)
-          }
-        } })
-      });
-    };
-    ModifyChartHelper.setDataPointLabelAttributes = (dataLabel) => {
-      return {
-        "c:spPr": {
-          isRequired: false,
-          modify: [modify_color_helper_1.default.solidFill(dataLabel.solidFill)]
-        },
-        "c:numFmt": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.attribute("formatCode", dataLabel.formatCode),
-            modify_xml_helper_1.default.booleanAttribute("sourceLinked", dataLabel.sourceLinked)
-          ]
-        },
-        "c:dLblPos": {
-          isRequired: false,
-          modify: [modify_xml_helper_1.default.attribute("val", dataLabel.dLblPos)]
-        },
-        "c:showLegendKey": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showLegendKey)
-          ]
-        },
-        "c:showVal": {
-          isRequired: false,
-          modify: [modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showVal)]
-        },
-        "c:showCatName": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showCatName)
-          ]
-        },
-        "c:showSerName": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showSerName)
-          ]
-        },
-        "c:showPercent": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showPercent)
-          ]
-        },
-        "c:showBubbleSize": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showBubbleSize)
-          ]
-        },
-        "c:showLeaderLines": {
-          isRequired: false,
-          modify: [
-            modify_xml_helper_1.default.booleanAttribute("val", dataLabel.showLeaderLines)
-          ]
-        }
-      };
-    };
-    exports.default = ModifyChartHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/image-dimensions.js
-var require_image_dimensions = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/image-dimensions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.imageDimensions = void 0;
-    var MIN_SNIFF_LENGTH = 12;
-    var SVG_SCAN_LIMIT = 4096;
-    var parsePng = (buffer) => {
-      if (buffer.length < 24 || buffer.toString("latin1", 12, 16) !== "IHDR") {
-        throw new Error("Malformed PNG: missing IHDR chunk");
-      }
-      return {
-        width: buffer.readUInt32BE(16),
-        height: buffer.readUInt32BE(20)
-      };
-    };
-    var parseJpeg = (buffer) => {
-      let offset = 2;
-      while (offset + 1 < buffer.length) {
-        if (buffer[offset] !== 255) {
-          throw new Error("Malformed JPEG: expected marker");
-        }
-        while (offset < buffer.length && buffer[offset] === 255) {
-          offset++;
-        }
-        if (offset >= buffer.length) {
-          break;
-        }
-        const marker = buffer[offset];
-        offset++;
-        if (marker === 1 || marker >= 208 && marker <= 215) {
-          continue;
-        }
-        if (marker === 217 || marker === 218) {
-          break;
-        }
-        if (offset + 2 > buffer.length) {
-          break;
-        }
-        const segmentLength = buffer.readUInt16BE(offset);
-        if (segmentLength < 2) {
-          throw new Error("Malformed JPEG: invalid segment length");
-        }
-        const isSof = marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204;
-        if (isSof) {
-          if (offset + 7 > buffer.length) {
-            break;
-          }
-          return {
-            height: buffer.readUInt16BE(offset + 3),
-            width: buffer.readUInt16BE(offset + 5)
-          };
-        }
-        offset += segmentLength;
-      }
-      throw new Error("Malformed JPEG: no size found");
-    };
-    var parseGif = (buffer) => {
-      if (buffer.length < 10) {
-        throw new Error("Malformed GIF: buffer too short");
-      }
-      return {
-        width: buffer.readUInt16LE(6),
-        height: buffer.readUInt16LE(8)
-      };
-    };
-    var parseBmp = (buffer) => {
-      if (buffer.length < 26) {
-        throw new Error("Malformed BMP: buffer too short");
-      }
-      const dibHeaderSize = buffer.readUInt32LE(14);
-      if (dibHeaderSize === 12) {
-        return {
-          width: buffer.readUInt16LE(18),
-          height: buffer.readUInt16LE(20)
-        };
-      }
-      return {
-        width: buffer.readInt32LE(18),
-        // top-down BMPs store a negative height
-        height: Math.abs(buffer.readInt32LE(22))
-      };
-    };
-    var readUInt24LE = (buffer, offset) => buffer[offset] | buffer[offset + 1] << 8 | buffer[offset + 2] << 16;
-    var parseWebp = (buffer) => {
-      if (buffer.length < 30) {
-        throw new Error("Malformed WebP: buffer too short");
-      }
-      const chunkType = buffer.toString("latin1", 12, 16);
-      if (chunkType === "VP8 ") {
-        if (buffer[23] !== 157 || buffer[24] !== 1 || buffer[25] !== 42) {
-          throw new Error("Malformed WebP: bad VP8 start code");
-        }
-        return {
-          width: buffer.readUInt16LE(26) & 16383,
-          height: buffer.readUInt16LE(28) & 16383
-        };
-      }
-      if (chunkType === "VP8L") {
-        if (buffer[20] !== 47) {
-          throw new Error("Malformed WebP: bad VP8L signature");
-        }
-        const bits = buffer.readUInt32LE(21);
-        return {
-          width: (bits & 16383) + 1,
-          height: (bits >> 14 & 16383) + 1
-        };
-      }
-      if (chunkType === "VP8X") {
-        return {
-          width: readUInt24LE(buffer, 24) + 1,
-          height: readUInt24LE(buffer, 27) + 1
-        };
-      }
-      throw new Error("Malformed WebP: unknown chunk type");
-    };
-    var svgAttribute = (tag2, name) => {
-      const match = tag2.match(new RegExp(`[\\s"']` + name + `\\s*=\\s*["']([0-9.]+)(?:px)?["']`));
-      return match ? Math.round(parseFloat(match[1])) : void 0;
-    };
-    var parseSvg = (buffer) => {
-      const text = buffer.toString("utf8", 0, SVG_SCAN_LIMIT).replace(/^\uFEFF/, "");
-      const svgStart = text.indexOf("<svg");
-      const tagEnd = svgStart === -1 ? -1 : text.indexOf(">", svgStart);
-      if (svgStart === -1 || tagEnd === -1) {
-        throw new Error("Malformed SVG: no <svg> root tag found");
-      }
-      const tag2 = text.slice(svgStart, tagEnd + 1);
-      const width = svgAttribute(tag2, "width");
-      const height = svgAttribute(tag2, "height");
-      if (width !== void 0 && height !== void 0) {
-        return { width, height };
-      }
-      const viewBox = tag2.match(/viewBox\s*=\s*["']\s*[0-9.+-]+[\s,]+[0-9.+-]+[\s,]+([0-9.]+)[\s,]+([0-9.]+)\s*["']/);
-      if (viewBox) {
-        return {
-          width: Math.round(parseFloat(viewBox[1])),
-          height: Math.round(parseFloat(viewBox[2]))
-        };
-      }
-      throw new Error("Malformed SVG: no width/height or viewBox found");
-    };
-    var looksLikeSvg = (buffer) => buffer.toString("utf8", 0, Math.min(buffer.length, SVG_SCAN_LIMIT)).includes("<svg");
-    var imageDimensions = (buffer) => {
-      if (!buffer || buffer.length < MIN_SNIFF_LENGTH) {
-        throw new Error("Image buffer is empty or too short");
-      }
-      if (buffer.readUInt32BE(0) === 2303741511 && buffer.readUInt32BE(4) === 218765834) {
-        return parsePng(buffer);
-      }
-      if (buffer[0] === 255 && buffer[1] === 216) {
-        return parseJpeg(buffer);
-      }
-      const ascii6 = buffer.toString("latin1", 0, 6);
-      if (ascii6 === "GIF87a" || ascii6 === "GIF89a") {
-        return parseGif(buffer);
-      }
-      if (buffer[0] === 66 && buffer[1] === 77) {
-        return parseBmp(buffer);
-      }
-      if (buffer.toString("latin1", 0, 4) === "RIFF" && buffer.toString("latin1", 8, 12) === "WEBP") {
-        return parseWebp(buffer);
-      }
-      if (looksLikeSvg(buffer)) {
-        return parseSvg(buffer);
-      }
-      throw new Error("Unsupported or unrecognized image format");
-    };
-    exports.imageDimensions = imageDimensions;
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/compute-src-rect.js
-var require_compute_src_rect = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/compute-src-rect.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.inferContainerAr = inferContainerAr;
-    exports.computeSrcRectForNewImage = computeSrcRectForNewImage;
-    var K = 1e5;
-    function toFractions(src) {
-      var _a3, _b, _c, _d;
-      return {
-        l: ((_a3 = src.l) !== null && _a3 !== void 0 ? _a3 : 0) / K,
-        t: ((_b = src.t) !== null && _b !== void 0 ? _b : 0) / K,
-        r: ((_c = src.r) !== null && _c !== void 0 ? _c : 0) / K,
-        b: ((_d = src.b) !== null && _d !== void 0 ? _d : 0) / K
-      };
-    }
-    function inferContainerAr(oldImageWidth, oldImageHeight, currentSrcRect) {
-      const { l, t, r, b } = toFractions(currentSrcRect);
-      const wf = 1 - (l + r);
-      const hf = 1 - (t + b);
-      const oldAr = oldImageWidth / oldImageHeight;
-      return oldAr * (wf / hf || 1);
-    }
-    function computeSrcRectForNewImage(containerAr, newImageWidth, newImageHeight) {
-      const newAr = newImageWidth / newImageHeight;
-      if (!isFinite(containerAr) || !isFinite(newAr) || containerAr <= 0 || newAr <= 0) {
-        return { l: 0, t: 0, r: 0, b: 0 };
-      }
-      if (newAr > containerAr) {
-        const visibleW = containerAr / newAr;
-        const crop = Math.max(0, Math.min(0.5, (1 - visibleW) / 2));
-        const cropHorizontal = Math.round(crop * K);
-        return { l: cropHorizontal, r: cropHorizontal, t: 0, b: 0 };
-      } else if (newAr < containerAr) {
-        const visibleH = newAr / containerAr;
-        const crop = Math.max(0, Math.min(0.5, (1 - visibleH) / 2));
-        const cropVertical = Math.round(crop * K);
-        return { l: 0, r: 0, t: cropVertical, b: cropVertical };
-      } else {
-        return { l: 0, t: 0, r: 0, b: 0 };
-      }
-    }
-  }
-});
-
-// node_modules/pptx-automizer/dist/helper/modify-image-helper.js
-var require_modify_image_helper = __commonJS({
-  "node_modules/pptx-automizer/dist/helper/modify-image-helper.js"(exports) {
-    "use strict";
-    var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    var _a3;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var logger_1 = require_logger();
-    var types_1 = require_types();
-    var slugify_1 = __importDefault(require_slugify());
-    var image_dimensions_1 = require_image_dimensions();
-    var fs_1 = __importDefault(__require("fs"));
-    var xml_helper_1 = require_xml_helper();
-    var compute_src_rect_1 = require_compute_src_rect();
-    var ModifyImageHelper = class {
-    };
-    _a3 = ModifyImageHelper;
-    ModifyImageHelper.setRelationTarget = (filename) => {
-      return (element, arg1) => {
-        arg1.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr("../media/" + (0, slugify_1.default)(filename)));
-      };
-    };
-    ModifyImageHelper.setRelationTargetCover = (filename, pres) => {
-      return (element, arg1) => __awaiter(void 0, void 0, void 0, function* () {
-        const newTarget = "../media/" + (0, slugify_1.default)(filename);
-        const originalTarget = arg1.getAttribute("Target");
-        const originalTargetPath = originalTarget.replace("../", "ppt/");
-        const originalImageDimensions = { width: 100, height: 100 };
-        const newImageDimensions = { width: 100, height: 100 };
-        try {
-          const mediaFile = pres.rootTemplate.mediaFiles.find((file2) => file2.file === filename);
-          if (!mediaFile) {
-            throw new Error("Media file not found in template archive in path: " + filename);
-          }
-          const buffer = (0, types_1.getMediaBuffer)(mediaFile, fs_1.default.readFileSync);
-          const _dimensions = (0, image_dimensions_1.imageDimensions)(buffer);
-          newImageDimensions.width = _dimensions.width;
-          newImageDimensions.height = _dimensions.height;
-        } catch (error62) {
-          const errorMessage = error62 instanceof Error ? error62.message : String(error62);
-          logger_1.log.warn("Could not read new image dimensions, using defaults: " + errorMessage);
-        }
-        try {
-          if (pres.rootTemplate.archive.fileExists(originalTargetPath)) {
-            const originalImage = yield pres.rootTemplate.archive.read(originalTargetPath, "nodebuffer");
-            const _dimensions = (0, image_dimensions_1.imageDimensions)(originalImage);
-            originalImageDimensions.width = _dimensions.width;
-            originalImageDimensions.height = _dimensions.height;
-          } else {
-            throw new Error("Original image not found from template archive in path: " + originalTargetPath);
-          }
-          const srcRect = element.getElementsByTagName("a:srcRect")[0];
-          const srcRectLeft = srcRect.getAttribute("l");
-          const srcRectTop = srcRect.getAttribute("t");
-          const srcRectRight = srcRect.getAttribute("r");
-          const srcRectBottom = srcRect.getAttribute("b");
-          const currentSrcRect = {
-            l: srcRectLeft ? Number(srcRectLeft) : 0,
-            t: srcRectTop ? Number(srcRectTop) : 0,
-            r: srcRectRight ? Number(srcRectRight) : 0,
-            b: srcRectBottom ? Number(srcRectBottom) : 0
-          };
-          const containerAr = (0, compute_src_rect_1.inferContainerAr)(originalImageDimensions.width, originalImageDimensions.height, currentSrcRect);
-          const newSrcRect = (0, compute_src_rect_1.computeSrcRectForNewImage)(containerAr, newImageDimensions.width, newImageDimensions.height);
-          srcRect.setAttribute("l", String(newSrcRect.l));
-          srcRect.setAttribute("t", String(newSrcRect.t));
-          srcRect.setAttribute("r", String(newSrcRect.r));
-          srcRect.setAttribute("b", String(newSrcRect.b));
-        } catch (error62) {
-          const errorMessage = error62 instanceof Error ? error62.message : String(error62);
-          logger_1.log.warn("Skipped setting relation target cropped due to an error: " + errorMessage);
-        }
-        arg1.setAttribute("Target", xml_helper_1.XmlHelper.sanitizeAttr(newTarget));
-      });
-    };
-    ModifyImageHelper.setDuotoneFill = (duotoneParams) => (element) => {
-      const blipFill = element.getElementsByTagName("p:blipFill");
-      if (!blipFill) {
-        return;
-      }
-      const duotone = blipFill.item(0).getElementsByTagName("a:duotone")[0];
-      if (duotone) {
-        if (duotoneParams === null || duotoneParams === void 0 ? void 0 : duotoneParams.color) {
-          const srgbClr = duotone.getElementsByTagName("a:srgbClr")[0];
-          if (srgbClr) {
-            srgbClr.setAttribute("val", String(duotoneParams.color.value));
-            if ((duotoneParams === null || duotoneParams === void 0 ? void 0 : duotoneParams.tint) !== void 0) {
-              const tint = srgbClr.getElementsByTagName("a:tint")[0];
-              if (tint) {
-                tint.setAttribute("val", String(duotoneParams.tint));
-              }
-            }
-            if ((duotoneParams === null || duotoneParams === void 0 ? void 0 : duotoneParams.satMod) !== void 0) {
-              const satMod = srgbClr.getElementsByTagName("a:satMod")[0];
-              if (satMod) {
-                satMod.setAttribute("val", String(duotoneParams.satMod));
-              }
-            }
-          }
-        }
-        if (duotoneParams === null || duotoneParams === void 0 ? void 0 : duotoneParams.prstClr) {
-          const prstClr = duotone.getElementsByTagName("a:prstClr")[0];
-          if (prstClr) {
-            prstClr.setAttribute("val", String(duotoneParams.prstClr));
-          }
-        }
-      }
-    };
-    exports.default = ModifyImageHelper;
-  }
-});
-
-// node_modules/pptx-automizer/dist/enums/chart-type.js
-var require_chart_type = __commonJS({
-  "node_modules/pptx-automizer/dist/enums/chart-type.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.LabelPosition = void 0;
-    var LabelPosition;
-    (function(LabelPosition2) {
-      LabelPosition2["BestFit"] = "bestFit";
-      LabelPosition2["Bottom"] = "b";
-      LabelPosition2["Center"] = "ctr";
-      LabelPosition2["InsideEnd"] = "inEnd";
-      LabelPosition2["InsideBase"] = "inBase";
-      LabelPosition2["Left"] = "l";
-      LabelPosition2["OutsideEnd"] = "outEnd";
-      LabelPosition2["Right"] = "r";
-      LabelPosition2["Top"] = "t";
-    })(LabelPosition || (exports.LabelPosition = LabelPosition = {}));
-  }
-});
-
-// node_modules/pptx-automizer/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/pptx-automizer/dist/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v });
-    }) : function(o, v) {
-      o["default"] = v;
-    });
-    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
-      var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function(o2) {
-          var ar = [];
-          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
-          return ar;
-        };
-        return ownKeys(o);
-      };
-      return function(mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) {
-          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        }
-        __setModuleDefault(result, mod);
-        return result;
-      };
-    })();
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.NullLogger = exports.ConsoleLogger = exports.CallbackError = exports.OutputError = exports.ArchiveError = exports.ElementNotFoundError = exports.SlideNotFoundError = exports.TemplateNotFoundError = exports.AutomizerError = exports.EmuToPt = exports.PtToEmu = exports.DxaToCm = exports.CmToDxa = exports.read = exports.modify = exports.LabelPosition = exports.ModifyImageHelper = exports.ModifyColorHelper = exports.ModifyTextHelper = exports.ModifyChartHelper = exports.ModifyTableHelper = exports.ModifyCleanupHelper = exports.ModifyShapeHelper = exports.ModifyHelper = exports.ModifyPresentationHelper = exports.XmlRelationshipHelper = exports.XmlSlideHelper = exports.XmlHelper = exports.Automizer = void 0;
-    var automizer_1 = __importDefault(require_automizer());
-    exports.Automizer = automizer_1.default;
-    var modify_helper_1 = __importStar(require_modify_helper());
-    exports.ModifyHelper = modify_helper_1.default;
-    Object.defineProperty(exports, "CmToDxa", { enumerable: true, get: function() {
-      return modify_helper_1.CmToDxa;
-    } });
-    Object.defineProperty(exports, "DxaToCm", { enumerable: true, get: function() {
-      return modify_helper_1.DxaToCm;
-    } });
-    Object.defineProperty(exports, "EmuToPt", { enumerable: true, get: function() {
-      return modify_helper_1.EmuToPt;
-    } });
-    Object.defineProperty(exports, "PtToEmu", { enumerable: true, get: function() {
-      return modify_helper_1.PtToEmu;
-    } });
-    var modify_shape_helper_1 = __importDefault(require_modify_shape_helper());
-    exports.ModifyShapeHelper = modify_shape_helper_1.default;
-    var modify_cleanup_helper_1 = __importDefault(require_modify_cleanup_helper());
-    exports.ModifyCleanupHelper = modify_cleanup_helper_1.default;
-    var modify_table_helper_1 = __importDefault(require_modify_table_helper());
-    exports.ModifyTableHelper = modify_table_helper_1.default;
-    var modify_chart_helper_1 = __importDefault(require_modify_chart_helper());
-    exports.ModifyChartHelper = modify_chart_helper_1.default;
-    var modify_hyperlink_helper_1 = __importDefault(require_modify_hyperlink_helper());
-    var modify_presentation_helper_1 = __importDefault(require_modify_presentation_helper());
-    exports.ModifyPresentationHelper = modify_presentation_helper_1.default;
-    var xml_slide_helper_1 = require_xml_slide_helper();
-    Object.defineProperty(exports, "XmlSlideHelper", { enumerable: true, get: function() {
-      return xml_slide_helper_1.XmlSlideHelper;
-    } });
-    var xml_relationship_helper_1 = require_xml_relationship_helper();
-    Object.defineProperty(exports, "XmlRelationshipHelper", { enumerable: true, get: function() {
-      return xml_relationship_helper_1.XmlRelationshipHelper;
-    } });
-    var xml_helper_1 = require_xml_helper();
-    Object.defineProperty(exports, "XmlHelper", { enumerable: true, get: function() {
-      return xml_helper_1.XmlHelper;
-    } });
-    var modify_text_helper_1 = __importDefault(require_modify_text_helper());
-    exports.ModifyTextHelper = modify_text_helper_1.default;
-    var modify_color_helper_1 = __importDefault(require_modify_color_helper());
-    exports.ModifyColorHelper = modify_color_helper_1.default;
-    var modify_image_helper_1 = __importDefault(require_modify_image_helper());
-    exports.ModifyImageHelper = modify_image_helper_1.default;
-    var chart_type_1 = require_chart_type();
-    Object.defineProperty(exports, "LabelPosition", { enumerable: true, get: function() {
-      return chart_type_1.LabelPosition;
-    } });
-    var dump = modify_helper_1.default.dump;
-    var dumpChart = modify_helper_1.default.dumpChart;
-    var setAttribute = modify_helper_1.default.setAttribute;
-    var setSolidFill = modify_shape_helper_1.default.setSolidFill;
-    var setOutline = modify_shape_helper_1.default.setOutline;
-    var setText = modify_shape_helper_1.default.setText;
-    var setMultiText = modify_text_helper_1.default.setMultiText;
-    var htmlToMultiText = modify_text_helper_1.default.htmlToMultiText;
-    var setBulletList = modify_shape_helper_1.default.setBulletList;
-    var replaceText = modify_shape_helper_1.default.replaceText;
-    var setPosition = modify_shape_helper_1.default.setPosition;
-    var updatePosition = modify_shape_helper_1.default.updatePosition;
-    var rotateShape = modify_shape_helper_1.default.rotate;
-    var setTableData = modify_table_helper_1.default.setTableData;
-    var adjustHeight = modify_table_helper_1.default.adjustHeight;
-    var adjustWidth = modify_table_helper_1.default.adjustWidth;
-    var setTable = modify_table_helper_1.default.setTable;
-    var updateColumnWidth = modify_table_helper_1.default.updateColumnWidth;
-    var updateRowHeight = modify_table_helper_1.default.updateRowHeight;
-    var setRelationTarget = modify_image_helper_1.default.setRelationTarget;
-    var setDuotoneFill = modify_image_helper_1.default.setDuotoneFill;
-    var setChartData = modify_chart_helper_1.default.setChartData;
-    var setExtendedChartData = modify_chart_helper_1.default.setExtendedChartData;
-    var setChartVerticalLines = modify_chart_helper_1.default.setChartVerticalLines;
-    var setChartScatter = modify_chart_helper_1.default.setChartScatter;
-    var setChartBubbles = modify_chart_helper_1.default.setChartBubbles;
-    var setChartCombo = modify_chart_helper_1.default.setChartCombo;
-    var setAxisRange = modify_chart_helper_1.default.setAxisRange;
-    var setPlotArea = modify_chart_helper_1.default.setPlotArea;
-    var setLegendPosition = modify_chart_helper_1.default.setLegendPosition;
-    var removeChartLegend = modify_chart_helper_1.default.removeChartLegend;
-    var minimizeChartLegend = modify_chart_helper_1.default.minimizeChartLegend;
-    var setWaterFallColumnTotalToLast = modify_chart_helper_1.default.setWaterFallColumnTotalToLast;
-    var setChartTitle = modify_chart_helper_1.default.setChartTitle;
-    var setDataLabelAttributes = modify_chart_helper_1.default.setDataLabelAttributes;
-    var removeDataLabels = modify_chart_helper_1.default.removeDataLabels;
-    var readWorkbookData = modify_chart_helper_1.default.readWorkbookData;
-    var readChartInfo = modify_chart_helper_1.default.readChartInfo;
-    var setHyperlinkTarget = modify_hyperlink_helper_1.default.setHyperlinkTarget;
-    var addHyperlink = modify_hyperlink_helper_1.default.addHyperlink;
-    var removeHyperlink = modify_hyperlink_helper_1.default.removeHyperlink;
-    exports.modify = {
-      dump,
-      dumpChart,
-      setAttribute,
-      setSolidFill,
-      setOutline,
-      setText,
-      setMultiText,
-      htmlToMultiText,
-      setBulletList,
-      replaceText,
-      setPosition,
-      updatePosition,
-      rotateShape,
-      setTableData,
-      adjustHeight,
-      adjustWidth,
-      updateColumnWidth,
-      updateRowHeight,
-      setTable,
-      setRelationTarget,
-      setDuotoneFill,
-      setChartData,
-      setAxisRange,
-      setExtendedChartData,
-      setChartVerticalLines,
-      setChartScatter,
-      setChartCombo,
-      setChartBubbles,
-      setPlotArea,
-      setLegendPosition,
-      removeChartLegend,
-      minimizeChartLegend,
-      setWaterFallColumnTotalToLast,
-      setChartTitle,
-      setDataLabelAttributes,
-      removeDataLabels,
-      setHyperlinkTarget,
-      addHyperlink,
-      removeHyperlink
-    };
-    exports.read = {
-      readWorkbookData,
-      readChartInfo
-    };
-    var errors_1 = require_errors2();
-    Object.defineProperty(exports, "AutomizerError", { enumerable: true, get: function() {
-      return errors_1.AutomizerError;
-    } });
-    Object.defineProperty(exports, "TemplateNotFoundError", { enumerable: true, get: function() {
-      return errors_1.TemplateNotFoundError;
-    } });
-    Object.defineProperty(exports, "SlideNotFoundError", { enumerable: true, get: function() {
-      return errors_1.SlideNotFoundError;
-    } });
-    Object.defineProperty(exports, "ElementNotFoundError", { enumerable: true, get: function() {
-      return errors_1.ElementNotFoundError;
-    } });
-    Object.defineProperty(exports, "ArchiveError", { enumerable: true, get: function() {
-      return errors_1.ArchiveError;
-    } });
-    Object.defineProperty(exports, "OutputError", { enumerable: true, get: function() {
-      return errors_1.OutputError;
-    } });
-    Object.defineProperty(exports, "CallbackError", { enumerable: true, get: function() {
-      return errors_1.CallbackError;
-    } });
-    var logger_1 = require_logger();
-    Object.defineProperty(exports, "ConsoleLogger", { enumerable: true, get: function() {
-      return logger_1.ConsoleLogger;
-    } });
-    Object.defineProperty(exports, "NullLogger", { enumerable: true, get: function() {
-      return logger_1.NullLogger;
-    } });
-    exports.default = automizer_1.default;
+    module.exports = PptxGenJS2;
   }
 });
 
@@ -38464,9 +21961,9 @@ Options:
                     element covers a text shape -- reposition it),
                     W_FONT_TOO_SMALL (a run/element font is below the
                     readable minimum -- enlarge it). Not escalated, as it
-                    is found after the write: W_CONTENT_LOST (the engine
-                    could not carry over content of a slide no op touched,
-                    e.g. an image -- tell the user)
+                    is found during the write: W_REPAIRED (the input deck
+                    carried PowerPoint repair triggers on a slide, which
+                    pptc repaired -- tell the user)
   --min-font-pt N   readability floor for explicit font sizes (default
                     8); runs/elements below N trigger W_FONT_TOO_SMALL.
                     0 disables the check. Footer/slide-number/date
@@ -38688,10 +22185,10 @@ var toPptcError = (err) => {
 };
 
 // src/infra/version.ts
-var VERSION = true ? "1.0.11" : "0.0.0-dev";
+var VERSION = true ? "1.1.0" : "0.0.0-dev";
 
 // src/commands/apply.ts
-import path9 from "node:path";
+import path12 from "node:path";
 
 // src/core/ops/registry.ts
 var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
@@ -39403,16 +22900,16 @@ var metaProps = {
     const { custom: custom2, ...core } = op.set;
     const coreEntries = Object.entries(core).filter(([, v]) => v !== void 0);
     if (coreEntries.length > 0) {
-      const patch2 = { ...ctx.plan.props ?? {} };
+      const patch = { ...ctx.plan.props ?? {} };
       for (const [key, value] of coreEntries)
-        patch2[key] = value;
-      ctx.plan.props = patch2;
+        patch[key] = value;
+      ctx.plan.props = patch;
     }
     if (custom2 !== void 0) {
-      const patch2 = { ...ctx.plan.customProps ?? {} };
+      const patch = { ...ctx.plan.customProps ?? {} };
       for (const [key, value] of Object.entries(custom2))
-        patch2[key] = value;
-      ctx.plan.customProps = patch2;
+        patch[key] = value;
+      ctx.plan.customProps = patch;
     }
   }
 };
@@ -40284,10 +23781,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path12) {
-  if (!path12)
+function getElementAtPath(obj, path15) {
+  if (!path15)
     return obj;
-  return path12.reduce((acc, key) => acc?.[key], obj);
+  return path15.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -40627,11 +24124,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path12, issues) {
+function prefixIssues(path15, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path12);
+    iss.path.unshift(path15);
     return iss;
   });
 }
@@ -41093,16 +24590,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path12 = []) => {
+  const processError = (error63, path15 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path12, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path15, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
       } else {
-        const fullpath = [...path12, ...issue2.path];
+        const fullpath = [...path15, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -41141,17 +24638,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path12 = []) => {
+  const processError = (error63, path15 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path12, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path15, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path15, ...issue2.path]);
       } else {
-        const fullpath = [...path12, ...issue2.path];
+        const fullpath = [...path15, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -41190,8 +24687,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path12 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path12) {
+  const path15 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path15) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -58329,13 +41826,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path12 = ref.slice(1).split("/").filter(Boolean);
-  if (path12.length === 0) {
+  const path15 = ref.slice(1).split("/").filter(Boolean);
+  if (path15.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path12[0] === defsKey) {
-    const key = path12[1] === void 0 ? void 0 : decodeJSONPointerSegment(path12[1]);
+  if (path15[0] === defsKey) {
+    const key = path15[1] === void 0 ? void 0 : decodeJSONPointerSegment(path15[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -59538,6 +43035,101 @@ var drawingText = (scope) => {
 
 // src/engine/parts.ts
 import path2 from "node:path";
+var resolveTarget = (base, target) => target.startsWith("/") ? target.slice(1) : path2.posix.normalize(path2.posix.join(base, target));
+var relsPartOf = (part) => `${path2.posix.dirname(part)}/_rels/${path2.posix.basename(part)}.rels`;
+var reEscape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var PartAllocator = class _PartAllocator {
+  constructor(names, rid, sldId, sldIds) {
+    this.names = names;
+    this.rid = rid;
+    this.sldId = sldId;
+    this.sldIds = sldIds;
+  }
+  names;
+  rid;
+  sldId;
+  sldIds;
+  /**
+   *  Scan a package once.
+   *
+   *  @param zip - the package
+   *  @param sldIds - slide ids of the input deck (also those removed now)
+   *  @returns the allocator
+   */
+  static async create(zip, sldIds) {
+    let rid = 9e3;
+    for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
+      const text = await zip.file(relsPart)?.async("string") ?? "";
+      for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
+        rid = Math.max(rid, Number(m[1]));
+    }
+    return new _PartAllocator(new Set(Object.keys(zip.files)), rid + 1, Math.max(255, ...sldIds), new Set(sldIds));
+  }
+  /**
+   *  A fresh part name `<dir>/<stem><n><ext>`, n above every number of the
+   *  family (any extension) in use.
+   *
+   *  @param dir - folder, e.g. "ppt/slides"
+   *  @param stem - name stem, e.g. "slide"
+   *  @param ext - extension including the dot, e.g. ".xml"
+   *  @returns the reserved part name
+   */
+  part(dir, stem, ext) {
+    const re = new RegExp(`^${reEscape(dir)}/${reEscape(stem)}(\\d+)\\.[^/]+$`);
+    let n = 0;
+    for (const name2 of this.names)
+      n = Math.max(n, Number(re.exec(name2)?.[1] ?? "0"));
+    const name = `${dir}/${stem}${n + 1}${ext}`;
+    this.names.add(name);
+    return name;
+  }
+  /**
+   *  A fresh part name of the same family as an existing part (media are
+   *  always named `image<n>`).
+   *
+   *  @param part - the part to name a sibling of
+   *  @returns the reserved part name
+   */
+  like(part) {
+    const dir = path2.posix.dirname(part);
+    const ext = path2.posix.extname(part);
+    const stem = dir === "ppt/media" ? "image" : path2.posix.basename(part, ext).replace(/\d+$/, "");
+    return this.part(dir, stem === "" ? "part" : stem, ext);
+  }
+  /**
+   *  A fresh relationship id, unique in every rels part of the package.
+   *
+   *  @returns the id
+   */
+  relId() {
+    return `rIdPptc${this.rid++}`;
+  }
+  /**
+   *  A fresh slide id above every id of the input deck; ids above the
+   *  schema maximum wrap to the lowest free one.
+   *
+   *  @returns the id
+   */
+  slideId() {
+    this.sldId = this.sldId < 2147483647 ? this.sldId + 1 : 256;
+    while (this.sldIds.has(this.sldId))
+      this.sldId++;
+    this.sldIds.add(this.sldId);
+    return this.sldId;
+  }
+  /**
+   *  A counter of fresh shape ids for one slide.
+   *
+   *  @param slide - the slide document
+   *  @returns a function returning the next free `p:cNvPr` id
+   */
+  static shapeIds(slide) {
+    let max = 0;
+    for (const el of elements(slide, "p:cNvPr"))
+      max = Math.max(max, Number(el.getAttribute("id") ?? "0") || 0);
+    return () => ++max;
+  }
+};
 var partText = async (zip, part) => {
   const f = zip.file(part);
   if (f === null)
@@ -60120,121 +43712,1341 @@ var readDeckState = async (archive) => {
   };
 };
 
-// src/engine/session.ts
-var import_pptx_automizer = __toESM(require_dist(), 1);
+// src/engine/inplace/engine.ts
+var import_jszip6 = __toESM(require_lib3(), 1);
+import { readFileSync as readFileSync6 } from "node:fs";
+import path11 from "node:path";
 
-// src/engine/automizer-patches.ts
-var import_count_helper = __toESM(require_count_helper(), 1);
-var import_ole = __toESM(require_ole(), 1);
-var import_image = __toESM(require_image(), 1);
-var import_diagram = __toESM(require_diagram(), 1);
-var import_file_helper = __toESM(require_file_helper(), 1);
-var import_archive = __toESM(require_archive(), 1);
-var import_placeholder_normalizer = __toESM(require_placeholder_normalizer(), 1);
-var import_xml_helper = __toESM(require_xml_helper(), 1);
-var import_xml_relationship_helper = __toESM(require_xml_relationship_helper(), 1);
-var maxNumber = async (archive, specs) => {
-  let max = 0;
-  for (const [dir, re] of specs)
-    for (const file2 of await archive.folder(dir))
-      max = Math.max(max, Number(re.exec(file2.relativePath)?.[1] ?? "0"));
-  return max;
+// src/engine/guard.ts
+var import_jszip2 = __toESM(require_lib3(), 1);
+import path4 from "node:path";
+import { createHash as createHash2 } from "node:crypto";
+var SKIP_RELS = ["/slideLayout", "/notesSlide", "/hyperlink", "/slide"];
+var IMPLICIT_RELS = ["/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo"];
+var canonText = async (zip, part) => {
+  const text = await zip.file(part)?.async("string");
+  if (text === void 0)
+    return null;
+  try {
+    return serializeXml(parseXml(text.replace(/^\uFEFF/, "")));
+  } catch {
+    return text;
+  }
 };
-var patch = (target, name, fn) => {
-  if (typeof target[name] !== "function")
-    throw new Error(`pptx-automizer patch target '${name}' not found -- re-check engine/automizer-patches.ts after an upgrade`);
-  target[name] = fn;
-};
-patch(import_count_helper.CountHelper, "countImages", async (archive) => await maxNumber(archive, [["ppt/media", /^(?:image|media)(\d+)\./i]]));
-patch(import_count_helper.CountHelper, "countCharts", async (archive) => await maxNumber(archive, [
-  ["ppt/charts", /^(?:chart|chartEx|colors|style)(\d+)\.xml$/i],
-  ["ppt/drawings", /^drawing(\d+)\.xml$/i],
-  ["ppt/theme", /^themeOverride(\d+)\.xml$/i],
-  ["ppt/embeddings", /-created-(\d+)\.[^.]+$/i],
-  ["ppt/media", /-chart-(\d+)\.[^.]+$/i]
-]));
-patch(import_count_helper.CountHelper, "countDiagrams", async (archive) => await maxNumber(archive, [["ppt/diagrams", /^(?:data|colors|layout|quickStyle|drawing)(\d+)\.xml$/i]]));
-var oleStatic = import_ole.OLEObject;
-patch(oleStatic.prototype, "prepare", async function(targetTemplate, targetSlideNumber, oleObjects) {
-  await this.setTarget(targetTemplate, targetSlideNumber);
-  const all = oleObjects ?? await oleStatic.getAllOnSlide(this.sourceArchive, this.targetSlideRelFile);
-  const ole = all.find((obj) => obj.rId === this.sourceRid);
-  if (ole === void 0)
-    throw new Error(`OLE object with rId ${this.sourceRid} not found.`);
-  const n = 1 + await maxNumber(this.targetArchive, [["ppt/embeddings", /^oleObjectrIdOle(\d+)\./]]);
-  this.createdRid = `rIdOle${n}`;
-  await this.copyOleObjectFile(`ppt/embeddings/${ole.file.split("/").pop()}`);
-  await this.appendToContentTypes();
-  await this.updateSlideRels();
-  await this.updateSlideXml();
-});
-var removeUnsupportedTags = import_placeholder_normalizer.PlaceholderNormalizer.prototype["removeUnsupportedTags"];
-patch(
-  import_placeholder_normalizer.PlaceholderNormalizer.prototype,
-  "removeUnsupportedTags",
-  function(xml) {
-    const tags = this.host.unsupportedTags;
-    this.host.unsupportedTags = tags.filter((t) => t !== "a:buBlip");
+var digestBytes = (bytes) => createHash2("sha1").update(bytes).digest("hex").slice(0, 12);
+var digest = async (zip, part) => {
+  const file2 = zip.file(part);
+  if (file2 === null)
+    return "missing";
+  const bytes = await file2.async("nodebuffer");
+  let data = bytes;
+  if (/\.(xml|rels)$/.test(part)) {
+    let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "");
     try {
-      removeUnsupportedTags.call(this, xml);
-    } finally {
-      this.host.unsupportedTags = tags;
+      const doc = parseXml(xml);
+      for (const tag2 of ["a:hlinkClick", "a:hlinkHover"])
+        for (const el of elements(doc, tag2))
+          if ((el.getAttribute("action") ?? "").includes("hlinksldjump"))
+            el.parentNode?.removeChild(el);
+      xml = serializeXml(doc);
+    } catch {
+    }
+    data = xml.replace(/>\s+</g, "><").replace(/\br:(id|embed|link|pict|dm|lo|qs|cs)="[^"]*"/g, 'r:$1=""').replace(/\brelId="[^"]*"/g, 'relId=""').replace(/(<p:sldLayoutId\b[^>]*?\bid=")\d+"/g, '$1"');
+  }
+  return createHash2("sha1").update(data).digest("hex").slice(0, 12);
+};
+var relatedDigests = async (zip, part, xml, depth) => {
+  const relsPart = `${path4.posix.dirname(part)}/_rels/${path4.posix.basename(part)}.rels`;
+  const rels = await canonText(zip, relsPart);
+  if (rels === null)
+    return [];
+  const out = [];
+  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+    const rel = m[0];
+    const type = /Type="([^"]+)"/.exec(rel)?.[1] ?? "";
+    if (SKIP_RELS.some((k) => type.endsWith(k)))
+      continue;
+    const id = /Id="([^"]+)"/.exec(rel)?.[1] ?? "";
+    if (xml !== null && !xml.includes(`"${id}"`) && !IMPLICIT_RELS.some((k) => type.endsWith(k)) && !type.endsWith("/diagramDrawing"))
+      continue;
+    if (rel.includes('TargetMode="External"')) {
+      out.push(`${type.slice(type.lastIndexOf("/") + 1)}:ext:${/Target="([^"]+)"/.exec(rel)?.[1] ?? ""}`);
+      continue;
+    }
+    const target = path4.posix.normalize(path4.posix.join(path4.posix.dirname(part), /Target="([^"]+)"/.exec(rel)?.[1] ?? ""));
+    let hash2 = await digest(zip, target);
+    if (depth > 0)
+      hash2 += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`;
+    out.push(`${type.slice(type.lastIndexOf("/") + 1)}:${hash2}`);
+  }
+  return out.sort();
+};
+var notesText = async (zip, slidePart) => {
+  const rels = await canonText(zip, `ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`) ?? "";
+  const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => m[0]).find((r) => /Type="[^"]*\/notesSlide"/.test(r));
+  if (rel === void 0)
+    return null;
+  const part = path4.posix.normalize(path4.posix.join("ppt/slides", /Target="([^"]+)"/.exec(rel)?.[1] ?? ""));
+  const xml = await canonText(zip, part);
+  return xml === null ? null : [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("\n");
+};
+var slidePrint = async (zip, slidePart) => {
+  const xml = await canonText(zip, slidePart) ?? "";
+  return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1) };
+};
+var slideParts = async (zip) => {
+  const pres = await canonText(zip, "ppt/presentation.xml") ?? "";
+  const rels = await canonText(zip, "ppt/_rels/presentation.xml.rels") ?? "";
+  const target = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
+  return [...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => path4.posix.normalize(path4.posix.join("ppt", target.get(m[1]) ?? "")));
+};
+var minus = (a, b) => {
+  const rest = [...a];
+  for (const x of b) {
+    const i = rest.indexOf(x);
+    if (i >= 0)
+      rest.splice(i, 1);
+  }
+  return rest;
+};
+var parseEntry = (entry) => {
+  const i = entry.indexOf("[");
+  return { base: entry.slice(0, i), children: entry.slice(i + 1, -1).split(",").filter((c) => c !== "") };
+};
+var verifyContent = async (before, after, expects) => {
+  const blocked = [];
+  const lost = [];
+  const outParts = await slideParts(after);
+  for (const [i, exp] of expects.entries()) {
+    const outPart = outParts[i];
+    if (exp.source === null || outPart === void 0)
+      continue;
+    const was = await slidePrint(before, exp.source);
+    const now = await slidePrint(after, outPart);
+    if (!exp.notes && was.notes !== now.notes) {
+      if (now.notes === null || now.notes === "")
+        lost.push({ slide: i, what: "speaker notes" });
+      else
+        blocked.push(`slide ${exp.label}: speaker notes would change although no op set them`);
+    }
+    if (exp.assets === "any")
+      continue;
+    const gone = minus(was.assets, now.assets);
+    const added = minus(now.assets, was.assets);
+    if (exp.assets === "grow" && exp.grow !== void 0) {
+      const images = [...exp.grow.images];
+      let fallbacks = exp.grow.fallbacks;
+      let charts = exp.grow.charts;
+      for (let j = added.length - 1; j >= 0; j--) {
+        const entry = added[j];
+        const planned = images.indexOf(entry.replace(/^image:([0-9a-f]+)\[\]$/, "$1"));
+        if (entry.startsWith("image:") && planned >= 0)
+          images.splice(planned, 1);
+        else if (entry.startsWith("image:") && fallbacks > 0)
+          fallbacks--;
+        else if (entry.startsWith("chart:") && charts > 0)
+          charts--;
+        else
+          continue;
+        added.splice(j, 1);
+      }
+    }
+    for (const entry of added) {
+      const a = parseEntry(entry);
+      const k = gone.findIndex((g2) => parseEntry(g2).base === a.base && minus(a.children, parseEntry(g2).children).length === 0);
+      if (k < 0) {
+        blocked.push(`slide ${exp.label}: images, charts or embedded objects would change although no op touched them (${was.assets.join(" ")} -> ${now.assets.join(" ")})`);
+        break;
+      }
+      const g = parseEntry(gone[k]);
+      for (const child of minus(g.children, a.children))
+        lost.push({ slide: i, what: `${child.slice(0, child.indexOf(":"))} inside ${a.base.slice(0, a.base.indexOf(":"))}` });
+      gone.splice(k, 1);
+    }
+    for (const entry of gone) {
+      const type = entry.slice(0, entry.indexOf(":"));
+      if (!(exp.textReplaced === true && type === "image"))
+        lost.push({ slide: i, what: type });
     }
   }
-);
-var xmlHelper = import_xml_helper.XmlHelper;
-var getTargetByRelId = xmlHelper.getTargetByRelId.bind(xmlHelper);
-var IMAGE_BLIPS = { "image": "a:blip", "image:svg": "asvg:svgBlip" };
-patch(xmlHelper, "getTargetByRelId", async (archive, relsPath, element, type) => {
-  const target = await getTargetByRelId(archive, relsPath, element, type);
-  const tag2 = IMAGE_BLIPS[type];
-  if (target !== void 0 || tag2 === void 0)
-    return target;
-  const blip = element.getElementsByTagName(tag2).item(0);
-  const rid = blip?.getAttribute("r:embed") ?? null;
-  if (rid === null)
-    return void 0;
-  const rels = await xmlHelper.getRelationshipItems(archive, relsPath, (rel, items) => {
-    const file2 = rel.getAttribute("Target") ?? "";
-    items.push({
-      rId: rel.getAttribute("Id") ?? "",
-      type: rel.getAttribute("Type") ?? "",
-      file: file2,
-      filename: file2.split("/").pop() ?? "",
-      element: rel
-    });
-  });
-  return rels.find((rel) => rel.rId === rid && rel.element.getAttribute("TargetMode") !== "External");
-});
-var matchHelper = import_xml_helper.XmlHelper;
-var targetMatches = matchHelper.targetMatchesRelationship.bind(matchHelper);
-patch(matchHelper, "targetMatchesRelationship", (relType, subtype, file2, prefix) => relType === "package" && !prefix.includes("embeddings") ? false : targetMatches(relType, subtype, file2, prefix));
-var relHelper = import_xml_relationship_helper.XmlRelationshipHelper;
-var relTargetMatches = relHelper.targetMatchesRelationship.bind(relHelper);
-patch(relHelper, "targetMatchesRelationship", (relType, subtype, file2, prefix) => relType === "package" && !prefix.includes("embeddings") ? false : relTargetMatches(relType, subtype, file2, prefix));
-var isInternal = (rel) => rel.element?.getAttribute("TargetMode") !== "External";
-for (const cls of [import_image.Image, import_ole.OLEObject]) {
-  const getAll = cls.getAllOnSlide.bind(cls);
-  patch(cls, "getAllOnSlide", async (archive, relsPath) => (await getAll(archive, relsPath)).filter(isInternal));
-}
-var fileHelper = import_file_helper.FileHelper;
-patch(import_diagram.Diagram.prototype, "copyFiles", async function() {
-  for (const kind of ["data", "colors", "drawing", "layout", "quickStyle"]) {
-    const from = `ppt/diagrams/${kind}${this.sourceNumber}.xml`;
-    if (kind !== "drawing" || this.sourceArchive.fileExists(from))
-      await fileHelper.zipCopy(this.sourceArchive, from, this.targetArchive, `ppt/diagrams/${kind}${this.targetNumber}.xml`);
+  for (const part of Object.keys(before.files).filter((f) => /^ppt\/(slideLayouts|slideMasters|theme)\/[^/]+\.xml$/.test(f) && after.file(f) !== null)) {
+    const xmlBefore = await canonText(before, part) ?? "";
+    const xmlAfter = await canonText(after, part) ?? "";
+    const was = `${await digest(before, part)} ${(await relatedDigests(before, part, xmlBefore, 1)).join(" ")}`;
+    const now = `${await digest(after, part)} ${(await relatedDigests(after, part, xmlAfter, 1)).join(" ")}`;
+    if (was !== now)
+      blocked.push(`${part}: layout/master content would change`);
   }
-});
-var archiveClass = import_archive.default.default ?? import_archive.default;
-var parseArchiveXml = archiveClass.prototype.parseXml;
-patch(archiveClass.prototype, "parseXml", function(xml) {
-  return parseArchiveXml.call(this, xml.replace(/^\uFEFF/, ""));
-});
+  return { blocked, lost };
+};
 
-// src/engine/session.ts
-var import_jszip6 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync6, rmSync as rmSync2, writeFileSync as writeFileSync2 } from "node:fs";
+// src/engine/post.ts
+import path5 from "node:path";
+var removeParts = async (zip, parts) => {
+  if (parts.length === 0)
+    return;
+  let ct = await partText(zip, "[Content_Types].xml");
+  for (const part of parts) {
+    zip.remove(part);
+    zip.remove(`${path5.posix.dirname(part)}/_rels/${path5.posix.basename(part)}.rels`);
+    ct = ct.replace(new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "");
+  }
+  zip.file("[Content_Types].xml", ct);
+};
+var syncSectionRefs = async (zip) => {
+  const part = "ppt/presentation.xml";
+  const xml = await partText(zip, part);
+  if (!xml.includes("<p14:sectionLst"))
+    return;
+  const pres = parseXml(xml);
+  const sections = elements(pres, "p14:section");
+  const lists = sections.map((sec) => firstElement(sec, "p14:sldIdLst"));
+  if (sections.length === 0 || lists.some((l) => l === null))
+    return;
+  const sectionOf = /* @__PURE__ */ new Map();
+  const oldPos = /* @__PURE__ */ new Map();
+  sections.forEach((sec, k) => {
+    for (const ref of elements(sec, "p14:sldId")) {
+      const id = ref.getAttribute("id") ?? "";
+      if (!sectionOf.has(id)) {
+        sectionOf.set(id, k);
+        oldPos.set(id, oldPos.size);
+      }
+    }
+  });
+  const order = elements(pres, "p:sldId").map((s) => s.getAttribute("id") ?? "");
+  const kept = order.filter((id) => oldPos.has(id));
+  const len = kept.map(() => 1);
+  const prev = kept.map(() => -1);
+  for (let i = 0; i < kept.length; i++)
+    for (let j = 0; j < i; j++)
+      if (oldPos.get(kept[j]) < oldPos.get(kept[i]) && len[j] + 1 > len[i]) {
+        len[i] = len[j] + 1;
+        prev[i] = j;
+      }
+  const stable = /* @__PURE__ */ new Set();
+  for (let i = len.indexOf(Math.max(0, ...len)); i >= 0; i = prev[i])
+    stable.add(kept[i]);
+  const members2 = sections.map(() => []);
+  let current = 0;
+  for (const id of order) {
+    if (stable.has(id))
+      current = sectionOf.get(id);
+    members2[current]?.push(id);
+  }
+  for (const [k, list] of lists.entries()) {
+    const l = list;
+    for (const ref of elements(l, "p14:sldId"))
+      l.removeChild(ref);
+    for (const id of members2[k]) {
+      const ref = pres.createElementNS(l.namespaceURI, "p14:sldId");
+      ref.setAttribute("id", id);
+      l.appendChild(ref);
+    }
+  }
+  zip.file(part, serializeXml(pres));
+};
+var ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/;
+var gcAssets = async (zip) => {
+  const isAsset = (f) => ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/");
+  const assets = Object.keys(zip.files).filter(isAsset);
+  if (assets.length === 0)
+    return;
+  const live = /* @__PURE__ */ new Set();
+  const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(f.replace(/_rels\/([^/]+)\.rels$/, "$1")));
+  while (queue.length > 0) {
+    const relsPart = queue.pop();
+    const relsText = await zip.file(relsPart)?.async("string");
+    if (relsText === void 0)
+      continue;
+    const base = path5.posix.dirname(path5.posix.dirname(relsPart));
+    for (const rel of elements(parseXml(relsText), "Relationship")) {
+      if (rel.getAttribute("TargetMode") === "External")
+        continue;
+      const target = resolveTarget(base, rel.getAttribute("Target") ?? "");
+      if (isAsset(target) && !live.has(target)) {
+        live.add(target);
+        const tRels = `${path5.posix.dirname(target)}/_rels/${path5.posix.basename(target)}.rels`;
+        if (zip.file(tRels) !== null)
+          queue.push(tRels);
+      }
+    }
+  }
+  await removeParts(zip, assets.filter((a) => !live.has(a)));
+};
+var addRel = (rels, id, type, target, external = false) => {
+  const rel = rels.createElementNS(NS_REL, "Relationship");
+  rel.setAttribute("Id", id);
+  rel.setAttribute("Type", type);
+  rel.setAttribute("Target", target);
+  if (external)
+    rel.setAttribute("TargetMode", "External");
+  rels.documentElement?.appendChild(rel);
+};
+var IMAGE_TYPES = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  emf: "image/x-emf",
+  wmf: "image/x-wmf"
+};
+var slideTitle = (slide) => {
+  for (const sp of elements(slide, "p:sp")) {
+    const type = firstElement(sp, "p:ph")?.getAttribute("type") ?? "";
+    if (type === "title" || type === "ctrTitle")
+      return elements(sp, "a:t").map((n) => n.textContent ?? "").join("");
+  }
+  return "";
+};
+var xmlEscape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var syncAppProperties = async (zip, slides) => {
+  const part = "docProps/app.xml";
+  const f = zip.file(part);
+  if (f === null)
+    return;
+  let xml = await f.async("string");
+  const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(xml);
+  const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(xml);
+  if (hp === null || tp === null)
+    return;
+  const hpBody = hp[1] ?? "";
+  const tpBody = tp[1] ?? "";
+  const n = slides.length;
+  const titles = [];
+  for (const slidePart of slides)
+    titles.push(slideTitle(parseXml(await partText(zip, slidePart))));
+  const counts = [...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].map((m) => Number(m[1]));
+  const leading = counts.slice(0, -1).reduce((a, b) => a + b, 0);
+  let seen = 0;
+  const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) => ++seen === counts.length ? `<vt:i4>${n}</vt:i4>` : m);
+  const kept = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)].map((m) => m[1]).slice(0, leading);
+  const lpstr = [...kept, ...titles.map(xmlEscape)].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
+  xml = xml.replace(/<Slides>\d+<\/Slides>/, `<Slides>${n}</Slides>`).replace(hp[0], `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
+  zip.file(part, xml);
+};
+var setProps = async (zip, props) => {
+  const part = "docProps/core.xml";
+  const text = await zip.file(part)?.async("string");
+  if (text === void 0)
+    return;
+  const doc = parseXml(text);
+  const tags = {
+    title: ["dc:title", "http://purl.org/dc/elements/1.1/"],
+    author: ["dc:creator", "http://purl.org/dc/elements/1.1/"],
+    subject: ["dc:subject", "http://purl.org/dc/elements/1.1/"],
+    keywords: ["cp:keywords", "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"],
+    category: ["cp:category", "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"],
+    comments: ["dc:description", "http://purl.org/dc/elements/1.1/"]
+  };
+  for (const [key, value] of Object.entries(props)) {
+    const spec = tags[key];
+    if (spec === void 0)
+      continue;
+    let el = firstElement(doc, spec[0]);
+    if (el === null) {
+      el = doc.createElementNS(spec[1], spec[0]);
+      doc.documentElement?.appendChild(el);
+    }
+    while (el.firstChild !== null)
+      el.removeChild(el.firstChild);
+    el.appendChild(doc.createTextNode(value));
+  }
+  zip.file(part, serializeXml(doc));
+};
+var CUSTOM_PROPS_PART = "docProps/custom.xml";
+var CUSTOM_PROPS_CT = "application/vnd.openxmlformats-officedocument.custom-properties+xml";
+var CUSTOM_PROPS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties";
+var NS_CUSTOM = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
+var NS_VT = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
+var CUSTOM_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
+var setCustomProps = async (zip, patch) => {
+  const props = /* @__PURE__ */ new Map();
+  const existing = await zip.file(CUSTOM_PROPS_PART)?.async("string");
+  if (existing !== void 0)
+    for (const p of elements(parseXml(existing), "property")) {
+      const vt = firstElement(p, "vt:lpwstr");
+      props.set(p.getAttribute("name") ?? "", vt?.textContent ?? "");
+    }
+  for (const [k, v] of Object.entries(patch))
+    props.set(k, v);
+  let pid = 2;
+  let body = "";
+  for (const [name, value] of props)
+    body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name)}"><vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`;
+  zip.file(
+    CUSTOM_PROPS_PART,
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r
+<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}">${body}</Properties>`
+  );
+  const ct = await partText(zip, "[Content_Types].xml");
+  if (!ct.includes(`PartName="/${CUSTOM_PROPS_PART}"`))
+    zip.file("[Content_Types].xml", ct.replace(
+      "</Types>",
+      `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`
+    ));
+  const rootRels = parseXml(await partText(zip, "_rels/.rels"));
+  const present = elements(rootRels, "Relationship").some((r) => (r.getAttribute("Type") ?? "") === CUSTOM_PROPS_REL);
+  if (!present) {
+    const ids = new Set(elements(rootRels, "Relationship").map((r) => r.getAttribute("Id")));
+    let n = 1;
+    while (ids.has(`rId${n}`))
+      n++;
+    addRel(rootRels, `rId${n}`, CUSTOM_PROPS_REL, CUSTOM_PROPS_PART);
+    zip.file("_rels/.rels", serializeXml(rootRels));
+  }
+};
+var sweepSlideRefs = async (zip, slides) => {
+  const notes = /* @__PURE__ */ new Set();
+  for (const slide of slides) {
+    const rels = await zip.file(`ppt/slides/_rels/${path5.posix.basename(slide)}.rels`)?.async("string") ?? "";
+    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g))
+      if (/Type="[^"]*\/notesSlide"/.test(m[0]))
+        notes.add(resolveTarget("ppt/slides", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""));
+  }
+  await removeParts(zip, Object.keys(zip.files).filter((f) => /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)));
+  const presRelsPart = "ppt/_rels/presentation.xml.rels";
+  const presRels = parseXml(await partText(zip, presRelsPart));
+  const presXml = await partText(zip, "ppt/presentation.xml");
+  const liveSlideRids = new Set([...presXml.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]));
+  let pruned = false;
+  for (const rel of elements(presRels, "Relationship")) {
+    if (rel.getAttribute("TargetMode") === "External")
+      continue;
+    const target = resolveTarget("ppt", rel.getAttribute("Target") ?? "");
+    if (zip.file(target) === null || (rel.getAttribute("Type") ?? "").endsWith("/slide") && !liveSlideRids.has(rel.getAttribute("Id") ?? "")) {
+      rel.parentNode?.removeChild(rel);
+      pruned = true;
+    }
+  }
+  if (pruned)
+    zip.file(presRelsPart, serializeXml(presRels));
+  if (!presXml.includes("<p:custShow"))
+    return;
+  const rids = new Set(elements(presRels, "Relationship").map((r) => r.getAttribute("Id") ?? ""));
+  const pres = parseXml(presXml);
+  let dropped = false;
+  for (const show of elements(pres, "p:custShow"))
+    for (const sld of elements(show, "p:sld"))
+      if (!rids.has(sld.getAttribute("r:id") ?? "")) {
+        sld.parentNode?.removeChild(sld);
+        dropped = true;
+      }
+  if (dropped)
+    zip.file("ppt/presentation.xml", serializeXml(pres));
+};
+var finishPackage = async (zip, slides, props, customProps) => {
+  await sweepSlideRefs(zip, slides);
+  if (props !== null)
+    await setProps(zip, props);
+  if (customProps !== null)
+    await setCustomProps(zip, customProps);
+  await gcAssets(zip);
+  await syncSectionRefs(zip);
+  await cleanContentTypes(zip);
+  await syncAppProperties(zip, slides);
+};
+
+// src/engine/seed.ts
+var import_jszip3 = __toESM(require_lib3(), 1);
+import { readFileSync as readFileSync3 } from "node:fs";
+import path6 from "node:path";
+var slideFromLayout = (layoutXml) => {
+  const layout = parseXml(layoutXml);
+  const sps = [];
+  let nextId = 2;
+  for (const sp of elements(layout, "p:sp")) {
+    const ph = firstElement(sp, "p:ph");
+    if (ph === null)
+      continue;
+    const type = ph.getAttribute("type") ?? "body";
+    const clone2 = sp.cloneNode(true);
+    const cNvPr = firstElement(clone2, "p:cNvPr");
+    cNvPr?.setAttribute("id", String(nextId++));
+    if (type === "ftr" || type === "sldNum" || type === "dt") {
+      sps.push(serializeElement(clone2));
+      continue;
+    }
+    cNvPr?.setAttribute("name", seedPlaceholderName(Number(ph.getAttribute("idx") ?? "0")));
+    const txBody = firstElement(clone2, "p:txBody");
+    const doc = clone2.ownerDocument;
+    if (txBody !== null && doc !== null) {
+      while (txBody.firstChild !== null)
+        txBody.removeChild(txBody.firstChild);
+      txBody.appendChild(doc.createElementNS(NS_A, "a:bodyPr"));
+      txBody.appendChild(doc.createElementNS(NS_A, "a:lstStyle"));
+      const p = doc.createElementNS(NS_A, "a:p");
+      p.appendChild(doc.createElementNS(NS_A, "a:endParaRPr"));
+      txBody.appendChild(p);
+    }
+    sps.push(serializeElement(clone2));
+  }
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' + sps.join("") + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>";
+};
+var SLIDE_REL_RE = /<Relationship [^>]*Type="[^"]*\/slide"[^>]*\/>/g;
+var stripSlides = (presRels, ct) => ({
+  presRels: presRels.replace(SLIDE_REL_RE, ""),
+  ct: ct.replace(/<Override PartName="\/ppt\/slides\/[^"]*"[^>]*\/>/g, "")
+});
+var layoutOrder = async (zip) => {
+  const order = [];
+  const pres = await zip.file("ppt/presentation.xml")?.async("string") ?? "";
+  const presRels = await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? "";
+  const relTarget = new Map([...presRels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
+  const listed = [...pres.matchAll(/<p:sldMasterId\b[^>]*\br:id="([^"]+)"/g)].map((m) => path6.posix.normalize(path6.posix.join("ppt", relTarget.get(m[1]) ?? ""))).filter((part) => zip.file(part) !== null);
+  const masters = listed.length > 0 ? listed : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort();
+  for (const masterPart of masters) {
+    const master = parseXml(await zip.file(masterPart).async("string"));
+    const relsFile = zip.file(`ppt/slideMasters/_rels/${path6.posix.basename(masterPart)}.rels`);
+    if (relsFile === null)
+      continue;
+    const rels = parseXml(await relsFile.async("string"));
+    const relMap = new Map(elements(rels, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
+    for (const layoutId of elements(master, "p:sldLayoutId")) {
+      const target = relMap.get(layoutId.getAttribute("r:id") ?? "");
+      if (target !== void 0 && target.includes("slideLayouts/"))
+        order.push(path6.posix.normalize(path6.posix.join("ppt/slideMasters", target)));
+    }
+  }
+  return order;
+};
+var buildSeed = async (templateBytes) => {
+  const zip = await import_jszip3.default.loadAsync(templateBytes);
+  await normalizeRelTargets(zip);
+  const get = async (part) => {
+    const f = zip.file(part);
+    if (f === null)
+      throw new PptcError("E_TEMPLATE", `template is missing required part: ${part}`);
+    return await f.async("string");
+  };
+  let ct = (await get("[Content_Types].xml")).replace("presentationml.template.main+xml", "presentationml.presentation.main+xml");
+  let pres = await get("ppt/presentation.xml");
+  let presRels = await get("ppt/_rels/presentation.xml.rels");
+  pres = pres.replace(/<p:sldIdLst\s*\/>/, "<p:sldIdLst></p:sldIdLst>").replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst></p:sldIdLst>");
+  if (!pres.includes("<p:sldIdLst>"))
+    pres = pres.replace("</p:sldMasterIdLst>", "</p:sldMasterIdLst><p:sldIdLst></p:sldIdLst>");
+  pres = pres.replace(/<p:ext uri="\{521415D9-36F7-43E2-AB2F-B90AF26B5E84\}">.*?<\/p:ext>/s, "").replace(/<p:extLst>\s*<\/p:extLst>/, "");
+  for (const lst of ["handoutMasterIdLst", "notesMasterIdLst"]) {
+    const el = new RegExp(`<p:${lst}>.*?</p:${lst}>|<p:${lst}\\s*/>`, "s").exec(pres);
+    if (el !== null && pres.indexOf(el[0]) > pres.indexOf("<p:sldIdLst"))
+      pres = pres.replace(el[0], "").replace(/<p:sldIdLst/, `${el[0]}<p:sldIdLst`);
+  }
+  presRels = presRels.replace(SLIDE_REL_RE, "");
+  for (const f of Object.keys(zip.files))
+    if (/^ppt\/(slides|notesSlides)\//.test(f))
+      zip.remove(f);
+  ct = ct.replace(/<Override PartName="\/ppt\/(slides|notesSlides)\/[^"]*"[^>]*\/>/g, "");
+  const viewPr = zip.file("ppt/viewProps.xml");
+  if (viewPr !== null)
+    zip.file(
+      "ppt/viewProps.xml",
+      (await viewPr.async("string")).replace(/ lastView="[^"]*"/g, "")
+    );
+  const order = await layoutOrder(zip);
+  if (order.length === 0)
+    throw new PptcError("E_TEMPLATE", "template contains no slide layouts");
+  let sldIds = "", rels = "", overrides = "";
+  for (let i = 0; i < order.length; i++) {
+    const n = i + 1;
+    const layoutXml = await get(order[i]);
+    zip.file(`ppt/slides/slide${n}.xml`, slideFromLayout(layoutXml));
+    zip.file(
+      `ppt/slides/_rels/slide${n}.xml.rels`,
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../${order[i].substring(4)}"/></Relationships>`
+    );
+    sldIds += `<p:sldId id="${9e3 + n}" r:id="rIdPptcSeed${n}"/>`;
+    rels += `<Relationship Id="rIdPptcSeed${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${n}.xml"/>`;
+    overrides += `<Override PartName="/ppt/slides/slide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
+  }
+  zip.file("[Content_Types].xml", ct.replace("</Types>", `${overrides}</Types>`));
+  zip.file("ppt/presentation.xml", pres.replace("<p:sldIdLst></p:sldIdLst>", `<p:sldIdLst>${sldIds}</p:sldIdLst>`));
+  zip.file("ppt/_rels/presentation.xml.rels", presRels.replace("</Relationships>", `${rels}</Relationships>`));
+  await gcAssets(zip);
+  await cleanContentTypes(zip);
+  return {
+    bytes: await zip.generateAsync({ type: "nodebuffer" }),
+    layoutCount: order.length
+  };
+};
+var buildEmptyDeck = async (templatePath) => {
+  const seed = await buildSeed(readFileSync3(templatePath));
+  const zip = await import_jszip3.default.loadAsync(seed.bytes);
+  const pres = await zip.file("ppt/presentation.xml").async("string");
+  const presRels = await zip.file("ppt/_rels/presentation.xml.rels").async("string");
+  const ct = await zip.file("[Content_Types].xml").async("string");
+  zip.file("ppt/presentation.xml", pres.replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst/>"));
+  const stripped = stripSlides(presRels, ct);
+  zip.file("ppt/_rels/presentation.xml.rels", stripped.presRels);
+  zip.file("[Content_Types].xml", stripped.ct);
+  for (const f of Object.keys(zip.files))
+    if (/^ppt\/slides\//.test(f))
+      zip.remove(f);
+  return await zip.generateAsync({ type: "nodebuffer" });
+};
+
+// src/engine/verify.ts
+var import_jszip4 = __toESM(require_lib3(), 1);
+var import_xmldom2 = __toESM(require_lib4(), 1);
+import path7 from "node:path";
+import { readFileSync as readFileSync4 } from "node:fs";
+var shapeIdFindings = (part, xml) => {
+  const ids = [...xml.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1]);
+  const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))];
+  return dup.length > 0 ? [`${part}: duplicate cNvPr ids ${dup.join(",")}`] : [];
+};
+var relsFindings = (relsPart, xml, names) => {
+  const findings = [];
+  const relIds = [...xml.matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1]);
+  const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))];
+  if (dupIds.length > 0)
+    findings.push(`${relsPart}: duplicate relationship ids ${dupIds.join(",")}`);
+  const base = path7.posix.dirname(path7.posix.dirname(relsPart));
+  for (const m of xml.matchAll(/<Relationship [^>]*?\/>/g)) {
+    if (m[0].includes('TargetMode="External"'))
+      continue;
+    const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
+    if (!names.has(path7.posix.normalize(path7.posix.join(base, target))))
+      findings.push(`${relsPart}: dead relationship target ${target}`);
+  }
+  return findings;
+};
+var verifyArchive = async (zip) => {
+  if (zip.file("[Content_Types].xml") === null)
+    return ["[Content_Types].xml: part missing (not a flat OPC package)"];
+  const findings = [];
+  const names = new Set(Object.keys(zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")));
+  const text = async (part) => (await zip.file(part).async("string")).replace(/^\uFEFF/, "");
+  for (const n of names)
+    if (n.endsWith(".xml") || n.endsWith(".rels"))
+      try {
+        const parser = new import_xmldom2.DOMParser({
+          onError: (_level, msg) => {
+            throw new Error(msg);
+          }
+        });
+        parser.parseFromString(await text(n), "application/xml");
+      } catch (err) {
+        findings.push(`${n}: malformed XML (${String(err).slice(0, 80)})`);
+      }
+  for (const n of names)
+    if (/^ppt\/slides\/slide\d+\.xml$/.test(n))
+      findings.push(...shapeIdFindings(n, await text(n)));
+  for (const n of names)
+    if (n.endsWith(".rels"))
+      findings.push(...relsFindings(n, await text(n), names));
+  const ct = await text("[Content_Types].xml");
+  const overrides = [...ct.matchAll(/<Override PartName="([^"]+)"/g)].map((m) => m[1]);
+  for (const o of new Set(overrides)) {
+    if (!names.has(o.replace(/^\//, "")))
+      findings.push(`[Content_Types].xml: override for missing part ${o}`);
+    if (overrides.filter((x) => x === o).length > 1)
+      findings.push(`[Content_Types].xml: duplicate override ${o}`);
+  }
+  const defaults = new Set([...ct.matchAll(/<Default Extension="([^"]+)"/g)].map((m) => m[1].toLowerCase()));
+  const overridden = new Set(overrides.map((o) => o.replace(/^\//, "")));
+  for (const n of names)
+    if (n !== "[Content_Types].xml" && !overridden.has(n) && !defaults.has(n.split(".").pop()?.toLowerCase() ?? ""))
+      findings.push(`${n}: no content type (neither default nor override)`);
+  const pres = await text("ppt/presentation.xml");
+  const rels = await text("ppt/_rels/presentation.xml.rels");
+  const relMap = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/\bId="([^"]+)"/.exec(m[0])?.[1] ?? "", /\bTarget="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
+  for (const m of pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)) {
+    const target = relMap.get(m[1]);
+    if (target === void 0 || !names.has(path7.posix.normalize(path7.posix.join("ppt", target))))
+      findings.push(`presentation.xml: sldId ${m[1]} does not resolve to a slide part`);
+  }
+  for (const m of pres.matchAll(/<([\w:]+)\b[^>]*\br:id="([^"]+)"/g))
+    if (m[1] !== "p:sldId" && !relMap.has(m[2]))
+      findings.push(`presentation.xml: <${m[1]}> r:id ${m[2]} has no relationship`);
+  const seq = [...pres.matchAll(/<p:(sldMasterIdLst|notesMasterIdLst|handoutMasterIdLst|sldIdLst|sldSz|notesSz)[ >/]/g)].map((m) => m[1]);
+  const sldAt = seq.indexOf("sldIdLst");
+  if (sldAt >= 0) {
+    for (const lst of ["notesMasterIdLst", "handoutMasterIdLst"])
+      if (seq.includes(lst) && seq.indexOf(lst) > sldAt)
+        findings.push(`presentation.xml: ${lst} appears after sldIdLst (schema order violated)`);
+  }
+  if (seq.includes("sldSz") && seq.includes("notesSz") && seq.indexOf("sldSz") > seq.indexOf("notesSz"))
+    findings.push("presentation.xml: sldSz appears after notesSz (schema order violated)");
+  const liveSlideRids = new Set([...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]));
+  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+    const id = /\bId="([^"]+)"/.exec(m[0])?.[1] ?? "";
+    if (/\bType="[^"]*\/slide"/.test(m[0]) && !liveSlideRids.has(id))
+      findings.push(`presentation.xml.rels: dangling slide relationship ${id} (no sldId references it)`);
+  }
+  const realIds = new Set([...pres.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => m[1]));
+  for (const m of pres.matchAll(/<p14:sldId id="(\d+)"/g))
+    if (!realIds.has(m[1]))
+      findings.push(`presentation.xml: section references removed slide id ${m[1]}`);
+  if (names.has("docProps/app.xml")) {
+    const app = await text("docProps/app.xml");
+    const slideCount = [...pres.matchAll(/<p:sldId /g)].length;
+    const declared = /<Slides>(\d+)<\/Slides>/.exec(app);
+    if (declared !== null && Number(declared[1]) !== slideCount)
+      findings.push(`docProps/app.xml: declares ${declared[1]} slides, deck has ${slideCount}`);
+    const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(app);
+    const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(app);
+    if (hp !== null && tp !== null) {
+      const sum = [...(hp[1] ?? "").matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].reduce((a, m) => a + Number(m[1]), 0);
+      const entries = [...(tp[1] ?? "").matchAll(/<vt:lpstr>/g)].length;
+      if (sum !== entries)
+        findings.push(`docProps/app.xml: HeadingPairs sum ${sum} != TitlesOfParts ${entries}`);
+    }
+  }
+  const notesRef = /* @__PURE__ */ new Map();
+  for (const n of names)
+    if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(n))
+      for (const m of (await text(n)).matchAll(/Target="\.\.\/notesSlides\/([^"]+)"/g)) {
+        const part = m[1];
+        notesRef.set(part, [...notesRef.get(part) ?? [], n]);
+      }
+  for (const [part, owners] of notesRef)
+    if (owners.length > 1)
+      findings.push(`notesSlide ${part} is referenced by ${owners.length} slides (must be 1:1)`);
+  const isAsset = (f) => ASSET_PART.test(f) && !f.includes("/_rels/");
+  const live = /* @__PURE__ */ new Set();
+  for (const n of names)
+    if (n.endsWith(".rels")) {
+      const base = path7.posix.dirname(path7.posix.dirname(n));
+      for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
+        if (m[0].includes('TargetMode="External"'))
+          continue;
+        const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
+        live.add(path7.posix.normalize(path7.posix.join(base, target)));
+      }
+    }
+  for (const n of names)
+    if (isAsset(n) && !live.has(n))
+      findings.push(`${n}: orphan asset (not referenced from any part)`);
+  return findings;
+};
+var verifyBytes = async (bytes, before) => {
+  const zip = await import_jszip4.default.loadAsync(bytes);
+  await normalizeRelTargets(zip);
+  const findings = await verifyArchive(zip);
+  if (before !== void 0)
+    for (const n of Object.keys(before.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))) {
+      const after = zip.file(n);
+      if (after !== null && !(await after.async("nodebuffer")).equals(await before.file(n).async("nodebuffer")))
+        findings.push(`${n}: existing media file overwritten with different content`);
+    }
+  return findings;
+};
+var verifyFile = async (file2) => await verifyBytes(readFileSync4(file2));
+
+// src/engine/inplace/package.ts
+var import_jszip5 = __toESM(require_lib3(), 1);
 import path8 from "node:path";
+var SHARED_RELS = ["/slideLayout", "/slideMaster", "/notesMaster", "/slide", "/image", "/media", "/video", "/audio", "/hyperlink", "/theme"];
+var EMPTY_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${NS_REL}"/>`;
+var Package = class _Package {
+  constructor(zip, alloc) {
+    this.zip = zip;
+    this.alloc = alloc;
+  }
+  zip;
+  alloc;
+  /**
+   *  Open the package from the deck bytes.
+   *
+   *  @param bytes - the deck file as on disk
+   *  @param sldIds - slide ids of the input deck
+   *  @returns the package
+   */
+  static async open(bytes, sldIds) {
+    const zip = await import_jszip5.default.loadAsync(bytes);
+    for (const f of Object.keys(zip.files))
+      if (f.startsWith("[trash]/"))
+        zip.remove(f);
+    return new _Package(zip, await PartAllocator.create(zip, sldIds));
+  }
+  /**
+   *  Whether a part exists.
+   *
+   *  @param part - part name
+   *  @returns true when present
+   */
+  has(part) {
+    return this.zip.file(part) !== null;
+  }
+  /**
+   *  Text of a part (byte-order mark dropped); the part must exist.
+   *
+   *  @param part - part name
+   *  @returns its content
+   */
+  async text(part) {
+    return await partText(this.zip, part);
+  }
+  /**
+   *  Parsed XML of a part; the part must exist.
+   *
+   *  @param part - part name
+   *  @returns its DOM
+   */
+  async xml(part) {
+    return parseXml(await this.text(part));
+  }
+  /**
+   *  The relationships of a part, an empty list when it has none. Absolute
+   *  targets are rewritten to the relative form, as the rels part is about
+   *  to be written anyway.
+   *
+   *  @param part - the owning part
+   *  @returns the rels DOM
+   */
+  async rels(part) {
+    const relsPart = relsPartOf(part);
+    const doc = parseXml(this.has(relsPart) ? await this.text(relsPart) : EMPTY_RELS);
+    const base = path8.posix.dirname(part);
+    for (const rel of elements(doc, "Relationship")) {
+      const target = rel.getAttribute("Target") ?? "";
+      if (rel.getAttribute("TargetMode") !== "External" && target.startsWith("/"))
+        rel.setAttribute("Target", path8.posix.relative(base, target.slice(1)));
+    }
+    return doc;
+  }
+  /**
+   *  Write a part.
+   *
+   *  @param part - part name
+   *  @param data - XML document or raw content
+   */
+  write(part, data) {
+    this.zip.file(part, typeof data === "string" || data instanceof Uint8Array ? data : serializeXml(data));
+  }
+  /**
+   *  Write the relationships of a part.
+   *
+   *  @param part - the owning part
+   *  @param rels - the rels DOM
+   */
+  writeRels(part, rels) {
+    this.write(relsPartOf(part), rels);
+  }
+  /**
+   *  Append a relationship with a fresh id.
+   *
+   *  @param rels - the rels DOM
+   *  @param type - full relationship type URI
+   *  @param target - target, relative to the owner (or a URL)
+   *  @param external - whether the target is external
+   *  @returns the new relationship id
+   */
+  addRel(rels, type, target, external = false) {
+    const id = this.alloc.relId();
+    const rel = rels.createElementNS(NS_REL, "Relationship");
+    rel.setAttribute("Id", id);
+    rel.setAttribute("Type", type);
+    rel.setAttribute("Target", target);
+    if (external)
+      rel.setAttribute("TargetMode", "External");
+    rels.documentElement?.appendChild(rel);
+    return id;
+  }
+  /**
+   *  Register a content-type override for a part.
+   *
+   *  @param part - the part
+   *  @param contentType - its content type
+   */
+  async typeAs(part, contentType) {
+    this.write("[Content_Types].xml", (await this.text("[Content_Types].xml")).replace("</Types>", `<Override PartName="/${part}" ContentType="${contentType}"/></Types>`));
+  }
+  /**
+   *  Give a part a content type: the override it has in the source
+   *  package, else a default for its extension.
+   *
+   *  @param part - the (new) part
+   *  @param sourceCt - [Content_Types].xml of the package the content comes from
+   *  @param sourcePart - the part it was copied from
+   */
+  async typePart(part, sourceCt, sourcePart) {
+    const override = new RegExp(`<Override [^>]*PartName="/${sourcePart.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(sourceCt);
+    if (override !== null) {
+      await this.typeAs(part, /ContentType="([^"]+)"/.exec(override[0])?.[1] ?? "");
+      return;
+    }
+    const ct = await this.text("[Content_Types].xml");
+    const ext = path8.posix.extname(part).slice(1).toLowerCase();
+    if (new RegExp(`<Default [^>]*Extension="${ext}"`, "i").test(ct))
+      return;
+    const type = new RegExp(`<Default [^>]*Extension="${ext}"[^>]*ContentType="([^"]+)"`, "i").exec(sourceCt)?.[1] ?? IMAGE_TYPES[ext] ?? "application/octet-stream";
+    this.write("[Content_Types].xml", ct.replace(/<Default\b/, `<Default Extension="${ext}" ContentType="${type}"/><Default`));
+  }
+  /**
+   *  Copy a part and everything it relates to under fresh names. Inside
+   *  one package, layouts, masters, other slides and media stay shared;
+   *  from another package (the element generator) everything is copied.
+   *
+   *  @param from - the package holding the part
+   *  @param part - the part to copy
+   *  @param done - parts already copied in this operation (source to copy);
+   *                a relationship to one of them points at its copy
+   *  @returns the name of the copy
+   */
+  async clonePart(from, part, done = /* @__PURE__ */ new Map()) {
+    const copied = done.get(part);
+    if (copied !== void 0)
+      return copied;
+    const copy = this.alloc.like(part);
+    done.set(part, copy);
+    this.write(copy, await from.zip.file(part).async("uint8array"));
+    await this.typePart(copy, await from.text("[Content_Types].xml"), part);
+    if (!from.has(relsPartOf(part)))
+      return copy;
+    const rels = await from.rels(part);
+    await this.relinkClone(from, part, copy, rels, done);
+    this.writeRels(copy, rels);
+    return copy;
+  }
+  /**
+   *  Re-point the relationships of a copied part: targets copied in the
+   *  same operation point at their copy, shared ones keep their part,
+   *  everything else is copied recursively.
+   *
+   *  @param from - the package holding the original
+   *  @param part - the original part
+   *  @param copy - the name of the copy
+   *  @param rels - the relationships to re-point (in place)
+   *  @param done - parts already copied in this operation
+   */
+  async relinkClone(from, part, copy, rels, done) {
+    for (const rel of elements(rels, "Relationship")) {
+      if (rel.getAttribute("TargetMode") === "External")
+        continue;
+      const target = resolveTarget(path8.posix.dirname(part), rel.getAttribute("Target") ?? "");
+      const type = rel.getAttribute("Type") ?? "";
+      let next = done.get(target);
+      if (next === void 0 && from === this && SHARED_RELS.some((k) => type.endsWith(k)))
+        next = target;
+      if (next === void 0 && !from.has(target)) {
+        rel.parentNode?.removeChild(rel);
+        continue;
+      }
+      next ??= await this.clonePart(from, target, done);
+      rel.setAttribute("Target", path8.posix.relative(path8.posix.dirname(copy), next));
+    }
+  }
+  /**
+   *  Remove parts together with their rels and content-type overrides.
+   *
+   *  @param parts - the parts to remove
+   */
+  async remove(parts) {
+    if (parts.length === 0)
+      return;
+    let ct = await this.text("[Content_Types].xml");
+    for (const part of parts) {
+      this.zip.remove(part);
+      this.zip.remove(relsPartOf(part));
+      ct = ct.replace(new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "");
+    }
+    this.write("[Content_Types].xml", ct);
+  }
+  /**
+   *  Targets of the relationships of a part, resolved to part names.
+   *
+   *  @param part - the owning part
+   *  @param rels - its rels DOM
+   *  @returns relationship elements with their resolved target
+   */
+  static targets(part, rels) {
+    return elements(rels, "Relationship").map((rel) => ({
+      rel,
+      type: rel.getAttribute("Type") ?? "",
+      target: rel.getAttribute("TargetMode") === "External" ? null : resolveTarget(path8.posix.dirname(part), rel.getAttribute("Target") ?? "")
+    }));
+  }
+};
+
+// src/engine/inplace/slides.ts
+import { readFileSync as readFileSync5 } from "node:fs";
+import path9 from "node:path";
+
+// src/engine/text.ts
+var HLINK_ATTR = "pptc-hlink";
+var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
+var buildRunProps = (doc, run) => {
+  const hasProps = run.bold !== void 0 || run.italic !== void 0 || run.underline !== void 0 || run.size !== void 0 || run.font !== void 0 || run.color !== void 0 || run.hyperlink !== void 0;
+  if (!hasProps)
+    return null;
+  const rPr = doc.createElementNS(NS_A, "a:rPr");
+  if (run.bold !== void 0)
+    rPr.setAttribute("b", run.bold ? "1" : "0");
+  if (run.italic !== void 0)
+    rPr.setAttribute("i", run.italic ? "1" : "0");
+  if (run.underline === true)
+    rPr.setAttribute("u", "sng");
+  if (run.size !== void 0)
+    rPr.setAttribute("sz", String(Math.round(run.size * 100)));
+  if (run.color !== void 0) {
+    const fill = doc.createElementNS(NS_A, "a:solidFill");
+    const clr = doc.createElementNS(NS_A, "a:srgbClr");
+    clr.setAttribute("val", run.color);
+    fill.appendChild(clr);
+    rPr.appendChild(fill);
+  }
+  if (run.font !== void 0) {
+    const latin = doc.createElementNS(NS_A, "a:latin");
+    latin.setAttribute("typeface", run.font);
+    rPr.appendChild(latin);
+  }
+  if (run.hyperlink !== void 0) {
+    const hlink = doc.createElementNS(NS_A, "a:hlinkClick");
+    hlink.setAttribute(HLINK_ATTR, run.hyperlink);
+    rPr.appendChild(hlink);
+  }
+  return rPr;
+};
+var buildRun = (doc, run) => {
+  const r = doc.createElementNS(NS_A, "a:r");
+  const rPr = buildRunProps(doc, run);
+  if (rPr !== null)
+    r.appendChild(rPr);
+  const t = doc.createElementNS(NS_A, "a:t");
+  t.appendChild(doc.createTextNode(run.text));
+  r.appendChild(t);
+  return r;
+};
+var buildParagraph = (doc, p) => {
+  const el = doc.createElementNS(NS_A, "a:p");
+  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false;
+  if (needsPPr) {
+    const pPr = doc.createElementNS(NS_A, "a:pPr");
+    if (p.level !== void 0)
+      pPr.setAttribute("lvl", String(p.level));
+    if (p.alignment !== void 0)
+      pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment]);
+    if (p.bullet === false)
+      pPr.appendChild(doc.createElementNS(NS_A, "a:buNone"));
+    el.appendChild(pPr);
+  }
+  const runs = p.runs ?? [{
+    text: p.text ?? "",
+    ...p.bold !== void 0 && { bold: p.bold },
+    ...p.italic !== void 0 && { italic: p.italic },
+    ...p.underline !== void 0 && { underline: p.underline },
+    ...p.size !== void 0 && { size: p.size },
+    ...p.font !== void 0 && { font: p.font },
+    ...p.color !== void 0 && { color: p.color }
+  }];
+  for (const run of runs)
+    el.appendChild(buildRun(doc, run));
+  return el;
+};
+var setShapeText = (shape, text, append = false) => {
+  const doc = shape.ownerDocument;
+  const txBody = firstElement(shape, "p:txBody");
+  if (txBody === null)
+    return;
+  if (!append)
+    for (const p of elements(txBody, "a:p"))
+      txBody.removeChild(p);
+  for (const paragraph of toParagraphs(text))
+    txBody.appendChild(buildParagraph(doc, paragraph));
+};
+
+// src/engine/inplace/slides.ts
+var REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+var UNREFERENCED_RELS = ["/slideLayout", "/notesSlide", "/diagramDrawing", ...IMPLICIT_RELS];
+var isPlaceholder = (idx) => (shape) => {
+  const ph = firstElement(shape, "p:ph");
+  return ph !== null && Number(ph.getAttribute("idx") ?? "0") === idx;
+};
+var isTopLevel = (shape) => shape.parentNode?.nodeName === "p:spTree";
+var shapeOf = (cNvPr) => cNvPr.parentNode?.parentNode;
+var findShape = (slide, name, pick2) => elements(slide, "p:cNvPr").map(shapeOf).find((shape) => firstElement(shape, "p:cNvPr")?.getAttribute("name") === name && pick2(shape)) ?? null;
+var relIdsOf = (scope) => {
+  const ids = [];
+  const walk = (el) => {
+    for (let i = 0; i < el.attributes.length; i++) {
+      const attr = el.attributes.item(i);
+      if (attr !== null && attr.namespaceURI === NS_R)
+        ids.push(attr.value);
+    }
+    for (let n = el.firstChild; n !== null; n = n.nextSibling)
+      if (n.nodeType === 1)
+        walk(n);
+  };
+  walk(scope);
+  return ids;
+};
+var removeShape = (shape) => {
+  let doomed = shape;
+  for (let up = shape.parentNode; up !== null && up.nodeName !== "p:spTree"; up = up.parentNode)
+    if (up.nodeName === "mc:AlternateContent")
+      doomed = up;
+  doomed.parentNode?.removeChild(doomed);
+};
+var setSlideVisibility = (slide, hidden) => {
+  const root = slide.documentElement;
+  if (root === null)
+    return;
+  if (hidden)
+    root.setAttribute("show", "0");
+  else if (root.hasAttribute("show"))
+    root.removeAttribute("show");
+};
+var setBackground = (slide, color) => {
+  const cSld = firstElement(slide, "p:cSld");
+  if (cSld === null)
+    return;
+  const old = firstElement(slide, "p:bg");
+  if (old !== null)
+    cSld.removeChild(old);
+  const bg = slide.createElementNS(NS_P, "p:bg");
+  const bgPr = slide.createElementNS(NS_P, "p:bgPr");
+  const fill = slide.createElementNS(NS_A, "a:solidFill");
+  const clr = slide.createElementNS(NS_A, "a:srgbClr");
+  clr.setAttribute("val", color);
+  fill.appendChild(clr);
+  bgPr.appendChild(fill);
+  bgPr.appendChild(slide.createElementNS(NS_A, "a:effectLst"));
+  bg.appendChild(bgPr);
+  cSld.insertBefore(bg, cSld.firstChild);
+};
+var setFooter = (slide, layout, text, nextId) => {
+  const spTree = firstElement(slide, "p:spTree");
+  if (spTree === null)
+    return;
+  for (const sp of elements(slide, "p:sp"))
+    if (firstElement(sp, "p:ph")?.getAttribute("type") === "ftr")
+      sp.parentNode?.removeChild(sp);
+  const ftr = layout === null ? void 0 : elements(layout, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === "ftr");
+  if (ftr === void 0)
+    return;
+  const clone2 = slide.importNode(ftr, true);
+  firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(nextId()));
+  const txBody = firstElement(clone2, "p:txBody");
+  if (txBody !== null) {
+    for (const p2 of elements(txBody, "a:p"))
+      txBody.removeChild(p2);
+    const p = slide.createElementNS(NS_A, "a:p");
+    const r = slide.createElementNS(NS_A, "a:r");
+    const t = slide.createElementNS(NS_A, "a:t");
+    t.appendChild(slide.createTextNode(text));
+    r.appendChild(t);
+    p.appendChild(r);
+    txBody.appendChild(p);
+  }
+  spTree.appendChild(clone2);
+};
+var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
+  const sp = elements(slide, "p:sp").find((s) => {
+    const ph2 = firstElement(s, "p:ph");
+    return ph2 !== null && ph2.getAttribute("type") === "pic" && Number(ph2.getAttribute("idx") ?? "0") === phIdx;
+  });
+  if (sp === void 0)
+    return false;
+  const cNvPr = firstElement(sp, "p:cNvPr");
+  const ph = firstElement(sp, "p:ph");
+  const xfrm = frame === void 0 ? firstElement(sp, "a:xfrm") : null;
+  const pic = slide.createElementNS(NS_P, "p:pic");
+  const nvPicPr = slide.createElementNS(NS_P, "p:nvPicPr");
+  const newCNvPr = slide.createElementNS(NS_P, "p:cNvPr");
+  newCNvPr.setAttribute("id", cNvPr?.getAttribute("id") ?? "99");
+  newCNvPr.setAttribute("name", cNvPr?.getAttribute("name") ?? `Picture ${phIdx}`);
+  const cNvPicPr = slide.createElementNS(NS_P, "p:cNvPicPr");
+  const picLocks = slide.createElementNS(NS_A, "a:picLocks");
+  picLocks.setAttribute("noChangeAspect", "1");
+  cNvPicPr.appendChild(picLocks);
+  const nvPr = slide.createElementNS(NS_P, "p:nvPr");
+  nvPr.appendChild(slide.importNode(ph, true));
+  nvPicPr.appendChild(newCNvPr);
+  nvPicPr.appendChild(cNvPicPr);
+  nvPicPr.appendChild(nvPr);
+  pic.appendChild(nvPicPr);
+  const blipFill = slide.createElementNS(NS_P, "p:blipFill");
+  const blip = slide.createElementNS(NS_A, "a:blip");
+  blip.setAttributeNS(NS_R, "r:embed", rid);
+  const stretch = slide.createElementNS(NS_A, "a:stretch");
+  stretch.appendChild(slide.createElementNS(NS_A, "a:fillRect"));
+  blipFill.appendChild(blip);
+  blipFill.appendChild(stretch);
+  pic.appendChild(blipFill);
+  const spPr = slide.createElementNS(NS_P, "p:spPr");
+  if (frame !== void 0) {
+    const xf = slide.createElementNS(NS_A, "a:xfrm");
+    const off = slide.createElementNS(NS_A, "a:off");
+    off.setAttribute("x", String(inchToEmu(frame.x)));
+    off.setAttribute("y", String(inchToEmu(frame.y)));
+    const ext = slide.createElementNS(NS_A, "a:ext");
+    ext.setAttribute("cx", String(inchToEmu(frame.w)));
+    ext.setAttribute("cy", String(inchToEmu(frame.h)));
+    xf.appendChild(off);
+    xf.appendChild(ext);
+    spPr.appendChild(xf);
+  } else if (xfrm !== null)
+    spPr.appendChild(slide.importNode(xfrm, true));
+  pic.appendChild(spPr);
+  sp.parentNode?.replaceChild(pic, sp);
+  return true;
+};
+var xmlEscape2 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var setNotes = async (pkg, slidePart, slideRels, text, notesMaster) => {
+  const notesPart = pkg.alloc.part("ppt/notesSlides", "notesSlide", ".xml");
+  const paras = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape2(line)}</a:t></a:r></a:p>`).join("");
+  pkg.write(
+    notesPart,
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Notes Placeholder"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`
+  );
+  pkg.write(
+    relsPartOf(notesPart),
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${path9.posix.relative("ppt/notesSlides", notesMaster)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path9.posix.basename(slidePart)}"/></Relationships>`
+  );
+  await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml");
+  for (const rel of elements(slideRels, "Relationship"))
+    if ((rel.getAttribute("Type") ?? "").endsWith("/notesSlide"))
+      rel.parentNode?.removeChild(rel);
+  pkg.addRel(slideRels, `${REL}/notesSlide`, `../notesSlides/${path9.posix.basename(notesPart)}`);
+};
+var unshareNotes = async (pkg, slidePart, slideRels) => {
+  const rel = elements(slideRels, "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"));
+  const notesPart = rel === void 0 ? null : Package.targets(slidePart, slideRels).find((t) => t.rel === rel)?.target ?? null;
+  if (rel === void 0 || notesPart === null || !pkg.has(notesPart))
+    return;
+  const notesXml = await pkg.text(notesPart);
+  const backref = Package.targets(notesPart, await pkg.rels(notesPart)).find((t) => t.type.endsWith("/slide") && !notesXml.includes(`"${t.rel.getAttribute("Id") ?? ""}"`))?.target ?? slidePart;
+  const copy = await pkg.clonePart(pkg, notesPart, /* @__PURE__ */ new Map([[backref, slidePart]]));
+  rel.setAttribute("Target", `../notesSlides/${path9.posix.basename(copy)}`);
+};
+var wireHyperlinks = (pkg, slide, slideRels) => {
+  for (const hlink of elements(slide, "a:hlinkClick")) {
+    const url2 = hlink.getAttribute(HLINK_ATTR);
+    if (url2 === null)
+      continue;
+    const rid = pkg.addRel(slideRels, `${REL}/hyperlink`, url2, true);
+    hlink.removeAttribute(HLINK_ATTR);
+    hlink.setAttributeNS(NS_R, "r:id", rid);
+  }
+};
+var dropLinksToRemoved = (owner, doc, rels, removed) => {
+  let changed = false;
+  for (const { rel, type, target } of Package.targets(owner, rels)) {
+    if (!/\/relationships\/slide$/.test(type) || target === null || !removed.has(target))
+      continue;
+    const id = rel.getAttribute("Id") ?? "";
+    rel.parentNode?.removeChild(rel);
+    changed = true;
+    if (doc !== null) {
+      for (const tag2 of ["a:hlinkClick", "a:hlinkHover", "p:sld"])
+        for (const el of elements(doc, tag2))
+          if (el.getAttribute("r:id") === id)
+            el.parentNode?.removeChild(el);
+    }
+  }
+  return changed;
+};
+var uniquifyShapeIds = (slide) => {
+  const nextId = PartAllocator.shapeIds(slide);
+  const seen = /* @__PURE__ */ new Set();
+  for (const el of elements(slide, "p:cNvPr")) {
+    const id = el.getAttribute("id") ?? "0";
+    if (seen.has(id))
+      el.setAttribute("id", String(nextId()));
+    else
+      seen.add(id);
+  }
+};
+var repairRels = (pkg, part, slide, rels, unused) => {
+  const xml = serializeXml(slide);
+  const seen = /* @__PURE__ */ new Set();
+  for (const { rel, type, target } of Package.targets(part, rels)) {
+    const id = rel.getAttribute("Id") ?? "";
+    const dead = target !== null && !pkg.has(target);
+    const stale = unused.has(id) && !UNREFERENCED_RELS.some((k) => type.endsWith(k)) && !xml.includes(`"${id}"`);
+    if (seen.has(id) || dead || stale)
+      rel.parentNode?.removeChild(rel);
+    seen.add(id);
+  }
+};
+var createSlide = async (pkg, layoutPart) => {
+  const part = pkg.alloc.part("ppt/slides", "slide", ".xml");
+  pkg.write(part, slideFromLayout(await pkg.text(layoutPart)));
+  const rels = parseXml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>');
+  pkg.addRel(rels, `${REL}/slideLayout`, path9.posix.relative("ppt/slides", layoutPart));
+  pkg.writeRels(part, rels);
+  await pkg.typeAs(part, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml");
+  return part;
+};
+var editSlide = async (pkg, work) => {
+  const { part, entry } = work;
+  const slide = await pkg.xml(part);
+  const rels = await pkg.rels(part);
+  const missing = (what) => new PptcError("E_ADDR_NOTFOUND", `slide ${part}: no ${what}`);
+  const need = (shape, what) => {
+    if (shape === null)
+      throw missing(what);
+    return shape;
+  };
+  const fills = entry.fills.filter((f) => f.text !== void 0).map((f) => ({
+    fill: f,
+    shape: need(findShape(slide, f.phName, isPlaceholder(f.phIdx)), `placeholder '${f.phName}'`)
+  }));
+  const texts = entry.setTexts.map((t) => ({
+    text: t.text,
+    shape: need(findShape(slide, t.name, isTopLevel), `element '${t.name}'`)
+  }));
+  const doomed = /* @__PURE__ */ new Set();
+  for (const name of entry.removeNames) {
+    const shape = elements(slide, "p:cNvPr").map(shapeOf).find((s) => !doomed.has(s) && isTopLevel(s) && firstElement(s, "p:cNvPr")?.getAttribute("name") === name);
+    if (shape !== void 0)
+      doomed.add(shape);
+  }
+  const unused = /* @__PURE__ */ new Set();
+  for (const shape of [...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape), ...texts.map((t) => t.shape)])
+    for (const id of relIdsOf(shape))
+      unused.add(id);
+  for (const shape of doomed)
+    removeShape(shape);
+  for (const { fill, shape } of fills)
+    setShapeText(shape, fill.text, fill.append);
+  for (const { text, shape } of texts)
+    setShapeText(shape, text);
+  for (const fill of entry.fills.filter((f) => f.image !== void 0)) {
+    const file2 = fill.image;
+    const ext = path9.extname(file2).slice(1).toLowerCase() || "png";
+    const media = pkg.alloc.part("ppt/media", "image", `.${ext}`);
+    pkg.write(media, readFileSync5(file2));
+    await pkg.typePart(media, "", media);
+    const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path9.posix.basename(media)}`);
+    if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame))
+      throw missing(`empty picture placeholder idx ${fill.phIdx}`);
+  }
+  if (entry.background !== null)
+    setBackground(slide, entry.background);
+  if (entry.footer !== null) {
+    const layout = Package.targets(part, rels).find((t) => t.type.endsWith("/slideLayout"))?.target ?? null;
+    setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide));
+  }
+  if (entry.notes !== null)
+    await setNotes(pkg, part, rels, entry.notes, work.notesMaster);
+  else if (work.sharedNotes)
+    await unshareNotes(pkg, part, rels);
+  if (work.generated !== null)
+    await work.generated.transplant(pkg, entry, slide, rels, part);
+  wireHyperlinks(pkg, slide, rels);
+  setSlideVisibility(slide, entry.hidden);
+  dropLinksToRemoved(part, slide, rels, work.removed);
+  uniquifyShapeIds(slide);
+  repairRels(pkg, part, slide, rels, unused);
+  pkg.write(part, slide);
+  pkg.writeRels(part, rels);
+};
+
+// src/engine/inplace/transplant.ts
+var import_pptxgenjs = __toESM(require_pptxgen_cjs(), 1);
+import { randomUUID } from "node:crypto";
+import path10 from "node:path";
 
 // src/engine/elements.ts
 var chartType = (gen, type) => {
@@ -60409,1462 +45221,94 @@ var addElement = (slide, gen, el) => {
   }
 };
 
-// src/engine/post.ts
-var import_jszip3 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync3 } from "node:fs";
-import path5 from "node:path";
-
-// src/engine/text.ts
-var HLINK_ATTR = "pptc-hlink";
-var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
-var buildRunProps = (doc, run) => {
-  const hasProps = run.bold !== void 0 || run.italic !== void 0 || run.underline !== void 0 || run.size !== void 0 || run.font !== void 0 || run.color !== void 0 || run.hyperlink !== void 0;
-  if (!hasProps)
-    return null;
-  const rPr = doc.createElementNS(NS_A, "a:rPr");
-  if (run.bold !== void 0)
-    rPr.setAttribute("b", run.bold ? "1" : "0");
-  if (run.italic !== void 0)
-    rPr.setAttribute("i", run.italic ? "1" : "0");
-  if (run.underline === true)
-    rPr.setAttribute("u", "sng");
-  if (run.size !== void 0)
-    rPr.setAttribute("sz", String(Math.round(run.size * 100)));
-  if (run.color !== void 0) {
-    const fill = doc.createElementNS(NS_A, "a:solidFill");
-    const clr = doc.createElementNS(NS_A, "a:srgbClr");
-    clr.setAttribute("val", run.color);
-    fill.appendChild(clr);
-    rPr.appendChild(fill);
-  }
-  if (run.font !== void 0) {
-    const latin = doc.createElementNS(NS_A, "a:latin");
-    latin.setAttribute("typeface", run.font);
-    rPr.appendChild(latin);
-  }
-  if (run.hyperlink !== void 0) {
-    const hlink = doc.createElementNS(NS_A, "a:hlinkClick");
-    hlink.setAttribute(HLINK_ATTR, run.hyperlink);
-    rPr.appendChild(hlink);
-  }
-  return rPr;
-};
-var buildRun = (doc, run) => {
-  const r = doc.createElementNS(NS_A, "a:r");
-  const rPr = buildRunProps(doc, run);
-  if (rPr !== null)
-    r.appendChild(rPr);
-  const t = doc.createElementNS(NS_A, "a:t");
-  t.appendChild(doc.createTextNode(run.text));
-  r.appendChild(t);
-  return r;
-};
-var buildParagraph = (doc, p) => {
-  const el = doc.createElementNS(NS_A, "a:p");
-  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false;
-  if (needsPPr) {
-    const pPr = doc.createElementNS(NS_A, "a:pPr");
-    if (p.level !== void 0)
-      pPr.setAttribute("lvl", String(p.level));
-    if (p.alignment !== void 0)
-      pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment]);
-    if (p.bullet === false)
-      pPr.appendChild(doc.createElementNS(NS_A, "a:buNone"));
-    el.appendChild(pPr);
-  }
-  const runs = p.runs ?? [{
-    text: p.text ?? "",
-    ...p.bold !== void 0 && { bold: p.bold },
-    ...p.italic !== void 0 && { italic: p.italic },
-    ...p.underline !== void 0 && { underline: p.underline },
-    ...p.size !== void 0 && { size: p.size },
-    ...p.font !== void 0 && { font: p.font },
-    ...p.color !== void 0 && { color: p.color }
-  }];
-  for (const run of runs)
-    el.appendChild(buildRun(doc, run));
-  return el;
-};
-var setShapeText = (shape, text, append = false) => {
-  const doc = shape.ownerDocument;
-  const txBody = firstElement(shape, "p:txBody");
-  if (txBody === null)
-    return;
-  if (!append)
-    for (const p of elements(txBody, "a:p"))
-      txBody.removeChild(p);
-  for (const paragraph of toParagraphs(text))
-    txBody.appendChild(buildParagraph(doc, paragraph));
-};
-
-// src/engine/guard.ts
-var import_jszip2 = __toESM(require_lib3(), 1);
-import path4 from "node:path";
-import { createHash as createHash2 } from "node:crypto";
-var SKIP_RELS = ["/slideLayout", "/notesSlide", "/hyperlink", "/slide"];
-var IMPLICIT_RELS = ["/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo"];
-var canonText = async (zip, part) => {
-  const text = await zip.file(part)?.async("string");
-  if (text === void 0)
-    return null;
-  try {
-    return serializeXml(parseXml(text.replace(/^\uFEFF/, "")));
-  } catch {
-    return text;
-  }
-};
-var digestBytes = (bytes) => createHash2("sha1").update(bytes).digest("hex").slice(0, 12);
-var digest = async (zip, part) => {
-  const file2 = zip.file(part);
-  if (file2 === null)
-    return "missing";
-  const bytes = await file2.async("nodebuffer");
-  let data = bytes;
-  if (/\.(xml|rels)$/.test(part)) {
-    let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "");
-    try {
-      const doc = parseXml(xml);
-      for (const tag2 of ["a:hlinkClick", "a:hlinkHover"])
-        for (const el of elements(doc, tag2))
-          if ((el.getAttribute("action") ?? "").includes("hlinksldjump"))
-            el.parentNode?.removeChild(el);
-      xml = serializeXml(doc);
-    } catch {
-    }
-    data = xml.replace(/>\s+</g, "><").replace(/\br:(id|embed|link|pict|dm|lo|qs|cs)="[^"]*"/g, 'r:$1=""').replace(/\brelId="[^"]*"/g, 'relId=""').replace(/(<p:sldLayoutId\b[^>]*?\bid=")\d+"/g, '$1"');
-  }
-  return createHash2("sha1").update(data).digest("hex").slice(0, 12);
-};
-var relatedDigests = async (zip, part, xml, depth) => {
-  const relsPart = `${path4.posix.dirname(part)}/_rels/${path4.posix.basename(part)}.rels`;
-  const rels = await canonText(zip, relsPart);
-  if (rels === null)
-    return [];
-  const out = [];
-  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-    const rel = m[0];
-    const type = /Type="([^"]+)"/.exec(rel)?.[1] ?? "";
-    if (SKIP_RELS.some((k) => type.endsWith(k)))
-      continue;
-    const id = /Id="([^"]+)"/.exec(rel)?.[1] ?? "";
-    if (xml !== null && !xml.includes(`"${id}"`) && !IMPLICIT_RELS.some((k) => type.endsWith(k)) && !type.endsWith("/diagramDrawing"))
-      continue;
-    if (rel.includes('TargetMode="External"')) {
-      out.push(`${type.slice(type.lastIndexOf("/") + 1)}:ext:${/Target="([^"]+)"/.exec(rel)?.[1] ?? ""}`);
-      continue;
-    }
-    const target = path4.posix.normalize(path4.posix.join(path4.posix.dirname(part), /Target="([^"]+)"/.exec(rel)?.[1] ?? ""));
-    let hash2 = await digest(zip, target);
-    if (depth > 0)
-      hash2 += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`;
-    out.push(`${type.slice(type.lastIndexOf("/") + 1)}:${hash2}`);
-  }
-  return out.sort();
-};
-var notesText = async (zip, slidePart) => {
-  const rels = await canonText(zip, `ppt/slides/_rels/${path4.posix.basename(slidePart)}.rels`) ?? "";
-  const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => m[0]).find((r) => /Type="[^"]*\/notesSlide"/.test(r));
-  if (rel === void 0)
-    return null;
-  const part = path4.posix.normalize(path4.posix.join("ppt/slides", /Target="([^"]+)"/.exec(rel)?.[1] ?? ""));
-  const xml = await canonText(zip, part);
-  return xml === null ? null : [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("\n");
-};
-var slidePrint = async (zip, slidePart) => {
-  const xml = await canonText(zip, slidePart) ?? "";
-  return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1) };
-};
-var slideParts = async (zip) => {
-  const pres = await canonText(zip, "ppt/presentation.xml") ?? "";
-  const rels = await canonText(zip, "ppt/_rels/presentation.xml.rels") ?? "";
-  const target = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
-  return [...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => path4.posix.normalize(path4.posix.join("ppt", target.get(m[1]) ?? "")));
-};
-var minus = (a, b) => {
-  const rest = [...a];
-  for (const x of b) {
-    const i = rest.indexOf(x);
-    if (i >= 0)
-      rest.splice(i, 1);
-  }
-  return rest;
-};
-var parseEntry = (entry) => {
-  const i = entry.indexOf("[");
-  return { base: entry.slice(0, i), children: entry.slice(i + 1, -1).split(",").filter((c) => c !== "") };
-};
-var verifyContent = async (before, after, expects) => {
-  const blocked = [];
-  const lost = [];
-  const outParts = await slideParts(after);
-  for (const [i, exp] of expects.entries()) {
-    const outPart = outParts[i];
-    if (exp.source === null || outPart === void 0)
-      continue;
-    const was = await slidePrint(before, exp.source);
-    const now = await slidePrint(after, outPart);
-    if (!exp.notes && was.notes !== now.notes) {
-      if (now.notes === null || now.notes === "")
-        lost.push({ slide: i, what: "speaker notes" });
-      else
-        blocked.push(`slide ${exp.label}: speaker notes would change although no op set them`);
-    }
-    if (exp.assets === "any")
-      continue;
-    const gone = minus(was.assets, now.assets);
-    const added = minus(now.assets, was.assets);
-    if (exp.assets === "grow" && exp.grow !== void 0) {
-      const images = [...exp.grow.images];
-      let fallbacks = exp.grow.fallbacks;
-      let charts = exp.grow.charts;
-      for (let j = added.length - 1; j >= 0; j--) {
-        const entry = added[j];
-        const planned = images.indexOf(entry.replace(/^image:([0-9a-f]+)\[\]$/, "$1"));
-        if (entry.startsWith("image:") && planned >= 0)
-          images.splice(planned, 1);
-        else if (entry.startsWith("image:") && fallbacks > 0)
-          fallbacks--;
-        else if (entry.startsWith("chart:") && charts > 0)
-          charts--;
-        else
-          continue;
-        added.splice(j, 1);
-      }
-    }
-    for (const entry of added) {
-      const a = parseEntry(entry);
-      const k = gone.findIndex((g2) => parseEntry(g2).base === a.base && minus(a.children, parseEntry(g2).children).length === 0);
-      if (k < 0) {
-        blocked.push(`slide ${exp.label}: images, charts or embedded objects would change although no op touched them (${was.assets.join(" ")} -> ${now.assets.join(" ")})`);
-        break;
-      }
-      const g = parseEntry(gone[k]);
-      for (const child of minus(g.children, a.children))
-        lost.push({ slide: i, what: `${child.slice(0, child.indexOf(":"))} inside ${a.base.slice(0, a.base.indexOf(":"))}` });
-      gone.splice(k, 1);
-    }
-    for (const entry of gone) {
-      const type = entry.slice(0, entry.indexOf(":"));
-      if (!(exp.textReplaced === true && type === "image"))
-        lost.push({ slide: i, what: type });
-    }
-  }
-  for (const part of Object.keys(before.files).filter((f) => /^ppt\/(slideLayouts|slideMasters|theme)\/[^/]+\.xml$/.test(f) && after.file(f) !== null)) {
-    const xmlBefore = await canonText(before, part) ?? "";
-    const xmlAfter = await canonText(after, part) ?? "";
-    const was = `${await digest(before, part)} ${(await relatedDigests(before, part, xmlBefore, 1)).join(" ")}`;
-    const now = `${await digest(after, part)} ${(await relatedDigests(after, part, xmlAfter, 1)).join(" ")}`;
-    if (was !== now)
-      blocked.push(`${part}: layout/master content would change`);
-  }
-  return { blocked, lost };
-};
-
-// src/engine/post.ts
-var referencedSlides = async (zip) => {
-  const pres = parseXml(await partText(zip, "ppt/presentation.xml"));
-  const rels = parseXml(await partText(zip, "ppt/_rels/presentation.xml.rels"));
-  const relMap = new Map(elements(rels, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
-  return elements(pres, "p:sldId").map((s) => path5.posix.normalize(path5.posix.join("ppt", relMap.get(s.getAttribute("r:id") ?? "") ?? "")));
-};
-var removeParts = async (zip, parts) => {
-  if (parts.length === 0)
-    return;
-  let ct = await partText(zip, "[Content_Types].xml");
-  for (const part of parts) {
-    zip.remove(part);
-    zip.remove(`${path5.posix.dirname(part)}/_rels/${path5.posix.basename(part)}.rels`);
-    ct = ct.replace(new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "");
-  }
-  zip.file("[Content_Types].xml", ct);
-};
-var isBackref = (rel, notesXml) => (rel.getAttribute("Type") ?? "").endsWith("/slide") && !notesXml.includes(`"${rel.getAttribute("Id") ?? ""}"`);
-var gcParts = async (zip, kept) => {
-  const keptSet = new Set(kept);
-  const orphanSlides = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f) && !keptSet.has(f));
-  await removeParts(zip, orphanSlides);
-  const referencedNotes = /* @__PURE__ */ new Set();
-  for (const slide of kept) {
-    const relsPart = `ppt/slides/_rels/${path5.posix.basename(slide)}.rels`;
-    const relsText = await zip.file(relsPart)?.async("string");
-    if (relsText === void 0)
-      continue;
-    for (const rel of elements(parseXml(relsText), "Relationship"))
-      if ((rel.getAttribute("Type") ?? "").endsWith("/notesSlide")) {
-        const notesPart = path5.posix.normalize(
-          path5.posix.join("ppt/slides", rel.getAttribute("Target") ?? "")
-        );
-        referencedNotes.add(notesPart);
-        const noteRelsPart = `ppt/notesSlides/_rels/${path5.posix.basename(notesPart)}.rels`;
-        const noteRelsText = await zip.file(noteRelsPart)?.async("string");
-        if (noteRelsText === void 0)
-          continue;
-        const noteRels = parseXml(noteRelsText);
-        const notesXml = await zip.file(notesPart)?.async("string") ?? "";
-        for (const back of elements(noteRels, "Relationship"))
-          if (isBackref(back, notesXml))
-            back.setAttribute("Target", `../slides/${path5.posix.basename(slide)}`);
-        zip.file(noteRelsPart, serializeXml(noteRels));
-      }
-  }
-  const orphanNotes = Object.keys(zip.files).filter((f) => /^ppt\/notesSlides\/notesSlide[^/]*\.xml$/.test(f) && !referencedNotes.has(f));
-  await removeParts(zip, orphanNotes);
-  const presRelsPart = "ppt/_rels/presentation.xml.rels";
-  const presRels = parseXml(await partText(zip, presRelsPart));
-  const pres = parseXml(await partText(zip, "ppt/presentation.xml"));
-  const liveSlideRids = new Set(elements(pres, "p:sldId").map((s) => s.getAttribute("r:id") ?? ""));
-  let pruned = false;
-  for (const rel of elements(presRels, "Relationship")) {
-    if (rel.getAttribute("TargetMode") === "External")
-      continue;
-    const target = path5.posix.normalize(path5.posix.join("ppt", rel.getAttribute("Target") ?? ""));
-    const isSlide = (rel.getAttribute("Type") ?? "").endsWith("/slide");
-    if (zip.file(target) === null || isSlide && !liveSlideRids.has(rel.getAttribute("Id") ?? "")) {
-      rel.parentNode?.removeChild(rel);
-      pruned = true;
-    }
-  }
-  if (pruned)
-    zip.file(presRelsPart, serializeXml(presRels));
-};
-var restoreSlideIds = async (zip, ids) => {
-  const part = "ppt/presentation.xml";
-  const pres = parseXml(await partText(zip, part));
-  const sldIds = elements(pres, "p:sldId");
-  if (sldIds.length !== ids.length)
-    throw new PptcError("E_ENGINE", `slide id restore: ${sldIds.length} slides, ${ids.length} planned`);
-  sldIds.forEach((s, i) => s.setAttribute("id", String(ids[i])));
-  zip.file(part, serializeXml(pres));
-};
-var syncSectionRefs = async (zip) => {
-  const part = "ppt/presentation.xml";
-  const xml = await partText(zip, part);
-  if (!xml.includes("<p14:sectionLst"))
-    return;
-  const pres = parseXml(xml);
-  const sections = elements(pres, "p14:section");
-  const lists = sections.map((sec) => firstElement(sec, "p14:sldIdLst"));
-  if (sections.length === 0 || lists.some((l) => l === null))
-    return;
-  const sectionOf = /* @__PURE__ */ new Map();
-  const oldPos = /* @__PURE__ */ new Map();
-  sections.forEach((sec, k) => {
-    for (const ref of elements(sec, "p14:sldId")) {
-      const id = ref.getAttribute("id") ?? "";
-      if (!sectionOf.has(id)) {
-        sectionOf.set(id, k);
-        oldPos.set(id, oldPos.size);
-      }
-    }
-  });
-  const order = elements(pres, "p:sldId").map((s) => s.getAttribute("id") ?? "");
-  const kept = order.filter((id) => oldPos.has(id));
-  const len = kept.map(() => 1);
-  const prev = kept.map(() => -1);
-  for (let i = 0; i < kept.length; i++)
-    for (let j = 0; j < i; j++)
-      if (oldPos.get(kept[j]) < oldPos.get(kept[i]) && len[j] + 1 > len[i]) {
-        len[i] = len[j] + 1;
-        prev[i] = j;
-      }
-  const stable = /* @__PURE__ */ new Set();
-  for (let i = len.indexOf(Math.max(0, ...len)); i >= 0; i = prev[i])
-    stable.add(kept[i]);
-  const members2 = sections.map(() => []);
-  let current = 0;
-  for (const id of order) {
-    if (stable.has(id))
-      current = sectionOf.get(id);
-    members2[current]?.push(id);
-  }
-  for (const [k, list] of lists.entries()) {
-    const l = list;
-    for (const ref of elements(l, "p14:sldId"))
-      l.removeChild(ref);
-    for (const id of members2[k]) {
-      const ref = pres.createElementNS(l.namespaceURI, "p14:sldId");
-      ref.setAttribute("id", id);
-      l.appendChild(ref);
-    }
-  }
-  zip.file(part, serializeXml(pres));
-};
-var STRUCTURAL_RELS = ["/slideLayout", "/notesSlide", ...IMPLICIT_RELS];
-var pruneUnusedSlideRels = (slide, slideRels, keep = /* @__PURE__ */ new Set()) => {
-  const xml = serializeXml(slide);
-  let changed = false;
-  const seen = /* @__PURE__ */ new Set();
-  for (const rel of elements(slideRels, "Relationship")) {
-    const id = rel.getAttribute("Id") ?? "";
-    if (seen.has(id)) {
-      rel.parentNode?.removeChild(rel);
-      changed = true;
-      continue;
-    }
-    seen.add(id);
-    const type = rel.getAttribute("Type") ?? "";
-    if (STRUCTURAL_RELS.some((k) => type.endsWith(k)) || keep.has(id))
-      continue;
-    if (!xml.includes(`"${id}"`)) {
-      rel.parentNode?.removeChild(rel);
-      changed = true;
-    }
-  }
-  return changed;
-};
-var remapSlideLinks = (owner, doc, rels, partMap, usedOnly = false) => {
-  let changed = false;
-  const xml = usedOnly && doc !== null ? serializeXml(doc) : "";
-  for (const rel of elements(rels, "Relationship")) {
-    if (!/\/relationships\/slide$/.test(rel.getAttribute("Type") ?? "") || rel.getAttribute("TargetMode") === "External")
-      continue;
-    if (usedOnly && !xml.includes(`"${rel.getAttribute("Id") ?? ""}"`))
-      continue;
-    const target = rel.getAttribute("Target") ?? "";
-    const input2 = path5.posix.normalize(path5.posix.join(path5.posix.dirname(owner), target));
-    const output2 = partMap.get(input2);
-    if (output2 !== void 0) {
-      const rewired = path5.posix.relative(path5.posix.dirname(owner), output2);
-      if (rewired !== target) {
-        rel.setAttribute("Target", rewired);
-        changed = true;
-      }
-      continue;
-    }
-    const id = rel.getAttribute("Id") ?? "";
-    rel.parentNode?.removeChild(rel);
-    changed = true;
-    if (doc !== null) {
-      for (const tag2 of ["a:hlinkClick", "a:hlinkHover", "p:sld"])
-        for (const el of elements(doc, tag2))
-          if (el.getAttribute("r:id") === id)
-            el.parentNode?.removeChild(el);
-    }
-  }
-  return changed;
-};
-var remapCustomShows = async (zip, inputRidToId) => {
-  const part = "ppt/presentation.xml";
-  const xml = await partText(zip, part);
-  if (!xml.includes("<p:custShow"))
-    return;
-  const pres = parseXml(xml);
-  const ridOf = new Map(elements(pres, "p:sldId").map((s) => [s.getAttribute("id") ?? "", s.getAttribute("r:id") ?? ""]));
-  for (const show of elements(pres, "p:custShow"))
-    for (const sld of elements(show, "p:sld")) {
-      const id = inputRidToId[sld.getAttribute("r:id") ?? ""];
-      const rid = id === void 0 ? void 0 : ridOf.get(String(id));
-      if (rid === void 0)
-        sld.parentNode?.removeChild(sld);
-      else
-        sld.setAttribute("r:id", rid);
-    }
-  zip.file(part, serializeXml(pres));
-};
-var removeShapes = (slide, removals) => {
-  const doomed = removals.map((r) => elements(slide, "p:cNvPr").filter((el) => el.getAttribute("name") === r.name)[r.nth]);
-  for (const cNvPr of doomed) {
-    if (cNvPr === void 0)
-      continue;
-    let shape = cNvPr.parentNode?.parentNode;
-    for (let up = shape?.parentNode; up !== null && up.nodeName !== "p:spTree"; up = up.parentNode)
-      if (up.nodeName === "mc:AlternateContent")
-        shape = up;
-    shape?.parentNode?.removeChild(shape);
-  }
-};
-var wireDiagrams = async (zip, slide, slideRels, sources) => {
-  const keep = /* @__PURE__ */ new Set();
-  const rels = elements(slideRels, "Relationship");
-  const targetOf = new Map(rels.map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
-  const unused = [...sources];
-  for (const relIds of elements(slide, "dgm:relIds")) {
-    const n = /data(\d+)\.xml$/.exec(targetOf.get(relIds.getAttribute("r:dm") ?? "") ?? "")?.[1];
-    if (n === void 0)
-      continue;
-    let frame = relIds;
-    while (frame !== null && frame.nodeName !== "p:graphicFrame")
-      frame = frame.parentNode;
-    const frameId = frame === null ? null : firstElement(frame, "p:cNvPr")?.getAttribute("id") ?? null;
-    const k = unused.findIndex((src2) => src2.frame === frameId);
-    const src = k < 0 ? void 0 : unused.splice(k, 1)[0];
-    const copy = async (from, to) => {
-      const file2 = zip.file(from);
-      if (file2 !== null && from !== to)
-        zip.file(to, await file2.async("uint8array"));
-    };
-    if (src !== void 0) {
-      await copy(`ppt/diagrams/_rels/${path5.posix.basename(src.data)}.rels`, `ppt/diagrams/_rels/data${n}.xml.rels`);
-      if (src.drawing !== null) {
-        await copy(src.drawing, `ppt/diagrams/drawing${n}.xml`);
-        await copy(`ppt/diagrams/_rels/${path5.posix.basename(src.drawing)}.rels`, `ppt/diagrams/_rels/drawing${n}.xml.rels`);
-      }
-    }
-    const drawingRel = rels.find((r) => (r.getAttribute("Type") ?? "").endsWith("/diagramDrawing") && r.getAttribute("Target") === `../diagrams/drawing${n}.xml`);
-    const dataPart = `ppt/diagrams/data${n}.xml`;
-    if (drawingRel !== void 0 && zip.file(`ppt/diagrams/drawing${n}.xml`) === null) {
-      drawingRel.parentNode?.removeChild(drawingRel);
-      continue;
-    }
-    if (drawingRel === void 0 || zip.file(dataPart) === null)
-      continue;
-    const id = drawingRel.getAttribute("Id") ?? "";
-    keep.add(id);
-    zip.file(dataPart, (await partText(zip, dataPart)).replace(/(<dsp:dataModelExt\b[^>]*?\brelId=")[^"]*"/, `$1${id}"`));
-  }
-  return keep;
-};
-var ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/;
-var normalizeEmbeddingNames = async (zip) => {
-  const renames = /* @__PURE__ */ new Map();
-  for (const part of Object.keys(zip.files).filter((f) => /^ppt\/embeddings\/[^/]*-created-[^/]*$/.test(f))) {
-    const ext = path5.posix.extname(part);
-    const base = path5.posix.basename(part, ext).replace(/-created-.*$/, "").replace(/\d+$/, "");
-    let n = 1;
-    while (zip.file(`ppt/embeddings/${base}${n}${ext}`) !== null)
-      n++;
-    const target = `ppt/embeddings/${base}${n}${ext}`;
-    zip.file(target, await zip.file(part).async("uint8array"));
-    zip.remove(part);
-    renames.set(path5.posix.basename(part), path5.posix.basename(target));
-  }
-  if (renames.size === 0)
-    return;
-  const swap = (xml) => xml.replace(
-    /((?:Target|PartName)="[^"]*\/embeddings\/)([^"]+)"/g,
-    (m, prefix, name) => renames.has(name) ? `${prefix}${renames.get(name)}"` : m
-  );
-  for (const part of Object.keys(zip.files).filter((f) => f.endsWith(".rels") || f === "[Content_Types].xml"))
-    zip.file(part, swap(await partText(zip, part)));
-};
-var gcAssets = async (zip) => {
-  const isAsset = (f) => ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/");
-  const assets = Object.keys(zip.files).filter(isAsset);
-  if (assets.length === 0)
-    return;
-  const live = /* @__PURE__ */ new Set();
-  const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(f.replace(/_rels\/([^/]+)\.rels$/, "$1")));
-  while (queue.length > 0) {
-    const relsPart = queue.pop();
-    const relsText = await zip.file(relsPart)?.async("string");
-    if (relsText === void 0)
-      continue;
-    const base = path5.posix.dirname(path5.posix.dirname(relsPart));
-    for (const rel of elements(parseXml(relsText), "Relationship")) {
-      if (rel.getAttribute("TargetMode") === "External")
-        continue;
-      const target = path5.posix.normalize(path5.posix.join(base, rel.getAttribute("Target") ?? ""));
-      if (isAsset(target) && !live.has(target)) {
-        live.add(target);
-        const tRels = `${path5.posix.dirname(target)}/_rels/${path5.posix.basename(target)}.rels`;
-        if (zip.file(tRels) !== null)
-          queue.push(tRels);
-      }
-    }
-  }
-  await removeParts(zip, assets.filter((a) => !live.has(a)));
-};
-var uniquifyShapeIds = (slide) => {
-  const all = elements(slide, "p:cNvPr");
-  let max = 0;
-  for (const el of all)
-    max = Math.max(max, Number(el.getAttribute("id") ?? "0"));
-  const seen = /* @__PURE__ */ new Set();
-  let changed = false;
-  for (const el of all) {
-    const id = Number(el.getAttribute("id") ?? "0");
-    if (seen.has(id)) {
-      el.setAttribute("id", String(++max));
-      changed = true;
-    } else
-      seen.add(id);
-  }
-  return changed;
-};
-var nextRid = (post) => `rIdPptc${post.rid++}`;
-var addRel = (rels, id, type, target, external = false) => {
-  const rel = rels.createElementNS(NS_REL, "Relationship");
-  rel.setAttribute("Id", id);
-  rel.setAttribute("Type", type);
-  rel.setAttribute("Target", target);
-  if (external)
-    rel.setAttribute("TargetMode", "External");
-  rels.documentElement?.appendChild(rel);
-};
-var setSlideVisibility = (slide, hidden) => {
-  const root = slide.documentElement;
-  if (root === null)
-    return false;
-  const current = root.getAttribute("show");
-  if (hidden) {
-    if (current === "0")
-      return false;
-    root.setAttribute("show", "0");
-    return true;
-  }
-  if (current === null || current === "")
-    return false;
-  root.removeAttribute("show");
-  return true;
-};
-var setBackground = (slide, color) => {
-  const cSld = firstElement(slide, "p:cSld");
-  if (cSld === null)
-    return;
-  const old = firstElement(slide, "p:bg");
-  if (old !== null)
-    cSld.removeChild(old);
-  const bg = slide.createElementNS(NS_P, "p:bg");
-  const bgPr = slide.createElementNS(NS_P, "p:bgPr");
-  const fill = slide.createElementNS(NS_A, "a:solidFill");
-  const clr = slide.createElementNS(NS_A, "a:srgbClr");
-  clr.setAttribute("val", color);
-  fill.appendChild(clr);
-  bgPr.appendChild(fill);
-  bgPr.appendChild(slide.createElementNS(NS_A, "a:effectLst"));
-  bg.appendChild(bgPr);
-  cSld.insertBefore(bg, cSld.firstChild);
-};
-var setFooter = async (zip, slidePart, slide, text) => {
-  const spTree = firstElement(slide, "p:spTree");
-  if (spTree === null)
-    return;
-  for (const sp of elements(slide, "p:sp")) {
-    const ph = firstElement(sp, "p:ph");
-    if (ph !== null && ph.getAttribute("type") === "ftr")
-      spTree.removeChild(sp);
-  }
-  const relsText = await partText(zip, `ppt/slides/_rels/${path5.posix.basename(slidePart)}.rels`);
-  const layoutTarget = elements(parseXml(relsText), "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/slideLayout"))?.getAttribute("Target");
-  if (layoutTarget === void 0 || layoutTarget === null)
-    return;
-  const layoutPart = path5.posix.normalize(path5.posix.join("ppt/slides", layoutTarget));
-  const layout = parseXml(await partText(zip, layoutPart));
-  const ftr = elements(layout, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === "ftr");
-  if (ftr === void 0)
-    return;
-  const clone2 = slide.importNode(ftr, true);
-  const ids = elements(slide, "p:cNvPr").map((c) => Number(c.getAttribute("id") ?? "0"));
-  firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(Math.max(0, ...ids) + 1));
-  const txBody = firstElement(clone2, "p:txBody");
-  if (txBody !== null) {
-    for (const p2 of elements(txBody, "a:p"))
-      txBody.removeChild(p2);
-    const p = slide.createElementNS(NS_A, "a:p");
-    const r = slide.createElementNS(NS_A, "a:r");
-    const t = slide.createElementNS(NS_A, "a:t");
-    t.appendChild(slide.createTextNode(text));
-    r.appendChild(t);
-    p.appendChild(r);
-    txBody.appendChild(p);
-  }
-  spTree.appendChild(clone2);
-};
-var IMAGE_TYPES = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  svg: "image/svg+xml",
-  webp: "image/webp",
-  bmp: "image/bmp",
-  tif: "image/tiff",
-  tiff: "image/tiff",
-  emf: "image/x-emf",
-  wmf: "image/x-wmf"
-};
-var ensureImageDefault = async (zip, ext) => {
-  const ct = await partText(zip, "[Content_Types].xml");
-  if (ct.includes(`Extension="${ext}"`))
-    return;
-  zip.file(
-    "[Content_Types].xml",
-    ct.replace("<Default", `<Default Extension="${ext}" ContentType="${IMAGE_TYPES[ext] ?? "image/png"}"/><Default`)
-  );
-};
-var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
-  const sp = elements(slide, "p:sp").find((s) => {
-    const ph2 = firstElement(s, "p:ph");
-    return ph2 !== null && ph2.getAttribute("type") === "pic" && Number(ph2.getAttribute("idx") ?? "0") === phIdx;
-  });
-  if (sp === void 0)
-    return false;
-  const cNvPr = firstElement(sp, "p:cNvPr");
-  const name = cNvPr?.getAttribute("name") ?? `Picture ${phIdx}`;
-  const id = cNvPr?.getAttribute("id") ?? "99";
-  const ph = firstElement(sp, "p:ph");
-  const xfrm = frame === void 0 ? firstElement(sp, "a:xfrm") : null;
-  const pic = slide.createElementNS(NS_P, "p:pic");
-  const nvPicPr = slide.createElementNS(NS_P, "p:nvPicPr");
-  const newCNvPr = slide.createElementNS(NS_P, "p:cNvPr");
-  newCNvPr.setAttribute("id", id);
-  newCNvPr.setAttribute("name", name);
-  const cNvPicPr = slide.createElementNS(NS_P, "p:cNvPicPr");
-  const picLocks = slide.createElementNS(NS_A, "a:picLocks");
-  picLocks.setAttribute("noChangeAspect", "1");
-  cNvPicPr.appendChild(picLocks);
-  const nvPr = slide.createElementNS(NS_P, "p:nvPr");
-  nvPr.appendChild(slide.importNode(ph, true));
-  nvPicPr.appendChild(newCNvPr);
-  nvPicPr.appendChild(cNvPicPr);
-  nvPicPr.appendChild(nvPr);
-  pic.appendChild(nvPicPr);
-  const blipFill = slide.createElementNS(NS_P, "p:blipFill");
-  const blip = slide.createElementNS(NS_A, "a:blip");
-  blip.setAttributeNS(NS_R, "r:embed", rid);
-  const stretch = slide.createElementNS(NS_A, "a:stretch");
-  stretch.appendChild(slide.createElementNS(NS_A, "a:fillRect"));
-  blipFill.appendChild(blip);
-  blipFill.appendChild(stretch);
-  pic.appendChild(blipFill);
-  const spPr = slide.createElementNS(NS_P, "p:spPr");
-  if (frame !== void 0) {
-    const xf = slide.createElementNS(NS_A, "a:xfrm");
-    const off = slide.createElementNS(NS_A, "a:off");
-    off.setAttribute("x", String(inchToEmu(frame.x)));
-    off.setAttribute("y", String(inchToEmu(frame.y)));
-    const ext = slide.createElementNS(NS_A, "a:ext");
-    ext.setAttribute("cx", String(inchToEmu(frame.w)));
-    ext.setAttribute("cy", String(inchToEmu(frame.h)));
-    xf.appendChild(off);
-    xf.appendChild(ext);
-    spPr.appendChild(xf);
-  } else if (xfrm !== null)
-    spPr.appendChild(slide.importNode(xfrm, true));
-  pic.appendChild(spPr);
-  sp.parentNode?.replaceChild(pic, sp);
-  return true;
-};
-var ensureNotesOverride = async (zip, notesPart) => {
-  const ct = await partText(zip, "[Content_Types].xml");
-  if (!ct.includes(notesPart))
-    zip.file("[Content_Types].xml", ct.replace(
-      "</Types>",
-      `<Override PartName="/${notesPart}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/></Types>`
-    ));
-};
-var freeNotesPart = (zip) => {
-  let n = 1;
-  while (zip.file(`ppt/notesSlides/notesSlide-pptc-${n}.xml`) !== null)
-    n++;
-  return `ppt/notesSlides/notesSlide-pptc-${n}.xml`;
-};
-var setNotes = async (post, slidePart, slideRels, text) => {
-  const notesPart = freeNotesPart(post.zip);
-  const escaped = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("");
-  post.zip.file(
-    notesPart,
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Notes Placeholder"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${escaped}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`
-  );
-  post.zip.file(
-    `ppt/notesSlides/_rels/${path5.posix.basename(notesPart)}.rels`,
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
-  );
-  await ensureNotesOverride(post.zip, notesPart);
-  for (const rel of elements(slideRels, "Relationship"))
-    if ((rel.getAttribute("Type") ?? "").endsWith("/notesSlide"))
-      rel.parentNode?.removeChild(rel);
-  addRel(
-    slideRels,
-    nextRid(post),
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
-    `../notesSlides/${path5.posix.basename(notesPart)}`
-  );
-};
-var wireHyperlinks = (post, slide, slideRels) => {
-  for (const hlink of elements(slide, "a:hlinkClick")) {
-    const url2 = hlink.getAttribute(HLINK_ATTR);
-    if (url2 === null)
-      continue;
-    const rid = nextRid(post);
-    addRel(
-      slideRels,
-      rid,
-      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-      url2,
-      true
-    );
-    hlink.removeAttribute(HLINK_ATTR);
-    hlink.setAttributeNS(NS_R, "r:id", rid);
-  }
-};
-var dedupeSharedNotes = async (zip, slides) => {
-  const refs = /* @__PURE__ */ new Map();
-  for (const slidePart of slides) {
-    const relsText = await zip.file(`ppt/slides/_rels/${path5.posix.basename(slidePart)}.rels`)?.async("string");
-    if (relsText === void 0)
-      continue;
-    const rel = elements(parseXml(relsText), "Relationship").find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"));
-    if (rel === void 0)
-      continue;
-    const notesPart = path5.posix.normalize(path5.posix.join("ppt/slides", rel.getAttribute("Target") ?? ""));
-    refs.set(notesPart, [...refs.get(notesPart) ?? [], slidePart]);
-  }
-  const setBackref = async (notesPart, slidePart) => {
-    const relsPart = `ppt/notesSlides/_rels/${path5.posix.basename(notesPart)}.rels`;
-    const doc = parseXml(await partText(zip, relsPart));
-    const notesXml = await zip.file(notesPart)?.async("string") ?? "";
-    for (const back of elements(doc, "Relationship"))
-      if (isBackref(back, notesXml))
-        back.setAttribute("Target", `../slides/${path5.posix.basename(slidePart)}`);
-    zip.file(relsPart, serializeXml(doc));
-  };
-  for (const [notesPart, owners] of refs) {
-    if (owners.length < 2 || !/notesSlide-pptc-/.test(notesPart))
-      continue;
-    await setBackref(notesPart, owners[0]);
-    for (let i = 1; i < owners.length; i++) {
-      const slidePart = owners[i];
-      const clone2 = freeNotesPart(zip);
-      zip.file(clone2, await partText(zip, notesPart));
-      zip.file(
-        `ppt/notesSlides/_rels/${path5.posix.basename(clone2)}.rels`,
-        await partText(zip, `ppt/notesSlides/_rels/${path5.posix.basename(notesPart)}.rels`)
-      );
-      await setBackref(clone2, slidePart);
-      const slideRelsPart = `ppt/slides/_rels/${path5.posix.basename(slidePart)}.rels`;
-      const slideRels = parseXml(await partText(zip, slideRelsPart));
-      for (const r of elements(slideRels, "Relationship"))
-        if ((r.getAttribute("Type") ?? "").endsWith("/notesSlide"))
-          r.setAttribute("Target", `../notesSlides/${path5.posix.basename(clone2)}`);
-      zip.file(slideRelsPart, serializeXml(slideRels));
-      await ensureNotesOverride(zip, clone2);
-    }
-  }
-};
-var clonePart = async (zip, part) => {
-  const ext = path5.posix.extname(part);
-  const stem = part.slice(0, part.length - ext.length).replace(/(-pptc-\d+)+$/, "");
-  let n = 2;
-  let clone2 = `${stem}-pptc-${n}${ext}`;
-  while (zip.file(clone2) !== null)
-    clone2 = `${stem}-pptc-${++n}${ext}`;
-  zip.file(clone2, await zip.file(part).async("uint8array"));
-  const rels = zip.file(`${path5.posix.dirname(part)}/_rels/${path5.posix.basename(part)}.rels`);
-  if (rels !== null)
-    zip.file(`${path5.posix.dirname(clone2)}/_rels/${path5.posix.basename(clone2)}.rels`, await rels.async("uint8array"));
-  const ct = await partText(zip, "[Content_Types].xml");
-  const override = new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(ct);
-  if (override !== null)
-    zip.file("[Content_Types].xml", ct.replace("</Types>", `${override[0].replace(part, clone2)}</Types>`));
-  return clone2;
-};
-var unshareImplicitParts = async (post, slidePart, slideRels) => {
-  let changed = false;
-  for (const rel of elements(slideRels, "Relationship")) {
-    if (!IMPLICIT_RELS.some((k) => (rel.getAttribute("Type") ?? "").endsWith(k)))
-      continue;
-    const target = rel.getAttribute("Target") ?? "";
-    const part = path5.posix.normalize(path5.posix.join(path5.posix.dirname(slidePart), target));
-    if (post.implicitSeen.has(part) && post.zip.file(part) !== null) {
-      const clone2 = await clonePart(post.zip, part);
-      rel.setAttribute("Target", path5.posix.relative(path5.posix.dirname(slidePart), clone2));
-      post.implicitSeen.add(clone2);
-      changed = true;
-    } else
-      post.implicitSeen.add(part);
-  }
-  return changed;
-};
-var restoreSlideTags = async (post, slide, slideRels, refs) => {
-  const cSld = firstElement(slide, "p:cSld");
-  const spTree = firstElement(slide, "p:spTree");
-  if (cSld === null || spTree === null)
-    return;
-  for (const old of elements(slide, "p:custDataLst"))
-    old.parentNode?.removeChild(old);
-  const lists = /* @__PURE__ */ new Map();
-  for (const ref of refs) {
-    const lst = lists.get(ref.owner) ?? slide.createElementNS(NS_P, "p:custDataLst");
-    lists.set(ref.owner, lst);
-    let target = ref.target;
-    let part = path5.posix.normalize(path5.posix.join("ppt/slides", target));
-    if (post.zip.file(part) === null)
-      continue;
-    if (post.tagsSeen.has(part)) {
-      const clone2 = await clonePart(post.zip, part);
-      target = path5.posix.join(path5.posix.dirname(target), path5.posix.basename(clone2));
-      part = clone2;
-    }
-    post.tagsSeen.add(part);
-    const rid = nextRid(post);
-    addRel(slideRels, rid, ref.relType, target);
-    const el = slide.createElementNS(NS_P, ref.kind);
-    el.setAttributeNS(NS_R, "r:id", rid);
-    lst.appendChild(el);
-  }
-  for (const [owner, lst] of lists) {
-    if (lst.childNodes.length === 0)
-      continue;
-    if (owner === null) {
-      cSld.insertBefore(lst, spTree.nextSibling);
-      continue;
-    }
-    const [shapeId, nth] = owner.split("#");
-    const cNvPr = elements(slide, "p:cNvPr").filter((el) => el.getAttribute("id") === shapeId)[Number(nth ?? "0")];
-    const nvPr = cNvPr === void 0 ? void 0 : elements(cNvPr.parentNode, "p:nvPr").find((el) => el.parentNode === cNvPr.parentNode);
-    if (nvPr !== void 0)
-      nvPr.insertBefore(lst, elements(nvPr, "p:extLst").find((el) => el.parentNode === nvPr) ?? null);
-  }
-};
-var slideTitle = (slide) => {
-  for (const sp of elements(slide, "p:sp")) {
-    const type = firstElement(sp, "p:ph")?.getAttribute("type") ?? "";
-    if (type === "title" || type === "ctrTitle")
-      return elements(sp, "a:t").map((n) => n.textContent ?? "").join("");
-  }
-  return "";
-};
-var xmlEscape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-var syncAppProperties = async (zip, slides) => {
-  const part = "docProps/app.xml";
-  const f = zip.file(part);
-  if (f === null)
-    return;
-  let xml = await f.async("string");
-  const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(xml);
-  const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(xml);
-  if (hp === null || tp === null)
-    return;
-  const hpBody = hp[1] ?? "";
-  const tpBody = tp[1] ?? "";
-  const n = slides.length;
-  const titles = [];
-  for (const slidePart of slides)
-    titles.push(slideTitle(parseXml(await partText(zip, slidePart))));
-  const counts = [...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].map((m) => Number(m[1]));
-  const leading = counts.slice(0, -1).reduce((a, b) => a + b, 0);
-  let seen = 0;
-  const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) => ++seen === counts.length ? `<vt:i4>${n}</vt:i4>` : m);
-  const kept = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)].map((m) => m[1]).slice(0, leading);
-  const lpstr = [...kept, ...titles.map(xmlEscape)].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
-  xml = xml.replace(/<Slides>\d+<\/Slides>/, `<Slides>${n}</Slides>`).replace(hp[0], `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
-  zip.file(part, xml);
-};
-var setProps = async (zip, props) => {
-  const part = "docProps/core.xml";
-  const text = await zip.file(part)?.async("string");
-  if (text === void 0)
-    return;
-  const doc = parseXml(text);
-  const tags = {
-    title: ["dc:title", "http://purl.org/dc/elements/1.1/"],
-    author: ["dc:creator", "http://purl.org/dc/elements/1.1/"],
-    subject: ["dc:subject", "http://purl.org/dc/elements/1.1/"],
-    keywords: ["cp:keywords", "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"],
-    category: ["cp:category", "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"],
-    comments: ["dc:description", "http://purl.org/dc/elements/1.1/"]
-  };
-  for (const [key, value] of Object.entries(props)) {
-    const spec = tags[key];
-    if (spec === void 0)
-      continue;
-    let el = firstElement(doc, spec[0]);
-    if (el === null) {
-      el = doc.createElementNS(spec[1], spec[0]);
-      doc.documentElement?.appendChild(el);
-    }
-    while (el.firstChild !== null)
-      el.removeChild(el.firstChild);
-    el.appendChild(doc.createTextNode(value));
-  }
-  zip.file(part, serializeXml(doc));
-};
-var CUSTOM_PROPS_PART = "docProps/custom.xml";
-var CUSTOM_PROPS_CT = "application/vnd.openxmlformats-officedocument.custom-properties+xml";
-var CUSTOM_PROPS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties";
-var NS_CUSTOM = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
-var NS_VT = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
-var CUSTOM_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
-var setCustomProps = async (zip, patch2) => {
-  const props = /* @__PURE__ */ new Map();
-  const existing = await zip.file(CUSTOM_PROPS_PART)?.async("string");
-  if (existing !== void 0)
-    for (const p of elements(parseXml(existing), "property")) {
-      const vt = firstElement(p, "vt:lpwstr");
-      props.set(p.getAttribute("name") ?? "", vt?.textContent ?? "");
-    }
-  for (const [k, v] of Object.entries(patch2))
-    props.set(k, v);
-  let pid = 2;
-  let body = "";
-  for (const [name, value] of props)
-    body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name)}"><vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`;
-  zip.file(
-    CUSTOM_PROPS_PART,
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r
-<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}">${body}</Properties>`
-  );
-  const ct = await partText(zip, "[Content_Types].xml");
-  if (!ct.includes(`PartName="/${CUSTOM_PROPS_PART}"`))
-    zip.file("[Content_Types].xml", ct.replace(
-      "</Types>",
-      `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`
-    ));
-  const rootRels = parseXml(await partText(zip, "_rels/.rels"));
-  const present = elements(rootRels, "Relationship").some((r) => (r.getAttribute("Type") ?? "") === CUSTOM_PROPS_REL);
-  if (!present) {
-    const ids = new Set(elements(rootRels, "Relationship").map((r) => r.getAttribute("Id")));
-    let n = 1;
-    while (ids.has(`rId${n}`))
-      n++;
-    addRel(rootRels, `rId${n}`, CUSTOM_PROPS_REL, CUSTOM_PROPS_PART);
-    zip.file("_rels/.rels", serializeXml(rootRels));
-  }
-};
-var postProcess = async (bytes, work, props, customProps = null, inputRidToId = {}) => {
-  const zip = await import_jszip3.default.loadAsync(bytes);
-  for (const f of Object.keys(zip.files))
-    if (f.startsWith("[trash]/"))
-      zip.remove(f);
-  for (const f of Object.keys(zip.files).filter((n) => /\.(xml|rels)$/.test(n))) {
-    const bytes2 = await zip.file(f).async("nodebuffer");
-    if (bytes2[0] === 239 && bytes2[1] === 187 && bytes2[2] === 191)
-      zip.file(f, bytes2.subarray(3));
-  }
-  let maxRid = 9e3;
-  for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
-    const text = await zip.file(relsPart)?.async("string") ?? "";
-    for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
-      maxRid = Math.max(maxRid, Number(m[1]));
-  }
-  const post = { zip, rid: maxRid + 1, tagsSeen: /* @__PURE__ */ new Set(), implicitSeen: /* @__PURE__ */ new Set() };
-  const slides = await referencedSlides(zip);
-  await gcParts(zip, slides);
-  await restoreSlideIds(zip, work.map((w) => w.slideId));
-  await remapCustomShows(zip, inputRidToId);
-  const partMap = /* @__PURE__ */ new Map();
-  work.forEach((w, i) => {
-    if (w.sourcePart !== null && slides[i] !== void 0)
-      partMap.set(w.sourcePart, slides[i]);
-  });
-  const viewRelsPart = "ppt/_rels/viewProps.xml.rels";
-  if (zip.file(viewRelsPart) !== null) {
-    const viewRels = parseXml(await partText(zip, viewRelsPart));
-    const viewProps = zip.file("ppt/viewProps.xml") === null ? null : parseXml(await partText(zip, "ppt/viewProps.xml"));
-    if (remapSlideLinks("ppt/viewProps.xml", viewProps, viewRels, partMap)) {
-      zip.file(viewRelsPart, serializeXml(viewRels));
-      if (viewProps !== null)
-        zip.file("ppt/viewProps.xml", serializeXml(viewProps));
-    }
-  }
-  let mediaSeq = 1 + Math.max(0, ...Object.keys(zip.files).map((f) => Number(/^ppt\/media\/pptcImage(\d+)\./.exec(f)?.[1] ?? "0")));
-  for (let i = 0; i < slides.length; i++) {
-    const slidePart = slides[i];
-    const job = work[i];
-    const relsPart = `ppt/slides/_rels/${path5.posix.basename(slidePart)}.rels`;
-    const slide = parseXml(await partText(zip, slidePart));
-    const slideRels = parseXml(await partText(zip, relsPart));
-    if (job !== void 0) {
-      removeShapes(slide, job.removals);
-      if (job.background !== null)
-        setBackground(slide, job.background);
-      if (job.footer !== null)
-        await setFooter(zip, slidePart, slide, job.footer);
-      for (const img of job.images) {
-        const ext = path5.extname(img.path).slice(1).toLowerCase() || "png";
-        const mediaPart = `ppt/media/pptcImage${mediaSeq++}.${ext}`;
-        zip.file(mediaPart, readFileSync3(img.path));
-        await ensureImageDefault(zip, ext);
-        const rid = nextRid(post);
-        addRel(
-          slideRels,
-          rid,
-          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-          `../media/${path5.posix.basename(mediaPart)}`
-        );
-        if (!fillPicturePlaceholder(slide, rid, img.phIdx, img.frame))
-          throw new PptcError(
-            "E_ADDR_NOTFOUND",
-            `slide ${i}: no empty picture placeholder idx ${img.phIdx}`
-          );
-      }
-      if (job.notes !== null)
-        await setNotes(post, slidePart, slideRels, job.notes);
-      wireHyperlinks(post, slide, slideRels);
-      setSlideVisibility(slide, job.hidden);
-      if (job.slideTags.length > 0)
-        await restoreSlideTags(post, slide, slideRels, job.slideTags);
-    }
-    const linksRemapped = remapSlideLinks(slidePart, slide, slideRels, partMap);
-    const linksChanged = await unshareImplicitParts(post, slidePart, slideRels) || linksRemapped;
-    const keepRels = job !== void 0 && job.diagrams.length > 0 ? await wireDiagrams(zip, slide, slideRels, job.diagrams) : /* @__PURE__ */ new Set();
-    const idsChanged = uniquifyShapeIds(slide);
-    const relsChanged = pruneUnusedSlideRels(slide, slideRels, keepRels);
-    if (job !== void 0 || idsChanged || relsChanged || linksChanged) {
-      zip.file(slidePart, serializeXml(slide));
-      zip.file(relsPart, serializeXml(slideRels));
-    }
-  }
-  for (const relsPart of Object.keys(zip.files).filter((f) => /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$/.test(f))) {
-    const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1");
-    if (zip.file(owner) === null)
-      continue;
-    const relsDoc = parseXml(await partText(zip, relsPart));
-    const ownerDoc = parseXml(await partText(zip, owner));
-    if (remapSlideLinks(owner, ownerDoc, relsDoc, partMap, owner.startsWith("ppt/notesSlides/"))) {
-      zip.file(relsPart, serializeXml(relsDoc));
-      zip.file(owner, serializeXml(ownerDoc));
-    }
-  }
-  if (props !== null)
-    await setProps(zip, props);
-  if (customProps !== null)
-    await setCustomProps(zip, customProps);
-  await dedupeSharedNotes(zip, slides);
-  await gcParts(zip, slides);
-  await normalizeEmbeddingNames(zip);
-  await gcAssets(zip);
-  await syncSectionRefs(zip);
-  await cleanContentTypes(zip);
-  await syncAppProperties(zip, slides);
-  const names = Object.keys(zip.files);
-  for (const dir of names.filter((n) => n.endsWith("/")))
-    if (!names.some((n) => n !== dir && n.startsWith(dir)))
-      zip.remove(dir);
-  return await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
-};
-
-// src/engine/verify.ts
-var import_jszip4 = __toESM(require_lib3(), 1);
-var import_xmldom2 = __toESM(require_lib4(), 1);
-import path6 from "node:path";
-import { readFileSync as readFileSync4 } from "node:fs";
-var verifyArchive = async (zip) => {
-  if (zip.file("[Content_Types].xml") === null)
-    return ["[Content_Types].xml: part missing (not a flat OPC package)"];
-  const findings = [];
-  const names = new Set(Object.keys(zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")));
-  const text = async (part) => (await zip.file(part).async("string")).replace(/^\uFEFF/, "");
-  for (const n of names)
-    if (n.endsWith(".xml") || n.endsWith(".rels"))
-      try {
-        const parser = new import_xmldom2.DOMParser({
-          onError: (_level, msg) => {
-            throw new Error(msg);
-          }
-        });
-        parser.parseFromString(await text(n), "application/xml");
-      } catch (err) {
-        findings.push(`${n}: malformed XML (${String(err).slice(0, 80)})`);
-      }
-  for (const n of names)
-    if (/^ppt\/slides\/slide\d+\.xml$/.test(n)) {
-      const ids = [...(await text(n)).matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1]);
-      const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))];
-      if (dup.length > 0)
-        findings.push(`${n}: duplicate cNvPr ids ${dup.join(",")}`);
-    }
-  for (const n of names)
-    if (n.endsWith(".rels")) {
-      const relIds = [...(await text(n)).matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1]);
-      const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))];
-      if (dupIds.length > 0)
-        findings.push(`${n}: duplicate relationship ids ${dupIds.join(",")}`);
-      const base = path6.posix.dirname(path6.posix.dirname(n));
-      for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
-        if (m[0].includes('TargetMode="External"'))
-          continue;
-        const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
-        const full = path6.posix.normalize(path6.posix.join(base, target));
-        if (!names.has(full))
-          findings.push(`${n}: dead relationship target ${target}`);
-      }
-    }
-  const ct = await text("[Content_Types].xml");
-  const overrides = [...ct.matchAll(/<Override PartName="([^"]+)"/g)].map((m) => m[1]);
-  for (const o of new Set(overrides)) {
-    if (!names.has(o.replace(/^\//, "")))
-      findings.push(`[Content_Types].xml: override for missing part ${o}`);
-    if (overrides.filter((x) => x === o).length > 1)
-      findings.push(`[Content_Types].xml: duplicate override ${o}`);
-  }
-  const defaults = new Set([...ct.matchAll(/<Default Extension="([^"]+)"/g)].map((m) => m[1].toLowerCase()));
-  const overridden = new Set(overrides.map((o) => o.replace(/^\//, "")));
-  for (const n of names)
-    if (n !== "[Content_Types].xml" && !overridden.has(n) && !defaults.has(n.split(".").pop()?.toLowerCase() ?? ""))
-      findings.push(`${n}: no content type (neither default nor override)`);
-  const pres = await text("ppt/presentation.xml");
-  const rels = await text("ppt/_rels/presentation.xml.rels");
-  const relMap = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/\bId="([^"]+)"/.exec(m[0])?.[1] ?? "", /\bTarget="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
-  for (const m of pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)) {
-    const target = relMap.get(m[1]);
-    if (target === void 0 || !names.has(path6.posix.normalize(path6.posix.join("ppt", target))))
-      findings.push(`presentation.xml: sldId ${m[1]} does not resolve to a slide part`);
-  }
-  for (const m of pres.matchAll(/<([\w:]+)\b[^>]*\br:id="([^"]+)"/g))
-    if (m[1] !== "p:sldId" && !relMap.has(m[2]))
-      findings.push(`presentation.xml: <${m[1]}> r:id ${m[2]} has no relationship`);
-  const seq = [...pres.matchAll(/<p:(sldMasterIdLst|notesMasterIdLst|handoutMasterIdLst|sldIdLst|sldSz|notesSz)[ >/]/g)].map((m) => m[1]);
-  const sldAt = seq.indexOf("sldIdLst");
-  if (sldAt >= 0) {
-    for (const lst of ["notesMasterIdLst", "handoutMasterIdLst"])
-      if (seq.includes(lst) && seq.indexOf(lst) > sldAt)
-        findings.push(`presentation.xml: ${lst} appears after sldIdLst (schema order violated)`);
-  }
-  if (seq.includes("sldSz") && seq.includes("notesSz") && seq.indexOf("sldSz") > seq.indexOf("notesSz"))
-    findings.push("presentation.xml: sldSz appears after notesSz (schema order violated)");
-  const liveSlideRids = new Set([...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]));
-  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-    const id = /\bId="([^"]+)"/.exec(m[0])?.[1] ?? "";
-    if (/\bType="[^"]*\/slide"/.test(m[0]) && !liveSlideRids.has(id))
-      findings.push(`presentation.xml.rels: dangling slide relationship ${id} (no sldId references it)`);
-  }
-  const realIds = new Set([...pres.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => m[1]));
-  for (const m of pres.matchAll(/<p14:sldId id="(\d+)"/g))
-    if (!realIds.has(m[1]))
-      findings.push(`presentation.xml: section references removed slide id ${m[1]}`);
-  if (names.has("docProps/app.xml")) {
-    const app = await text("docProps/app.xml");
-    const slideCount = [...pres.matchAll(/<p:sldId /g)].length;
-    const declared = /<Slides>(\d+)<\/Slides>/.exec(app);
-    if (declared !== null && Number(declared[1]) !== slideCount)
-      findings.push(`docProps/app.xml: declares ${declared[1]} slides, deck has ${slideCount}`);
-    const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(app);
-    const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(app);
-    if (hp !== null && tp !== null) {
-      const sum = [...(hp[1] ?? "").matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].reduce((a, m) => a + Number(m[1]), 0);
-      const entries = [...(tp[1] ?? "").matchAll(/<vt:lpstr>/g)].length;
-      if (sum !== entries)
-        findings.push(`docProps/app.xml: HeadingPairs sum ${sum} != TitlesOfParts ${entries}`);
-    }
-  }
-  const notesRef = /* @__PURE__ */ new Map();
-  for (const n of names)
-    if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(n))
-      for (const m of (await text(n)).matchAll(/Target="\.\.\/notesSlides\/([^"]+)"/g)) {
-        const part = m[1];
-        notesRef.set(part, [...notesRef.get(part) ?? [], n]);
-      }
-  for (const [part, owners] of notesRef)
-    if (owners.length > 1)
-      findings.push(`notesSlide ${part} is referenced by ${owners.length} slides (must be 1:1)`);
-  const isAsset = (f) => ASSET_PART.test(f) && !f.includes("/_rels/");
-  const live = /* @__PURE__ */ new Set();
-  for (const n of names)
-    if (n.endsWith(".rels")) {
-      const base = path6.posix.dirname(path6.posix.dirname(n));
-      for (const m of (await text(n)).matchAll(/<Relationship [^>]*?\/>/g)) {
-        if (m[0].includes('TargetMode="External"'))
-          continue;
-        const target = /Target="([^"]+)"/.exec(m[0])?.[1] ?? "";
-        live.add(path6.posix.normalize(path6.posix.join(base, target)));
-      }
-    }
-  for (const n of names)
-    if (isAsset(n) && !live.has(n))
-      findings.push(`${n}: orphan asset (not referenced from any part)`);
-  return findings;
-};
-var verifyBytes = async (bytes, before) => {
-  const zip = await import_jszip4.default.loadAsync(bytes);
-  await normalizeRelTargets(zip);
-  const findings = await verifyArchive(zip);
-  if (before !== void 0)
-    for (const n of Object.keys(before.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))) {
-      const after = zip.file(n);
-      if (after !== null && !(await after.async("nodebuffer")).equals(await before.file(n).async("nodebuffer")))
-        findings.push(`${n}: existing media file overwritten with different content`);
-    }
-  return findings;
-};
-var verifyFile = async (file2) => await verifyBytes(readFileSync4(file2));
-
-// src/engine/seed.ts
-var import_jszip5 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync5, readdirSync, rmSync, statSync, utimesSync } from "node:fs";
-import path7 from "node:path";
-var SEED_FORMAT = 5;
-var slideFromLayout = (layoutXml) => {
-  const layout = parseXml(layoutXml);
-  const sps = [];
-  let nextId = 2;
-  for (const sp of elements(layout, "p:sp")) {
-    const ph = firstElement(sp, "p:ph");
-    if (ph === null)
-      continue;
-    const type = ph.getAttribute("type") ?? "body";
-    const clone2 = sp.cloneNode(true);
-    const cNvPr = firstElement(clone2, "p:cNvPr");
-    cNvPr?.setAttribute("id", String(nextId++));
-    if (type === "ftr" || type === "sldNum" || type === "dt") {
-      sps.push(serializeElement(clone2));
-      continue;
-    }
-    cNvPr?.setAttribute("name", seedPlaceholderName(Number(ph.getAttribute("idx") ?? "0")));
-    const txBody = firstElement(clone2, "p:txBody");
-    const doc = clone2.ownerDocument;
-    if (txBody !== null && doc !== null) {
-      while (txBody.firstChild !== null)
-        txBody.removeChild(txBody.firstChild);
-      txBody.appendChild(doc.createElementNS(NS_A, "a:bodyPr"));
-      txBody.appendChild(doc.createElementNS(NS_A, "a:lstStyle"));
-      const p = doc.createElementNS(NS_A, "a:p");
-      p.appendChild(doc.createElementNS(NS_A, "a:endParaRPr"));
-      txBody.appendChild(p);
-    }
-    sps.push(serializeElement(clone2));
-  }
-  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' + sps.join("") + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>";
-};
-var SLIDE_REL_RE = /<Relationship [^>]*Type="[^"]*\/slide"[^>]*\/>/g;
-var stripSlides = (presRels, ct) => ({
-  presRels: presRels.replace(SLIDE_REL_RE, ""),
-  ct: ct.replace(/<Override PartName="\/ppt\/slides\/[^"]*"[^>]*\/>/g, "")
-});
-var layoutOrder = async (zip) => {
-  const order = [];
-  const pres = await zip.file("ppt/presentation.xml")?.async("string") ?? "";
-  const presRels = await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? "";
-  const relTarget = new Map([...presRels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""]));
-  const listed = [...pres.matchAll(/<p:sldMasterId\b[^>]*\br:id="([^"]+)"/g)].map((m) => path7.posix.normalize(path7.posix.join("ppt", relTarget.get(m[1]) ?? ""))).filter((part) => zip.file(part) !== null);
-  const masters = listed.length > 0 ? listed : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort();
-  for (const masterPart of masters) {
-    const master = parseXml(await zip.file(masterPart).async("string"));
-    const relsFile = zip.file(`ppt/slideMasters/_rels/${path7.posix.basename(masterPart)}.rels`);
-    if (relsFile === null)
-      continue;
-    const rels = parseXml(await relsFile.async("string"));
-    const relMap = new Map(elements(rels, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
-    for (const layoutId of elements(master, "p:sldLayoutId")) {
-      const target = relMap.get(layoutId.getAttribute("r:id") ?? "");
-      if (target !== void 0 && target.includes("slideLayouts/"))
-        order.push(path7.posix.normalize(path7.posix.join("ppt/slideMasters", target)));
-    }
-  }
-  return order;
-};
-var buildSeed = async (templateBytes) => {
-  const zip = await import_jszip5.default.loadAsync(templateBytes);
-  await normalizeRelTargets(zip);
-  const get = async (part) => {
-    const f = zip.file(part);
-    if (f === null)
-      throw new PptcError("E_TEMPLATE", `template is missing required part: ${part}`);
-    return await f.async("string");
-  };
-  let ct = (await get("[Content_Types].xml")).replace("presentationml.template.main+xml", "presentationml.presentation.main+xml");
-  let pres = await get("ppt/presentation.xml");
-  let presRels = await get("ppt/_rels/presentation.xml.rels");
-  pres = pres.replace(/<p:sldIdLst\s*\/>/, "<p:sldIdLst></p:sldIdLst>").replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst></p:sldIdLst>");
-  if (!pres.includes("<p:sldIdLst>"))
-    pres = pres.replace("</p:sldMasterIdLst>", "</p:sldMasterIdLst><p:sldIdLst></p:sldIdLst>");
-  pres = pres.replace(/<p:ext uri="\{521415D9-36F7-43E2-AB2F-B90AF26B5E84\}">.*?<\/p:ext>/s, "").replace(/<p:extLst>\s*<\/p:extLst>/, "");
-  for (const lst of ["handoutMasterIdLst", "notesMasterIdLst"]) {
-    const el = new RegExp(`<p:${lst}>.*?</p:${lst}>|<p:${lst}\\s*/>`, "s").exec(pres);
-    if (el !== null && pres.indexOf(el[0]) > pres.indexOf("<p:sldIdLst"))
-      pres = pres.replace(el[0], "").replace(/<p:sldIdLst/, `${el[0]}<p:sldIdLst`);
-  }
-  presRels = presRels.replace(SLIDE_REL_RE, "");
-  for (const f of Object.keys(zip.files))
-    if (/^ppt\/(slides|notesSlides)\//.test(f))
-      zip.remove(f);
-  ct = ct.replace(/<Override PartName="\/ppt\/(slides|notesSlides)\/[^"]*"[^>]*\/>/g, "");
-  const viewPr = zip.file("ppt/viewProps.xml");
-  if (viewPr !== null)
-    zip.file(
-      "ppt/viewProps.xml",
-      (await viewPr.async("string")).replace(/ lastView="[^"]*"/g, "")
-    );
-  const order = await layoutOrder(zip);
-  if (order.length === 0)
-    throw new PptcError("E_TEMPLATE", "template contains no slide layouts");
-  let sldIds = "", rels = "", overrides = "";
-  for (let i = 0; i < order.length; i++) {
-    const n = i + 1;
-    const layoutXml = await get(order[i]);
-    zip.file(`ppt/slides/slide${n}.xml`, slideFromLayout(layoutXml));
-    zip.file(
-      `ppt/slides/_rels/slide${n}.xml.rels`,
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../${order[i].substring(4)}"/></Relationships>`
-    );
-    sldIds += `<p:sldId id="${9e3 + n}" r:id="rIdPptcSeed${n}"/>`;
-    rels += `<Relationship Id="rIdPptcSeed${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${n}.xml"/>`;
-    overrides += `<Override PartName="/ppt/slides/slide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
-  }
-  zip.file("[Content_Types].xml", ct.replace("</Types>", `${overrides}</Types>`));
-  zip.file("ppt/presentation.xml", pres.replace("<p:sldIdLst></p:sldIdLst>", `<p:sldIdLst>${sldIds}</p:sldIdLst>`));
-  zip.file("ppt/_rels/presentation.xml.rels", presRels.replace("</Relationships>", `${rels}</Relationships>`));
-  await gcAssets(zip);
-  await cleanContentTypes(zip);
-  return {
-    bytes: await zip.generateAsync({ type: "nodebuffer" }),
-    layoutCount: order.length
-  };
-};
-var ensureSeed = async (templatePath) => {
-  const bytes = readFileSync5(templatePath);
-  return await cachedSeed(`seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`, bytes);
-};
-var SEED_MAX_AGE_MS = 14 * 24 * 3600 * 1e3;
-var SEED_MAX_COUNT = 24;
-var cachedSeed = async (name, source) => {
-  const dir = cacheDir();
-  const seedPath = path7.join(dir, name);
-  try {
-    const now = /* @__PURE__ */ new Date();
-    utimesSync(seedPath, now, now);
-  } catch {
-    atomicWrite(seedPath, (await buildSeed(source)).bytes);
-  }
-  const seeds = [];
-  for (const f of readdirSync(dir).filter((f2) => f2.startsWith("seed-")))
-    try {
-      const file2 = path7.join(dir, f);
-      const mtime = statSync(file2).mtimeMs;
-      if (f.endsWith(".pptx") && file2 !== seedPath)
-        seeds.push({ file: file2, mtime });
-      else if (!f.endsWith(".pptx") && Date.now() - mtime > 3600 * 1e3)
-        rmSync(file2, { force: true });
-    } catch {
-    }
-  seeds.sort((a, b) => b.mtime - a.mtime);
-  for (const [i, seed] of seeds.entries())
-    if (i >= SEED_MAX_COUNT - 1 || Date.now() - seed.mtime > SEED_MAX_AGE_MS)
-      rmSync(seed.file, { force: true });
-  return seedPath;
-};
-var ensureSeedFromDeck = async (deckPath) => {
-  const bytes = readFileSync5(deckPath);
-  const zip = await import_jszip5.default.loadAsync(bytes);
-  const designParts = Object.keys(zip.files).filter((f) => /^ppt\/(slideMasters|slideLayouts|theme)\/[^/]+\.xml$/.test(f) || f === "ppt/presentation.xml").sort();
-  const design = [];
-  for (const part of designParts) {
-    let xml = await zip.file(part).async("string");
-    if (part === "ppt/presentation.xml")
-      xml = xml.replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, "").replace(/<p14:sectionLst[\s\S]*?<\/p14:sectionLst>/, "");
-    design.push(`${part}:${xml}`);
-  }
-  return await cachedSeed(`seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`, bytes);
-};
-var buildEmptyDeck = async (templatePath) => {
-  const seed = await buildSeed(readFileSync5(templatePath));
-  const zip = await import_jszip5.default.loadAsync(seed.bytes);
-  const pres = await zip.file("ppt/presentation.xml").async("string");
-  const presRels = await zip.file("ppt/_rels/presentation.xml.rels").async("string");
-  const ct = await zip.file("[Content_Types].xml").async("string");
-  zip.file("ppt/presentation.xml", pres.replace(/<p:sldIdLst>.*?<\/p:sldIdLst>/s, "<p:sldIdLst/>"));
-  const stripped = stripSlides(presRels, ct);
-  zip.file("ppt/_rels/presentation.xml.rels", stripped.presRels);
-  zip.file("[Content_Types].xml", stripped.ct);
-  for (const f of Object.keys(zip.files))
-    if (/^ppt\/slides\//.test(f))
-      zip.remove(f);
-  return await zip.generateAsync({ type: "nodebuffer" });
-};
-
-// src/engine/session.ts
+// src/engine/inplace/transplant.ts
 var unwrapDefault = (mod) => {
   let candidate = mod;
   while (typeof candidate !== "function" && candidate !== null && typeof candidate === "object" && "default" in candidate)
     candidate = candidate["default"];
   return candidate;
 };
-var Automizer = unwrapDefault(import_pptx_automizer.default);
-var partNumber = (part) => Number(/slide(\d+)\.xml$/.exec(part)?.[1] ?? "0");
+var PptxGenJS = unwrapDefault(import_pptxgenjs.default);
+var named = (slide, objectName) => ({
+  addText: (text, opts) => {
+    slide.addText(text, { ...opts, objectName });
+  },
+  addTable: (rows, opts) => {
+    slide.addTable(rows, { ...opts, objectName });
+  },
+  addChart: (type, data, opts) => {
+    slide.addChart(type, data, { ...opts, objectName });
+  },
+  addShape: (type, opts) => {
+    slide.addShape(type, { ...opts, objectName });
+  },
+  addImage: (opts) => {
+    slide.addImage({ ...opts, objectName });
+  }
+});
+var generateElements = async (entries) => {
+  const withElements = entries.filter((e) => e.elements.length > 0);
+  if (withElements.length === 0)
+    return null;
+  const gen = new PptxGenJS();
+  const placed = /* @__PURE__ */ new Map();
+  for (const [k, entry] of withElements.entries()) {
+    const slide = gen.addSlide();
+    const names = entry.elements.map((planned) => {
+      const name = `${planned.name !== null ? `${planned.name}-` : ""}${randomUUID()}`;
+      addElement(named(slide, name), gen, planned.spec);
+      return name;
+    });
+    placed.set(entry, { part: `ppt/slides/slide${k + 1}.xml`, names });
+  }
+  const source = await Package.open(await gen.write({ outputType: "nodebuffer" }), []);
+  return {
+    async transplant(pkg, entry, slide, rels, part) {
+      const info = placed.get(entry);
+      const spTree = firstElement(slide, "p:spTree");
+      if (info === void 0 || spTree === null)
+        return;
+      const genSlide = await source.xml(info.part);
+      const genRels = new Map(Package.targets(info.part, await source.rels(info.part)).map((t) => [t.rel.getAttribute("Id") ?? "", t]));
+      const nextId = PartAllocator.shapeIds(slide);
+      const copies = /* @__PURE__ */ new Map();
+      const anchor2 = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null;
+      for (const name of info.names) {
+        const cNvPr = elements(genSlide, "p:cNvPr").find((el) => el.getAttribute("name") === name);
+        if (cNvPr === void 0)
+          throw new PptcError("E_ENGINE", `generated element '${name}' not found in the generator output`);
+        const shape = slide.importNode(cNvPr.parentNode?.parentNode, true);
+        const ids = /* @__PURE__ */ new Map();
+        const relink = async (el) => {
+          for (let i = 0; i < el.attributes.length; i++) {
+            const attr = el.attributes.item(i);
+            if (attr === null || attr.namespaceURI !== NS_R)
+              continue;
+            let id = ids.get(attr.value);
+            const rel = genRels.get(attr.value);
+            if (id === void 0 && rel !== void 0) {
+              const target = rel.target === null ? rel.rel.getAttribute("Target") ?? "" : path10.posix.relative(path10.posix.dirname(part), await pkg.clonePart(source, rel.target, copies));
+              id = pkg.addRel(rels, rel.type, target, rel.target === null);
+              ids.set(attr.value, id);
+            }
+            if (id !== void 0)
+              el.setAttributeNS(NS_R, attr.name, id);
+          }
+          for (let n = el.firstChild; n !== null; n = n.nextSibling)
+            if (n.nodeType === 1)
+              await relink(n);
+        };
+        await relink(shape);
+        firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()));
+        spTree.insertBefore(shape, anchor2);
+      }
+    }
+  };
+};
+
+// src/engine/inplace/engine.ts
+var REL2 = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+var FOREIGN_RELS = ["/slideLayout", "/slideMaster", "/slide", "/notesMaster", "/theme"];
 var withStdoutShield = async (fn) => {
   const original = { log: console.log, info: console.info, warn: console.warn };
   console.log = (...args) => {
@@ -61884,185 +45328,159 @@ var withStdoutShield = async (fn) => {
     console.warn = original.warn;
   }
 };
-var selectorFor = (source, name, pick2) => {
-  let n = 0;
-  if (source !== null)
-    for (const cNvPr of elements(source, "p:cNvPr")) {
-      if (cNvPr.getAttribute("name") !== name)
-        continue;
-      if (pick2(cNvPr.parentNode?.parentNode)) {
-        const creationId = firstElement(cNvPr, "a16:creationId")?.getAttribute("id") ?? "";
-        const unique = creationId !== "" && elements(source, "a16:creationId").filter((el) => el.getAttribute("id") === creationId).length === 1;
-        return { name, nameIdx: n, ...unique && { creationId } };
-      }
-      n++;
-    }
-  return { name, nameIdx: 0 };
-};
-var isPlaceholder = (idx) => (shape) => {
-  const ph = firstElement(shape, "p:ph");
-  return ph !== null && Number(ph.getAttribute("idx") ?? "0") === idx;
-};
-var isTopLevel = (shape) => shape.parentNode?.nodeName === "p:spTree";
-var slideCallback = (entry, source) => (slide) => {
-  for (const fill of entry.fills)
-    if (fill.text !== void 0) {
-      const text = fill.text;
-      slide.modifyElement(selectorFor(source, fill.phName, isPlaceholder(fill.phIdx)), [
-        (el) => setShapeText(el, text, fill.append)
-      ]);
-    }
-  for (const setText of entry.setTexts)
-    slide.modifyElement(selectorFor(source, setText.name, isTopLevel), [
-      (el) => setShapeText(el, setText.text)
-    ]);
-  for (const planned of entry.elements)
-    slide.generate(
-      (pSlide, gen) => addElement(pSlide, gen, planned.spec),
-      planned.name ?? void 0
-    );
-};
-var captureDiagramSources = async (archive, plan) => {
-  const out = [];
-  for (const entry of plan.entries) {
-    const found = [];
-    out.push(found);
-    if (entry.source.kind !== "self")
+var hasEdits = (e) => e.fills.length > 0 || e.setTexts.length > 0 || e.removeNames.length > 0 || e.elements.length > 0 || e.notes !== null || e.footer !== null || e.background !== null;
+var closure = async (pkg, slide) => {
+  const parts = [];
+  const queue = [slide];
+  while (queue.length > 0) {
+    const part = queue.pop();
+    if (parts.includes(part) || !pkg.has(part))
       continue;
-    const part = entry.source.part;
-    const slideText = await archive.text(part);
-    if (slideText === null || !slideText.includes("dgm:relIds"))
+    parts.push(part);
+    if (!pkg.has(relsPartOf(part)))
       continue;
-    const rels = await archive.xml(`ppt/slides/_rels/${path8.posix.basename(part)}.rels`);
-    const targetOf = new Map(elements(rels, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]));
-    const resolve = (rid) => {
-      const target = targetOf.get(rid);
-      return target === void 0 ? null : path8.posix.normalize(path8.posix.join("ppt/slides", target));
-    };
-    for (const el of elements(parseXml(slideText), "dgm:relIds")) {
-      const data = resolve(el.getAttribute("r:dm") ?? "");
-      if (data === null)
-        continue;
-      let frame = el;
-      while (frame !== null && frame.nodeName !== "p:graphicFrame")
-        frame = frame.parentNode;
-      const relId = /<dsp:dataModelExt\b[^>]*?\brelId="([^"]+)"/.exec(await archive.text(data) ?? "")?.[1];
-      found.push({
-        frame: frame === null ? null : firstElement(frame, "p:cNvPr")?.getAttribute("id") ?? null,
-        data,
-        drawing: relId === void 0 ? null : resolve(relId)
-      });
-    }
+    parts.push(relsPartOf(part));
+    for (const t of Package.targets(part, await pkg.rels(part)))
+      if (t.target !== null && !FOREIGN_RELS.some((k) => t.type.endsWith(k)))
+        queue.push(t.target);
   }
-  return out;
+  return parts;
 };
-var captureSlideTags = async (archive, plan) => {
-  const out = [];
-  for (const entry of plan.entries) {
-    const refs = [];
-    out.push(refs);
-    if (entry.source.kind !== "self")
-      continue;
-    const part = entry.source.part;
-    const slideText = await archive.text(part);
-    if (slideText === null || !slideText.includes("<p:custDataLst"))
-      continue;
-    const relsDoc = await archive.xml(`ppt/slides/_rels/${path8.posix.basename(part)}.rels`);
-    const rels = new Map(elements(relsDoc, "Relationship").map((r) => [r.getAttribute("Id") ?? "", r]));
-    const slideDoc = parseXml(slideText);
-    const allCNvPr = elements(slideDoc, "p:cNvPr");
-    for (const lst of elements(slideDoc, "p:custDataLst")) {
-      const parent = lst.parentNode;
-      const cNvPr = parent?.nodeName === "p:nvPr" ? firstElement(parent.parentNode, "p:cNvPr") : null;
-      const shapeId = cNvPr?.getAttribute("id") ?? null;
-      const owner = cNvPr === null || shapeId === null ? null : `${shapeId}#${allCNvPr.filter((el) => el.getAttribute("id") === shapeId).indexOf(cNvPr)}`;
-      if (parent?.nodeName === "p:nvPr" && owner === null)
-        continue;
-      const tagsEl = firstElement(lst, "p:tags");
-      const children = [...elements(lst, "p:custData"), ...tagsEl === null ? [] : [tagsEl]];
-      for (const el of children) {
-        const rel = rels.get(el.getAttribute("r:id") ?? "");
-        if (rel !== void 0)
-          refs.push({
-            kind: el.nodeName,
-            relType: rel.getAttribute("Type") ?? "",
-            target: rel.getAttribute("Target") ?? "",
-            owner
-          });
-      }
-    }
-  }
-  return out;
+var linksTo = async (pkg, parts, removed) => {
+  for (const part of parts.filter((p) => !p.endsWith(".rels") && pkg.has(relsPartOf(p))))
+    if (Package.targets(part, await pkg.rels(part)).some((t) => t.type.endsWith("/slide") && t.target !== null && removed.has(t.target)))
+      return true;
+  return false;
 };
-var executePlan = async (deckFile, outFile, plan, archive, seedPath, tmpName, tmpFile) => {
-  const slideTags = await captureSlideTags(archive, plan);
-  const diagramSources = await captureDiagramSources(archive, plan);
-  const automizer = new Automizer({
-    templateDir: "",
-    outputDir: cacheDir(),
-    removeExistingSlides: true,
-    verbosity: 0
-  });
-  const sourceFile = archive.normalized ? `${tmpFile}-source.pptx` : path8.resolve(deckFile);
-  if (archive.normalized)
-    writeFileSync2(sourceFile, await archive.zip.generateAsync({ type: "nodebuffer" }));
-  let pres = automizer.loadRoot(sourceFile).load(sourceFile, "self");
-  if (seedPath !== null)
-    pres = pres.load(seedPath, "seed");
-  const sources = [];
-  for (const entry of plan.entries) {
-    const sourceNumber = entry.source.kind === "self" ? partNumber(entry.source.part) : entry.source.layoutIndex + 1;
-    const source = entry.source.kind === "self" ? await archive.xml(entry.source.part) : null;
-    sources.push(source);
-    pres.addSlide(entry.source.kind, sourceNumber, slideCallback(entry, source));
-  }
-  try {
-    await pres.write(tmpName);
-  } catch (err) {
-    if (archive.normalized && err instanceof Error)
-      err.message = err.message.split(path8.basename(sourceFile)).join(path8.basename(deckFile));
-    throw err;
-  } finally {
-    if (archive.normalized)
-      rmSync2(sourceFile, { force: true });
-  }
-  const presXml = await archive.zip.file("ppt/presentation.xml")?.async("string") ?? "";
-  const usedIds = new Set([...presXml.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => Number(m[1])));
-  let nextId = Math.max(255, ...usedIds);
-  const freshId = () => {
-    nextId = nextId < 2147483647 ? nextId + 1 : 256;
-    while (usedIds.has(nextId))
-      nextId++;
-    usedIds.add(nextId);
-    return nextId;
-  };
-  const work = plan.entries.map((entry, i) => ({
-    slideId: entry.virtualId > 0 ? entry.virtualId : freshId(),
-    sourcePart: entry.source.kind === "self" && entry.virtualId > 0 ? entry.source.part : null,
-    notes: entry.notes,
-    footer: entry.footer,
-    background: entry.background,
-    hidden: entry.hidden,
-    slideTags: slideTags[i],
-    diagrams: diagramSources[i],
-    /*  shapes to remove, by name and occurrence on the source slide --
-        removed in the post-pass, as automizer's removeElement cannot
-        resolve linked, package-embedded or renamed media  */
-    removals: entry.removeNames.map((name) => {
-      const sel = selectorFor(sources[i] ?? null, name, isTopLevel);
-      return { name: sel.name, nth: sel.nameIdx };
-    }),
-    images: entry.fills.filter((f) => f.image !== void 0).map((f) => ({
-      phIdx: f.phIdx,
-      path: f.image,
-      ...f.frame !== void 0 && { frame: f.frame }
-    }))
+var executePlan = async (outFile, plan, archive) => {
+  const presIn = await archive.xml("ppt/presentation.xml");
+  const inputIds = elements(presIn, "p:sldId").map((s) => Number(s.getAttribute("id")));
+  const pkg = await Package.open(readFileSync6(archive.file), inputIds);
+  const pres = await pkg.xml("ppt/presentation.xml");
+  const presRels = await pkg.rels("ppt/presentation.xml");
+  const ridTarget = new Map(Package.targets("ppt/presentation.xml", presRels).map((t) => [t.rel.getAttribute("Id") ?? "", t.target ?? ""]));
+  const input2 = elements(pres, "p:sldId").map((el) => ({
+    el,
+    id: Number(el.getAttribute("id")),
+    part: ridTarget.get(el.getAttribute("r:id") ?? "") ?? ""
   }));
-  const inputRidToId = Object.fromEntries([...presXml.matchAll(/<p:sldId [^>]*>/g)].map((m) => [/r:id="([^"]+)"/.exec(m[0])?.[1] ?? "", Number(/\bid="(\d+)"/.exec(m[0])?.[1])]));
-  const finalBytes = await postProcess(readFileSync6(tmpFile), work, plan.props, plan.customProps, inputRidToId);
+  const notesMaster = Package.targets("ppt/presentation.xml", presRels).find((t) => t.type.endsWith("/notesMaster"))?.target ?? "ppt/notesMasters/notesMaster1.xml";
+  const layouts = await layoutOrder(archive.zip);
+  const keptIds = new Set(plan.entries.filter((e) => e.virtualId > 0).map((e) => e.virtualId));
+  const removed = new Set(input2.filter((s) => !keptIds.has(s.id)).map((s) => s.part));
+  const parts = [];
+  for (const entry of plan.entries) {
+    const kept = input2.find((s) => s.id === entry.virtualId);
+    if (kept !== void 0)
+      parts.push(kept.part);
+    else if (entry.source.kind === "self")
+      parts.push(await pkg.clonePart(pkg, entry.source.part));
+    else {
+      const layout = layouts[entry.source.layoutIndex];
+      if (layout === void 0)
+        throw new PptcError("E_TEMPLATE", `the deck has no layout ${entry.source.layoutIndex}`);
+      parts.push(await createSlide(pkg, layout));
+    }
+  }
+  const names = new Set(Object.keys(archive.zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")));
+  const notesOwner = /* @__PURE__ */ new Set();
+  const touched = [];
+  const sharedNotes = [];
+  const untouched = /* @__PURE__ */ new Map();
+  const warnings = [];
+  for (const [i, entry] of plan.entries.entries()) {
+    const part = parts[i];
+    if (entry.virtualId <= 0) {
+      touched.push(true);
+      sharedNotes.push(false);
+      continue;
+    }
+    const xml = await archive.text(part) ?? "";
+    const relsPart = relsPartOf(part);
+    const defects = [
+      ...shapeIdFindings(part, xml),
+      ...relsFindings(relsPart, await archive.text(relsPart) ?? "", names)
+    ];
+    const notes = Package.targets(part, await pkg.rels(part)).find((t) => t.type.endsWith("/notesSlide"))?.target ?? null;
+    const shared = notes !== null && notesOwner.has(notes);
+    if (notes !== null)
+      notesOwner.add(notes);
+    const own2 = await closure(pkg, part);
+    const hidden = /<p:sld\b[^>]*\bshow="0"/.test(xml);
+    const touch = hasEdits(entry) || hidden !== entry.hidden || shared || defects.length > 0 || await linksTo(pkg, own2, removed);
+    touched.push(touch);
+    sharedNotes.push(shared);
+    if (shared)
+      defects.push(`notes part ${notes} is shared with another slide`);
+    if (defects.length > 0)
+      warnings.push({
+        code: "W_REPAIRED",
+        slide: { id: entry.virtualId, index: i, title: entry.title },
+        message: `the input deck carried PowerPoint repair triggers on this slide; pptc repaired them: ${defects.join("; ")}`
+      });
+    if (!touch)
+      for (const p of own2)
+        untouched.set(p, pkg.zip.file(p));
+  }
+  const generated = await generateElements(plan.entries);
+  for (const [i, entry] of plan.entries.entries())
+    if (touched[i] === true)
+      await editSlide(pkg, {
+        part: parts[i],
+        entry,
+        removed,
+        notesMaster,
+        generated,
+        sharedNotes: sharedNotes[i] === true
+      });
+  if (parts.length !== input2.length || parts.some((p, i) => p !== input2[i]?.part)) {
+    let lst = firstElement(pres, "p:sldIdLst");
+    if (lst === null) {
+      lst = pres.createElementNS(NS_P, "p:sldIdLst");
+      pres.documentElement?.insertBefore(lst, firstElement(pres, "p:sldSz"));
+    }
+    for (const s of input2)
+      lst.removeChild(s.el);
+    for (const [i, entry] of plan.entries.entries()) {
+      let el = input2.find((s) => s.id === entry.virtualId)?.el;
+      if (el === void 0) {
+        el = pres.createElementNS(NS_P, "p:sldId");
+        el.setAttribute("id", String(pkg.alloc.slideId()));
+        el.setAttributeNS(NS_R, "r:id", pkg.addRel(
+          presRels,
+          `${REL2}/slide`,
+          path11.posix.relative("ppt", parts[i])
+        ));
+      }
+      lst.appendChild(el);
+    }
+    for (const s of input2.filter((s2) => removed.has(s2.part)))
+      for (const rel of elements(presRels, "Relationship"))
+        if (rel.getAttribute("Id") === s.el.getAttribute("r:id"))
+          rel.parentNode?.removeChild(rel);
+    pkg.write("ppt/presentation.xml", pres);
+    pkg.writeRels("ppt/presentation.xml", presRels);
+  }
+  await pkg.remove([...removed]);
+  if (removed.size > 0)
+    for (const relsPart of Object.keys(pkg.zip.files).filter((f) => /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/viewProps\.xml\.rels$/.test(f))) {
+      const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1");
+      if (!pkg.has(owner))
+        continue;
+      const rels = await pkg.rels(owner);
+      const doc = await pkg.xml(owner);
+      if (dropLinksToRemoved(owner, doc, rels, removed)) {
+        pkg.writeRels(owner, rels);
+        pkg.write(owner, doc);
+      }
+    }
+  await finishPackage(pkg.zip, parts, plan.props, plan.customProps);
+  const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const after = await import_jszip6.default.loadAsync(finalBytes);
+  await normalizeRelTargets(after);
   const expects = plan.entries.map((entry, i) => ({
-    source: entry.source.kind === "self" ? entry.source.part : null,
-    label: `id:${work[i].slideId} '${entry.title ?? ""}'`,
+    source: entry.source.kind === "self" && touched[i] === true ? entry.source.part : null,
+    label: `#${i} '${entry.title ?? ""}'`,
     notes: entry.notes !== null,
     assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== void 0) ? "any" : entry.elements.length > 0 ? "grow" : "same",
     grow: {
@@ -62072,41 +45490,32 @@ var executePlan = async (deckFile, outFile, plan, archive, seedPath, tmpName, tm
     },
     textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== void 0 && !f.append)
   }));
-  const content = await verifyContent(archive.zip, await import_jszip6.default.loadAsync(finalBytes), expects);
-  const findings = [...await verifyBytes(finalBytes, archive.zip), ...content.blocked];
+  const content = await verifyContent(archive.zip, after, expects);
+  const findings = [
+    ...await verifyBytes(finalBytes, archive.zip),
+    ...content.blocked,
+    ...content.lost.map((l) => `slide ${expects[l.slide].label}: ${l.what} would be lost although no op removed it`),
+    ...[...untouched].filter(([name, file2]) => pkg.zip.file(name) !== file2).map(([name]) => `${name}: part of an untouched slide would change`)
+  ];
   if (findings.length > 0)
     throw new PptcError(
       "E_INTEGRITY",
       `the engine produced ${findings.length} integrity violation(s); deck not written`,
       { findings }
     );
-  atomicWrite(path8.resolve(outFile), finalBytes);
-  const warnings = content.lost.map((l) => ({
-    code: "W_CONTENT_LOST",
-    slide: {
-      id: work[l.slide].slideId,
-      index: l.slide,
-      title: plan.entries[l.slide].title
-    },
-    lost: l.what,
-    message: `the engine could not carry over ${l.what} on this slide although no op touched it -- tell the user`
-  }));
+  atomicWrite(path11.resolve(outFile), finalBytes);
   const refIndexes = {};
   for (const [name, entry] of plan.refs)
     refIndexes[name] = plan.entries.indexOf(entry);
   return { slideCount: plan.entries.length, refIndexes, warnings };
 };
-var runSession = async (deckFile, outFile, plan, archive, templatePath) => {
-  const needsSeed = plan.entries.some((e) => e.source.kind === "seed");
-  const seedPath = needsSeed ? templatePath !== null ? await ensureSeed(templatePath) : await ensureSeedFromDeck(deckFile) : null;
-  const tmpName = `pptc-session-${process.pid}.pptx`;
-  const tmpFile = path8.join(cacheDir(), tmpName);
+var runSession = async (deckFile, outFile, plan, archive, _templatePath) => {
   try {
-    return await withStdoutShield(() => executePlan(deckFile, outFile, plan, archive, seedPath, tmpName, tmpFile));
+    if (path11.resolve(deckFile) !== archive.file)
+      throw new PptcError("E_ENGINE", "the archive does not belong to the deck file");
+    return await withStdoutShield(() => executePlan(outFile, plan, archive));
   } catch (err) {
     throw toPptcError(err);
-  } finally {
-    rmSync2(tmpFile, { force: true });
   }
 };
 
@@ -62199,7 +45608,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     for (const fill of entry.fills)
       if (fill.image !== void 0) {
         requireFile(fill.image, "image");
-        const ext = path9.extname(fill.image).slice(1).toLowerCase();
+        const ext = path12.extname(fill.image).slice(1).toLowerCase();
         if (ext !== "" && IMAGE_TYPES[ext] === void 0)
           throw new PptcError(
             "E_SCHEMA",
@@ -62268,8 +45677,8 @@ var cmdApply = async (argv) => {
 };
 
 // src/commands/new.ts
-import { existsSync as existsSync2, rmSync as rmSync3 } from "node:fs";
-import path10 from "node:path";
+import { existsSync as existsSync2, rmSync } from "node:fs";
+import path13 from "node:path";
 var cmdNew = async (argv) => {
   const args = parse3(argv, {
     "template": { type: "string" },
@@ -62285,12 +45694,12 @@ var cmdNew = async (argv) => {
     throw new PptcError("E_FILE", `'${deckFile}' already exists -- use --force to overwrite`);
   const opsArg = args.str("ops");
   if (opsArg === null) {
-    atomicWrite(path10.resolve(deckFile), await buildEmptyDeck(templatePath));
-    return { file: path10.resolve(deckFile), result: { created: true, slideCount: 0 } };
+    atomicWrite(path13.resolve(deckFile), await buildEmptyDeck(templatePath));
+    return { file: path13.resolve(deckFile), result: { created: true, slideCount: 0 } };
   }
   const rawDoc = parseJson(resolvePayload(opsArg));
   const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc;
-  const stage = path10.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
+  const stage = path13.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
   try {
     atomicWrite(stage, await buildEmptyDeck(templatePath));
     const result = await executeOps(stage, doc, {
@@ -62298,12 +45707,12 @@ var cmdNew = async (argv) => {
       dryRun: false,
       strict: args.flag("strict"),
       expectRev: null,
-      outFile: path10.resolve(deckFile),
+      outFile: path13.resolve(deckFile),
       minFontPt: minFontPtArg(args)
     });
     return { ...result, result: { ...result.result, created: true } };
   } finally {
-    rmSync3(stage, { force: true });
+    rmSync(stage, { force: true });
   }
 };
 
@@ -62487,8 +45896,8 @@ var cmdMove = async (argv) => {
 };
 
 // src/commands/tpl.ts
-import { readdirSync as readdirSync2, existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
-import path11 from "node:path";
+import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
+import path14 from "node:path";
 
 // src/core/describe/minimap.ts
 var MAP_W = 40;
@@ -62627,13 +46036,13 @@ var cmdTplList = (argv) => {
   const dir = args.positionals[0];
   if (!existsSync3(dir))
     throw new PptcError("E_FILE", `directory not found: '${dir}'`);
-  const templates = readdirSync2(dir).filter((f) => /\.(potx|pptx)$/i.test(f)).sort().map((f) => ({
-    file: path11.join(dir, f),
-    sidecar: existsSync3(path11.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
+  const templates = readdirSync(dir).filter((f) => /\.(potx|pptx)$/i.test(f)).sort().map((f) => ({
+    file: path14.join(dir, f),
+    sidecar: existsSync3(path14.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
   }));
   if (args.flag("plain"))
-    return { plain: templates.length === 0 ? `(no templates in ${path11.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
-  return { result: { dir: path11.resolve(dir), templates } };
+    return { plain: templates.length === 0 ? `(no templates in ${path14.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
+  return { result: { dir: path14.resolve(dir), templates } };
 };
 var cmdTplDescribe = async (argv) => {
   const args = parse3(argv, {
@@ -62645,19 +46054,19 @@ var cmdTplDescribe = async (argv) => {
   const { info, sidecar } = await loadTemplate(file2);
   const filtered = filterLayouts(info, args.str("layout"));
   if (args.flag("plain"))
-    return { plain: narrateTemplate(filtered, path11.basename(file2), sidecar) };
+    return { plain: narrateTemplate(filtered, path14.basename(file2), sidecar) };
   if ((args.str("format") ?? "text") === "json")
-    return { file: path11.resolve(file2), result: filtered };
+    return { file: path14.resolve(file2), result: filtered };
   return {
-    file: path11.resolve(file2),
-    result: { description: narrateTemplate(filtered, path11.basename(file2), sidecar) }
+    file: path14.resolve(file2),
+    result: { description: narrateTemplate(filtered, path14.basename(file2), sidecar) }
   };
 };
 var cmdTplInspect = async (argv) => {
   const args = parse3(argv, { "layout": { type: "string" } }, ["template"]);
   const file2 = args.positionals[0];
   const { info } = await loadTemplate(file2);
-  return { file: path11.resolve(file2), result: filterLayouts(info, args.str("layout")) };
+  return { file: path14.resolve(file2), result: filterLayouts(info, args.str("layout")) };
 };
 var validate2 = (info, hasNotesMaster) => {
   const issues = [];
@@ -62691,11 +46100,11 @@ var cmdTplValidate = async (argv) => {
     throw new PptcError("E_LINT", "template validation failed", { issues });
   if (args.flag("plain"))
     return { plain: [
-      `${path11.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
+      `${path14.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
       ...issues.map((i) => `  ${i.severity}: ${i.message}`)
     ].join("\n") };
   return {
-    file: path11.resolve(file2),
+    file: path14.resolve(file2),
     result: {
       status: issues.length === 0 ? "ok" : "warn",
       layouts: info.layouts.map((l) => ({ index: l.index, name: l.name })),

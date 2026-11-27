@@ -9,8 +9,8 @@ cli/        entry, dispatch, envelope rendering, exit-code mapping
   ↓
 commands/   one module per command -- thin orchestration only
   ↓
-engine/     OOXML adapters: reader, seed factory, automizer session,
-            PptxGenJS element builders, zip post-pass, self-verify
+engine/     OOXML adapters: reader, in-place engine, PptxGenJS element
+            builders, package-wide steps, self-verify, content guard
   ↓
 core/       pure domain logic: model, selectors, ops planning,
             geometry→semantics, lint
@@ -40,19 +40,21 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `core/ops/fill-common.ts` | the shared fill payload (placeholders, notes, footer, background, hidden) planned identically for `slide.add` and `slide.fill` |
 | `core/ops/planner.ts` | registry assembly, rev check, whole-document planning |
 | `engine/reader.ts` | read-only OOXML: TemplateInfo, DeckState, rev hashing |
-| `engine/seed.ts` | seed-deck factory (one empty slide per layout), content-hash cache |
-| `engine/session.ts` | automizer pass + post-pass + atomic write |
+| `engine/seed.ts` | slides and decks from layouts: `slideFromLayout` (empty slide with cloned placeholders `PptcPh-<idx>`), layout order, `buildEmptyDeck` for `new` |
+| `engine/inplace/engine.ts` | `runSession`: slide structure, touched-slide detection, one pass per touched slide, slide list, package-wide steps, self-checks (verify, content guard, byte guard), atomic write |
+| `engine/inplace/package.ts` | part-level package access; rel-graph clone under fresh names (`slide.copy`, transplanted parts) |
+| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: removals, text, picture placeholders, background, footer, notes, transplanted elements, hyperlinks, visibility, links to removed slides, repairs |
+| `engine/inplace/transplant.ts` | `el.add`: one PptxGenJS deck per apply (one generator slide per target slide), shapes moved by object name with their parts |
 | `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`) |
-| `engine/elements.ts` | ElementSpec → PptxGenJS calls (automizer interop) |
-| `engine/post.ts` | zip post-pass: GC, notes, footer, background, slide visibility (`show="0"`), placeholder images, hyperlink rels, doc props, repair-trigger cleanup (stale rels, shape ids) |
-| `engine/verify.ts` | read-only integrity check against the known PowerPoint "repair" triggers; backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
-| `engine/guard.ts` | content self-check before every write: each slide the plan keeps must keep its notes and related parts (images, charts, embeddings), layouts/masters must not change (`E_INTEGRITY`) |
-| `engine/automizer-patches.ts` | fixes for pptx-automizer internals: part-name allocation (media, chart, SmartArt counters from the highest number in use; deck-unique OLE names), picture bullets, pictures with `media*` names, `package` rels, linked files, SmartArt without drawing, byte-order marks; fails loudly if an upgrade removes a patched member |
+| `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide |
+| `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections, content types, app properties |
+| `engine/verify.ts` | read-only integrity check against the known PowerPoint "repair" triggers; backs `pptc verify`, the self-verify before every write (`E_INTEGRITY`) and the input-defect detection of touched slides |
+| `engine/guard.ts` | content self-check before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them, layouts/masters must not change (`E_INTEGRITY`) |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries |
-| `engine/parts.ts` | zip part access helpers (read/parse archive parts) |
+| `engine/parts.ts` | zip part helpers and `PartAllocator`: every fresh part name, relationship id, sldId and shape id of an apply |
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |
 | `infra/errors.ts` | `PptcError` with stable codes and the exit-code table |
-| `infra/fs.ts` | `@file`/stdin payloads, atomic write, cache dir, hashing |
+| `infra/fs.ts` | `@file`/stdin payloads, atomic write, scratch dir, hashing |
 | `infra/version.ts` | the CLI version constant |
 
 ## Data flow: `apply`
@@ -64,55 +66,63 @@ reader      DeckState + deck layouts (+ template layouts when --template)
 planner     rev check → per-op plan transformers → MutationPlan
 lint        capacity warnings (E_LINT under --strict)
             ── everything above is side-effect-free; --dry-run stops here ──
-session     automizer: rebuild slide list (kept slides re-imported from the
-            deck itself, new slides imported from the template's seed deck),
-            callbacks apply DOM text + generated elements
-post-pass   zip level: GC orphan parts, prune presentation rels whose slide
-            part vanished, restore the planned sldIds (automizer renumbers
-            them by position), re-point notesSlide back-references, notes,
-            footer, background, slide visibility (re-apply `show="0"`),
-            placeholder images, hyperlink rels, doc props, uniquify cNvPr
-            shape ids
+structure   in place: kept slides stay where they are, copies are cloned
+            from the unchanged input, new slides come from the deck's own
+            layout parts; fresh names and ids from the PartAllocator
+touch       a kept slide is touched when an op edits or (un)hides it, it
+            links to a removed slide, shares a notes part or carries repair
+            triggers (W_REPAIRED); untouched slides are never written
+generate    PptxGenJS renders every el.add element of the apply into one
+            in-memory deck
+slides      one pass per touched slide: removals, text, picture placeholders,
+            background, footer, notes, transplanted elements, hyperlinks,
+            visibility, links to removed slides, repairs
+package     sldIdLst (kept ids, fresh ids for new and copied slides), removed
+            slides and links to them, then engine/post.ts: notes sweep, doc
+            props, asset GC, sections, content types, app properties
 verify      self-check the produced bytes against the known repair triggers,
-            and (guard) every kept slide against its source slide; any
+            every touched slide against its source (content guard) and every
+            part of every untouched slide against the input (byte guard); any
             finding aborts with E_INTEGRITY, nothing is written
 write       tmp file + rename (atomic), re-read → rev.after + ref→id map
 ```
 
 ## Engine constraints (why it is built this way)
 
-- **pptx-automizer imports slides, not layouts.** Hence the *seed deck*: for
-  each template, one empty slide per layout with the layout's placeholders
-  cloned on (normalized names `PptcPh-<idx>`), generated on demand and cached
-  by template content hash. `slide.add layout=N` imports seed slide N+1.
-  Footer, slide-number and date placeholders are cloned WITH their layout
-  content (footer text, `slidenum` field) so built slides behave like
-  PowerPoint-inserted ones; a master-view `lastView` in the template's
-  viewProps is stripped so decks open in normal view.
-- **`autoImportSlideMasters` stays off.** Templates with OLE objects on
-  masters/layouts crash automizer's master import; instead, the deck itself
-  always carries its masters/layouts (decks are created from the seed), so
-  imported slides re-bind to the root's identical layout numbering.
-- **automizer only appends.** Each apply rebuilds the deck: root loaded with
-  `removeExistingSlides`, every kept slide re-imported from the same file in
-  plan order. Edits on kept slides are modify callbacks on the re-import.
-- **The post-pass exists** because automizer cannot express notes, footer
-  cloning, backgrounds, slide visibility (it drops the `show="0"` "Hide
-  Slide" attribute on every rebuild), images into placeholders, hyperlink
-  relationships or doc props. It operates on the written zip via DOM and runs
-  before the atomic rename, so the all-or-nothing guarantee covers it.
-- **The post-pass also repairs after automizer.** Re-applying renames slide
-  parts and leaves relationship debris behind; element merge produces
-  colliding shape ids. The post-pass prunes presentation relationships whose
-  target part vanished, re-points each notesSlide back-reference at its
-  current parent slide, and renumbers duplicate `cNvPr` ids per slide --
-  any one of these triggers PowerPoint's "repair" dialog if left in.
-- **stdout is shielded during the engine pass.** automizer logs diagnostics
-  via `console.log`; the session diverts console output to stderr so the
-  one-JSON-envelope contract on stdout holds even on engine complaints.
-- **Garbage collection covers slide and notes parts only.** Media of removed
-  slides remains as unreferenced parts in the archive -- harmless for
-  correctness, slightly larger files after many removals.
+- **In place, not rebuilt.** 1.0.x rebuilt the whole deck through
+  pptx-automizer on every apply; its count-based, slide-local part and id
+  allocation moved media, notes, OLE objects, theme overrides, SmartArt,
+  tags, links and sections between slides. The in-place engine touches only
+  what the plan asks for: an untouched slide's parts are never parsed for
+  writing, renamed or re-serialized, and the byte guard proves it on every
+  apply.
+- **One allocator.** Every fresh part name continues above the highest
+  number of its family in the whole package, every relationship id is a
+  fresh `rIdPptc<N>`, every sldId is above every id of the input deck (a
+  removed id is never re-used). Nothing is ever named from a count.
+- **Slides from the deck's own layouts.** A new slide is the layout's
+  placeholders cloned onto an empty slide (normalized names `PptcPh-<idx>`;
+  footer, slide-number and date placeholders WITH their layout content).
+  Decks always carry their masters/layouts (`new` bakes them in from the
+  template), so no layout is ever imported; `--template` on `apply` only
+  checks that the template's layouts equal the deck's.
+- **Copies own their parts.** `slide.copy` clones the slide with its notes,
+  charts (with workbook, colors, style), embeddings, SmartArt, tags,
+  comments and theme overrides under fresh names; media, the layout and
+  external targets stay shared (media are immutable).
+- **PptxGenJS generates, the engine places.** All `el.add` elements of an
+  apply are rendered into one PptxGenJS deck; each shape is moved into its
+  target slide by its `<name>-<uuid>` object name, with the parts it
+  references copied under fresh names. `pptxgenjs` is pinned (3.12.0, the
+  version 1.0.x bundled) so generated XML stays stable.
+- **Repairs only where pptc writes.** BOM stripping, absolute-to-relative
+  targets and repair-trigger fixes happen on touched parts only; a slide
+  whose input carries repair triggers counts as touched, is repaired and
+  reported (`W_REPAIRED`). Package-wide parts (presentation, content types,
+  app properties) are kept consistent on every apply.
+- **stdout is shielded during the engine pass.** A library may log via
+  `console.log`; the engine diverts console output to stderr so the
+  one-JSON-envelope contract on stdout holds.
 
 ## Extending: a new op
 
@@ -121,17 +131,27 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
 2. Create the plan transformer in `core/ops/` fulfilling `OpHandler`
    (`plan(ctx, op)` rewrites the MutationPlan; never touch files).
 3. Register it in `core/ops/planner.ts` (`HANDLERS`).
-4. If the op introduces a new *kind* of mutation, teach `engine/session.ts`
-   (callback) or `engine/post.ts` (zip level) to interpret it.
+4. If the op introduces a new *kind* of mutation, teach
+   `engine/inplace/slides.ts` (per slide) or `engine/post.ts` (package-wide)
+   to interpret it, and mark the slide as touched in
+   `engine/inplace/engine.ts`.
 5. Add a unit test for the transformer and extend the integration roundtrip.
 
 ## Testing strategy
 
 - `test/unit/` -- pure core with geometry fixtures, no files
 - `test/golden/` -- `tpl describe` Markdown pinned as snapshot (the LLM-facing
-  contract)
+  contract), and the engine results of fixed op sequences over all ten ops
+  (per-slide fingerprints frozen from the 1.0.11 engine; the demo deck's and
+  the private templates' goldens stay local in `private-templates/golden/`)
 - `test/integration/` -- real write path against the committed neutral
   template fixture, incl. all-or-nothing and rev semantics
+- `test/integration/untouched.test.ts` -- every part of every untouched
+  slide keeps its bytes across edits, additions, copies, moves and removals
+- `test/integration/fuzz-semantic.test.ts` -- seeded random apply sequences
+  against an expected model (title, notes, image, chart, OLE payload,
+  section, sldId) after every apply; long runs via `PPTC_FUZZ_ROUNDS` and
+  `PPTC_FUZZ_SEEDS`
 - `test/integration/stress.test.ts` -- agent-like sessions: many applies in
   a row covering every op kind and element type, plus seeded-random edit
   combinations (reproducible LCG); planner rejections are fine, a

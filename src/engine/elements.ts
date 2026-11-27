@@ -4,14 +4,13 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  engine/elements: translate validated ElementSpec payloads into PptxGenJS
-**  calls. Runs inside pptx-automizer's `slide.generate()` interop, which
-**  hands us a PptxGenJS slide bound to the target template slide.
+**  calls on a generator slide; engine/inplace/transplant moves the result
+**  into the target slide.
 */
 
 import type { ChartData, ElementSpec, RichText, TableData } from "../schema/payloads.js"
 
-/*  PptxGenJS is provided at runtime by pptx-automizer's generate() callback;
-    we type the surface we use structurally to stay engine-agnostic.  */
+/*  the PptxGenJS surface used by pptc, typed structurally  */
 
 /**  the subset of the PptxGenJS slide API used by pptc  */
 export interface GenSlide {
@@ -108,7 +107,7 @@ const DEFAULT_COLORS = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F7964
 /**
  *  Render one validated element onto a PptxGenJS slide.
  *
- *  @param slide - PptxGenJS slide from automizer's generate() interop
+ *  @param slide - PptxGenJS generator slide
  *  @param gen - PptxGenJS root object (enums)
  *  @param el - validated element payload
  */

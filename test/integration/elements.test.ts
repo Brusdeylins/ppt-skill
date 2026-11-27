@@ -250,9 +250,9 @@ describe("write-path features", () => {
             { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "A" } } },
             { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "B" } } }
         ] }, opts)
-        /*  automizer re-imports every slide on each apply and mints a fresh
-            "-created" rel; without the prune the rels file would grow by one
-            per slide per apply until PowerPoint demands a repair  */
+        /*  the 1.0.x rebuild minted a fresh "-created" rel per slide and
+            apply until PowerPoint demanded a repair; no apply may grow the
+            presentation rels  */
         for (let i = 0; i < 6; i++)
             await executeOps(deck, { ops: [
                 { op: "meta.props", set: { title: `pass ${i}` } }
@@ -280,7 +280,7 @@ describe("write-path features", () => {
             { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "N1" } }, notes: "notes one" },
             { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "N2" } }, notes: "notes two" }
         ] }, opts)
-        /*  inject the aliasing automizer's part renumbering can leave behind:
+        /*  inject the aliasing older pptc versions could leave behind:
             point the second slide's notes rel at the first slide's notes part  */
         const zip = await JSZip.loadAsync(readFileSync(deck))
         const relsParts = Object.keys(zip.files)

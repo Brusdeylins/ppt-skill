@@ -24,8 +24,8 @@ export default tseslint.config(
         }
     },
     {
-        /*  main renders the envelope; session shields engine console output  */
-        files: ["src/cli/main.ts", "src/engine/session.ts"],
+        /*  main renders the envelope; the engine shields library console output  */
+        files: ["src/cli/main.ts", "src/engine/inplace/engine.ts"],
         rules: { "no-console": "off" }
     },
     {

@@ -4,14 +4,15 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  engine/guard: semantic self-check of an apply. verify.ts only proves the
-**  output opens without a repair prompt; this module proves that every slide
-**  still carries what the plan did NOT ask to change. Each apply rebuilds
-**  the whole deck, so a part-naming or id collision in the engine can move
-**  notes, images, charts or embedded objects to another slide while the
-**  package stays perfectly valid. A fingerprint of each kept slide (notes
-**  text plus the type and content hash of every related part) and of every
-**  layout/master is compared before and after; a mismatch becomes a finding
-**  and the apply fails atomically with E_INTEGRITY.
+**  output opens without a repair prompt; this module proves that every
+**  touched slide still carries what the plan did NOT ask to change (the
+**  engine's byte guard covers the untouched ones). A part-naming or id slip
+**  while copying, transplanting or repairing could move notes, images,
+**  charts or embedded objects to another slide while the package stays
+**  perfectly valid. A fingerprint of each such slide (notes text plus the
+**  type and content hash of every related part) and of every layout/master
+**  is compared before and after; a mismatch becomes a finding and the apply
+**  fails atomically with E_INTEGRITY.
 */
 
 import JSZip from "jszip"
@@ -21,7 +22,8 @@ import { elements, parseXml, serializeXml } from "./xml.js"
 
 /**  what the plan allows to change on one output slide  */
 export interface SlideExpect {
-    /**  source slide part in the input deck, null for slides from the seed  */
+    /**  source slide part in the input deck; null for new slides and for
+         untouched ones (the engine's byte guard covers those)  */
     source: string | null
     /**  sldId and title of the output slide, for readable findings  */
     label: string
@@ -65,9 +67,9 @@ export const digestBytes = (bytes: Buffer): string =>
 
 /**  content hash of a part. XML is hashed in a canonical form -- parsed
      and re-serialized, so quoting, entity and empty-element spellings do
-     not matter (automizer re-serializes masters on every apply) -- with
-     relationship ids and layout ids blanked, since the engine re-mints
-     them without changing content, and slide-jump links left out  */
+     not matter (a touched part is re-serialized) -- with relationship ids
+     and layout ids blanked, since a copied slide carries them under other
+     names, and slide-jump links left out (links to removed slides go)  */
 const digest = async (zip: JSZip, part: string): Promise<string> => {
     const file = zip.file(part)
     if (file === null)
@@ -177,9 +179,8 @@ const parseEntry = (entry: string): { base: string, children: string[] } => {
 }
 
 /**  outcome of the content comparison: `blocked` findings mean another
-     slide's content would appear (an overwrite or swap) and fail the
-     apply; `lost` items are content that would merely vanish (a known
-     engine limitation) and are reported as warnings  */
+     slide's content would appear (an overwrite or swap); `lost` items are
+     content that would vanish. Both fail the apply.  */
 export interface ContentCheck {
     blocked: string[]
     lost: { slide: number, what: string }[]
