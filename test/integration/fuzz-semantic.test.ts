@@ -93,7 +93,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
     }
 
     for (let round = 0; round < rounds; round++) {
-        const kind = model.length < 2 ? 0 : pick(7)
+        const kind = model.length < 2 ? 0 : pick(10)
         const ops: unknown[] = []
         if (kind === 0 || kind === 6) {
             const t = title()
@@ -135,6 +135,19 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
             const target = model[pick(model.length)] as Expected
             target.notes = `notes-${target.title}-r${round}`
             ops.push({ op: "slide.fill", slide: `title:${target.title}`, notes: target.notes })
+        }
+        else if (kind === 7) {
+            const target = model[pick(model.length)] as Expected
+            ops.push({ op: "slide.fill", slide: `title:${target.title}`, footer: `Fuß ${round}` })
+        }
+        else if (kind === 8) {
+            const target = model[pick(model.length)] as Expected
+            ops.push({ op: "slide.fill", slide: `title:${target.title}`, hidden: rnd() < 0.5 })
+        }
+        else if (kind === 9) {
+            const target = model[pick(model.length)] as Expected
+            ops.push({ op: "el.add", slide: `title:${target.title}`, elements: [
+                { type: "textbox", name: `Box${round}`, frame: { x: 8, y: 5, w: 2, h: 1 }, text: `Box ${round}` } ] })
         }
         else
             ops.push({ op: "meta.props", set: { title: `round ${round}` } })
