@@ -6,7 +6,8 @@
 **  Contract: the pptx-automizer patches (engine/automizer-patches.ts) are
 **  effective in the BUILT bundle, not only in the sources -- the reported
 **  regression (images added in separate applies overwriting each other)
-**  replayed through dst/pptc.mjs. `npm test` builds first.
+**  and OLE objects of two slides collapsing into one file, replayed
+**  through dst/pptc.mjs. `npm test` builds first.
 */
 
 import { describe, expect, it } from "vitest"
@@ -43,5 +44,46 @@ describe("automizer patches in the built bundle", () => {
         const fills = await Promise.all(Object.keys(zip.files).filter((f) => /^ppt\/media\/.+\.svg$/.test(f))
             .map(async (f) => /fill="(\w+)"/.exec(await (zip.file(f) as JSZip.JSZipObject).async("string"))?.[1]))
         expect(fills.sort()).toEqual([ ...colors ].sort())
+    })
+
+    it("keeps the embedded OLE objects of two slides apart", async () => {
+        mkdirSync(TMP, { recursive: true })
+        const deck = path.join(TMP, "bundle-patches-ole.pptx")
+        expect(run("new", deck, "--template", TEMPLATE, "--force").ok).toBe(true)
+        const add = spawnSync("node", [ BIN, "apply", deck, "--ops", "-" ], { encoding: "utf8", input: JSON.stringify({ ops: [
+            { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "A" } } },
+            { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "B" } } } ] }) })
+        expect((JSON.parse(add.stdout) as { ok: boolean }).ok).toBe(true)
+
+        /*  one OLE object per slide, each with its own payload  */
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const slides = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort()
+        for (const [ i, slide ] of slides.entries()) {
+            zip.file(`ppt/embeddings/oleObject${i + 1}.bin`, Buffer.from(`payload-${i}`))
+            const ct = await (zip.file("[Content_Types].xml") as JSZip.JSZipObject).async("string")
+            zip.file("[Content_Types].xml", ct.replace("</Types>",
+                `<Override PartName="/ppt/embeddings/oleObject${i + 1}.bin" ContentType="application/vnd.openxmlformats-officedocument.oleObject"/></Types>`))
+            const relsPart = `ppt/slides/_rels/${path.posix.basename(slide)}.rels`
+            const rels = await (zip.file(relsPart) as JSZip.JSZipObject).async("string")
+            zip.file(relsPart, rels.replace("</Relationships>", "<Relationship Id=\"rId90\" "
+                + "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject\" "
+                + `Target="../embeddings/oleObject${i + 1}.bin"/></Relationships>`))
+            const xml = await (zip.file(slide) as JSZip.JSZipObject).async("string")
+            zip.file(slide, xml.replace("</p:spTree>", "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"90\" name=\"Objekt\"/>"
+                + "<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></p:xfrm>"
+                + "<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/presentationml/2006/ole\">"
+                + "<p:oleObj progId=\"Package\" r:id=\"rId90\"><p:embed/></p:oleObj></a:graphicData></a:graphic></p:graphicFrame></p:spTree>"))
+        }
+        writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+
+        expect(run("apply", deck, "-e", JSON.stringify({ op: "meta.props", set: { title: "x" } })).ok).toBe(true)
+        const out = await JSZip.loadAsync(readFileSync(deck))
+        const payloads: string[] = []
+        for (const slide of Object.keys(out.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort()) {
+            const rels = await (out.file(`ppt/slides/_rels/${path.posix.basename(slide)}.rels`) as JSZip.JSZipObject).async("string")
+            const target = /\/oleObject" Target="\.\.\/embeddings\/([^"]+)"/.exec(rels)?.[1] as string
+            payloads.push(await (out.file(`ppt/embeddings/${target}`) as JSZip.JSZipObject).async("string"))
+        }
+        expect(payloads.sort()).toEqual([ "payload-0", "payload-1" ])
     })
 })
