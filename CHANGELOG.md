@@ -81,6 +81,15 @@
   `presentation.xml` without a relationship. Sections stay contiguous after
   `slide.move` and `slide.copy`: moved, copied and new slides join their
   predecessor's section.
+- **Fix: decks that could not be edited at all.** Every apply failed
+  (`E_ENGINE`/`E_TEMPLATE`, deck untouched) on decks with: an embedded
+  Excel object (Insert > Object; its `package` rel was taken for a chart),
+  an externally linked picture or OLE object, SmartArt without a drawing
+  part, XML parts starting with a byte-order mark (some .NET tools and six
+  of PowerPoint's own themes), or absolute relationship targets
+  (`/ppt/...`). `el.rm` of a picture added by `el.add` in an earlier apply
+  failed the same way. All of them work now; linked targets are kept as
+  they are, absolute targets are written back in relative form.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

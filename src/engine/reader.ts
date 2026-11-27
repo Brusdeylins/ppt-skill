@@ -16,7 +16,7 @@ import { PptcError } from "../infra/errors.js"
 import { contentHash, requireFile } from "../infra/fs.js"
 import { estimateCapacity } from "../core/describe/capacity.js"
 import { regionWithin, coverageFraction } from "../core/describe/position.js"
-import { elements, firstElement, drawingText, parseXml } from "./xml.js"
+import { elements, firstElement, drawingText, parseXml, normalizeRelTargets } from "./xml.js"
 import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
     DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
@@ -31,7 +31,10 @@ export class DeckArchive {
         /**  underlying zip archive  */
         readonly zip: JSZip,
         /**  absolute source file path  */
-        readonly file: string
+        readonly file: string,
+        /**  whether absolute rel targets were rewritten in memory (the file
+             on disk then differs from `zip`)  */
+        readonly normalized: boolean
     ) {}
 
     /**
@@ -45,7 +48,8 @@ export class DeckArchive {
         requireFile(file, "presentation file")
         try {
             const zip = await JSZip.loadAsync(readFileSync(file))
-            return new DeckArchive(zip, path.resolve(file))
+            const normalized = await normalizeRelTargets(zip)
+            return new DeckArchive(zip, path.resolve(file), normalized)
         }
         catch {
             throw new PptcError("E_FILE", `'${file}' is not a readable pptx/potx archive`)

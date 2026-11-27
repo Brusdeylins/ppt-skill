@@ -422,4 +422,86 @@ describe("parts of PowerPoint-authored decks", () => {
         await expectIntact(deck)
         expect((await relatedPart(deck, 1, "image"))?.bytes.toString()).toBe("quoted-picture")
     })
+
+    it("edits a deck whose SmartArt has no drawing part (older or foreign tools)", async () => {
+        const deck = path.join(TMP, "foreign-smartart-nodrawing.pptx")
+        await craftDeck(deck, async (zip, slides) => {
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
+                "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
+            await addSmartArt(zip, slides[0] as string, 1, 91)
+            zip.remove("ppt/diagrams/drawing1.xml")
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace(/<Override PartName="\/ppt\/diagrams\/drawing1\.xml"[^>]*\/>/, ""))
+            const rels = relsOf(slides[0] as string)
+            zip.file(rels, (await text(zip, rels)).replace(/<Relationship [^>]*diagramDrawing[^>]*\/>/, ""))
+        })
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await apply(deck, [ { op: "slide.copy", slide: "title:A" } ])
+        await expectIntact(deck)
+        expect(await relatedPart(deck, 0, "diagramData")).not.toBeNull()
+    })
+
+    it("edits a deck with an embedded Excel object (package rel) and linked files", async () => {
+        const deck = path.join(TMP, "foreign-package-links.pptx")
+        await craftDeck(deck, async (zip, slides) => {
+            const a = slides[0] as string
+            zip.file("ppt/embeddings/Microsoft_Excel_Worksheet.xlsx", Buffer.from("xlsx-payload"))
+            zip.file("ppt/media/image9.emf", Buffer.from("emf-preview"))
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
+                "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>"
+                + "<Default Extension=\"emf\" ContentType=\"image/x-emf\"/><Default "))
+            await addRel(zip, a, "rId90", "package", "../embeddings/Microsoft_Excel_Worksheet.xlsx")
+            await addRel(zip, a, "rId91", "image", "../media/image9.emf")
+            const rels = relsOf(a)
+            zip.file(rels, (await text(zip, rels)).replace("</Relationships>",
+                `<Relationship Id="rId92" Type="${REL}/image" Target="file:///C:/Bilder/logo.png" TargetMode="External"/>`
+                + `<Relationship Id="rId93" Type="${REL}/oleObject" Target="file:///C:/Daten/tabelle.xlsx" TargetMode="External"/></Relationships>`))
+            const frame = (id: number, name: string, inner: string): string =>
+                `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${name}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>`
+                + "<p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></p:xfrm>"
+                + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">${inner}</a:graphicData></a:graphic></p:graphicFrame>`
+            const pic = (rel: string): string => "<p:pic><p:nvPicPr><p:cNvPr id=\"0\" name=\"\"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>"
+                + `<p:blipFill><a:blip ${rel}/><a:stretch><a:fillRect/></a:stretch></p:blipFill>`
+                + "<p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>"
+            zip.file(a, (await text(zip, a)).replace("</p:spTree>",
+                frame(90, "Tabelle", `<p:oleObj name="Arbeitsblatt" r:id="rId90" progId="Excel.Sheet.12"><p:embed/>${pic("r:embed=\"rId91\"")}</p:oleObj>`)
+                + pic("r:link=\"rId92\"").replace("id=\"0\" name=\"\"", "id=\"92\" name=\"Logo\"")
+                + frame(93, "Verknuepft", "<p:oleObj name=\"Tabelle\" r:id=\"rId93\" progId=\"Excel.Sheet.12\"><p:link updateAutomatic=\"1\"/></p:oleObj>")
+                + "</p:spTree>"))
+        })
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await apply(deck, [ { op: "slide.copy", slide: "title:A" } ])
+        await expectIntact(deck)
+        expect((await relatedPart(deck, 0, "package"))?.bytes.toString()).toBe("xlsx-payload")
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const slide = (await readDeckState(await DeckArchive.open(deck))).slides[0] as { part: string }
+        const rels = await text(zip, relsOf(slide.part))
+        expect(rels).toContain("file:///C:/Bilder/logo.png")
+        expect(rels).toContain("file:///C:/Daten/tabelle.xlsx")
+    })
+
+    it("edits decks with byte-order marks and absolute relationship targets", async () => {
+        const bomTemplate = path.join(TMP, "foreign-bom-template.pptx")
+        const zip = await JSZip.loadAsync(readFileSync(TEMPLATE))
+        for (const n of Object.keys(zip.files).filter((f) => /\.(xml|rels)$/.test(f)))
+            zip.file(n, Buffer.concat([ Buffer.from([ 0xEF, 0xBB, 0xBF ]), await (zip.file(n) as JSZip.JSZipObject).async("nodebuffer") ]))
+        writeFileSync(bomTemplate, await zip.generateAsync({ type: "nodebuffer" }))
+        const deck = path.join(TMP, "foreign-bom-abs.pptx")
+        writeFileSync(deck, await buildEmptyDeck(bomTemplate))
+        await executeOps(deck, { ops: [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "A" } }, notes: "n" } ] } as never,
+            { ...opts, templatePath: bomTemplate })
+
+        /*  rewrite every internal target to its absolute form  */
+        const abs = await JSZip.loadAsync(readFileSync(deck))
+        for (const n of Object.keys(abs.files).filter((f) => f.endsWith(".rels"))) {
+            const base = path.posix.dirname(path.posix.dirname(n))
+            abs.file(n, (await text(abs, n)).replace(/Target="([^"]+)"/g, (m, t: string) =>
+                /^[a-z]+:/i.test(t) || t.startsWith("/") ? m : `Target="/${path.posix.normalize(path.posix.join(base, t))}"`))
+        }
+        writeFileSync(deck, await abs.generateAsync({ type: "nodebuffer" }))
+        await executeOps(deck, { ops: [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "B" } } } ] } as never,
+            { ...opts, templatePath: null })
+        await executeOps(deck, { ops: [ { op: "slide.fill", slide: "title:A", notes: "m" } ] } as never, { ...opts, templatePath: null })
+        await expectIntact(deck)
+        expect((await readDeckState(await DeckArchive.open(deck))).slides.map((x) => [ x.title, x.notes ])).toEqual([ [ "A", "m" ], [ "B", null ] ])
+    })
 })

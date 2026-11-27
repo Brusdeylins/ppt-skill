@@ -7,6 +7,8 @@
 **  parsing, serializing, namespace constants and element iteration.
 */
 
+import JSZip from "jszip"
+import path from "node:path"
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
 import type { Document, Element } from "@xmldom/xmldom"
 
@@ -20,13 +22,15 @@ export const NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relat
 export const NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 /**
- *  Parse an XML string into a DOM document.
+ *  Parse an XML string into a DOM document. A leading byte-order mark
+ *  (written by some .NET tools and 6 of PowerPoint's own themes) is
+ *  dropped -- xmldom would reject the declaration behind it.
  *
  *  @param xml - XML source text
  *  @returns parsed document
  */
 export const parseXml = (xml: string): Document =>
-    new DOMParser().parseFromString(xml, "application/xml")
+    new DOMParser().parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml")
 
 /**
  *  Serialize a DOM document back to its XML string.
@@ -85,4 +89,29 @@ export const drawingText = (scope: Element): string => {
         parts.push(runs.join(""))
     }
     return parts.join("\n")
+}
+
+/**
+ *  Rewrite absolute relationship targets (`Target="/ppt/slides/slide1.xml"`,
+ *  written by some generators) to the relative form the engine and
+ *  pptx-automizer resolve. External targets stay as they are.
+ *
+ *  @param zip - archive to normalize in place
+ *  @returns whether any target was rewritten
+ */
+export const normalizeRelTargets = async (zip: JSZip): Promise<boolean> => {
+    let changed = false
+    for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
+        const text = await (zip.file(relsPart) as JSZip.JSZipObject).async("string")
+        if (!/Target="\//.test(text))
+            continue
+        const base = path.posix.dirname(path.posix.dirname(relsPart)).replace(/^\.$/, "")
+        const out = text.replace(/<Relationship\b[^>]*>/g, (rel) => rel.includes("TargetMode=\"External\"") ? rel
+            : rel.replace(/Target="\/([^"]*)"/, (_m, abs: string) => `Target="${path.posix.relative(base, abs)}"`))
+        if (out !== text) {
+            zip.file(relsPart, out)
+            changed = true
+        }
+    }
+    return changed
 }

@@ -24,7 +24,7 @@ export const partText = async (zip: JSZip, part: string): Promise<string> => {
     const f = zip.file(part)
     if (f === null)
         throw new PptcError("E_ENGINE", `output archive is missing part ${part}`)
-    return await f.async("string")
+    return (await f.async("string")).replace(/^\uFEFF/, "")
 }
 
 /**

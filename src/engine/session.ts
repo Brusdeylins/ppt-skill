@@ -12,7 +12,7 @@
 
 import automizerPkg from "pptx-automizer"
 import "./automizer-patches.js"
-import { readFileSync, rmSync } from "node:fs"
+import { readFileSync, rmSync, writeFileSync } from "node:fs"
 import JSZip from "jszip"
 import path from "node:path"
 import type { Document, Element, Node } from "@xmldom/xmldom"
@@ -254,9 +254,14 @@ const executePlan = async (
         removeExistingSlides: true,
         verbosity: 0
     })
+    /*  automizer reads the deck from disk: hand it the in-memory normalized
+        copy when absolute rel targets had to be rewritten  */
+    const sourceFile = archive.normalized ? `${tmpFile}-source.pptx` : path.resolve(deckFile)
+    if (archive.normalized)
+        writeFileSync(sourceFile, await archive.zip.generateAsync({ type: "nodebuffer" }))
     let pres = automizer
-        .loadRoot(path.resolve(deckFile))
-        .load(path.resolve(deckFile), "self")
+        .loadRoot(sourceFile)
+        .load(sourceFile, "self")
     if (seedPath !== null)
         pres = pres.load(seedPath, "seed")
     for (const entry of plan.entries) {
@@ -266,7 +271,13 @@ const executePlan = async (
         const source = entry.source.kind === "self" ? await archive.xml(entry.source.part) : null
         pres.addSlide(entry.source.kind, sourceNumber, slideCallback(entry, source))
     }
-    await pres.write(tmpName)
+    try {
+        await pres.write(tmpName)
+    }
+    finally {
+        if (archive.normalized)
+            rmSync(sourceFile, { force: true })
+    }
 
     /*  new and copied slides get ids above every id of the input deck, so a
         stale `id:` of a removed slide never silently hits a new slide  */

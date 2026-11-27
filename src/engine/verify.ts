@@ -20,6 +20,7 @@ import path from "node:path"
 import { readFileSync } from "node:fs"
 import { DOMParser } from "@xmldom/xmldom"
 import { ASSET_PART } from "./post.js"
+import { normalizeRelTargets } from "./xml.js"
 
 /**
  *  Validate an opened archive for the known PowerPoint repair triggers.
@@ -41,7 +42,7 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
     const names = new Set(Object.keys(zip.files)
         .filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")))
     const text = async (part: string): Promise<string> =>
-        await (zip.file(part) as JSZip.JSZipObject).async("string")
+        (await (zip.file(part) as JSZip.JSZipObject).async("string")).replace(/^\uFEFF/, "")
 
     /*  1. every XML part must be well-formed  */
     for (const n of names)
@@ -214,6 +215,9 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
  */
 export const verifyBytes = async (bytes: Buffer, before?: JSZip): Promise<string[]> => {
     const zip = await JSZip.loadAsync(bytes)
+
+    /*  absolute rel targets are valid OPC -- check them in relative form  */
+    await normalizeRelTargets(zip)
     const findings = await verifyArchive(zip)
 
     /*  with the pre-apply archive: a media file kept under its name must keep

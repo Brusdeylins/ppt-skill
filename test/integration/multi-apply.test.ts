@@ -266,6 +266,25 @@ describe("plan-time checks and rev", () => {
         expect(new Set(ids).size).toBe(3)
     })
 
+    it("removes images that el.add inserted in an earlier apply (PNG and SVG)", async () => {
+        const deck = path.join(TMP, "multi-elrm.pptx")
+        const png = path.join(TMP, "multi-elrm.png")
+        const svg = path.join(TMP, "multi-elrm.svg")
+        writeFileSync(png, Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"))
+        writeFileSync(svg, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><rect width=\"10\" height=\"10\"/></svg>")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ addTitled("A") ])
+        for (const [ name, file ] of [ [ "P", png ], [ "S", svg ] ] as const)
+            await apply(deck, [ { op: "el.add", slide: "title:A", elements: [
+                { type: "image", name, frame: { x: 1, y: 2, w: 1, h: 1 }, path: file } ] } ])
+        await apply(deck, [ { op: "el.rm", slide: "title:A", name: "P" } ])
+        await apply(deck, [ { op: "el.rm", slide: "title:A", name: "S" } ])
+        await expectIntact(deck)
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        expect(Object.keys(zip.files).filter((f) => /^ppt\/media\/.+/.test(f) && !f.endsWith("/"))).toEqual([])
+    })
+
     it("changes the rev when only the notes change", async () => {
         const deck = path.join(TMP, "multi-rev.pptx")
         writeFileSync(deck, await buildEmptyDeck(TEMPLATE))

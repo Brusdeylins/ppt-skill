@@ -19,7 +19,7 @@ import { seedPlaceholderName } from "../core/model.js"
 import { atomicWrite, cacheDir, contentHash } from "../infra/fs.js"
 import { cleanContentTypes } from "./parts.js"
 import { gcAssets } from "./post.js"
-import { NS_A, elements, firstElement, parseXml, serializeElement } from "./xml.js"
+import { NS_A, elements, firstElement, normalizeRelTargets, parseXml, serializeElement } from "./xml.js"
 
 /**  seed format generation: bump to invalidate all cached seeds  */
 const SEED_FORMAT = 5
@@ -123,6 +123,7 @@ const layoutOrder = async (zip: JSZip): Promise<string[]> => {
  */
 export const buildSeed = async (templateBytes: Buffer): Promise<{ bytes: Buffer, layoutCount: number }> => {
     const zip = await JSZip.loadAsync(templateBytes)
+    await normalizeRelTargets(zip)
     const get = async (part: string): Promise<string> => {
         const f = zip.file(part)
         if (f === null)

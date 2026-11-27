@@ -10,8 +10,10 @@
 **  handed out again and its content overwritten -- another slide then
 **  shows the wrong image, chart style or embedded object. These patches
 **  seed each counter from the HIGHEST number of every part name the
-**  counter is used for, and give OLE embeddings a deck-unique name. A last
-**  patch keeps picture bullets (`a:buBlip`) that automizer strips.
+**  counter is used for, and give OLE embeddings a deck-unique name. Two
+**  more patches keep picture bullets (`a:buBlip`) that automizer strips
+**  and resolve pictures whose media is not named `image*`, and a last one
+**  stops embedded Excel objects from being taken for charts.
 **
 **  The patched members are private to automizer: installing fails loudly
 **  when one is missing, so an automizer upgrade cannot turn them into a
@@ -20,7 +22,13 @@
 
 import { CountHelper } from "pptx-automizer/dist/helper/count-helper.js"
 import { OLEObject } from "pptx-automizer/dist/shapes/ole.js"
+import { Image } from "pptx-automizer/dist/shapes/image.js"
+import { Diagram } from "pptx-automizer/dist/shapes/diagram.js"
+import { FileHelper } from "pptx-automizer/dist/helper/file-helper.js"
+import ArchiveModule from "pptx-automizer/dist/helper/archive/archive.js"
 import { PlaceholderNormalizer } from "pptx-automizer/dist/classes/placeholder-normalizer.js"
+import { XmlHelper } from "pptx-automizer/dist/helper/xml-helper.js"
+import { XmlRelationshipHelper } from "pptx-automizer/dist/helper/xml-relationship-helper.js"
 
 /**  the subset of automizer's archive API used here  */
 interface Archive {
@@ -113,3 +121,96 @@ patch((PlaceholderNormalizer as unknown as { prototype: object }).prototype, "re
             this.host.unsupportedTags = tags
         }
     })
+
+/*  images: automizer resolves a picture's rel only when its target starts
+    with `../media/image`, but it names copied media `media<N>` itself -- so
+    el.rm (or any import) of such a picture crashed with "Cannot read
+    properties of undefined (reading 'file')". Fall back to the rel id.  */
+interface RelItem { rId: string, type: string, file: string, filename: string, element: unknown }
+interface XmlHelperStatic {
+    getTargetByRelId(archive: unknown, relsPath: string, element: unknown, type: string): Promise<unknown>
+    getRelationshipItems(archive: unknown, relsPath: string,
+        cb: (element: { getAttribute(name: string): string | null }, rels: RelItem[]) => void): Promise<RelItem[]>
+}
+const xmlHelper = XmlHelper as unknown as XmlHelperStatic
+const getTargetByRelId = xmlHelper.getTargetByRelId.bind(xmlHelper)
+const IMAGE_BLIPS: Record<string, string> = { "image": "a:blip", "image:svg": "asvg:svgBlip" }
+patch(xmlHelper, "getTargetByRelId", async (archive: unknown, relsPath: string, element: unknown, type: string): Promise<unknown> => {
+    const target = await getTargetByRelId(archive, relsPath, element, type)
+    const tag = IMAGE_BLIPS[type]
+    if (target !== undefined || tag === undefined)
+        return target
+    const blip = (element as { getElementsByTagName(n: string): { item(i: number): { getAttribute(n: string): string | null } | null } })
+        .getElementsByTagName(tag).item(0)
+    const rid = blip?.getAttribute("r:embed") ?? null
+    if (rid === null)
+        return undefined
+    const rels = await xmlHelper.getRelationshipItems(archive, relsPath, (rel, items) => {
+        const file = rel.getAttribute("Target") ?? ""
+        items.push({ rId: rel.getAttribute("Id") ?? "", type: rel.getAttribute("Type") ?? "",
+            file, filename: file.split("/").pop() ?? "", element: rel })
+    })
+    return rels.find((rel) => rel.rId === rid)
+})
+
+/*  embedded files: automizer's prefix match accepts every `package` rel
+    for ANY prefix (meant for chart workbooks), so an embedded Excel object
+    on a slide (Insert > Object) was imported as "chart0", "data0", ... and
+    every apply failed with "Could not find file ppt/charts/chart0.xml".
+    A package rel matches only an embeddings prefix.  */
+interface MatchHelper { targetMatchesRelationship(relType: string, subtype: string, file: string, prefix: string): boolean }
+const matchHelper = XmlHelper as unknown as MatchHelper
+const targetMatches = matchHelper.targetMatchesRelationship.bind(matchHelper)
+patch(matchHelper, "targetMatchesRelationship", (relType: string, subtype: string, file: string, prefix: string): boolean =>
+    relType === "package" && !prefix.includes("embeddings") ? false : targetMatches(relType, subtype, file, prefix))
+
+/*  the same flaw in the second matcher, which also resolves a slide's
+    layout: a package rel listed first would pass for the layout  */
+const relHelper = XmlRelationshipHelper as unknown as MatchHelper
+const relTargetMatches = relHelper.targetMatchesRelationship.bind(relHelper)
+patch(relHelper, "targetMatchesRelationship", (relType: string, subtype: string, file: string, prefix: string): boolean =>
+    relType === "package" && !prefix.includes("embeddings") ? false : relTargetMatches(relType, subtype, file, prefix))
+
+/*  linked files: a picture or OLE object linked to an external file
+    (TargetMode="External", e.g. file:///C:/logo.png) has nothing to copy,
+    but automizer tried to and failed with "Could not find file
+    ppt/media/file:///...". Its rel is carried over verbatim with the
+    slide, so leave linked targets alone.  */
+type RelTarget = { element?: { getAttribute(name: string): string | null } }
+const isInternal = (rel: RelTarget): boolean => rel.element?.getAttribute("TargetMode") !== "External"
+for (const cls of [ Image, OLEObject ] as unknown as { getAllOnSlide(archive: unknown, relsPath: string): Promise<RelTarget[]> }[]) {
+    const getAll = cls.getAllOnSlide.bind(cls)
+    patch(cls, "getAllOnSlide", async (archive: unknown, relsPath: string): Promise<RelTarget[]> =>
+        (await getAll(archive, relsPath)).filter(isInternal))
+}
+
+/*  SmartArt without a drawing part (older PowerPoint, foreign tools): the
+    drawing is only a cached rendering, but automizer copied it blindly and
+    failed with "Could not find file ppt/diagrams/drawingN.xml". Copy the
+    parts that exist; the post-pass drops the then dead drawing rel.  */
+interface DiagramShape {
+    sourceNumber: number
+    targetNumber: number
+    sourceArchive: { fileExists(file: string): boolean }
+    targetArchive: unknown
+}
+const fileHelper = FileHelper as unknown as {
+    zipCopy(source: unknown, sourceFile: string, target: unknown, targetFile: string): Promise<void>
+}
+patch((Diagram as unknown as { prototype: object }).prototype, "copyFiles", async function (this: DiagramShape): Promise<void> {
+    for (const kind of [ "data", "colors", "drawing", "layout", "quickStyle" ]) {
+        const from = `ppt/diagrams/${kind}${this.sourceNumber}.xml`
+        if (kind !== "drawing" || this.sourceArchive.fileExists(from))
+            await fileHelper.zipCopy(this.sourceArchive, from, this.targetArchive, `ppt/diagrams/${kind}${this.targetNumber}.xml`)
+    }
+})
+
+/*  byte-order marks: some .NET tools and 6 of PowerPoint's own themes
+    start XML parts with a BOM, which xmldom rejects ("processing
+    instruction ... is an xml declaration which is only at the start of the
+    document") -- every apply on such a deck failed. Drop it before parsing.  */
+const archiveClass = ((ArchiveModule as unknown as { default?: unknown }).default ?? ArchiveModule) as { prototype: object }
+const parseArchiveXml = (archiveClass.prototype as { parseXml(xml: string): unknown }).parseXml
+patch(archiveClass.prototype, "parseXml", function (this: unknown, xml: string): unknown {
+    return parseArchiveXml.call(this, xml.replace(/^\uFEFF/, ""))
+})

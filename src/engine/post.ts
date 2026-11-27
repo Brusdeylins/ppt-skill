@@ -383,6 +383,12 @@ const wireDiagrams = async (zip: JSZip, slide: Document, slideRels: Document, so
         const drawingRel = rels.find((r) => (r.getAttribute("Type") ?? "").endsWith("/diagramDrawing")
             && r.getAttribute("Target") === `../diagrams/drawing${n}.xml`)
         const dataPart = `ppt/diagrams/data${n}.xml`
+
+        /*  a SmartArt without drawing part keeps none (PowerPoint renders it)  */
+        if (drawingRel !== undefined && zip.file(`ppt/diagrams/drawing${n}.xml`) === null) {
+            drawingRel.parentNode?.removeChild(drawingRel)
+            continue
+        }
         if (drawingRel === undefined || zip.file(dataPart) === null)
             continue
         const id = drawingRel.getAttribute("Id") ?? ""
@@ -1043,6 +1049,14 @@ export const postProcess = async (
     for (const f of Object.keys(zip.files))
         if (f.startsWith("[trash]/"))
             zip.remove(f)
+
+    /*  write XML without byte-order mark (some .NET tools and PowerPoint
+        themes carry one; strict parsers reject the declaration behind it)  */
+    for (const f of Object.keys(zip.files).filter((n) => /\.(xml|rels)$/.test(n))) {
+        const bytes = await (zip.file(f) as JSZip.JSZipObject).async("nodebuffer")
+        if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF)
+            zip.file(f, bytes.subarray(3))
+    }
     /*  the rid counter must clear every rIdPptc left by EARLIER applies,
         or re-wiring (e.g. refilled hyperlinks) collides with old ids  */
     let maxRid = 9000
