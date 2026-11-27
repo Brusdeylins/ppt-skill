@@ -83,9 +83,10 @@ const setSlideVisibility = (slide: Document, hidden: boolean): void => {
     const root = slide.documentElement
     if (root === null)
         return
-    if (hidden)
+    const current = root.getAttribute("show")
+    if (hidden && current !== "0" && current !== "false")
         root.setAttribute("show", "0")
-    else if (root.hasAttribute("show"))
+    else if (!hidden && root.hasAttribute("show"))
         root.removeAttribute("show")
 }
 
@@ -289,20 +290,108 @@ const uniquifyShapeIds = (slide: Document): void => {
     }
 }
 
-/**  repair the relationships of a slide: duplicate ids keep their first
-     occurrence, dead internal targets go; rels only removed shapes used are
-     dropped as well  */
-const repairRels = (pkg: Package, part: string, slide: Document, rels: Document, unused: Set<string>): void => {
-    const xml = serializeXml(slide)
+/**  repair the relationships of a part: duplicate ids keep their first
+     occurrence, dead internal targets go; rels only removed shapes used
+     (`unused`, unless the XML still references them) and the drawings of
+     removed SmartArt (`forced`) are dropped as well
+     @returns whether anything was dropped  */
+const repairRels = (pkg: Package, part: string, doc: Document | null, rels: Document,
+    unused: Set<string> = new Set(), forced: Set<string> = new Set()): boolean => {
+    const xml = doc === null ? "" : serializeXml(doc)
     const seen = new Set<string>()
+    let changed = false
     for (const { rel, type, target } of Package.targets(part, rels)) {
         const id = rel.getAttribute("Id") ?? ""
         const dead = target !== null && !pkg.has(target)
-        const stale = unused.has(id) && !UNREFERENCED_RELS.some((k) => type.endsWith(k)) && !xml.includes(`"${id}"`)
-        if (seen.has(id) || dead || stale)
+        const stale = (forced.has(id) || (unused.has(id) && !UNREFERENCED_RELS.some((k) => type.endsWith(k))))
+            && !xml.includes(`"${id}"`)
+        if (seen.has(id) || dead || stale) {
             rel.parentNode?.removeChild(rel)
+            changed = true
+        }
         seen.add(id)
     }
+    return changed
+}
+
+/**  drop what references a relationship the part does not have: a
+     hyperlink goes, a picture fill of a placeholder goes (the layout's fill
+     shows again), any other shape goes as a whole -- it cannot render  */
+const dropDangling = (doc: Document, rels: Document): void => {
+    const ids = new Set(elements(rels, "Relationship").map((r) => r.getAttribute("Id") ?? ""))
+    const dangling: Element[] = []
+    const walk = (el: Element): void => {
+        for (let i = 0; i < el.attributes.length; i++) {
+            const attr = el.attributes.item(i)
+            if (attr !== null && attr.namespaceURI === NS_R && attr.value !== "" && !ids.has(attr.value)) {
+                dangling.push(el)
+                break
+            }
+        }
+        for (let n = el.firstChild; n !== null; n = n.nextSibling)
+            if (n.nodeType === 1)
+                walk(n as Element)
+    }
+    if (doc.documentElement !== null)
+        walk(doc.documentElement)
+    for (const el of dangling) {
+        if (el.parentNode === null)
+            continue
+        const parent = el.parentNode as Element
+        if ([ "a:hlinkClick", "a:hlinkHover", "p:custData", "p:tags" ].includes(el.nodeName))
+            parent.removeChild(el)
+        else if (el.nodeName === "a:blip" && parent.nodeName === "a:blipFill" && (parent.parentNode as Element | null)?.nodeName === "p:spPr")
+            parent.parentNode?.removeChild(parent)
+        else {
+            let shape: Element | null = el
+            while (shape !== null && (shape.parentNode as Element | null)?.nodeName !== "p:spTree")
+                shape = shape.parentNode as Element | null
+            if (shape !== null)
+                removeShape(shape)
+            else
+                for (let i = el.attributes.length - 1; i >= 0; i--) {
+                    const attr = el.attributes.item(i)
+                    if (attr !== null && attr.namespaceURI === NS_R && !ids.has(attr.value))
+                        el.removeAttributeNode(attr)
+                }
+        }
+    }
+}
+
+/**
+ *  Repair a part of a touched slide other than the slide itself (its
+ *  notes, a chart, ...): duplicate and dead relationships go, and what
+ *  references them.
+ *
+ *  @param pkg - the deck package
+ *  @param part - the part to repair
+ */
+export const repairPart = async (pkg: Package, part: string): Promise<void> => {
+    const rels = await pkg.rels(part)
+    const doc = /\.xml$/.test(part) ? await pkg.xml(part) : null
+    if (!repairRels(pkg, part, doc, rels))
+        return
+    if (doc !== null) {
+        dropDangling(doc, rels)
+        pkg.write(part, doc)
+    }
+    pkg.writeRels(part, rels)
+}
+
+/**
+ *  Repair a package-wide part (layout, master, presentation): duplicate
+ *  and dead relationships go; the part's own XML stays as it is.
+ *
+ *  @param pkg - the deck package
+ *  @param part - the part whose relationships to repair
+ *  @returns whether anything was repaired
+ */
+export const repairPackageRels = async (pkg: Package, part: string): Promise<boolean> => {
+    const rels = await pkg.rels(part)
+    if (!repairRels(pkg, part, null, rels))
+        return false
+    pkg.writeRels(part, rels)
+    return true
 }
 
 /**
@@ -407,6 +496,18 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<void> =>
     for (const shape of [ ...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape), ...texts.map((t) => t.shape) ])
         for (const id of relIdsOf(shape))
             unused.add(id)
+
+    /*  a removed SmartArt's drawing is referenced from its data part  */
+    const forced = new Set<string>()
+    const targetOf = new Map(Package.targets(part, rels).map((t) => [ t.rel.getAttribute("Id") ?? "", t.target ]))
+    for (const shape of doomed)
+        for (const relIds of elements(shape, "dgm:relIds")) {
+            const data = targetOf.get(relIds.getAttribute("r:dm") ?? "") ?? null
+            const relId = data !== null && pkg.has(data)
+                ? /<dsp:dataModelExt\b[^>]*?\brelId=["']([^"']+)["']/.exec(await pkg.text(data))?.[1] : undefined
+            if (relId !== undefined)
+                forced.add(relId)
+        }
     for (const shape of doomed)
         removeShape(shape)
     for (const { fill, shape } of fills)
@@ -445,7 +546,8 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<void> =>
     setSlideVisibility(slide, entry.hidden)
     dropLinksToRemoved(part, slide, rels, work.removed)
     uniquifyShapeIds(slide)
-    repairRels(pkg, part, slide, rels, unused)
+    repairRels(pkg, part, slide, rels, unused, forced)
+    dropDangling(slide, rels)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
 }

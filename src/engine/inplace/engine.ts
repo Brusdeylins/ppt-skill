@@ -25,10 +25,10 @@ import { finishPackage } from "../post.js"
 import { normalizeRelTargets, relsPartOf } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
 import { layoutOrder } from "../seed.js"
-import { relsFindings, shapeIdFindings, verifyBytes } from "../verify.js"
-import { NS_P, NS_R, elements, firstElement } from "../xml.js"
+import { refFindings, relsFindings, shapeIdFindings, verifyBytes } from "../verify.js"
+import { NS_P, NS_R, doubleQuoted, elements, firstElement } from "../xml.js"
 import { Package } from "./package.js"
-import { createSlide, dropLinksToRemoved, editSlide } from "./slides.js"
+import { createSlide, dropLinksToRemoved, editSlide, repairPackageRels, repairPart } from "./slides.js"
 import { generateElements } from "./transplant.js"
 
 /**  OfficeDocument relationship type base URI  */
@@ -121,7 +121,10 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
         el, id: Number(el.getAttribute("id")), part: ridTarget.get(el.getAttribute("r:id") ?? "") ?? ""
     }))
     const notesMaster = Package.targets("ppt/presentation.xml", presRels)
-        .find((t) => t.type.endsWith("/notesMaster"))?.target ?? "ppt/notesMasters/notesMaster1.xml"
+        .find((t) => t.type.endsWith("/notesMaster"))?.target ?? null
+    if (plan.entries.some((e) => e.notes !== null) && (notesMaster === null || !pkg.has(notesMaster)))
+        throw new PptcError("E_TEMPLATE", "the deck has no notes master, which speaker notes need -- "
+            + "add a note to any slide in PowerPoint once, then retry")
     const layouts = await layoutOrder(archive.zip)
 
     /*  structure: kept slides stay where they are; copies are cloned from
@@ -146,34 +149,48 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
     /*  which kept slides are touched: edited, re-shown/hidden, linking to a
         removed slide, sharing a notes part, or carrying repair triggers  */
     const names = new Set(Object.keys(archive.zip.files).filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")))
-    const notesOwner = new Set<string>()
+    const quoted = async (part: string): Promise<string> => doubleQuoted(await archive.text(part) ?? "")
     const touched: boolean[] = []
     const sharedNotes: boolean[] = []
+    const repairs: string[][] = []
     const untouched = new Map<string, JSZip.JSZipObject | null>()
     const warnings: LintWarning[] = []
     for (const [ i, entry ] of plan.entries.entries()) {
         const part = parts[i] as string
-        if (entry.virtualId <= 0) {
-            touched.push(true)
-            sharedNotes.push(false)
+        touched.push(true)
+        sharedNotes.push(false)
+        repairs.push([])
+        if (entry.virtualId <= 0)
             continue
-        }
-        const xml = await archive.text(part) ?? ""
-        const relsPart = relsPartOf(part)
-        const defects = [ ...shapeIdFindings(part, xml),
-            ...relsFindings(relsPart, await archive.text(relsPart) ?? "", names) ]
-        const notes = Package.targets(part, await pkg.rels(part)).find((t) => t.type.endsWith("/notesSlide"))?.target ?? null
-        const shared = notes !== null && notesOwner.has(notes)
-        if (notes !== null)
-            notesOwner.add(notes)
+
+        /*  repair triggers of the slide and of every part of its own
+            content (notes, charts, ...): such a slide is repaired  */
         const own = await closure(pkg, part)
-        const hidden = /<p:sld\b[^>]*\bshow="0"/.test(xml)
-        const touch = hasEdits(entry) || hidden !== entry.hidden || shared || defects.length > 0
-            || await linksTo(pkg, own, removed)
-        touched.push(touch)
-        sharedNotes.push(shared)
-        if (shared)
-            defects.push(`notes part ${notes as string} is shared with another slide`)
+        const xml = await quoted(part)
+        const defects = [ ...shapeIdFindings(part, xml), ...refFindings(part, xml, await quoted(relsPartOf(part))) ]
+        for (const relsPart of own.filter((p) => p.endsWith(".rels"))) {
+            const found = relsFindings(relsPart, await quoted(relsPart), names)
+            defects.push(...found)
+            const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1")
+            if (found.length > 0 && owner !== part)
+                (repairs[i] as string[]).push(owner)
+        }
+
+        /*  a notes part whose back-reference names another slide (shared,
+            or left over by a removed slide) gets a copy of its own  */
+        const notes = Package.targets(part, await pkg.rels(part)).find((t) => t.type.endsWith("/notesSlide"))?.target ?? null
+        if (notes !== null && pkg.has(notes)) {
+            const notesXml = await pkg.text(notes)
+            const backref = Package.targets(notes, await pkg.rels(notes)).find((t) =>
+                t.type.endsWith("/slide") && !notesXml.includes(`"${t.rel.getAttribute("Id") ?? ""}"`))?.target ?? part
+            if (backref !== part) {
+                sharedNotes[i] = true
+                defects.push(`notes part ${notes} belongs to another slide`)
+            }
+        }
+        const hidden = /<p:sld\b[^>]*\bshow="(0|false)"/.test(xml)
+        const touch = hasEdits(entry) || hidden !== entry.hidden || defects.length > 0 || await linksTo(pkg, own, removed)
+        touched[i] = touch
         if (defects.length > 0)
             warnings.push({
                 code: "W_REPAIRED",
@@ -185,14 +202,17 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
                 untouched.set(p, pkg.zip.file(p))
     }
 
-    /*  one pass per touched slide  */
+    /*  one pass per touched slide, then the repairs of its other parts  */
     const generated = await generateElements(plan.entries)
     for (const [ i, entry ] of plan.entries.entries())
-        if (touched[i] === true)
+        if (touched[i] === true) {
             await editSlide(pkg, {
-                part: parts[i] as string, entry, removed, notesMaster, generated,
+                part: parts[i] as string, entry, removed, notesMaster: notesMaster ?? "", generated,
                 sharedNotes: sharedNotes[i] === true
             })
+            for (const owner of repairs[i] as string[])
+                await repairPart(pkg, owner)
+        }
 
     /*  the slide list: kept sldIds in their new order, fresh ids for new
         and copied slides, removed slides and their relationships gone  */
@@ -237,6 +257,20 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
                 pkg.write(owner, doc)
             }
         }
+
+    /*  repair triggers outside the slides (layouts, masters, presentation):
+        dead and duplicate relationships go  */
+    for (const relsPart of Object.keys(pkg.zip.files).filter((f) =>
+        /^ppt\/(slideLayouts|slideMasters|notesMasters|handoutMasters|theme)\/_rels\/[^/]+\.rels$|^ppt\/_rels\/presentation\.xml\.rels$/.test(f))) {
+        const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1")
+        if (!untouched.has(relsPart) && relsFindings(relsPart, doubleQuoted(await pkg.text(relsPart)), new Set(Object.keys(pkg.zip.files))).length > 0
+            && await repairPackageRels(pkg, owner))
+            warnings.push({
+                code: "W_REPAIRED",
+                slide: { id: null, index: -1, title: null },
+                message: `the input deck carried PowerPoint repair triggers in ${owner}; pptc dropped its dead or duplicate relationships`
+            })
+    }
     await finishPackage(pkg.zip, parts, plan.props, plan.customProps)
     const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
 
@@ -244,6 +278,13 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
         touched slide (canonical), and every part of every untouched slide
         (never written at all)  */
     const after = await JSZip.loadAsync(finalBytes)
+    const changed: string[] = []
+    for (const [ name, file ] of untouched) {
+        const now = after.file(name)
+        if (pkg.zip.file(name) !== file || file === null || now === null
+            || !Buffer.from(await now.async("uint8array")).equals(Buffer.from(await file.async("uint8array"))))
+            changed.push(`${name}: part of an untouched slide would change`)
+    }
     await normalizeRelTargets(after)
     const expects: SlideExpect[] = plan.entries.map((entry, i) => ({
         source: entry.source.kind === "self" && touched[i] === true ? entry.source.part : null,
@@ -263,8 +304,7 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
         ...await verifyBytes(finalBytes, archive.zip),
         ...content.blocked,
         ...content.lost.map((l) => `slide ${(expects[l.slide] as SlideExpect).label}: ${l.what} would be lost although no op removed it`),
-        ...[ ...untouched ].filter(([ name, file ]) => pkg.zip.file(name) !== file)
-            .map(([ name ]) => `${name}: part of an untouched slide would change`)
+        ...changed
     ]
     if (findings.length > 0)
         throw new PptcError("E_INTEGRITY",
@@ -285,8 +325,6 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
  *  @param outFile - the file to write atomically (may equal deckFile)
  *  @param plan - the finished mutation plan
  *  @param archive - the caller's open archive of deckFile (read-only reuse)
- *  @param _templatePath - unused: new slides come from the deck's own
- *                         layouts, which `apply` checked against the template
  *  @returns session facts for the result envelope
  *  @throws PptcError E_INTEGRITY when a self-check fails, E_ENGINE on
  *          unexpected failures (target untouched in both cases)
@@ -295,8 +333,7 @@ export const runSession = async (
     deckFile: string,
     outFile: string,
     plan: MutationPlan,
-    archive: DeckArchive,
-    _templatePath: string | null
+    archive: DeckArchive
 ): Promise<SessionResult> => {
     try {
         if (path.resolve(deckFile) !== archive.file)

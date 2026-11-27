@@ -40,6 +40,17 @@ export const serializeXml = (doc: Document): string =>
     new XMLSerializer().serializeToString(doc)
 
 /**
+ *  The XML with every attribute value in double quotes, as PowerPoint
+ *  writes it -- re-serialized only when it carries single-quoted values,
+ *  so the regex-based checks over raw package parts read it correctly.
+ *
+ *  @param xml - XML source text
+ *  @returns XML text with double-quoted attributes
+ */
+export const doubleQuoted = (xml: string): string =>
+    /\s[\w:]+\s*=\s*'/.test(xml) ? serializeXml(parseXml(xml)) : xml
+
+/**
  *  Serialize a single element subtree to its XML string.
  *
  *  @param el - DOM element

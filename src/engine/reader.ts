@@ -631,9 +631,10 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                 notes = body === undefined ? null : (drawingText(body) || null)
             }
         }
-        /*  slide visibility: `show="0"` on the <p:sld> root is PowerPoint's
+        /*  slide visibility: `show="0"` (or "false") on the <p:sld> root is PowerPoint's
             "Hide Slide". Absent (or "1") means visible.  */
-        const hidden = doc.documentElement?.getAttribute("show") === "0"
+        const show = doc.documentElement?.getAttribute("show")
+        const hidden = show === "0" || show === "false"
         slides.push({ id, index, title, layoutName, layoutIndex, shapes, notes, hidden, part })
     }
 

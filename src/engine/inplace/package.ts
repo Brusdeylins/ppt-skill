@@ -13,8 +13,8 @@ import JSZip from "jszip"
 import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PartAllocator, partText, relsPartOf, resolveTarget } from "../parts.js"
-import { IMAGE_TYPES } from "../post.js"
-import { NS_REL, elements, parseXml, serializeXml } from "../xml.js"
+import { IMAGE_TYPES, removeParts } from "../post.js"
+import { NS_REL, doubleQuoted, elements, parseXml, serializeXml } from "../xml.js"
 
 /**  relationship types whose target a clone inside the same package shares:
      layouts, masters, other slides, immutable media and external content  */
@@ -159,16 +159,17 @@ export class Package {
      *  package, else a default for its extension.
      *
      *  @param part - the (new) part
-     *  @param sourceCt - [Content_Types].xml of the package the content comes from
+     *  @param sourceCtText - [Content_Types].xml of the package the content comes from
      *  @param sourcePart - the part it was copied from
      */
-    async typePart(part: string, sourceCt: string, sourcePart: string): Promise<void> {
+    async typePart(part: string, sourceCtText: string, sourcePart: string): Promise<void> {
+        const sourceCt = doubleQuoted(sourceCtText)
         const override = new RegExp(`<Override [^>]*PartName="/${sourcePart.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(sourceCt)
         if (override !== null) {
             await this.typeAs(part, /ContentType="([^"]+)"/.exec(override[0])?.[1] ?? "")
             return
         }
-        const ct = await this.text("[Content_Types].xml")
+        const ct = doubleQuoted(await this.text("[Content_Types].xml"))
         const ext = path.posix.extname(part).slice(1).toLowerCase()
         if (new RegExp(`<Default [^>]*Extension="${ext}"`, "i").test(ct))
             return
@@ -239,15 +240,7 @@ export class Package {
      *  @param parts - the parts to remove
      */
     async remove(parts: string[]): Promise<void> {
-        if (parts.length === 0)
-            return
-        let ct = await this.text("[Content_Types].xml")
-        for (const part of parts) {
-            this.zip.remove(part)
-            this.zip.remove(relsPartOf(part))
-            ct = ct.replace(new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "")
-        }
-        this.write("[Content_Types].xml", ct)
+        await removeParts(this.zip, parts)
     }
 
     /**

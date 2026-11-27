@@ -283,10 +283,11 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
   readable minimum -- enlarge it). Not escalated, since it is found during
   the write: `W_REPAIRED` (the input deck carried PowerPoint repair
-  triggers on a slide -- duplicate shape ids, dead or duplicate
-  relationships, a shared notes part -- and pptc repaired that slide; the
-  deck is written, tell the user). Content of a slide that would vanish,
-  move or change although no op asked for it fails with `E_INTEGRITY`
+  triggers on a slide or a layout -- duplicate shape ids, dead or duplicate
+  relationships, references to missing relationships, a shared notes part
+  -- and pptc repaired it; the deck is written, tell the user). Content of
+  a slide that would vanish, move or change although no op asked for it
+  fails with `E_INTEGRITY`
 - `--min-font-pt N` -- readability floor for explicit font sizes (default
   `8`); runs or `el.add`/`el.set` elements below `N` raise
   `W_FONT_TOO_SMALL`. `0` disables the check. Footer/slide-number/date

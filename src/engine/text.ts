@@ -12,7 +12,7 @@ import type { Document, Element } from "@xmldom/xmldom"
 import { NS_A, elements, firstElement } from "./xml.js"
 import type { Paragraph, RichText, Run } from "../schema/payloads.js"
 
-/**  marker attribute consumed by the post-pass that wires hyperlink rels  */
+/**  marker attribute the engine replaces by a hyperlink relationship  */
 export const HLINK_ATTR = "pptc-hlink"
 
 /**  normalize plain-string content into the paragraph form  */
@@ -51,7 +51,7 @@ const buildRunProps = (doc: Document, run: Partial<Run>): Element | null => {
         rPr.appendChild(latin)
     }
     if (run.hyperlink !== undefined) {
-        /*  the relationship id is assigned by the post-pass; mark with the URL  */
+        /*  the relationship id is assigned by the engine; mark with the URL  */
         const hlink = doc.createElementNS(NS_A, "a:hlinkClick")
         hlink.setAttribute(HLINK_ATTR, run.hyperlink)
         rPr.appendChild(hlink)

@@ -86,10 +86,10 @@ the deck stays byte-identical).
 Options:
   --ops @file|-     ops document from file or stdin ('pptc help ops')
   -e '<op-json>'    exactly one inline op instead of --ops
-  --template <tpl>  layout source for 'slide.add'. Not needed on an existing
-                    deck -- it reuses the deck's OWN embedded layouts (a deck
-                    is self-contained); a template whose layouts differ from
-                    the deck's fails with E_TEMPLATE
+  --template <tpl>  check only: 'slide.add' always uses the deck's OWN
+                    embedded layouts (a deck is self-contained); a template
+                    whose layouts differ from the deck's fails with
+                    E_TEMPLATE
   --dry-run         validate and plan only, no write; warnings included
   --strict          lint warnings become exit 7: W_TEXT_OVERFLOW
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add

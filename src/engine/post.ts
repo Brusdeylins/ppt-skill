@@ -8,27 +8,27 @@
 **  document properties, collect unreachable assets, sync sections, content
 **  types and app properties. Slide-level edits live in engine/inplace.
 **
-**  LOCKSTEP: every repair-trigger this pass fixes is asserted read-only by
-**  engine/verify.ts -- when a trigger is added or changed here, teach the
-**  verifier the same rule (and vice versa), or self-verify turns green
-**  fixes into false E_INTEGRITY failures.
+**  LOCKSTEP: every repair trigger this module and engine/inplace/slides.ts
+**  fix is asserted read-only by engine/verify.ts -- when a trigger is added
+**  or changed here, teach the verifier the same rule (and vice versa), or
+**  self-verify turns green fixes into false E_INTEGRITY failures.
 */
 
 import type JSZip from "jszip"
 import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
 import { partText, cleanContentTypes, resolveTarget } from "./parts.js"
-import { NS_REL, elements, firstElement, parseXml, serializeXml } from "./xml.js"
+import { NS_REL, doubleQuoted, elements, firstElement, parseXml, serializeXml } from "./xml.js"
 
 /**  remove a list of parts plus their rels and content-type overrides  */
 export const removeParts = async (zip: JSZip, parts: string[]): Promise<void> => {
     if (parts.length === 0)
         return
-    let ct = await partText(zip, "[Content_Types].xml")
+    let ct = doubleQuoted(await partText(zip, "[Content_Types].xml"))
     for (const part of parts) {
         zip.remove(part)
         zip.remove(`${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`)
-        ct = ct.replace(new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "")
+        ct = ct.replace(new RegExp(`<Override [^>]*PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`, "g"), "")
     }
     zip.file("[Content_Types].xml", ct)
 }
@@ -98,10 +98,11 @@ export const syncSectionRefs = async (zip: JSZip): Promise<void> => {
 }
 
 /**  parts a slide carries (charts with their drawings and theme
-     overrides, SmartArt, embeddings, media, comments and tags);
+     overrides, SmartArt, embeddings, media, comments, tags, ink and
+     ActiveX controls);
      unreachable ones (e.g. of a removed slide) are garbage.
      Mirrored by the orphan check in engine/verify.ts.  */
-export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
+export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags|ink|activeX)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
 
 /**  GC assets unreachable from any live part  */
 export const gcAssets = async (zip: JSZip): Promise<void> => {
@@ -298,7 +299,7 @@ export const setCustomProps = async (zip: JSZip, patch: Record<string, string>):
 const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
     const notes = new Set<string>()
     for (const slide of slides) {
-        const rels = await zip.file(`ppt/slides/_rels/${path.posix.basename(slide)}.rels`)?.async("string") ?? ""
+        const rels = doubleQuoted(await zip.file(`ppt/slides/_rels/${path.posix.basename(slide)}.rels`)?.async("string") ?? "")
         for (const m of rels.matchAll(/<Relationship\b[^>]*>/g))
             if (/Type="[^"]*\/notesSlide"/.test(m[0]))
                 notes.add(resolveTarget("ppt/slides", /Target="([^"]+)"/.exec(m[0])?.[1] ?? ""))
@@ -308,7 +309,7 @@ const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
 
     const presRelsPart = "ppt/_rels/presentation.xml.rels"
     const presRels = parseXml(await partText(zip, presRelsPart))
-    const presXml = await partText(zip, "ppt/presentation.xml")
+    const presXml = doubleQuoted(await partText(zip, "ppt/presentation.xml"))
     const liveSlideRids = new Set([ ...presXml.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g) ].map((m) => m[1]))
     let pruned = false
     for (const rel of elements(presRels, "Relationship")) {

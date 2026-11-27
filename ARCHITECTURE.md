@@ -98,8 +98,10 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   apply.
 - **One allocator.** Every fresh part name continues above the highest
   number of its family in the whole package, every relationship id is a
-  fresh `rIdPptc<N>`, every sldId is above every id of the input deck (a
-  removed id is never re-used). Nothing is ever named from a count.
+  fresh `rIdPptc<N>`, every sldId is above every id of the input deck (an
+  id removed in the same apply is never re-used; across applies the next id
+  is the highest one in use plus one, as in PowerPoint -- `--rev` guards
+  against stale `id:` selectors). Nothing is ever named from a count.
 - **Slides from the deck's own layouts.** A new slide is the layout's
   placeholders cloned onto an empty slide (normalized names `PptcPh-<idx>`;
   footer, slide-number and date placeholders WITH their layout content).

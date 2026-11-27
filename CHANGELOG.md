@@ -14,7 +14,7 @@
   SmartArt, tags, comments and theme overrides, and every new part name,
   relationship id and slide id continues above everything in use.
   `pptx-automizer` and `engine/automizer-patches.ts` are gone; the bundle
-  shrinks from 2.6 MB to 1.9 MB, and a trivial apply on the demo deck
+  shrinks from 2.5 MB to 1.8 MB, and a trivial apply on the demo deck
   takes 1.8 s instead of 2.3 s.
 - **Untouched slides are checked byte for byte.** Before writing, the
   engine proves that no part of an untouched slide changed; otherwise the
@@ -24,10 +24,28 @@
   gone: content of a slide that would get lost although no op removed it
   now fails with `E_INTEGRITY`, like content that would move.
 - **Decks with repair triggers stay editable.** A slide whose input
-  carries PowerPoint repair triggers (duplicate shape ids, dead or
-  duplicate relationships, a notes part shared with another slide) is
-  repaired and reported with the new warning `W_REPAIRED`; all other
-  slides stay untouched.
+  carries PowerPoint repair triggers -- duplicate shape ids, dead or
+  duplicate relationships (also in its notes, charts or SmartArt),
+  references to missing relationships, a notes part belonging to another
+  slide (shared, or left over by a removed slide) -- is repaired and
+  reported with the new warning `W_REPAIRED`; a link to a missing slide
+  goes together with its hyperlink, a placeholder picture fill without
+  its picture goes so the layout's fill shows again. Dead and duplicate
+  relationships of layouts, masters and the presentation are dropped
+  package-wide. All other slides stay untouched.
+- **`verify` finds references to missing relationships.** A slide using a
+  relationship id its relationships part does not have (a picture, chart,
+  link) is reported -- 1.0.x created such slides from layouts with picture
+  fills.
+- **Single-quoted XML attributes are read correctly.** Parts written with
+  `attr='value'` no longer look like repair triggers or lose their slide
+  list.
+- **Further fixes:** a hidden slide written as `show="false"` stays hidden;
+  speaker notes on a deck without notes master fail with a clear
+  `E_TEMPLATE` instead of a dead relationship; new part names never clash
+  with existing ones in another letter case; ink and ActiveX parts of
+  removed slides are collected; `el.rm` of a SmartArt also removes its
+  drawing.
 - **Fix: new slides showed "the picture cannot be displayed".** A layout
   placeholder with a picture fill (e.g. the decorative circle of a
   corporate title layout) was cloned onto the new slide without its

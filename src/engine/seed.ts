@@ -17,7 +17,7 @@ import { PptcError } from "../infra/errors.js"
 import { seedPlaceholderName } from "../core/model.js"
 import { cleanContentTypes, normalizeRelTargets } from "./parts.js"
 import { gcAssets } from "./post.js"
-import { NS_A, elements, firstElement, parseXml, serializeElement } from "./xml.js"
+import { NS_A, doubleQuoted, elements, firstElement, parseXml, serializeElement } from "./xml.js"
 
 /**  clone the fillable placeholders of a layout onto an empty slide (DOM)  */
 export const slideFromLayout = (layoutXml: string): string => {
@@ -81,8 +81,8 @@ export const layoutOrder = async (zip: JSZip): Promise<string[]> => {
 
     /*  masters in sldMasterIdLst order -- the order the reader (and so every
         layout index) uses; part names need not follow it  */
-    const pres = await zip.file("ppt/presentation.xml")?.async("string") ?? ""
-    const presRels = await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? ""
+    const pres = doubleQuoted(await zip.file("ppt/presentation.xml")?.async("string") ?? "")
+    const presRels = doubleQuoted(await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? "")
     const relTarget = new Map([ ...presRels.matchAll(/<Relationship\b[^>]*>/g) ].map((m) =>
         [ /Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? "" ]))
     const listed = [ ...pres.matchAll(/<p:sldMasterId\b[^>]*\br:id="([^"]+)"/g) ]

@@ -7,12 +7,13 @@
 **  PowerPoint "repair" trigger. This SHIPS with the engine (and therefore
 **  with the skill bundle), so `apply` self-checks its own output on any
 **  machine -- a structurally fine but repair-prompting file is never written.
-**  The post-pass repairs these triggers; verify is the safety net that turns
-**  any residual corruption into a clean, atomic failure instead of a broken
-**  .pptx the user only discovers in PowerPoint.
+**  The engine repairs these triggers on touched slides (engine/inplace/
+**  slides.ts) and package-wide (engine/post.ts); verify is the safety net
+**  that turns any residual corruption into a clean, atomic failure instead
+**  of a broken .pptx the user only discovers in PowerPoint.
 **
-**  LOCKSTEP: the trigger list here mirrors what engine/post.ts repairs --
-**  extend both sides together (see the matching note there).
+**  LOCKSTEP: the trigger list here mirrors what engine/inplace/slides.ts
+**  and engine/post.ts repair -- extend both sides together.
 */
 
 import JSZip from "jszip"
@@ -21,6 +22,7 @@ import { readFileSync } from "node:fs"
 import { DOMParser } from "@xmldom/xmldom"
 import { ASSET_PART } from "./post.js"
 import { normalizeRelTargets } from "./parts.js"
+import { doubleQuoted } from "./xml.js"
 
 /**
  *  Repair triggers inside one slide part: duplicate `p:cNvPr` shape ids.
@@ -33,6 +35,23 @@ export const shapeIdFindings = (part: string, xml: string): string[] => {
     const ids = [...xml.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1])
     const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))]
     return dup.length > 0 ? [`${part}: duplicate cNvPr ids ${dup.join(",")}`] : []
+}
+
+/**
+ *  Dangling references inside one slide part: every relationship id the
+ *  slide XML uses (pictures, charts, links, SmartArt, tags) must exist in
+ *  its relationships part.
+ *
+ *  @param part - the slide part name
+ *  @param xml - its content (attributes double-quoted)
+ *  @param relsXml - the content of its rels part (attributes double-quoted)
+ *  @returns findings, empty when clean
+ */
+export const refFindings = (part: string, xml: string, relsXml: string): string[] => {
+    const ids = new Set([ ...relsXml.matchAll(/<Relationship\b[^>]*\bId="([^"]+)"/g) ].map((m) => m[1]))
+    const dangling = [ ...new Set([ ...xml.matchAll(/\br:(?:id|embed|link|pict|dm|lo|qs|cs)="([^"]+)"/g) ]
+        .map((m) => m[1] as string).filter((id) => !ids.has(id))) ]
+    return dangling.length > 0 ? [`${part}: references missing relationship ids ${dangling.join(",")}`] : []
 }
 
 /**
@@ -77,11 +96,22 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
     /*  parts under the reserved OPC folder [trash]/ are logically deleted
         (left by PowerPoint incremental save / OneDrive co-authoring), carry
         no content type by design and are ignored by PowerPoint -- exclude
-        them from every check (the post-pass drops them from the output)  */
+        them from every check (the engine drops them from the output)  */
     const names = new Set(Object.keys(zip.files)
         .filter((n) => !n.endsWith("/") && !n.startsWith("[trash]/")))
-    const text = async (part: string): Promise<string> =>
+    const raw = async (part: string): Promise<string> =>
         (await (zip.file(part) as JSZip.JSZipObject).async("string")).replace(/^\uFEFF/, "")
+
+    /*  the regex checks below read every attribute double-quoted  */
+    const text = async (part: string): Promise<string> => {
+        const xml = await raw(part)
+        try {
+            return doubleQuoted(xml)
+        }
+        catch {
+            return xml
+        }
+    }
 
     /*  1. every XML part must be well-formed  */
     for (const n of names)
@@ -90,16 +120,20 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
                 const parser = new DOMParser({
                     onError: (_level, msg): void => { throw new Error(msg) }
                 })
-                parser.parseFromString(await text(n), "application/xml")
+                parser.parseFromString(await raw(n), "application/xml")
             }
             catch (err) {
                 findings.push(`${n}: malformed XML (${String(err).slice(0, 80)})`)
             }
 
-    /*  2. cNvPr shape ids must be unique per slide  */
+    /*  2. cNvPr shape ids must be unique per slide; every relationship id
+        a slide uses must exist  */
     for (const n of names)
-        if (/^ppt\/slides\/slide\d+\.xml$/.test(n))
-            findings.push(...shapeIdFindings(n, await text(n)))
+        if (/^ppt\/slides\/slide\d+\.xml$/.test(n)) {
+            const relsPart = `ppt/slides/_rels/${path.posix.basename(n)}.rels`
+            findings.push(...shapeIdFindings(n, await text(n)),
+                ...refFindings(n, await text(n), names.has(relsPart) ? await text(relsPart) : ""))
+        }
 
     /*  3. every internal relationship target must exist; rel ids unique  */
     for (const n of names)

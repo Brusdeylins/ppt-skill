@@ -4,8 +4,8 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  engine/parts: neutral zip-package helpers shared by the write-path
-**  (engine, post.ts) and the seed builder (seed.ts), plus the allocator that
-**  hands out every fresh part name and id of an apply.
+**  (engine/inplace, post.ts) and the seed builder (seed.ts), plus the
+**  allocator that hands out every fresh part name and id of an apply.
 */
 
 import type JSZip from "jszip"
@@ -65,12 +65,14 @@ export class PartAllocator {
             for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
                 rid = Math.max(rid, Number(m[1]))
         }
-        return new PartAllocator(new Set(Object.keys(zip.files)), rid + 1, Math.max(255, ...sldIds), new Set(sldIds))
+        const names = new Set(Object.keys(zip.files).map((f) => f.toLowerCase()))
+        return new PartAllocator(names, rid + 1, Math.max(255, ...sldIds), new Set(sldIds))
     }
 
     /**
      *  A fresh part name `<dir>/<stem><n><ext>`, n above every number of the
-     *  family (any extension) in use.
+     *  family (any extension, any case -- OPC part names are case-insensitive)
+     *  in use.
      *
      *  @param dir - folder, e.g. "ppt/slides"
      *  @param stem - name stem, e.g. "slide"
@@ -78,12 +80,12 @@ export class PartAllocator {
      *  @returns the reserved part name
      */
     part(dir: string, stem: string, ext: string): string {
-        const re = new RegExp(`^${reEscape(dir)}/${reEscape(stem)}(\\d+)\\.[^/]+$`)
+        const re = new RegExp(`^${reEscape(dir)}/${reEscape(stem)}(\\d+)\\.[^/]+$`, "i")
         let n = 0
         for (const name of this.names)
             n = Math.max(n, Number(re.exec(name)?.[1] ?? "0"))
         const name = `${dir}/${stem}${n + 1}${ext}`
-        this.names.add(name)
+        this.names.add(name.toLowerCase())
         return name
     }
 

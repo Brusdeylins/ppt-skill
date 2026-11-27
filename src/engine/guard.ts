@@ -81,7 +81,7 @@ const digest = async (zip: JSZip, part: string): Promise<string> => {
         try {
             const doc = parseXml(xml)
 
-            /*  slide-jump links are re-pointed or dropped by the post-pass  */
+            /*  slide-jump links to removed slides are dropped by the engine  */
             for (const tag of [ "a:hlinkClick", "a:hlinkHover" ])
                 for (const el of elements(doc, tag))
                     if ((el.getAttribute("action") ?? "").includes("hlinksldjump"))
@@ -108,12 +108,16 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
     if (rels === null)
         return []
     const out: string[] = []
+    const seen = new Set<string>()
     for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
         const rel = m[0]
         const type = /Type="([^"]+)"/.exec(rel)?.[1] ?? ""
-        if (SKIP_RELS.some((k) => type.endsWith(k)))
+        const id = /\bId="([^"]+)"/.exec(rel)?.[1] ?? ""
+
+        /*  a duplicate id resolves to its first relationship (as repaired)  */
+        if (SKIP_RELS.some((k) => type.endsWith(k)) || seen.has(id))
             continue
-        const id = /Id="([^"]+)"/.exec(rel)?.[1] ?? ""
+        seen.add(id)
         if (xml !== null && !xml.includes(`"${id}"`) && !IMPLICIT_RELS.some((k) => type.endsWith(k))
             && !type.endsWith("/diagramDrawing"))
             continue
@@ -124,6 +128,10 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
             continue
         }
         const target = path.posix.normalize(path.posix.join(path.posix.dirname(part), /Target="([^"]+)"/.exec(rel)?.[1] ?? ""))
+
+        /*  a dead target carries no content that could be lost  */
+        if (zip.file(target) === null)
+            continue
         let hash = await digest(zip, target)
         if (depth > 0)
             hash += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`
