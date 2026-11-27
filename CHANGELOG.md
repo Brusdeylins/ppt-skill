@@ -40,6 +40,12 @@
   (about 350 characters after 35 applies); they are renamed to
   `<base><n>.xlsx`. Orphaned SmartArt, chart drawing and theme override
   parts are garbage-collected like charts and media.
+- **Fix: a fill or `el.set` could edit the wrong shape.** automizer
+  addresses a shape by name and takes the first match in document order,
+  group children included. A textbox named like a placeholder, or a group
+  child named like the target, was edited instead. Shapes are now
+  addressed by name plus occurrence, picked from the source slide: the
+  placeholder with the planned idx, or the top-level shape for `el.*`.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

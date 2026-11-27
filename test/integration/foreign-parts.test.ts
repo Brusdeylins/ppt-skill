@@ -145,4 +145,35 @@ describe("parts of PowerPoint-authored decks", () => {
         }
         await expectIntact(deck)
     })
+
+    it("fills the placeholder, not an earlier shape with the same name", async () => {
+        const deck = path.join(TMP, "foreign-names.pptx")
+        const sp = (id: number, name: string, txt: string): string =>
+            `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>`
+            + "<p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"457200\"/></a:xfrm></p:spPr>"
+            + `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${txt}</a:t></a:r></a:p></p:txBody></p:sp>`
+        let bodyName = ""
+        await craftDeck(deck, async (zip, slides) => {
+            const a = slides[0] as string
+            const xml = await text(zip, a)
+            bodyName = [ ...xml.matchAll(/<p:cNvPr id="\d+" name="([^"]+)"\/>(?:(?!<\/p:nvSpPr>)[\s\S])*<p:ph [^>]*idx="1"/g) ][0]?.[1] ?? ""
+
+            /*  a same-named textbox and a group child named "Box" before the real top-level "Box"  */
+            const group = "<p:grpSp><p:nvGrpSpPr><p:cNvPr id=\"80\" name=\"Gruppe\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
+                + "<p:grpSpPr/>" + sp(81, "Box", "GROUP-CHILD") + "</p:grpSp>"
+            zip.file(a, xml.replace("</p:grpSpPr>", `</p:grpSpPr>${sp(78, bodyName, "KEEP-ME")}${group}${sp(82, "Box", "TOP")}`))
+        })
+        expect(bodyName).not.toBe("")
+        await apply(deck, [
+            { op: "slide.fill", slide: "title:A", placeholders: { body: { text: "NEW-BODY" } } },
+            { op: "el.set", slide: "title:A", name: "Box", text: "TOP-NEW" }
+        ])
+        const slide = (await readDeckState(await DeckArchive.open(deck))).slides[0] as { part: string }
+        const xml = await text(await JSZip.loadAsync(readFileSync(deck)), slide.part)
+        expect(xml).toContain("KEEP-ME")
+        expect(xml).toContain("NEW-BODY")
+        expect(xml).toContain("GROUP-CHILD")
+        expect(xml).toContain("TOP-NEW")
+        await expectIntact(deck)
+    })
 })

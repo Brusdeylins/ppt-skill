@@ -15,7 +15,7 @@ import "./automizer-patches.js"
 import { readFileSync, rmSync } from "node:fs"
 import JSZip from "jszip"
 import path from "node:path"
-import type { Element } from "@xmldom/xmldom"
+import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError, toPptcError } from "../infra/errors.js"
 import type { MutationPlan, SlidePlanEntry } from "../core/ops/registry.js"
 import { atomicWrite, cacheDir } from "../infra/fs.js"
@@ -74,26 +74,56 @@ const withStdoutShield = async <T>(fn: () => Promise<T>): Promise<T> => {
     }
 }
 
+/**  automizer element selector: shape name plus its occurrence index  */
+type Selector = { name: string, nameIdx: number }
+
+/**  address a shape by name AND occurrence: automizer picks the first
+     `p:cNvPr` with the name in document order (group children included),
+     so a textbox named like a placeholder, earlier in z-order, would be
+     edited instead. Count the occurrences up to the shape `pick` accepts.  */
+const selectorFor = (source: Document | null, name: string, pick: (shape: Element) => boolean): Selector => {
+    let n = 0
+    if (source !== null)
+        for (const cNvPr of elements(source, "p:cNvPr")) {
+            if (cNvPr.getAttribute("name") !== name)
+                continue
+            if (pick(cNvPr.parentNode?.parentNode as Element))
+                return { name, nameIdx: n }
+            n++
+        }
+    return { name, nameIdx: 0 }
+}
+
+/**  is the shape the placeholder with the given idx  */
+const isPlaceholder = (idx: number) => (shape: Element): boolean => {
+    const ph = firstElement(shape, "p:ph")
+    return ph !== null && Number(ph.getAttribute("idx") ?? "0") === idx
+}
+
+/**  is the shape a top-level shape of the slide (what el.* addresses)  */
+const isTopLevel = (shape: Element): boolean =>
+    (shape.parentNode as Element | null)?.nodeName === "p:spTree"
+
 /**  compose the automizer callback for one planned slide  */
-const slideCallback = (entry: SlidePlanEntry) =>
+const slideCallback = (entry: SlidePlanEntry, source: Document | null) =>
     (slide: {
-        modifyElement(name: string, cb: ((el: unknown) => void)[]): void
-        removeElement(name: string): void
+        modifyElement(selector: Selector, cb: ((el: unknown) => void)[]): void
+        removeElement(selector: Selector): void
         generate(cb: (pSlide: GenSlide, gen: GenRoot) => void, name?: string): void
     }): void => {
         for (const fill of entry.fills)
             if (fill.text !== undefined) {
                 const text = fill.text
-                slide.modifyElement(fill.phName, [
+                slide.modifyElement(selectorFor(source, fill.phName, isPlaceholder(fill.phIdx)), [
                     (el): void => setShapeText(el as Element, text, fill.append)
                 ])
             }
         for (const setText of entry.setTexts)
-            slide.modifyElement(setText.name, [
+            slide.modifyElement(selectorFor(source, setText.name, isTopLevel), [
                 (el): void => setShapeText(el as Element, setText.text)
             ])
         for (const name of entry.removeNames)
-            slide.removeElement(name)
+            slide.removeElement(selectorFor(source, name, isTopLevel))
         for (const planned of entry.elements)
             slide.generate(
                 (pSlide, gen): void => addElement(pSlide, gen, planned.spec),
@@ -167,7 +197,8 @@ const executePlan = async (
         const sourceNumber = entry.source.kind === "self"
             ? partNumber(entry.source.part)
             : entry.source.layoutIndex + 1
-        pres.addSlide(entry.source.kind, sourceNumber, slideCallback(entry))
+        const source = entry.source.kind === "self" ? await archive.xml(entry.source.part) : null
+        pres.addSlide(entry.source.kind, sourceNumber, slideCallback(entry, source))
     }
     await pres.write(tmpName)
 
