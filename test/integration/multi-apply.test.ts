@@ -220,6 +220,32 @@ describe("plan-time checks and rev", () => {
         { ...opts, dryRun: true })).rejects.toMatchObject({ code: "E_FILE" })
     })
 
+    it("accepts a picture-placeholder image without file extension", async () => {
+        const deck = path.join(TMP, "multi-noext.pptx")
+        const img = path.join(TMP, "multi-noext-image")
+        writeFileSync(img, Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"))
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ { op: "slide.add", layout: "PICTURE", placeholders: { title: { text: "P" }, image: { image: img } } } ])
+        await expectIntact(deck)
+    })
+
+    it("keeps new slide ids within the schema range", async () => {
+        const deck = path.join(TMP, "multi-idmax.pptx")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ addTitled("A") ])
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const pres = await (zip.file("ppt/presentation.xml") as JSZip.JSZipObject).async("string")
+        zip.file("ppt/presentation.xml", pres.replace(/(<p:sldId [^>]*\bid=")\d+"/, "$12147483647\""))
+        writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+        await apply(deck, [ addTitled("B"), addTitled("C") ])
+        await expectIntact(deck)
+        const ids = (await slidesOf(deck)).map((s) => s.id)
+        expect(ids[0]).toBe(2147483647)
+        expect(ids.every((id) => id >= 256 && id <= 2147483647)).toBe(true)
+        expect(new Set(ids).size).toBe(3)
+    })
+
     it("changes the rev when only the notes change", async () => {
         const deck = path.join(TMP, "multi-rev.pptx")
         writeFileSync(deck, await buildEmptyDeck(TEMPLATE))

@@ -72,6 +72,8 @@ interface Post {
     rid: number
     /**  tags parts already wired to an output slide in this pass  */
     tagsSeen: Set<string>
+    /**  implicit parts (comments, ...) already used by an output slide  */
+    implicitSeen: Set<string>
 }
 
 /**  slide part paths referenced from the presentation, in sldIdLst order  */
@@ -733,6 +735,49 @@ const dedupeSharedNotes = async (zip: JSZip, slides: string[]): Promise<void> =>
     }
 }
 
+/**  clone a part (with its rels and content-type override) to a free
+     `<stem>-pptc-<n>` name, for a slide that must not share it
+     @returns the clone's part name  */
+const clonePart = async (zip: JSZip, part: string): Promise<string> => {
+    const ext = path.posix.extname(part)
+    const stem = part.slice(0, part.length - ext.length)
+    let n = 2
+    let clone = `${stem}-pptc-${n}${ext}`
+    while (zip.file(clone) !== null)
+        clone = `${stem}-pptc-${++n}${ext}`
+    zip.file(clone, await (zip.file(part) as JSZip.JSZipObject).async("uint8array"))
+    const rels = zip.file(`${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`)
+    if (rels !== null)
+        zip.file(`${path.posix.dirname(clone)}/_rels/${path.posix.basename(clone)}.rels`, await rels.async("uint8array"))
+    const ct = await partText(zip, "[Content_Types].xml")
+    const override = new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(ct)
+    if (override !== null)
+        zip.file("[Content_Types].xml", ct.replace("</Types>", `${override[0].replace(part, clone)}</Types>`))
+    return clone
+}
+
+/**  give a slide its own copy of implicit parts (comments, theme override,
+     ...) that an earlier slide of this pass already uses -- a slide.copy
+     would otherwise share them  */
+const unshareImplicitParts = async (post: Post, slidePart: string, slideRels: Document): Promise<boolean> => {
+    let changed = false
+    for (const rel of elements(slideRels, "Relationship")) {
+        if (!IMPLICIT_RELS.some((k) => (rel.getAttribute("Type") ?? "").endsWith(k)))
+            continue
+        const target = rel.getAttribute("Target") ?? ""
+        const part = path.posix.normalize(path.posix.join(path.posix.dirname(slidePart), target))
+        if (post.implicitSeen.has(part) && post.zip.file(part) !== null) {
+            const clone = await clonePart(post.zip, part)
+            rel.setAttribute("Target", path.posix.relative(path.posix.dirname(slidePart), clone))
+            post.implicitSeen.add(clone)
+            changed = true
+        }
+        else
+            post.implicitSeen.add(part)
+    }
+    return changed
+}
+
 /**  restore the slide-tags references (p:custDataLst) captured from the
      source slide. pptx-automizer strips the element and its /tags
      relationships as "unsupported" on every re-import, which would silently
@@ -764,18 +809,7 @@ const restoreSlideTags = async (post: Post, slide: Document, slideRels: Document
             per-instance), so every re-use gets a private clone: the tags
             sibling of dedupeSharedNotes  */
         if (post.tagsSeen.has(part)) {
-            const ext = path.posix.extname(part)
-            const stem = part.slice(0, part.length - ext.length)
-            let n = 2
-            let clone = `${stem}-pptc-${n}${ext}`
-            while (post.zip.file(clone) !== null)
-                clone = `${stem}-pptc-${++n}${ext}`
-            post.zip.file(clone, await (post.zip.file(part) as JSZip.JSZipObject).async("uint8array"))
-            const ct = await partText(post.zip, "[Content_Types].xml")
-            const override = new RegExp(`<Override PartName="/${part.replace(/[.\\/]/g, "\\$&")}"[^>]*/>`).exec(ct)
-            if (override !== null)
-                post.zip.file("[Content_Types].xml",
-                    ct.replace("</Types>", `${override[0].replace(part, clone)}</Types>`))
+            const clone = await clonePart(post.zip, part)
             target = path.posix.join(path.posix.dirname(target), path.posix.basename(clone))
             part = clone
         }
@@ -980,7 +1014,7 @@ export const postProcess = async (
         for (const m of text.matchAll(/"rIdPptc(\d+)"/g))
             maxRid = Math.max(maxRid, Number(m[1]))
     }
-    const post: Post = { zip, rid: maxRid + 1, tagsSeen: new Set() }
+    const post: Post = { zip, rid: maxRid + 1, tagsSeen: new Set(), implicitSeen: new Set() }
     const slides = await referencedSlides(zip)
     await gcParts(zip, slides)
     await restoreSlideIds(zip, work.map((w) => w.slideId))
@@ -1037,7 +1071,8 @@ export const postProcess = async (
             if (job.slideTags.length > 0)
                 await restoreSlideTags(post, slide, slideRels, job.slideTags)
         }
-        const linksChanged = remapSlideLinks(slidePart, slide, slideRels, partMap)
+        const linksRemapped = remapSlideLinks(slidePart, slide, slideRels, partMap)
+        const linksChanged = await unshareImplicitParts(post, slidePart, slideRels) || linksRemapped
         const keepRels = job !== undefined && job.diagrams.length > 0
             ? await wireDiagrams(zip, slide, slideRels, job.diagrams) : new Set<string>()
         const idsChanged = uniquifyShapeIds(slide)

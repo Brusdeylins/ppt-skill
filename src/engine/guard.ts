@@ -70,9 +70,18 @@ const digest = async (zip: JSZip, part: string): Promise<string> => {
      deeper, so a swapped workbook or chart style is caught as well)  */
 const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number): Promise<string[]> => {
     const relsPart = `${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`
-    const rels = await zip.file(relsPart)?.async("string")
-    if (rels === undefined)
+    const relsText = await zip.file(relsPart)?.async("string")
+    if (relsText === undefined)
         return []
+
+    /*  canonical form: attribute quoting must not matter to the regexes  */
+    let rels = relsText
+    try {
+        rels = serializeXml(parseXml(relsText))
+    }
+    catch {
+        /*  malformed rels are matched as is (verify.ts reports them)  */
+    }
     const out: string[] = []
     for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
         const rel = m[0]

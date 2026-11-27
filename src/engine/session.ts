@@ -245,9 +245,19 @@ const executePlan = async (
     /*  new and copied slides get ids above every id of the input deck, so a
         stale `id:` of a removed slide never silently hits a new slide  */
     const presXml = await archive.zip.file("ppt/presentation.xml")?.async("string") ?? ""
-    let nextId = Math.max(255, ...[ ...presXml.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g) ].map((m) => Number(m[1])))
+    const usedIds = new Set([ ...presXml.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g) ].map((m) => Number(m[1])))
+    let nextId = Math.max(255, ...usedIds)
+
+    /*  ids above the schema maximum wrap to the lowest free id  */
+    const freshId = (): number => {
+        nextId = nextId < 2147483647 ? nextId + 1 : 256
+        while (usedIds.has(nextId))
+            nextId++
+        usedIds.add(nextId)
+        return nextId
+    }
     const work: PostSlideWork[] = plan.entries.map((entry, i) => ({
-        slideId: entry.virtualId > 0 ? entry.virtualId : ++nextId,
+        slideId: entry.virtualId > 0 ? entry.virtualId : freshId(),
         sourcePart: entry.source.kind === "self" && entry.virtualId > 0 ? entry.source.part : null,
         notes: entry.notes,
         footer: entry.footer,

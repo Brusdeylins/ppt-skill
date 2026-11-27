@@ -120,6 +120,18 @@ describe("parts of PowerPoint-authored decks", () => {
         expect((await relatedPart(deck, 1, "themeOverride"))?.bytes.toString()).toContain("slide B")
         await expectIntact(deck)
 
+        /*  a copy gets its own comments and theme override parts  */
+        await apply(deck, [ { op: "slide.copy", slide: "title:B", ref: "c" },
+            { op: "slide.fill", slide: "$c", placeholders: { title: { text: "B2" } } } ])
+        await expectIntact(deck)
+        for (const type of [ "comments", "themeOverride" ]) {
+            const original = await relatedPart(deck, 1, type)
+            const copy = await relatedPart(deck, 2, type)
+            expect(copy?.part).not.toBe(original?.part)
+            expect(copy?.bytes.equals(original?.bytes as Buffer)).toBe(true)
+        }
+        await apply(deck, [ { op: "slide.rm", slide: "title:B2" } ])
+
         /*  removing the commented slide also removes its comments part  */
         await apply(deck, [ { op: "slide.rm", slide: "title:B" } ])
         expect((await JSZip.loadAsync(readFileSync(deck))).file("ppt/comments/comment1.xml")).toBeNull()

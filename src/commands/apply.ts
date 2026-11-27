@@ -122,7 +122,7 @@ export const executeOps = async (
             if (fill.image !== undefined) {
                 requireFile(fill.image, "image")
                 const ext = path.extname(fill.image).slice(1).toLowerCase()
-                if (IMAGE_TYPES[ext] === undefined)
+                if (ext !== "" && IMAGE_TYPES[ext] === undefined)
                     throw new PptcError("E_SCHEMA", `unsupported image type '.${ext}' for a picture placeholder`,
                         { supported: Object.keys(IMAGE_TYPES) })
             }
