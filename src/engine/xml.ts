@@ -7,8 +7,6 @@
 **  parsing, serializing, namespace constants and element iteration.
 */
 
-import JSZip from "jszip"
-import path from "node:path"
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
 import type { Document, Element } from "@xmldom/xmldom"
 
@@ -89,29 +87,4 @@ export const drawingText = (scope: Element): string => {
         parts.push(runs.join(""))
     }
     return parts.join("\n")
-}
-
-/**
- *  Rewrite absolute relationship targets (`Target="/ppt/slides/slide1.xml"`,
- *  written by some generators) to the relative form the engine and
- *  pptx-automizer resolve. External targets stay as they are.
- *
- *  @param zip - archive to normalize in place
- *  @returns whether any target was rewritten
- */
-export const normalizeRelTargets = async (zip: JSZip): Promise<boolean> => {
-    let changed = false
-    for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
-        const text = await (zip.file(relsPart) as JSZip.JSZipObject).async("string")
-        if (!/Target="\//.test(text))
-            continue
-        const base = path.posix.dirname(path.posix.dirname(relsPart)).replace(/^\.$/, "")
-        const out = text.replace(/<Relationship\b[^>]*>/g, (rel) => rel.includes("TargetMode=\"External\"") ? rel
-            : rel.replace(/Target="\/([^"]*)"/, (_m, abs: string) => `Target="${path.posix.relative(base, abs)}"`))
-        if (out !== text) {
-            zip.file(relsPart, out)
-            changed = true
-        }
-    }
-    return changed
 }

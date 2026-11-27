@@ -477,6 +477,20 @@ describe("parts of PowerPoint-authored decks", () => {
         const rels = await text(zip, relsOf(slide.part))
         expect(rels).toContain("file:///C:/Bilder/logo.png")
         expect(rels).toContain("file:///C:/Daten/tabelle.xlsx")
+
+        /*  each of them can also be removed  */
+        for (const name of [ "Logo", "Verknuepft", "Tabelle" ])
+            await apply(deck, [ { op: "el.rm", slide: "index:0", name } ])
+        await expectIntact(deck)
+        const after = await JSZip.loadAsync(readFileSync(deck))
+        const first = (await readDeckState(await DeckArchive.open(deck))).slides[0] as { part: string }
+        const xml = await text(after, first.part)
+        for (const name of [ "Logo", "Verknuepft", "Tabelle" ])
+            expect(xml).not.toContain(`name="${name}"`)
+        expect(await text(after, relsOf(first.part))).not.toContain("file:///")
+
+        /*  the copy still holds its own embedded workbook  */
+        expect((await relatedPart(deck, 1, "package"))?.bytes.toString()).toBe("xlsx-payload")
     })
 
     it("edits decks with byte-order marks and absolute relationship targets", async () => {
@@ -497,6 +511,9 @@ describe("parts of PowerPoint-authored decks", () => {
             abs.file(n, (await text(abs, n)).replace(/Target="([^"]+)"/g, (m, t: string) =>
                 /^[a-z]+:/i.test(t) || t.startsWith("/") ? m : `Target="/${path.posix.normalize(path.posix.join(base, t))}"`))
         }
+        /*  ... and single-quoted in the presentation rels  */
+        const presRels = "ppt/_rels/presentation.xml.rels"
+        abs.file(presRels, (await text(abs, presRels)).replace(/Target="(\/[^"]+)"/g, "Target='$1'"))
         writeFileSync(deck, await abs.generateAsync({ type: "nodebuffer" }))
         await executeOps(deck, { ops: [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "B" } } } ] } as never,
             { ...opts, templatePath: null })

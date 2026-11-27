@@ -16,7 +16,8 @@ import { PptcError } from "../infra/errors.js"
 import { contentHash, requireFile } from "../infra/fs.js"
 import { estimateCapacity } from "../core/describe/capacity.js"
 import { regionWithin, coverageFraction } from "../core/describe/position.js"
-import { elements, firstElement, drawingText, parseXml, normalizeRelTargets } from "./xml.js"
+import { elements, firstElement, drawingText, parseXml } from "./xml.js"
+import { normalizeRelTargets } from "./parts.js"
 import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
     DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,

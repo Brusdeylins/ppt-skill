@@ -20,7 +20,7 @@ import path from "node:path"
 import { readFileSync } from "node:fs"
 import { DOMParser } from "@xmldom/xmldom"
 import { ASSET_PART } from "./post.js"
-import { normalizeRelTargets } from "./xml.js"
+import { normalizeRelTargets } from "./parts.js"
 
 /**
  *  Validate an opened archive for the known PowerPoint repair triggers.

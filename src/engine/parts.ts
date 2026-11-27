@@ -9,6 +9,7 @@
 */
 
 import type JSZip from "jszip"
+import path from "node:path"
 import { PptcError } from "../infra/errors.js"
 import { elements, parseXml, serializeXml } from "./xml.js"
 
@@ -47,4 +48,36 @@ export const cleanContentTypes = async (zip: JSZip): Promise<void> => {
     }
     if (changed)
         zip.file("[Content_Types].xml", serializeXml(ct))
+}
+
+/**
+ *  Rewrite absolute relationship targets (`Target="/ppt/slides/slide1.xml"`,
+ *  written by some generators) to the relative form the engine and
+ *  pptx-automizer resolve. External targets stay as they are.
+ *
+ *  @param zip - archive to normalize in place
+ *  @returns whether any target was rewritten
+ */
+export const normalizeRelTargets = async (zip: JSZip): Promise<boolean> => {
+    let changed = false
+    for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
+        const text = await partText(zip, relsPart)
+        if (!/Target=["']\//.test(text))
+            continue
+        const base = path.posix.dirname(path.posix.dirname(relsPart)).replace(/^\.$/, "")
+        const doc = parseXml(text)
+        let rewritten = false
+        for (const rel of elements(doc, "Relationship")) {
+            const target = rel.getAttribute("Target") ?? ""
+            if (rel.getAttribute("TargetMode") !== "External" && target.startsWith("/")) {
+                rel.setAttribute("Target", path.posix.relative(base, target.slice(1)))
+                rewritten = true
+            }
+        }
+        if (rewritten) {
+            zip.file(relsPart, serializeXml(doc))
+            changed = true
+        }
+    }
+    return changed
 }

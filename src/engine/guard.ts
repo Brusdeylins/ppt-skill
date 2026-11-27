@@ -108,8 +108,6 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
     const out: string[] = []
     for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
         const rel = m[0]
-        if (rel.includes("TargetMode=\"External\""))
-            continue
         const type = /Type="([^"]+)"/.exec(rel)?.[1] ?? ""
         if (SKIP_RELS.some((k) => type.endsWith(k)))
             continue
@@ -117,6 +115,12 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
         if (xml !== null && !xml.includes(`"${id}"`) && !IMPLICIT_RELS.some((k) => type.endsWith(k))
             && !type.endsWith("/diagramDrawing"))
             continue
+
+        /*  a linked file (picture, OLE object, video) counts by its target  */
+        if (rel.includes("TargetMode=\"External\"")) {
+            out.push(`${type.slice(type.lastIndexOf("/") + 1)}:ext:${/Target="([^"]+)"/.exec(rel)?.[1] ?? ""}`)
+            continue
+        }
         const target = path.posix.normalize(path.posix.join(path.posix.dirname(part), /Target="([^"]+)"/.exec(rel)?.[1] ?? ""))
         let hash = await digest(zip, target)
         if (depth > 0)

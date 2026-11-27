@@ -227,6 +227,19 @@ describe("content guard", () => {
             grow: { images: [ digestBytes(planned) ], fallbacks: 0, charts: 0 } }
         expect(await verifyContent(before, await grown(planned), [ grow ])).toEqual({ blocked: [], lost: [] })
         expect((await verifyContent(before, await grown(Buffer.from("foreign")), [ grow ])).blocked).toHaveLength(1)
+
+        /*  a linked (external) picture counts by its target  */
+        const linked = async (target: string): Promise<JSZip> => {
+            const zip = await JSZip.loadAsync(readFileSync(deck))
+            zip.file(slideRels, (await (zip.file(slideRels) as JSZip.JSZipObject).async("string")).replace("</Relationships>",
+                `<Relationship Id="rId78" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}" TargetMode="External"/></Relationships>`))
+            const slideXml = await (zip.file(part) as JSZip.JSZipObject).async("string")
+            zip.file(part, slideXml.replace("</p:spTree>", "<p:pic><p:blipFill><a:blip r:link=\"rId78\"/></p:blipFill></p:pic></p:spTree>"))
+            return zip
+        }
+        const linkedBefore = await linked("file:///C:/a.png")
+        expect(await verifyContent(linkedBefore, await linked("file:///C:/a.png"), expects)).toEqual({ blocked: [], lost: [] })
+        expect((await verifyContent(linkedBefore, await linked("file:///C:/b.png"), expects)).blocked).toHaveLength(1)
     })
 })
 

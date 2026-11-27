@@ -89,7 +89,10 @@
   of PowerPoint's own themes), or absolute relationship targets
   (`/ppt/...`). `el.rm` of a picture added by `el.add` in an earlier apply
   failed the same way. All of them work now; linked targets are kept as
-  they are, absolute targets are written back in relative form.
+  they are, absolute targets are written back in relative form. `el.rm`
+  now removes shapes itself (including `mc:AlternateContent` wrappers), so
+  linked pictures, linked and embedded OLE objects can be removed too; the
+  content guard also fingerprints linked (external) targets.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

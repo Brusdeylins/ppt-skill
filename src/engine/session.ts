@@ -120,7 +120,6 @@ const isTopLevel = (shape: Element): boolean =>
 const slideCallback = (entry: SlidePlanEntry, source: Document | null) =>
     (slide: {
         modifyElement(selector: Selector, cb: ((el: unknown) => void)[]): void
-        removeElement(selector: Selector): void
         generate(cb: (pSlide: GenSlide, gen: GenRoot) => void, name?: string): void
     }): void => {
         for (const fill of entry.fills)
@@ -134,8 +133,6 @@ const slideCallback = (entry: SlidePlanEntry, source: Document | null) =>
             slide.modifyElement(selectorFor(source, setText.name, isTopLevel), [
                 (el): void => setShapeText(el as Element, setText.text)
             ])
-        for (const name of entry.removeNames)
-            slide.removeElement(selectorFor(source, name, isTopLevel))
         for (const planned of entry.elements)
             slide.generate(
                 (pSlide, gen): void => addElement(pSlide, gen, planned.spec),
@@ -264,15 +261,22 @@ const executePlan = async (
         .load(sourceFile, "self")
     if (seedPath !== null)
         pres = pres.load(seedPath, "seed")
+    const sources: (Document | null)[] = []
     for (const entry of plan.entries) {
         const sourceNumber = entry.source.kind === "self"
             ? partNumber(entry.source.part)
             : entry.source.layoutIndex + 1
         const source = entry.source.kind === "self" ? await archive.xml(entry.source.part) : null
+        sources.push(source)
         pres.addSlide(entry.source.kind, sourceNumber, slideCallback(entry, source))
     }
     try {
         await pres.write(tmpName)
+    }
+    catch (err) {
+        if (archive.normalized && err instanceof Error)
+            err.message = err.message.split(path.basename(sourceFile)).join(path.basename(deckFile))
+        throw err
     }
     finally {
         if (archive.normalized)
@@ -302,6 +306,14 @@ const executePlan = async (
         hidden: entry.hidden,
         slideTags: slideTags[i] as SlideTagRef[],
         diagrams: diagramSources[i] as DiagramSource[],
+
+        /*  shapes to remove, by name and occurrence on the source slide --
+            removed in the post-pass, as automizer's removeElement cannot
+            resolve linked, package-embedded or renamed media  */
+        removals: entry.removeNames.map((name) => {
+            const sel = selectorFor(sources[i] ?? null, name, isTopLevel)
+            return { name: sel.name, nth: sel.nameIdx }
+        }),
         images: entry.fills
             .filter((f) => f.image !== undefined)
             .map((f) => ({

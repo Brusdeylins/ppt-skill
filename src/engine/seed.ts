@@ -17,9 +17,9 @@ import type { Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
 import { seedPlaceholderName } from "../core/model.js"
 import { atomicWrite, cacheDir, contentHash } from "../infra/fs.js"
-import { cleanContentTypes } from "./parts.js"
+import { cleanContentTypes, normalizeRelTargets } from "./parts.js"
 import { gcAssets } from "./post.js"
-import { NS_A, elements, firstElement, normalizeRelTargets, parseXml, serializeElement } from "./xml.js"
+import { NS_A, elements, firstElement, parseXml, serializeElement } from "./xml.js"
 
 /**  seed format generation: bump to invalidate all cached seeds  */
 const SEED_FORMAT = 5

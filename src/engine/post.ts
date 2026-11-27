@@ -70,6 +70,9 @@ export interface PostSlideWork {
     hidden: boolean
     /**  images to insert into picture placeholders  */
     images: { phIdx: number, path: string, frame?: Frame }[]
+    /**  top-level shapes to remove: name and occurrence among the slide's
+         shapes of that name (document order)  */
+    removals: { name: string, nth: number }[]
     /**  source SmartArt of a kept slide: frame shape id, data and drawing part  */
     diagrams: DiagramSource[]
     /**  slide-tags references (p:custDataLst) captured from the source
@@ -342,6 +345,24 @@ const remapCustomShows = async (zip: JSZip, inputRidToId: Record<string, number>
                 sld.setAttribute("r:id", rid)
         }
     zip.file(part, serializeXml(pres))
+}
+
+/**  remove shapes by name and occurrence. The shape element is the
+     cNvPr's grandparent; inside an `mc:AlternateContent` (OLE objects,
+     SmartArt) the whole wrapper goes, so no fallback copy stays behind.
+     Rels the slide no longer uses are pruned, and their parts collected,
+     by the regular sweeps.  */
+const removeShapes = (slide: Document, removals: { name: string, nth: number }[]): void => {
+    const doomed = removals.map((r) => elements(slide, "p:cNvPr").filter((el) => el.getAttribute("name") === r.name)[r.nth])
+    for (const cNvPr of doomed) {
+        if (cNvPr === undefined)
+            continue
+        let shape = cNvPr.parentNode?.parentNode as Element | null
+        for (let up = shape?.parentNode as Element | null; up !== null && up.nodeName !== "p:spTree"; up = up.parentNode as Element | null)
+            if (up.nodeName === "mc:AlternateContent")
+                shape = up
+        shape?.parentNode?.removeChild(shape)
+    }
 }
 
 /**  re-wire the SmartArt of a slide after automizer copied its parts to
@@ -1098,6 +1119,7 @@ export const postProcess = async (
         const slideRels = parseXml(await partText(zip, relsPart))
 
         if (job !== undefined) {
+            removeShapes(slide, job.removals)
             if (job.background !== null)
                 setBackground(slide, job.background)
             if (job.footer !== null)

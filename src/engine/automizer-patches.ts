@@ -10,10 +10,12 @@
 **  handed out again and its content overwritten -- another slide then
 **  shows the wrong image, chart style or embedded object. These patches
 **  seed each counter from the HIGHEST number of every part name the
-**  counter is used for, and give OLE embeddings a deck-unique name. Two
-**  more patches keep picture bullets (`a:buBlip`) that automizer strips
-**  and resolve pictures whose media is not named `image*`, and a last one
-**  stops embedded Excel objects from being taken for charts.
+**  counter is used for, and give OLE embeddings a deck-unique name.
+**  Further patches: keep picture bullets (`a:buBlip`); resolve pictures
+**  whose media is not named `image*`; stop `package` rels (embedded Excel
+**  objects) from passing for charts, SmartArt or layouts; leave linked
+**  (external) pictures and OLE objects alone; copy SmartArt without a
+**  drawing part; accept XML parts that start with a byte-order mark.
 **
 **  The patched members are private to automizer: installing fails loudly
 **  when one is missing, so an automizer upgrade cannot turn them into a
@@ -150,7 +152,8 @@ patch(xmlHelper, "getTargetByRelId", async (archive: unknown, relsPath: string, 
         items.push({ rId: rel.getAttribute("Id") ?? "", type: rel.getAttribute("Type") ?? "",
             file, filename: file.split("/").pop() ?? "", element: rel })
     })
-    return rels.find((rel) => rel.rId === rid)
+    return rels.find((rel) => rel.rId === rid
+        && (rel.element as { getAttribute(n: string): string | null }).getAttribute("TargetMode") !== "External")
 })
 
 /*  embedded files: automizer's prefix match accepts every `package` rel

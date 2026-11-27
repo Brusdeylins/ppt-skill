@@ -47,7 +47,7 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/post.ts` | zip post-pass: GC, notes, footer, background, slide visibility (`show="0"`), placeholder images, hyperlink rels, doc props, repair-trigger cleanup (stale rels, shape ids) |
 | `engine/verify.ts` | read-only integrity check against the known PowerPoint "repair" triggers; backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
 | `engine/guard.ts` | content self-check before every write: each slide the plan keeps must keep its notes and related parts (images, charts, embeddings), layouts/masters must not change (`E_INTEGRITY`) |
-| `engine/automizer-patches.ts` | part-name allocation fixes for pptx-automizer (media, chart, SmartArt counters from the highest number in use; deck-unique OLE names); fails loudly if an upgrade removes a patched member |
+| `engine/automizer-patches.ts` | fixes for pptx-automizer internals: part-name allocation (media, chart, SmartArt counters from the highest number in use; deck-unique OLE names), picture bullets, pictures with `media*` names, `package` rels, linked files, SmartArt without drawing, byte-order marks; fails loudly if an upgrade removes a patched member |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries |
 | `engine/parts.ts` | zip part access helpers (read/parse archive parts) |
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |

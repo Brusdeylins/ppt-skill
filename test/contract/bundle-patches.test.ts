@@ -6,8 +6,9 @@
 **  Contract: the pptx-automizer patches (engine/automizer-patches.ts) are
 **  effective in the BUILT bundle, not only in the sources -- the reported
 **  regression (images added in separate applies overwriting each other)
-**  and OLE objects of two slides collapsing into one file, replayed
-**  through dst/pptc.mjs. `npm test` builds first.
+**  OLE objects of two slides collapsing into one file, and a BOM template's
+**  deck with an embedded Excel object, replayed through dst/pptc.mjs.
+**  `npm test` builds first.
 */
 
 import { describe, expect, it } from "vitest"
@@ -85,5 +86,39 @@ describe("automizer patches in the built bundle", () => {
             payloads.push(await (out.file(`ppt/embeddings/${target}`) as JSZip.JSZipObject).async("string"))
         }
         expect(payloads.sort()).toEqual([ "payload-0", "payload-1" ])
+    })
+
+    it("edits a BOM template's deck with an embedded Excel object", async () => {
+        mkdirSync(TMP, { recursive: true })
+        const template = path.join(TMP, "bundle-patches-bom.pptx")
+        const tpl = await JSZip.loadAsync(readFileSync(TEMPLATE))
+        for (const n of Object.keys(tpl.files).filter((f) => /\.(xml|rels)$/.test(f)))
+            tpl.file(n, Buffer.concat([ Buffer.from([ 0xEF, 0xBB, 0xBF ]), await (tpl.file(n) as JSZip.JSZipObject).async("nodebuffer") ]))
+        writeFileSync(template, await tpl.generateAsync({ type: "nodebuffer" }))
+        const deck = path.join(TMP, "bundle-patches-package.pptx")
+        expect(run("new", deck, "--template", template, "--force").ok).toBe(true)
+        expect(run("apply", deck, "-e", JSON.stringify({ op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "A" } } })).ok).toBe(true)
+
+        /*  an embedded Excel object: a package rel on the slide  */
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const slide = Object.keys(zip.files).find((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)) as string
+        const relsPart = `ppt/slides/_rels/${path.posix.basename(slide)}.rels`
+        zip.file("ppt/embeddings/Microsoft_Excel_Worksheet.xlsx", Buffer.from("xlsx-payload"))
+        const ct = await (zip.file("[Content_Types].xml") as JSZip.JSZipObject).async("string")
+        zip.file("[Content_Types].xml", ct.replace("<Default ",
+            "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/><Default "))
+        zip.file(relsPart, (await (zip.file(relsPart) as JSZip.JSZipObject).async("string")).replace("</Relationships>",
+            "<Relationship Id=\"rId90\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/package\" "
+            + "Target=\"../embeddings/Microsoft_Excel_Worksheet.xlsx\"/></Relationships>"))
+        zip.file(slide, (await (zip.file(slide) as JSZip.JSZipObject).async("string")).replace("</p:spTree>",
+            "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"90\" name=\"Tabelle\"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>"
+            + "<p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></p:xfrm>"
+            + "<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/presentationml/2006/ole\">"
+            + "<p:oleObj r:id=\"rId90\" progId=\"Excel.Sheet.12\"><p:embed/></p:oleObj></a:graphicData></a:graphic></p:graphicFrame></p:spTree>"))
+        writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+
+        expect(run("apply", deck, "-e", JSON.stringify({ op: "meta.props", set: { title: "x" } })).ok).toBe(true)
+        expect(run("apply", deck, "-e", JSON.stringify({ op: "el.rm", slide: "title:A", name: "Tabelle" })).ok).toBe(true)
+        expect(run("verify", deck).ok).toBe(true)
     })
 })
