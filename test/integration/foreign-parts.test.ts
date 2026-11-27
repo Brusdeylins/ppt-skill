@@ -119,6 +119,11 @@ describe("parts of PowerPoint-authored decks", () => {
         expect((await relatedPart(deck, 1, "comments"))?.part).toBe("ppt/comments/comment1.xml")
         expect((await relatedPart(deck, 1, "themeOverride"))?.bytes.toString()).toContain("slide B")
         await expectIntact(deck)
+
+        /*  removing the commented slide also removes its comments part  */
+        await apply(deck, [ { op: "slide.rm", slide: "title:B" } ])
+        expect((await JSZip.loadAsync(readFileSync(deck))).file("ppt/comments/comment1.xml")).toBeNull()
+        await expectIntact(deck)
     })
 
     it("keeps a chart's theme override apart from a slide's theme override", async () => {

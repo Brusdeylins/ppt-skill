@@ -38,8 +38,8 @@
 - **Embedded workbook names stay short.** automizer appended
   `-created-<n>` to the name it read, so names grew with every apply
   (about 350 characters after 35 applies); they are renamed to
-  `<base><n>.xlsx`. Orphaned SmartArt, chart drawing and theme override
-  parts are garbage-collected like charts and media.
+  `<base><n>.xlsx`. Orphaned SmartArt, chart drawing, theme override and
+  slide comment parts are garbage-collected like charts and media.
 - **Fix: a fill or `el.set` could edit the wrong shape.** automizer
   addresses a shape by name and takes the first match in document order,
   group children included. A textbox named like a placeholder, or a group

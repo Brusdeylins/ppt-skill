@@ -233,9 +233,9 @@ const pruneUnusedSlideRels = (slide: Document, slideRels: Document): boolean => 
 }
 
 /**  parts automizer copies per slide on every apply (charts with their
-     drawings and theme overrides, SmartArt, embeddings, media); unreachable
-     ones are garbage. Mirrored by the orphan check in engine/verify.ts.  */
-export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
+     drawings and theme overrides, SmartArt, embeddings, media) plus slide
+     comments; unreachable ones (e.g. of a removed slide) are garbage. Mirrored by the orphan check in engine/verify.ts.  */
+export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
 
 /**  normalise embedded workbook names: automizer appends `-created-<n>` to
      the name it read, so it grows by one suffix per apply and chart
