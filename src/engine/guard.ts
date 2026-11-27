@@ -37,15 +37,21 @@ const SKIP_RELS = [ "/slideLayout", "/notesSlide", "/hyperlink", "/slide" ]
 /**  rel types a slide carries without referencing them by id in its XML  */
 export const IMPLICIT_RELS = [ "/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo" ]
 
-/**  content hash of a part; XML relationship ids are blanked first, since
-     the engine re-mints them on every apply without changing content  */
+/**  content hash of a part; for XML the declaration, byte-order mark,
+     whitespace between tags, relationship ids and layout ids are dropped
+     first, since the engine re-serializes and re-mints them on every apply
+     without changing content  */
 const digest = async (zip: JSZip, part: string): Promise<string> => {
     const file = zip.file(part)
     if (file === null)
         return "missing"
     const bytes = await file.async("nodebuffer")
     const data = /\.(xml|rels)$/.test(part)
-        ? bytes.toString("utf8").replace(/\br:(id|embed|link|pict|dm|lo|qs|cs)="[^"]*"/g, "r:$1=\"\"")
+        ? bytes.toString("utf8")
+            .replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "")
+            .replace(/>\s+</g, "><")
+            .replace(/\br:(id|embed|link|pict|dm|lo|qs|cs)="[^"]*"/g, "r:$1=\"\"")
+            .replace(/(<p:sldLayoutId\b[^>]*?\bid=")\d+"/g, "$1\"")
         : bytes
     return createHash("sha1").update(data).digest("hex").slice(0, 12)
 }

@@ -46,6 +46,12 @@
   child named like the target, was edited instead. Shapes are now
   addressed by name plus occurrence, picked from the source slide: the
   placeholder with the planned idx, or the top-level shape for `el.*`.
+- **`--template` must match the deck.** A seed slide binds to the deck's
+  layout of the same index, and pptc never imports layouts into an
+  existing deck, so a template of another design put its placeholders on
+  a foreign layout. `apply --template` now fails with `E_TEMPLATE` unless
+  the template's layouts (names and placeholders) equal the deck's; the
+  fix is to omit `--template`.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

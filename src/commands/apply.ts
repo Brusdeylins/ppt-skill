@@ -12,6 +12,7 @@ import { PptcError } from "../infra/errors.js"
 import { planOps } from "../core/ops/planner.js"
 import { OpsDocumentSchema, type OpsDocument } from "../schema/ops.js"
 import { DeckArchive, readDeckState, readTemplateInfo } from "../engine/reader.js"
+import type { Layout } from "../core/model.js"
 import { runSession } from "../engine/session.js"
 import { parseJson, requireFile, resolvePayload } from "../infra/fs.js"
 import { parse, type Parsed } from "../infra/args.js"
@@ -92,6 +93,22 @@ export const executeOps = async (
     if (opts.templatePath !== null) {
         requireFile(opts.templatePath, "template")
         template = await readTemplateInfo(await DeckArchive.open(opts.templatePath))
+
+        /*  a seed slide is bound to the deck's layout of the SAME index, so a
+            template of another design would put its placeholders on a foreign
+            layout (pptc never imports layouts into an existing deck)  */
+        const shape = (layouts: Layout[]): string[] => layouts.map((l) =>
+            `${l.name}|${l.placeholders.map((p) => `${p.idx}:${p.kind}`).sort().join(",")}`)
+        const deckShape = shape(deckInfo.layouts)
+        const tplShape = shape(template.layouts)
+        const differs = deckShape.findIndex((l, i) => l !== tplShape[i])
+        if (deckShape.length > 0 && (differs >= 0 || deckShape.length !== tplShape.length)) {
+            const at = differs >= 0 ? differs : Math.min(deckShape.length, tplShape.length)
+            throw new PptcError("E_TEMPLATE",
+                "--template does not match the deck's layouts (another design or version); "
+                + "omit --template -- the deck carries its own layouts",
+                { layoutIndex: at, deck: deckShape[at] ?? null, template: tplShape[at] ?? null })
+        }
     }
 
     /*  plan everything before touching anything  */
