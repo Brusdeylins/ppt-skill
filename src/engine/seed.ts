@@ -22,7 +22,7 @@ import { gcAssets } from "./post.js"
 import { NS_A, elements, firstElement, parseXml, serializeElement } from "./xml.js"
 
 /**  seed format generation: bump to invalidate all cached seeds  */
-const SEED_FORMAT = 4
+const SEED_FORMAT = 5
 
 /**  clone the fillable placeholders of a layout onto an empty slide (DOM)  */
 const slideFromLayout = (layoutXml: string): string => {
@@ -83,7 +83,19 @@ const stripSlides = (
 /**  layout part paths in slide-master order  */
 const layoutOrder = async (zip: JSZip): Promise<string[]> => {
     const order: string[] = []
-    for (const masterPart of Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort()) {
+
+    /*  masters in sldMasterIdLst order -- the order the reader (and so every
+        layout index) uses; part names need not follow it  */
+    const pres = await zip.file("ppt/presentation.xml")?.async("string") ?? ""
+    const presRels = await zip.file("ppt/_rels/presentation.xml.rels")?.async("string") ?? ""
+    const relTarget = new Map([ ...presRels.matchAll(/<Relationship\b[^>]*>/g) ].map((m) =>
+        [ /Id="([^"]+)"/.exec(m[0])?.[1] ?? "", /Target="([^"]+)"/.exec(m[0])?.[1] ?? "" ]))
+    const listed = [ ...pres.matchAll(/<p:sldMasterId\b[^>]*\br:id="([^"]+)"/g) ]
+        .map((m) => path.posix.normalize(path.posix.join("ppt", relTarget.get(m[1] as string) ?? "")))
+        .filter((part) => zip.file(part) !== null)
+    const masters = listed.length > 0 ? listed
+        : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort()
+    for (const masterPart of masters) {
         const master = parseXml(await (zip.file(masterPart) as JSZip.JSZipObject).async("string"))
         const relsFile = zip.file(`ppt/slideMasters/_rels/${path.posix.basename(masterPart)}.rels`)
         if (relsFile === null)
