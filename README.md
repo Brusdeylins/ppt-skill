@@ -285,8 +285,11 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   the write: `W_REPAIRED` (the input deck carried PowerPoint repair
   triggers on a slide or a layout -- duplicate shape ids, dead or duplicate
   relationships, references to missing relationships, a shared notes part
-  -- and pptc repaired it; the deck is written, tell the user). Content of
-  a slide that would vanish, move or change although no op asked for it
+  -- and pptc repaired it, naming what it removed; the deck is written,
+  tell the user) and `W_INPUT_DEFECT` (the input deck carries repair
+  triggers pptc cannot repair, e.g. a slide listed twice; they stay as
+  they were, only triggers pptc itself would add block the write). Content
+  of a slide that would vanish, move or change although no op asked for it
   fails with `E_INTEGRITY`
 - `--min-font-pt N` -- readability floor for explicit font sizes (default
   `8`); runs or `el.add`/`el.set` elements below `N` raise

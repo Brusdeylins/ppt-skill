@@ -54,7 +54,7 @@ export const relsDefects = (view: PartView, exists: (part: string) => boolean): 
         findings.push(`${view.part}: duplicate relationship ids ${dup.join(",")}`)
     for (const r of view.rels)
         if (r.target !== null && !exists(r.target))
-            findings.push(`${view.part}: dead relationship target ${r.el.getAttribute("Target") ?? ""}`)
+            findings.push(`${view.part}: dead relationship target ${r.target}`)
     return findings
 }
 
@@ -88,7 +88,8 @@ export const partDefects = (view: PartView, exists: (part: string) => boolean): 
 
 /**
  *  The slide a notes part belongs to: the target of its slide relationship
- *  that no slide-jump link inside the notes uses.
+ *  that no slide-jump link inside the notes uses -- or, when a jump link
+ *  reuses it, of its first slide relationship.
  *
  *  @param notes - the notes part
  *  @returns the slide part, null when the notes name none
@@ -96,5 +97,6 @@ export const partDefects = (view: PartView, exists: (part: string) => boolean): 
 export const notesOwner = (notes: PartView): string | null => {
     const root = notes.doc?.documentElement ?? null
     const used = new Set(root === null ? [] : relRefs(root).map((ref) => ref.attr.value))
-    return notes.rels.find((r) => r.type.endsWith("/slide") && !used.has(r.id))?.target ?? null
+    const slides = notes.rels.filter((r) => r.kind === "slide")
+    return (slides.find((r) => !used.has(r.id)) ?? slides[0])?.target ?? null
 }

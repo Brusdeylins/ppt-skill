@@ -17,7 +17,7 @@ import { contentHash, requireFile } from "../infra/fs.js"
 import { estimateCapacity } from "../core/describe/capacity.js"
 import { regionWithin, coverageFraction } from "../core/describe/position.js"
 import { elements, firstElement, drawingText, parseXml } from "./xml.js"
-import { normalizeRelTargets } from "./parts.js"
+import { findPart, normalizeRelTargets, relMap, relTargets, relsPartOf } from "./parts.js"
 import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
     DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
@@ -67,8 +67,8 @@ export class DeckArchive {
      *  @returns content, or null when the part does not exist
      */
     async text(part: string): Promise<string | null> {
-        const f = this.zip.file(part)
-        return f === null ? null : await f.async("string")
+        const name = findPart(this.zip, part)
+        return name === null ? null : await (this.zip.file(name) as JSZip.JSZipObject).async("string")
     }
 
     /**
@@ -537,17 +537,19 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
     const layoutIndexByName = new Map(info.layouts.map((l) => [l.name, l.index]))
     const pres = await archive.xml("ppt/presentation.xml")
     const presRels = await archive.xml("ppt/_rels/presentation.xml.rels")
-    const relMap = new Map(elements(presRels, "Relationship")
-        .map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]))
+    const presTargets = relMap(relTargets("ppt/presentation.xml", presRels, archive.zip))
 
+    /*  a sldId without its slide part is no slide (an apply repairs it)  */
     const slides: SlideInfo[] = []
     const hashParts: string[] = []
-    const sldIds = elements(pres, "p:sldId")
+    const sldIds = elements(pres, "p:sldId").filter((el) => {
+        const target = presTargets.get(el.getAttribute("r:id") ?? "")?.target ?? null
+        return target !== null && findPart(archive.zip, target) !== null
+    })
     for (let index = 0; index < sldIds.length; index++) {
         const sldId = sldIds[index] as Element
         const id = Number(sldId.getAttribute("id"))
-        const target = relMap.get(sldId.getAttribute("r:id") ?? "") ?? ""
-        const part = path.posix.normalize(path.posix.join("ppt", target))
+        const part = presTargets.get(sldId.getAttribute("r:id") ?? "")?.target as string
         const partBase = path.posix.basename(part)
         const slideXmlText = await archive.text(part) ?? ""
         hashParts.push(`${id}:${slideXmlText}`,
@@ -555,15 +557,12 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
         const doc = parseXml(slideXmlText)
 
         /*  layout of this slide  */
-        const slideRels = await archive.xml(`ppt/slides/_rels/${partBase}.rels`)
-        const slideRelMap = new Map(elements(slideRels, "Relationship")
-            .map((r) => [r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? ""]))
-        const layoutTarget = elements(slideRels, "Relationship")
-            .find((r) => (r.getAttribute("Type") ?? "").endsWith("/slideLayout"))?.getAttribute("Target")
+        const slideRels = relTargets(part, await archive.xml(relsPartOf(part)), archive.zip)
+        const slideRelMap = relMap(slideRels)
+        const layoutPart = slideRels.find((r) => r.kind === "slideLayout")?.target ?? null
         let layoutName = ""
         let layoutIndex = -1
-        if (layoutTarget !== null && layoutTarget !== undefined) {
-            const layoutPart = path.posix.normalize(path.posix.join("ppt/slides", layoutTarget))
+        if (layoutPart !== null) {
             const layoutDoc = await archive.xml(layoutPart)
             layoutName = firstElement(layoutDoc, "p:cSld")?.getAttribute("name") ?? ""
             layoutIndex = layoutIndexByName.get(layoutName) ?? -1
@@ -606,8 +605,8 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                 }
                 if (node.nodeName === "p:pic") {
                     const embed = firstElement(node, "a:blip")?.getAttribute("r:embed")
-                    const tgt = embed === null || embed === undefined ? undefined : slideRelMap.get(embed)
-                    if (tgt !== undefined && tgt !== "")
+                    const tgt = embed === null || embed === undefined ? null : slideRelMap.get(embed)?.target ?? null
+                    if (tgt !== null)
                         shape.image = path.posix.basename(tgt)
                 }
                 if (shape.type === "table") {
@@ -621,11 +620,9 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
             }
 
         /*  speaker notes  */
-        const notesTarget = elements(slideRels, "Relationship")
-            .find((r) => (r.getAttribute("Type") ?? "").endsWith("/notesSlide"))?.getAttribute("Target")
+        const notesPart = slideRels.find((r) => r.kind === "notesSlide")?.target ?? null
         let notes: string | null = null
-        if (notesTarget !== null && notesTarget !== undefined) {
-            const notesPart = path.posix.normalize(path.posix.join("ppt/slides", notesTarget))
+        if (notesPart !== null) {
             const notesText = await archive.text(notesPart)
             if (notesText !== null) {
                 const notesDoc = parseXml(notesText)

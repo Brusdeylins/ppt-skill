@@ -135,14 +135,15 @@ export const executeOps = async (
             `${plan.warnings.length} lint finding(s) under --strict`,
             { warnings: plan.warnings })
 
-    await preflight(plan, archive)
-    if (opts.dryRun)
+    if (opts.dryRun) {
+        await preflight(plan, archive)
         return {
             file: deck.file,
             rev: { before: deck.rev, after: null },
             result: { applied: doc.ops.length, slideCount: plan.entries.length, dryRun: true, slides: {} },
             warnings: plan.warnings
         }
+    }
 
     /*  execute and report the final identities  */
     const outFile = opts.outFile ?? deckFile

@@ -16,7 +16,7 @@ import {
     EMPTY_RELS, IMAGE_TYPES, PartAllocator, RELS, appendRel, findPart, partText, relIs, relTargets,
     relsPartOf, removeParts, type Rel
 } from "../parts.js"
-import { elements, parseXml, serializeXml, xmlEscape } from "../xml.js"
+import { elements, parseXml, serializeXml } from "../xml.js"
 
 /**  the deck package of one apply  */
 export class Package {
@@ -103,7 +103,7 @@ export class Package {
      *  @param data - XML document or raw content
      */
     write(part: string, data: Document | string | Uint8Array): void {
-        this.zip.file(part, typeof data === "string" || data instanceof Uint8Array ? data : serializeXml(data))
+        this.zip.file(findPart(this.zip, part) ?? part, typeof data === "string" || data instanceof Uint8Array ? data : serializeXml(data))
     }
 
     /**
@@ -138,8 +138,12 @@ export class Package {
      *  @param contentType - its content type
      */
     async typeAs(part: string, contentType: string): Promise<void> {
-        this.write("[Content_Types].xml", (await this.text("[Content_Types].xml"))
-            .replace("</Types>", () => `<Override PartName="/${xmlEscape(part, true)}" ContentType="${xmlEscape(contentType, true)}"/></Types>`))
+        const ct = await this.xml("[Content_Types].xml")
+        const override = ct.createElementNS(ct.documentElement?.namespaceURI ?? null, "Override")
+        override.setAttribute("PartName", `/${part}`)
+        override.setAttribute("ContentType", contentType)
+        ct.documentElement?.appendChild(override)
+        this.write("[Content_Types].xml", ct)
     }
 
     /**
@@ -210,7 +214,8 @@ export class Package {
      *  @param done - parts already copied in this operation
      */
     private async relinkClone(from: Package, part: string, copy: string, rels: Document, done: Map<string, string>): Promise<void> {
-        for (const { el, type, target } of from.targets(part, rels)) {
+        for (const rel of from.targets(part, rels)) {
+            const { el, target } = rel
             if (target === null)
                 continue
             let next = done.get(target)
@@ -218,7 +223,7 @@ export class Package {
                 el.parentNode?.removeChild(el)
                 continue
             }
-            if (next === undefined && from === this && relIs(type, RELS.shared))
+            if (next === undefined && from === this && relIs(rel, RELS.shared))
                 next = target
             next ??= await this.clonePart(from, target, done)
             el.setAttribute("Target", path.posix.relative(path.posix.dirname(copy), next))

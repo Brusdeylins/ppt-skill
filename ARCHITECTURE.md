@@ -43,14 +43,15 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/seed.ts` | slides and decks from layouts: `slideFromLayout` (empty slide with cloned placeholders `PptcPh-<idx>`), `buildEmptyDeck` for `new` |
 | `engine/inplace/engine.ts` | `runSession`: package repairs, slide structure, slide classification (touched, repairs), one pass per touched slide, slide list, package-wide steps, self-checks (verify, content guard, byte guard), atomic write; `preflight` for `--dry-run` |
 | `engine/inplace/package.ts` | part-level package access; rel-graph clone under fresh names (`slide.copy`, transplanted parts) |
-| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: removals, text, picture placeholders, background, footer, notes, transplanted elements, hyperlinks, visibility, links to removed slides, repairs; `repairPart` for any other part carrying repair triggers |
+| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: removals, text, picture placeholders, background, footer, notes, transplanted elements, hyperlinks, visibility, links to removed slides, repairs |
+| `engine/inplace/repair.ts` | the repairs of the triggers `defects.ts` detects, on any part: duplicate/dead relationships, references to missing relationships (smallest valid removal, named), duplicate shape ids |
 | `engine/inplace/transplant.ts` | `el.add`: one PptxGenJS deck per apply (one generator slide per target slide), shapes moved by object name with their parts |
 | `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`) |
 | `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide |
 | `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections, content types, app properties |
 | `engine/defects.ts` | the repair triggers of a single part (duplicate or dead relationships, references to missing relationships, duplicate shape ids, notes ownership) -- ONE rule set: the engine detects its input defects with it and repairs exactly these, verify reports them |
 | `engine/verify.ts` | read-only integrity check: the part rules of `defects.ts` on every part plus the package-level rules (slide list, content types, notes 1:1, app properties, orphans); backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
-| `engine/guard.ts` | content self-check before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them, layouts/masters must not change (`E_INTEGRITY`) |
+| `engine/guard.ts` | content self-check and byte guard before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them, layouts/masters must not change (`E_INTEGRITY`) |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries, relationship references, escaping |
 | `engine/parts.ts` | the OPC layer below every engine module: case-insensitive part names, relationships read through the DOM, the relationship-type taxonomy, content types, part removal, asset GC, layout order, and `PartAllocator`: every fresh part name, relationship id, sldId and shape id of an apply |
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |
@@ -90,7 +91,8 @@ package     sldIdLst (kept ids, fresh ids for new and copied slides), removed
 verify      self-check the produced bytes against the known repair triggers,
             every touched slide against its source (content guard) and every
             part of every untouched slide against the input (byte guard); any
-            finding aborts with E_INTEGRITY, nothing is written
+            finding the input did not already carry aborts with
+            E_INTEGRITY, nothing is written (inherited: W_INPUT_DEFECT)
 write       tmp file + rename (atomic), re-read → rev.after + ref→id map
 ```
 
@@ -131,12 +133,24 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   app properties) are kept consistent on every apply.
 - **One rule set for defects.** `engine/defects.ts` defines the repair
   triggers of a part once; the engine detects input defects with it,
-  `slides.ts` repairs exactly these, `verify.ts` reports them. A new
-  trigger is added there, with its repair in `slides.ts`.
+  `inplace/repair.ts` repairs exactly these, `verify.ts` reports them. A
+  new trigger is added there, with its repair in `repair.ts`. A dead
+  reference takes down the smallest element that keeps the XML valid (a
+  link, a picture bullet or fill, an extension, a sound, else its shape);
+  `W_REPAIRED` names what was removed.
 - **Relationships through the DOM.** Relationships, content types and the
-  slide list are read through the DOM (`parts.ts` `relTargets`/`readRels`),
-  never by regex over raw XML -- attribute quoting and spelling vary
-  between producers. Part names are compared case-insensitively.
+  slide list are read and written through the DOM (`parts.ts`
+  `relTargets`/`readRels`/`relMap`), never by regex over raw XML --
+  attribute quoting and spelling vary between producers. A duplicate
+  relationship id resolves to its first relationship everywhere. Only
+  `docProps/app.xml` is edited as text (element content, no attributes).
+  Part names are resolved case-insensitively by every accessor
+  (`findPart`), as OPC demands.
+- **Only the engine's own triggers block a write.** The output is verified
+  against every known repair trigger; a finding the input deck already
+  carried and pptc cannot repair (a slide listed twice, ...) stays as it
+  was and is reported (`W_INPUT_DEFECT`) -- only findings the apply would
+  add fail with `E_INTEGRITY`.
 - **stdout is shielded during the engine pass.** A library may log via
   `console.log`; the engine diverts console output to stderr so the
   one-JSON-envelope contract on stdout holds.

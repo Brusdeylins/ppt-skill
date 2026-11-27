@@ -23,7 +23,7 @@ export type SlideAddr = { id: number | null, index: number, title: string | null
 /**  One lint finding, rendered into the envelope's `warnings` array.  */
 export interface LintWarning {
     /**  stable warning code  */
-    code: "W_TEXT_OVERFLOW" | "W_ELEMENT_OVERLAP" | "W_FONT_TOO_SMALL" | "W_REPAIRED"
+    code: "W_TEXT_OVERFLOW" | "W_ELEMENT_OVERLAP" | "W_FONT_TOO_SMALL" | "W_REPAIRED" | "W_INPUT_DEFECT"
     /**  slide address the finding refers to  */
     slide: SlideAddr
     /**  placeholder idx the finding refers to (overflow, font-too-small)  */

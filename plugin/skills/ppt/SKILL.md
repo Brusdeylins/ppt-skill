@@ -77,7 +77,9 @@ Execution Rules
   the font (sizes come from the template, see content-rules.md). A
   W_REPAIRED warning on a successful apply means the deck carried
   PowerPoint repair triggers on that slide and pptc repaired them -- tell
-  the user which slide, do not hide it.
+  the user which slide and what was removed, do not hide it. A
+  W_INPUT_DEFECT warning means the deck carries repair triggers pptc
+  cannot repair; they stay as they were -- tell the user.
 - **The user edits between turns.** Treat every deck as changed: begin
   EVERY write with a fresh `state` (rev + structure) and pass that rev to
   `apply --rev`. On exit 6 (E_REV_CONFLICT): re-read `state`, re-check your

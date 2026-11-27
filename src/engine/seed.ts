@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs"
 import type { Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
 import { seedPlaceholderName } from "../core/model.js"
-import { cleanContentTypes, gcAssets, layoutOrder, normalizeRelTargets } from "./parts.js"
+import { cleanContentTypes, gcAssets, layoutOrder, normalizeRelTargets, relTargets } from "./parts.js"
 import { NS_A, NS_P, elements, firstElement, parseXml, serializeElement, serializeXml } from "./xml.js"
 
 /**  clone the fillable placeholders of a layout onto an empty slide (DOM)  */
@@ -121,9 +121,9 @@ export const buildEmptyDeck = async (template: string | Buffer): Promise<Buffer>
     zip.file("ppt/presentation.xml", serializeXml(pres))
 
     const presRels = parseXml(await get("ppt/_rels/presentation.xml.rels"))
-    for (const rel of elements(presRels, "Relationship"))
-        if ((rel.getAttribute("Type") ?? "").endsWith("/slide"))
-            rel.parentNode?.removeChild(rel)
+    for (const rel of relTargets("ppt/presentation.xml", presRels))
+        if (rel.kind === "slide")
+            rel.el.parentNode?.removeChild(rel.el)
     zip.file("ppt/_rels/presentation.xml.rels", serializeXml(presRels))
     for (const f of Object.keys(zip.files))
         if (/^ppt\/(slides|notesSlides)\//.test(f))

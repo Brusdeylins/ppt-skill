@@ -36,13 +36,25 @@
   presentation (a master id of a dead relationship) and slide parts
   outside the slide list are repaired package-wide before anything else.
   All other slides stay untouched.
+- **Input defects pptc cannot repair no longer block an apply.** A
+  repair trigger the input deck already carried (a slide listed twice,
+  ...) stays as it was and is reported with the new warning
+  `W_INPUT_DEFECT`; only triggers the apply would add fail with
+  `E_INTEGRITY`. Duplicate slide ids get fresh ones, notes without a
+  back-reference get one, dead relationships of any package part (e.g. a
+  removed thumbnail) are dropped. A dead reference takes down only the
+  smallest element that keeps the XML valid -- a picture bullet, a group
+  or cell fill, the SVG extension of a picture, a transition sound -- and
+  `W_REPAIRED` names what was removed.
 - **`verify` checks more.** References to missing relationships in any
   part (1.0.x created such slides from layouts with picture fills), a
   notes part that names another slide, a slide listed twice and slide
   parts outside the slide list are reported. The repeated shape ids of an
   `mc:Fallback` (equations, OLE objects) are no trigger. Part names are
-  compared case-insensitively, as OPC demands: a picture whose target
-  differs in letter case is no longer taken for dead and removed.
+  resolved case-insensitively, as OPC demands: a picture whose target or
+  a content type whose part name differs in letter case is no longer
+  taken for dead and removed. A duplicate relationship id resolves to its
+  first relationship in `state` and `apply` alike.
 - **Single-quoted XML attributes are read correctly.** Relationships,
   content types and the slide list are read through the DOM: a deck
   re-saved with `attr='value'` no longer gets clashing relationship ids,

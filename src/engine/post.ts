@@ -198,10 +198,14 @@ export const setCustomProps = async (zip: JSZip, patch: Record<string, string>):
         + `<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}">${body}</Properties>`)
 
     /*  content-type override (idempotent)  */
-    const ct = await partText(zip, "[Content_Types].xml")
-    if (!ct.includes(`PartName="/${CUSTOM_PROPS_PART}"`))
-        zip.file("[Content_Types].xml", ct.replace("</Types>",
-            () => `<Override PartName="/${CUSTOM_PROPS_PART}" ContentType="${CUSTOM_PROPS_CT}"/></Types>`))
+    const ct = parseXml(await partText(zip, "[Content_Types].xml"))
+    if (!elements(ct, "Override").some((o) => (o.getAttribute("PartName") ?? "").toLowerCase() === `/${CUSTOM_PROPS_PART}`.toLowerCase())) {
+        const override = ct.createElementNS(ct.documentElement?.namespaceURI ?? null, "Override")
+        override.setAttribute("PartName", `/${CUSTOM_PROPS_PART}`)
+        override.setAttribute("ContentType", CUSTOM_PROPS_CT)
+        ct.documentElement?.appendChild(override)
+        zip.file("[Content_Types].xml", serializeXml(ct))
+    }
 
     /*  package relationship from the root .rels (idempotent)  */
     const rootRels = parseXml(await partText(zip, "_rels/.rels"))
@@ -224,7 +228,7 @@ const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
     const notes = new Set<string>()
     for (const slide of slides)
         for (const r of await readRels(zip, slide))
-            if (r.type.endsWith("/notesSlide") && r.target !== null)
+            if (r.kind === "notesSlide" && r.target !== null)
                 notes.add(r.target)
     await removeParts(zip, Object.keys(zip.files).filter((f) =>
         /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)))
@@ -235,7 +239,7 @@ const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
     const liveSlideRids = new Set(elements(pres, "p:sldId").map((s) => s.getAttribute("r:id") ?? ""))
     let pruned = false
     for (const r of await readRels(zip, "ppt/presentation.xml")) {
-        if (r.target === null || (zip.file(r.target) !== null && !(r.type.endsWith("/slide") && !liveSlideRids.has(r.id))))
+        if (r.target === null || (zip.file(r.target) !== null && !(r.kind === "slide" && !liveSlideRids.has(r.id))))
             continue
         for (const rel of elements(presRels, "Relationship"))
             if (rel.getAttribute("Id") === r.id)

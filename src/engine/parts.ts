@@ -19,29 +19,42 @@ import { NS_REL, elements, parseXml, serializeXml } from "./xml.js"
 /**  OfficeDocument relationship type base URI  */
 export const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
-/**  the relationship types by role (matched as type suffixes) -- the one
-     taxonomy the engine, the content guard and the verifier share  */
+/**  the relationship kinds (the last segment of the type URI) by role --
+     the one taxonomy the engine, the content guard and the verifier share  */
 export const RELS = {
     /**  leave a slide's own content: layout, master, other slides, notes
          master, theme  */
-    foreign:  [ "/slideLayout", "/slideMaster", "/slide", "/notesMaster", "/theme" ],
+    foreign:   [ "slideLayout", "slideMaster", "slide", "notesMaster", "theme" ],
     /**  targets a clone inside the same package shares: layouts, masters,
          other slides, immutable media and external content  */
-    shared:   [ "/slideLayout", "/slideMaster", "/notesMaster", "/slide", "/image", "/media", "/video", "/audio", "/hyperlink", "/theme" ],
+    shared:    [ "slideLayout", "slideMaster", "notesMaster", "slide", "image", "media", "video", "audio", "hyperlink", "theme" ],
     /**  carried without being referenced by id in the owner's XML (the
          SmartArt drawing is referenced from the SmartArt data part)  */
-    implicit: [ "/slideLayout", "/notesSlide", "/diagramDrawing", "/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo" ]
+    implicit:  [ "slideLayout", "notesSlide", "diagramDrawing", "comments", "themeOverride", "vmlDrawing", "slideUpdateInfo" ],
+    /**  never carry slide content of their own (or are checked separately):
+         left out of the content guard's fingerprint  */
+    unprinted: [ "slideLayout", "notesSlide", "hyperlink", "slide" ]
 } as const
 
 /**
- *  Whether a relationship type is one of a role's types.
+ *  The kind of a relationship type: the last segment of its URI
+ *  (`.../relationships/slide` is "slide").
  *
  *  @param type - full relationship type URI
- *  @param kinds - type suffixes, e.g. `RELS.shared`
+ *  @returns the kind
+ */
+export const relKind = (type: string): string =>
+    type.slice(type.lastIndexOf("/") + 1)
+
+/**
+ *  Whether a relationship is of one of a role's kinds.
+ *
+ *  @param rel - the relationship
+ *  @param kinds - the role, e.g. `RELS.shared`
  *  @returns true when it matches
  */
-export const relIs = (type: string, kinds: readonly string[]): boolean =>
-    kinds.some((k) => type.endsWith(k))
+export const relIs = (rel: Pick<Rel, "kind">, kinds: readonly string[]): boolean =>
+    kinds.includes(rel.kind)
 
 /**  an empty relationships document  */
 export const EMPTY_RELS = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
@@ -61,11 +74,11 @@ export const resolveTarget = (base: string, target: string): string =>
 /**
  *  The rels part of a part.
  *
- *  @param part - part name
+ *  @param part - part name ("" for the package)
  *  @returns the name of its relationships part
  */
 export const relsPartOf = (part: string): string =>
-    `${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`
+    part === "" ? "_rels/.rels" : `${path.posix.dirname(part)}/_rels/${path.posix.basename(part)}.rels`
 
 /**
  *  The part a rels part belongs to ("" for the package rels `_rels/.rels`).
@@ -75,6 +88,11 @@ export const relsPartOf = (part: string): string =>
  */
 export const relsOwner = (relsPart: string): string =>
     relsPart === "_rels/.rels" ? "" : relsPart.replace(/(^|\/)_rels\/([^/]+)\.rels$/, "$1$2")
+
+/**  lower-case part names per archive, rebuilt whenever the number of
+     entries changes (the engine never adds a name that differs from an
+     existing one in case only)  */
+const caseIndex = new WeakMap<JSZip, { size: number, names: Map<string, string> }>()
 
 /**
  *  The actual name of a part, looked up case-insensitively as OPC demands
@@ -87,8 +105,14 @@ export const relsOwner = (relsPart: string): string =>
 export const findPart = (zip: JSZip, name: string): string | null => {
     if (zip.file(name) !== null)
         return name
-    const lower = name.toLowerCase()
-    return Object.keys(zip.files).find((f) => !f.endsWith("/") && f.toLowerCase() === lower) ?? null
+    const keys = Object.keys(zip.files)
+    let index = caseIndex.get(zip)
+    if (index === undefined || index.size !== keys.length) {
+        index = { size: keys.length, names: new Map(keys.filter((f) => !f.endsWith("/")).map((f) => [ f.toLowerCase(), f ])) }
+        caseIndex.set(zip, index)
+    }
+    const found = index.names.get(name.toLowerCase()) ?? null
+    return found !== null && zip.file(found) !== null ? found : null
 }
 
 /**  one relationship of a part  */
@@ -99,6 +123,8 @@ export interface Rel {
     id: string
     /**  its full type URI  */
     type: string
+    /**  its kind, e.g. "slide" (see `relKind`)  */
+    kind: string
     /**  the target part (case resolved when an archive is given), null for
          an external target  */
     target: string | null
@@ -120,8 +146,24 @@ export const relTargets = (owner: string, rels: Document, zip?: JSZip): Rel[] =>
             if (zip !== undefined)
                 target = findPart(zip, target) ?? target
         }
-        return { el, id: el.getAttribute("Id") ?? "", type: el.getAttribute("Type") ?? "", target }
+        const type = el.getAttribute("Type") ?? ""
+        return { el, id: el.getAttribute("Id") ?? "", type, kind: relKind(type), target }
     })
+
+/**
+ *  Relationships by id. A duplicate id resolves to its first relationship
+ *  everywhere -- reader, engine, repairs and verify agree.
+ *
+ *  @param rels - the relationships of a part
+ *  @returns the first relationship of every id
+ */
+export const relMap = (rels: Rel[]): Map<string, Rel> => {
+    const map = new Map<string, Rel>()
+    for (const r of rels)
+        if (!map.has(r.id))
+            map.set(r.id, r)
+    return map
+}
 
 /**
  *  Read the relationships of a part from an archive.
@@ -131,8 +173,8 @@ export const relTargets = (owner: string, rels: Document, zip?: JSZip): Rel[] =>
  *  @returns its relationships, empty when it has none
  */
 export const readRels = async (zip: JSZip, owner: string): Promise<Rel[]> => {
-    const f = zip.file(relsPartOf(owner))
-    return f === null ? [] : relTargets(owner, parseXml(await f.async("string")), zip)
+    const relsPart = findPart(zip, relsPartOf(owner))
+    return relsPart === null ? [] : relTargets(owner, parseXml(await partText(zip, relsPart)), zip)
 }
 
 /**
@@ -166,7 +208,7 @@ const inflated = new WeakMap<JSZip.JSZipObject, Promise<Buffer>>()
  *  @returns its bytes, null when the part does not exist
  */
 export const bytesOf = async (zip: JSZip, part: string): Promise<Buffer | null> => {
-    const f = zip.file(part)
+    const f = zip.file(findPart(zip, part) ?? part)
     if (f === null)
         return null
     let bytes = inflated.get(f)
@@ -294,7 +336,7 @@ export class PartAllocator {
  *  @throws PptcError E_ENGINE when the part is missing
  */
 export const partText = async (zip: JSZip, part: string): Promise<string> => {
-    const f = zip.file(part)
+    const f = zip.file(findPart(zip, part) ?? part)
     if (f === null)
         throw new PptcError("E_ENGINE", `the deck is missing part ${part}`)
     return (await f.async("string")).replace(/^\uFEFF/, "")
@@ -311,12 +353,12 @@ export const cleanContentTypes = async (zip: JSZip): Promise<void> => {
     let changed = false
     for (const o of elements(ct, "Override")) {
         const part = (o.getAttribute("PartName") ?? "").replace(/^\//, "")
-        if (zip.file(part) === null || seen.has(part)) {
+        if (findPart(zip, part) === null || seen.has(part.toLowerCase())) {
             o.parentNode?.removeChild(o)
             changed = true
         }
         else
-            seen.add(part)
+            seen.add(part.toLowerCase())
     }
     if (changed)
         zip.file("[Content_Types].xml", serializeXml(ct))
@@ -421,19 +463,19 @@ export const gcAssets = async (zip: JSZip): Promise<void> => {
  *  @returns the layout part names
  */
 export const layoutOrder = async (zip: JSZip): Promise<string[]> => {
-    const presRels = new Map((await readRels(zip, "ppt/presentation.xml")).map((r) => [ r.id, r.target ]))
-    const pres = zip.file("ppt/presentation.xml") === null ? null : parseXml(await partText(zip, "ppt/presentation.xml"))
+    const presRels = relMap(await readRels(zip, "ppt/presentation.xml"))
+    const pres = findPart(zip, "ppt/presentation.xml") === null ? null : parseXml(await partText(zip, "ppt/presentation.xml"))
     const listed = (pres === null ? [] : elements(pres, "p:sldMasterId"))
-        .map((m) => presRels.get(m.getAttribute("r:id") ?? "") ?? null)
-        .filter((part): part is string => part !== null && zip.file(part) !== null)
+        .map((m) => presRels.get(m.getAttribute("r:id") ?? "")?.target ?? null)
+        .filter((part): part is string => part !== null && findPart(zip, part) !== null)
     const masters = listed.length > 0 ? listed
         : Object.keys(zip.files).filter((f) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(f)).sort()
     const order: string[] = []
     for (const master of masters) {
-        const rels = new Map((await readRels(zip, master)).map((r) => [ r.id, r ]))
+        const rels = relMap(await readRels(zip, master))
         for (const layoutId of elements(parseXml(await partText(zip, master)), "p:sldLayoutId")) {
             const rel = rels.get(layoutId.getAttribute("r:id") ?? "")
-            if (rel !== undefined && rel.target !== null && rel.type.endsWith("/slideLayout"))
+            if (rel !== undefined && rel.target !== null && rel.kind === "slideLayout")
                 order.push(rel.target)
         }
     }

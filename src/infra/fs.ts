@@ -7,7 +7,7 @@
 **  inline), atomic writes, the staging directory, and content hashing.
 */
 
-import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs"
+import { readFileSync, writeFileSync, renameSync, rmSync, mkdirSync, existsSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { createHash } from "node:crypto"
 import path from "node:path"
@@ -61,8 +61,14 @@ export const parseJson = (text: string): unknown => {
  */
 export const atomicWrite = (file: string, data: Buffer): void => {
     const tmp = `${file}.tmp-${process.pid}`
-    writeFileSync(tmp, data)
-    renameSync(tmp, file)
+    try {
+        writeFileSync(tmp, data)
+        renameSync(tmp, file)
+    }
+    catch (err) {
+        rmSync(tmp, { force: true })
+        throw err
+    }
 }
 
 /**

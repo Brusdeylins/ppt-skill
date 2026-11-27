@@ -3,10 +3,10 @@
 **  Copyright (c) 2026 Matthias Brusdeylins
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
-**  engine/guard: semantic self-check of an apply. verify.ts only proves the
+**  engine/guard: semantic self-checks of an apply. verify.ts only proves the
 **  output opens without a repair prompt; this module proves that every
-**  touched slide still carries what the plan did NOT ask to change (the
-**  engine's byte guard covers the untouched ones). A part-naming or id slip
+**  touched slide still carries what the plan did NOT ask to change, and
+**  (byte guard) that no part of an untouched slide changed at all. A part-naming or id slip
 **  while copying, transplanting or repairing could move notes, images,
 **  charts or embedded objects to another slide while the package stays
 **  perfectly valid. A fingerprint of each such slide (notes text plus the
@@ -17,7 +17,7 @@
 
 import JSZip from "jszip"
 import { createHash } from "node:crypto"
-import { RELS, bytesOf, readRels, relIs } from "./parts.js"
+import { RELS, bytesOf, readRels, relIs, relMap } from "./parts.js"
 import { elements, parseXml, serializeXml } from "./xml.js"
 
 /**  what the plan allows to change on one output slide  */
@@ -39,10 +39,6 @@ export interface SlideExpect {
          picture, e.g. a picture bullet, legitimately)  */
     textReplaced?: boolean
 }
-
-/**  rel types that never carry slide content of their own (or are
-     checked separately), excluded from the asset fingerprint  */
-const SKIP_RELS = [ "/slideLayout", "/notesSlide", "/hyperlink", "/slide" ]
 
 /**  a part's text in canonical form (parsed and re-serialized), so that
      attribute quoting and entity spellings never matter to a regex  */
@@ -117,16 +113,17 @@ const computeDigest = async (zip: JSZip, part: string): Promise<string> => {
 const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number): Promise<string[]> => {
     const out: string[] = []
     const seen = new Set<string>()
-    for (const { el, id, type, target } of await readRels(zip, part)) {
+    for (const rel of await readRels(zip, part)) {
+        const { el, id, kind, target } = rel
+
         /*  a duplicate id resolves to its first relationship (as repaired)  */
-        if (relIs(type, SKIP_RELS) || seen.has(id))
+        if (relIs(rel, RELS.unprinted) || seen.has(id))
             continue
         seen.add(id)
-        if (xml !== null && !xml.includes(`"${id}"`) && !relIs(type, RELS.implicit))
+        if (xml !== null && !xml.includes(`"${id}"`) && !relIs(rel, RELS.implicit))
             continue
 
         /*  a linked file (picture, OLE object, video) counts by its target  */
-        const kind = type.slice(type.lastIndexOf("/") + 1)
         if (target === null) {
             out.push(`${kind}:ext:${el.getAttribute("Target") ?? ""}`)
             continue
@@ -145,7 +142,7 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
 
 /**  all a:t text of the slide's notes part, null when it has none  */
 const notesText = async (zip: JSZip, slidePart: string): Promise<string | null> => {
-    const notes = (await readRels(zip, slidePart)).find((r) => r.type.endsWith("/notesSlide"))?.target ?? null
+    const notes = (await readRels(zip, slidePart)).find((r) => r.kind === "notesSlide")?.target ?? null
     const xml = notes === null ? null : await canonText(zip, notes)
     return xml === null ? null
         : [ ...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g) ].map((t) => t[1]).join("\n")
@@ -159,9 +156,9 @@ const slidePrint = async (zip: JSZip, slidePart: string): Promise<{ notes: strin
 
 /**  slide part paths in presentation order  */
 const slideParts = async (zip: JSZip): Promise<string[]> => {
-    const target = new Map((await readRels(zip, "ppt/presentation.xml")).map((r) => [ r.id, r.target ?? "" ]))
+    const rels = relMap(await readRels(zip, "ppt/presentation.xml"))
     const pres = await canonText(zip, "ppt/presentation.xml")
-    return pres === null ? [] : elements(parseXml(pres), "p:sldId").map((s) => target.get(s.getAttribute("r:id") ?? "") ?? "")
+    return pres === null ? [] : elements(parseXml(pres), "p:sldId").map((s) => rels.get(s.getAttribute("r:id") ?? "")?.target ?? "")
 }
 
 /**  remove the entries of `b` from `a` (multiset difference)  */
@@ -278,4 +275,23 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
             blocked.push(`${part}: layout/master content would change`)
     }
     return { blocked, lost }
+}
+
+/**
+ *  The byte guard: every part of an untouched slide keeps its exact bytes
+ *  (it is never written at all).
+ *
+ *  @param zip - the edited package
+ *  @param untouched - the parts of untouched slides with their input entry
+ *  @param after - the output deck
+ *  @returns findings, empty when every such part is unchanged
+ */
+export const byteGuard = async (zip: JSZip, untouched: Map<string, JSZip.JSZipObject | null>, after: JSZip): Promise<string[]> => {
+    const changed: string[] = []
+    for (const [ name, file ] of untouched) {
+        const now = await bytesOf(after, name)
+        if (zip.file(name) !== file || file === null || now === null || !now.equals(await bytesOf(zip, name) as Buffer))
+            changed.push(`${name}: part of an untouched slide would change`)
+    }
+    return changed
 }

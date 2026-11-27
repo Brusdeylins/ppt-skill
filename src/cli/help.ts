@@ -95,10 +95,12 @@ Options:
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add
                     element covers a text shape -- reposition it),
                     W_FONT_TOO_SMALL (a run/element font is below the
-                    readable minimum -- enlarge it). Not escalated, as it
-                    is found during the write: W_REPAIRED (the input deck
-                    carried PowerPoint repair triggers on a slide, which
-                    pptc repaired -- tell the user)
+                    readable minimum -- enlarge it). Not escalated, as
+                    they are found during the write: W_REPAIRED (the input
+                    deck carried PowerPoint repair triggers, which pptc
+                    repaired -- tell the user), W_INPUT_DEFECT (the input
+                    deck carries repair triggers pptc cannot repair; they
+                    stay as they were -- tell the user)
   --min-font-pt N   readability floor for explicit font sizes (default
                     8); runs/elements below N trigger W_FONT_TOO_SMALL.
                     0 disables the check. Footer/slide-number/date
