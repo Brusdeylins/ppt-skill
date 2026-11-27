@@ -23,7 +23,7 @@ export type SlideAddr = { id: number | null, index: number, title: string | null
 /**  One lint finding, rendered into the envelope's `warnings` array.  */
 export interface LintWarning {
     /**  stable warning code  */
-    code: "W_TEXT_OVERFLOW" | "W_ELEMENT_OVERLAP" | "W_FONT_TOO_SMALL"
+    code: "W_TEXT_OVERFLOW" | "W_ELEMENT_OVERLAP" | "W_FONT_TOO_SMALL" | "W_CONTENT_LOST"
     /**  slide address the finding refers to  */
     slide: SlideAddr
     /**  placeholder idx the finding refers to (overflow, font-too-small)  */
@@ -36,6 +36,9 @@ export interface LintWarning {
     element?: string
     /**  name of the covered shape or placeholder (overlap)  */
     covers?: string
+    /**  kind of content the engine dropped from a slide no op touched,
+         e.g. "image" or "image inside diagramData" (content lost)  */
+    lost?: string
     /**  smallest explicit run/element font size found, in pt (font-too-small)  */
     fontPt?: number
     /**  the configured font-size floor in pt (font-too-small)  */

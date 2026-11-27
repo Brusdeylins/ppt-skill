@@ -157,7 +157,7 @@ export const executeOps = async (
         file: finalState.file,
         rev: { before: deck.rev, after: finalState.rev },
         result: { applied: doc.ops.length, slideCount: session.slideCount, dryRun: false, slides },
-        warnings: plan.warnings
+        warnings: [ ...plan.warnings, ...session.warnings ]
     }
 }
 

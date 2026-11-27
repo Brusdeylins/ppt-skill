@@ -95,7 +95,10 @@ Options:
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add
                     element covers a text shape -- reposition it),
                     W_FONT_TOO_SMALL (a run/element font is below the
-                    readable minimum -- enlarge it)
+                    readable minimum -- enlarge it). Not escalated, as it
+                    is found after the write: W_CONTENT_LOST (the engine
+                    could not carry over content of a slide no op touched,
+                    e.g. an image -- tell the user)
   --min-font-pt N   readability floor for explicit font sizes (default
                     8); runs/elements below N trigger W_FONT_TOO_SMALL.
                     0 disables the check. Footer/slide-number/date

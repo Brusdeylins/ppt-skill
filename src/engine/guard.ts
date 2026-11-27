@@ -122,16 +122,30 @@ const slideParts = async (zip: JSZip): Promise<string[]> => {
         path.posix.normalize(path.posix.join("ppt", target.get(m[1] as string) ?? "")))
 }
 
-/**  is every entry of `inner` contained in `outer` (as multisets)  */
-const contains = (outer: string[], inner: string[]): boolean => {
-    const rest = [ ...outer ]
-    for (const x of inner) {
+/**  remove the entries of `b` from `a` (multiset difference)  */
+const minus = (a: string[], b: string[]): string[] => {
+    const rest = [ ...a ]
+    for (const x of b) {
         const i = rest.indexOf(x)
-        if (i < 0)
-            return false
-        rest.splice(i, 1)
+        if (i >= 0)
+            rest.splice(i, 1)
     }
-    return true
+    return rest
+}
+
+/**  split a related-part entry `type:hash[child,...]` into its parts  */
+const parseEntry = (entry: string): { base: string, children: string[] } => {
+    const i = entry.indexOf("[")
+    return { base: entry.slice(0, i), children: entry.slice(i + 1, -1).split(",").filter((c) => c !== "") }
+}
+
+/**  outcome of the content comparison: `blocked` findings mean another
+     slide's content would appear (an overwrite or swap) and fail the
+     apply; `lost` items are content that would merely vanish (a known
+     engine limitation) and are reported as warnings  */
+export interface ContentCheck {
+    blocked: string[]
+    lost: { slide: number, what: string }[]
 }
 
 /**
@@ -140,10 +154,12 @@ const contains = (outer: string[], inner: string[]): boolean => {
  *  @param before - the input deck
  *  @param after - the output deck
  *  @param expects - one expectation per output slide, in output order
- *  @returns findings; empty when nothing changed that the plan kept
+ *  @returns blocking findings and mere losses; both empty when nothing
+ *           changed that the plan kept
  */
-export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideExpect[]): Promise<string[]> => {
-    const findings: string[] = []
+export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideExpect[]): Promise<ContentCheck> => {
+    const blocked: string[] = []
+    const lost: { slide: number, what: string }[] = []
     const outParts = await slideParts(after)
     for (const [ i, exp ] of expects.entries()) {
         const outPart = outParts[i]
@@ -151,12 +167,36 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
             continue
         const was = await slidePrint(before, exp.source)
         const now = await slidePrint(after, outPart)
-        if (!exp.notes && was.notes !== now.notes)
-            findings.push(`slide ${exp.label}: speaker notes would change although no op set them`)
-        if ((exp.assets === "same" && was.assets.join() !== now.assets.join())
-            || (exp.assets === "grow" && !contains(now.assets, was.assets)))
-            findings.push(`slide ${exp.label}: images, charts or embedded objects would change `
-                + `although no op touched them (${was.assets.join(" ")} -> ${now.assets.join(" ")})`)
+        if (!exp.notes && was.notes !== now.notes) {
+            if (now.notes === null || now.notes === "")
+                lost.push({ slide: i, what: "speaker notes" })
+            else
+                blocked.push(`slide ${exp.label}: speaker notes would change although no op set them`)
+        }
+        if (exp.assets === "any")
+            continue
+
+        /*  parts that vanished are a loss; a part that appeared or changed
+            is foreign content -- unless it is a vanished part that only
+            lost some of its own children (e.g. a picture inside SmartArt)  */
+        const gone = minus(was.assets, now.assets)
+        const added = exp.assets === "same" ? minus(now.assets, was.assets) : []
+        for (const entry of added) {
+            const a = parseEntry(entry)
+            const k = gone.findIndex((g) => parseEntry(g).base === a.base
+                && minus(a.children, parseEntry(g).children).length === 0)
+            if (k < 0) {
+                blocked.push(`slide ${exp.label}: images, charts or embedded objects would change `
+                    + `although no op touched them (${was.assets.join(" ")} -> ${now.assets.join(" ")})`)
+                break
+            }
+            const g = parseEntry(gone[k] as string)
+            for (const child of minus(g.children, a.children))
+                lost.push({ slide: i, what: `${child.slice(0, child.indexOf(":"))} inside ${a.base.slice(0, a.base.indexOf(":"))}` })
+            gone.splice(k, 1)
+        }
+        for (const entry of gone)
+            lost.push({ slide: i, what: entry.slice(0, entry.indexOf(":")) })
     }
 
     /*  layouts, masters and themes are never changed by an apply  */
@@ -167,7 +207,7 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
         const was = `${await digest(before, part)} ${(await relatedDigests(before, part, xmlBefore, 1)).join(" ")}`
         const now = `${await digest(after, part)} ${(await relatedDigests(after, part, xmlAfter, 1)).join(" ")}`
         if (was !== now)
-            findings.push(`${part}: layout/master content would change`)
+            blocked.push(`${part}: layout/master content would change`)
     }
-    return findings
+    return { blocked, lost }
 }

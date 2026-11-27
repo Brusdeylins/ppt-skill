@@ -281,7 +281,10 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   `W_ELEMENT_OVERLAP` (an `el.add` element covers a text-bearing shape,
   incl. the footer/slide-number area -- reposition it; prompt boxes are
   exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
-  readable minimum -- enlarge it)
+  readable minimum -- enlarge it). Not escalated, since it is found after
+  the write: `W_CONTENT_LOST` (the engine could not carry over content of a
+  slide no op touched, e.g. an image -- the deck is written, tell the user;
+  content of another slide appearing instead fails with `E_INTEGRITY`)
 - `--min-font-pt N` -- readability floor for explicit font sizes (default
   `8`); runs or `el.add`/`el.set` elements below `N` raise
   `W_FONT_TOO_SMALL`. `0` disables the check. Footer/slide-number/date

@@ -150,7 +150,7 @@ describe("content guard", () => {
         const before = await JSZip.loadAsync(readFileSync(deck))
         const part = ((await readDeckState(await DeckArchive.open(deck))).slides[0] as { part: string }).part
         const expects: SlideExpect[] = [ { source: part, label: "A", notes: false, assets: "same" } ]
-        expect(await verifyContent(before, before, expects)).toEqual([])
+        expect(await verifyContent(before, before, expects)).toEqual({ blocked: [], lost: [] })
 
         /*  tamper: swap the notes text and the image bytes of the untouched slide  */
         const after = await JSZip.loadAsync(readFileSync(deck))
@@ -160,10 +160,18 @@ describe("content guard", () => {
             if (/^ppt\/media\/.+\.png$/.test(f))
                 after.file(f, Buffer.from("other"))
         }
-        const findings = await verifyContent(before, after, expects)
-        expect(findings.some((f) => f.includes("speaker notes"))).toBe(true)
-        expect(findings.some((f) => f.includes("images, charts"))).toBe(true)
-        expect(await verifyContent(before, after, [ { ...expects[0] as SlideExpect, notes: true, assets: "any" } ])).toEqual([])
+        const { blocked } = await verifyContent(before, after, expects)
+        expect(blocked.some((f) => f.includes("speaker notes"))).toBe(true)
+        expect(blocked.some((f) => f.includes("images, charts"))).toBe(true)
+        expect(await verifyContent(before, after, [ { ...expects[0] as SlideExpect, notes: true, assets: "any" } ]))
+            .toEqual({ blocked: [], lost: [] })
+
+        /*  content that merely vanishes is a loss (warning), not a block  */
+        const gone = await JSZip.loadAsync(readFileSync(deck))
+        const slideRels = `ppt/slides/_rels/${path.posix.basename(part)}.rels`
+        gone.file(slideRels, (await (gone.file(slideRels) as JSZip.JSZipObject).async("string"))
+            .replace(/<Relationship [^>]*\/image"[^>]*\/>/, ""))
+        expect(await verifyContent(before, gone, expects)).toEqual({ blocked: [], lost: [ { slide: 0, what: "image" } ] })
     })
 })
 

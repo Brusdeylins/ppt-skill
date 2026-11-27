@@ -73,10 +73,19 @@
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,
   workbook and embedded object) and of every layout, master and theme with
-  the input deck. Anything that changed although no op asked for it fails
-  the apply with `E_INTEGRITY` (deck untouched); `details.findings` names
-  the slide (`id:` and title) and what would have changed. A media file
-  that existed before the apply must also keep its bytes.
+  the input deck (XML compared in canonical form). Content of another
+  slide appearing or replacing content on a slide no op touched fails the
+  apply with `E_INTEGRITY` (deck untouched); `details.findings` names the
+  slide (`id:` and title) and what would have changed. Content that merely
+  vanishes (a known engine limitation) is written and reported as warning
+  `W_CONTENT_LOST`, so a deck never becomes un-editable. A media file that
+  existed before the apply must also keep its bytes.
+- **Fix: SmartArt, think-cell tags and picture bullets.** SmartArt keeps
+  its pictures and its drawing (a widened GC on this branch had made such
+  decks un-editable); shape-level `p:custDataLst` tags (think-cell) are
+  restored on their shape instead of being lost or moved to the slide;
+  picture bullets (`a:buBlip`) are no longer stripped. Shapes with an
+  `a16:creationId` are addressed by it.
 
 ## 1.0.10
 

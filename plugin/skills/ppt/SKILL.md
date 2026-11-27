@@ -74,7 +74,10 @@ Execution Rules
   `"ok": false` carries a stable `error.code` -- react to it, do not retry
   blindly. Exit 7 = lint failure: W_TEXT_OVERFLOW -> shorten or split,
   W_ELEMENT_OVERLAP -> reposition the element, W_FONT_TOO_SMALL -> enlarge
-  the font (sizes come from the template, see content-rules.md).
+  the font (sizes come from the template, see content-rules.md). A
+  W_CONTENT_LOST warning on a successful apply means the engine dropped
+  content (named in `lost`) from a slide you did not touch -- tell the
+  user which slide and what, do not hide it.
 - **The user edits between turns.** Treat every deck as changed: begin
   EVERY write with a fresh `state` (rev + structure) and pass that rev to
   `apply --rev`. On exit 6 (E_REV_CONFLICT): re-read `state`, re-check your

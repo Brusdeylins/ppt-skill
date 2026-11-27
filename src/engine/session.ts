@@ -25,6 +25,7 @@ import type { DeckArchive } from "./reader.js"
 import { elements, firstElement, parseXml } from "./xml.js"
 import { verifyBytes } from "./verify.js"
 import { verifyContent, type SlideExpect } from "./guard.js"
+import type { LintWarning } from "../core/lint.js"
 import { ensureSeed, ensureSeedFromDeck } from "./seed.js"
 import { setShapeText } from "./text.js"
 
@@ -45,6 +46,8 @@ export interface SessionResult {
     slideCount: number
     /**  plan-order positions of the entries that carried a ref  */
     refIndexes: Record<string, number>
+    /**  content the engine dropped from untouched slides (W_CONTENT_LOST)  */
+    warnings: LintWarning[]
 }
 
 /**  automizer's slide number = numeric part of the slide part filename  */
@@ -271,20 +274,27 @@ const executePlan = async (
         assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
             ? "any" : entry.elements.length > 0 ? "grow" : "same"
     }))
-    const findings = [
-        ...await verifyBytes(finalBytes, archive.zip),
-        ...await verifyContent(archive.zip, await JSZip.loadAsync(finalBytes), expects)
-    ]
+    const content = await verifyContent(archive.zip, await JSZip.loadAsync(finalBytes), expects)
+    const findings = [ ...await verifyBytes(finalBytes, archive.zip), ...content.blocked ]
     if (findings.length > 0)
         throw new PptcError("E_INTEGRITY",
             `the engine produced ${findings.length} integrity violation(s); deck not written`,
             { findings })
     atomicWrite(path.resolve(outFile), finalBytes)
 
+    /*  content the engine could not carry over (no foreign content) is
+        written, but reported so the agent can tell the user  */
+    const warnings: LintWarning[] = content.lost.map((l) => ({
+        code: "W_CONTENT_LOST",
+        slide: { id: (work[l.slide] as PostSlideWork).slideId, index: l.slide,
+            title: (plan.entries[l.slide] as SlidePlanEntry).title },
+        lost: l.what,
+        message: `the engine could not carry over ${l.what} on this slide although no op touched it -- tell the user`
+    }))
     const refIndexes: Record<string, number> = {}
     for (const [name, entry] of plan.refs)
         refIndexes[name] = plan.entries.indexOf(entry)
-    return { slideCount: plan.entries.length, refIndexes }
+    return { slideCount: plan.entries.length, refIndexes, warnings }
 }
 
 /**
