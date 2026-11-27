@@ -69,6 +69,15 @@
   re-read `state`, retry the ops one per apply, reach a still failing goal
   with another op, and then report what is done and what is not, quoting
   the findings. The `--template` guidance now says it is only for `new`.
+- **Fix: slide links, custom shows and sections follow their slides.**
+  Slide-to-slide hyperlinks (agenda/navigation, outline view) still named
+  the input slide part, which after an apply holds another slide or none:
+  they now point at the same slide again, and a link to a removed slide is
+  dropped with its hyperlink. Custom shows are re-pointed the same way
+  (they dangled after every apply); `verify` reports any `r:id` in
+  `presentation.xml` without a relationship. Sections stay contiguous after
+  `slide.move` and `slide.copy`: moved, copied and new slides join their
+  predecessor's section.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

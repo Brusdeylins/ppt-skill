@@ -248,6 +248,7 @@ const executePlan = async (
     let nextId = Math.max(255, ...[ ...presXml.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g) ].map((m) => Number(m[1])))
     const work: PostSlideWork[] = plan.entries.map((entry, i) => ({
         slideId: entry.virtualId > 0 ? entry.virtualId : ++nextId,
+        sourcePart: entry.source.kind === "self" && entry.virtualId > 0 ? entry.source.part : null,
         notes: entry.notes,
         footer: entry.footer,
         background: entry.background,
@@ -262,7 +263,9 @@ const executePlan = async (
                 ...(f.frame !== undefined && { frame: f.frame })
             }))
     }))
-    const finalBytes = await postProcess(readFileSync(tmpFile), work, plan.props, plan.customProps)
+    const inputRidToId = Object.fromEntries([ ...presXml.matchAll(/<p:sldId [^>]*>/g) ].map((m) =>
+        [ /r:id="([^"]+)"/.exec(m[0])?.[1] ?? "", Number(/\bid="(\d+)"/.exec(m[0])?.[1]) ]))
+    const finalBytes = await postProcess(readFileSync(tmpFile), work, plan.props, plan.customProps, inputRidToId)
     /*  self-verify before writing: the post-pass repairs every known
         PowerPoint "repair" trigger, so a finding here is a residual defect.
         Fail atomically rather than emit a .pptx the user only discovers is

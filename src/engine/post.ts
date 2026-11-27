@@ -44,6 +44,9 @@ export interface PostSlideWork {
     /**  sldId of the output slide: the original id for kept slides, a fresh
          one (above every id of the input deck) for new and copied slides  */
     slideId: number
+    /**  input slide part of a kept (not copied) slide, null otherwise --
+         slide-to-slide links of the input deck are re-pointed with it  */
+    sourcePart: string | null
     /**  speaker notes text to set, null = leave untouched  */
     notes: string | null
     /**  footer text to clone in from the layout, null = leave untouched  */
@@ -261,6 +264,60 @@ const pruneUnusedSlideRels = (slide: Document, slideRels: Document, keep: Set<st
         }
     }
     return changed
+}
+
+/**  re-point slide-to-slide links (hyperlink jumps, zoom, outline view):
+     automizer copies the rels verbatim, so they still name the INPUT slide
+     part, which now holds another slide or nothing. A link to a removed
+     slide is dropped together with its hyperlink.
+     @returns whether the rels or the slide changed  */
+const remapSlideLinks = (owner: string, doc: Document | null, rels: Document, partMap: Map<string, string>): boolean => {
+    let changed = false
+    for (const rel of elements(rels, "Relationship")) {
+        if (!/\/relationships\/slide$/.test(rel.getAttribute("Type") ?? "") || rel.getAttribute("TargetMode") === "External")
+            continue
+        const target = rel.getAttribute("Target") ?? ""
+        const input = path.posix.normalize(path.posix.join(path.posix.dirname(owner), target))
+        const output = partMap.get(input)
+        if (output !== undefined) {
+            const rewired = path.posix.relative(path.posix.dirname(owner), output)
+            if (rewired !== target) {
+                rel.setAttribute("Target", rewired)
+                changed = true
+            }
+            continue
+        }
+        const id = rel.getAttribute("Id") ?? ""
+        rel.parentNode?.removeChild(rel)
+        changed = true
+        if (doc !== null)
+            for (const tag of [ "a:hlinkClick", "a:hlinkHover", "p:sld" ])
+                for (const el of elements(doc, tag))
+                    if (el.getAttribute("r:id") === id)
+                        el.parentNode?.removeChild(el)
+    }
+    return changed
+}
+
+/**  re-point custom shows (`p:custShow` slide lists) at the output slides:
+     their r:ids name presentation rels of the INPUT deck  */
+const remapCustomShows = async (zip: JSZip, inputRidToId: Record<string, number>): Promise<void> => {
+    const part = "ppt/presentation.xml"
+    const xml = await partText(zip, part)
+    if (!xml.includes("<p:custShow"))
+        return
+    const pres = parseXml(xml)
+    const ridOf = new Map(elements(pres, "p:sldId").map((s) => [ s.getAttribute("id") ?? "", s.getAttribute("r:id") ?? "" ]))
+    for (const show of elements(pres, "p:custShow"))
+        for (const sld of elements(show, "p:sld")) {
+            const id = inputRidToId[sld.getAttribute("r:id") ?? ""]
+            const rid = id === undefined ? undefined : ridOf.get(String(id))
+            if (rid === undefined)
+                sld.parentNode?.removeChild(sld)
+            else
+                sld.setAttribute("r:id", rid)
+        }
+    zip.file(part, serializeXml(pres))
 }
 
 /**  re-wire the SmartArt of a slide after automizer copied its parts to
@@ -901,7 +958,8 @@ export const postProcess = async (
     bytes: Buffer,
     work: PostSlideWork[],
     props: Record<string, string> | null,
-    customProps: Record<string, string> | null = null
+    customProps: Record<string, string> | null = null,
+    inputRidToId: Record<string, number> = {}
 ): Promise<Buffer> => {
     const zip = await JSZip.loadAsync(bytes)
     /*  drop parts under the reserved OPC folder [trash]/ FIRST -- before the
@@ -926,6 +984,22 @@ export const postProcess = async (
     const slides = await referencedSlides(zip)
     await gcParts(zip, slides)
     await restoreSlideIds(zip, work.map((w) => w.slideId))
+    await remapCustomShows(zip, inputRidToId)
+    const partMap = new Map<string, string>()
+    work.forEach((w, i) => {
+        if (w.sourcePart !== null && slides[i] !== undefined)
+            partMap.set(w.sourcePart, slides[i] as string)
+    })
+    const viewRelsPart = "ppt/_rels/viewProps.xml.rels"
+    if (zip.file(viewRelsPart) !== null) {
+        const viewRels = parseXml(await partText(zip, viewRelsPart))
+        const viewProps = zip.file("ppt/viewProps.xml") === null ? null : parseXml(await partText(zip, "ppt/viewProps.xml"))
+        if (remapSlideLinks("ppt/viewProps.xml", viewProps, viewRels, partMap)) {
+            zip.file(viewRelsPart, serializeXml(viewRels))
+            if (viewProps !== null)
+                zip.file("ppt/viewProps.xml", serializeXml(viewProps))
+        }
+    }
 
     /*  continue after the pptcImage media of EARLIER applies, or a new
         placeholder image overwrites the image of another slide  */
@@ -963,12 +1037,13 @@ export const postProcess = async (
             if (job.slideTags.length > 0)
                 await restoreSlideTags(post, slide, slideRels, job.slideTags)
         }
+        const linksChanged = remapSlideLinks(slidePart, slide, slideRels, partMap)
         const keepRels = job !== undefined && job.diagrams.length > 0
             ? await wireDiagrams(zip, slide, slideRels, job.diagrams) : new Set<string>()
         const idsChanged = uniquifyShapeIds(slide)
         const relsChanged = pruneUnusedSlideRels(slide, slideRels, keepRels)
 
-        if (job !== undefined || idsChanged || relsChanged) {
+        if (job !== undefined || idsChanged || relsChanged || linksChanged) {
             zip.file(slidePart, serializeXml(slide))
             zip.file(relsPart, serializeXml(slideRels))
         }

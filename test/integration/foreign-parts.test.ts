@@ -302,4 +302,41 @@ describe("parts of PowerPoint-authored decks", () => {
             expect(await tagOf(bulletRid)).toBe("bullet-picture")
         }
     })
+
+    it("re-points slide links and custom shows; drops links to removed slides", async () => {
+        const deck = path.join(TMP, "foreign-links.pptx")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ "A", "B", "C", "D" ].map((t) => ({ op: "slide.add", layout: "CONTENT", placeholders: { title: { text: t } } })))
+        const parts = (await readDeckState(await DeckArchive.open(deck))).slides.map((s) => (s as { part: string }).part)
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const link = async (from: number, to: number): Promise<void> => {
+            const slide = parts[from] as string
+            await addRel(zip, slide, "rId97", "slide", path.posix.basename(parts[to] as string))
+            const t = [ "A", "B", "C", "D" ][from] as string
+            zip.file(slide, (await text(zip, slide)).replace(`<a:r><a:t>${t}</a:t>`,
+                `<a:r><a:rPr lang="de-DE"><a:hlinkClick r:id="rId97" action="ppaction://hlinksldjump"/></a:rPr><a:t>${t}</a:t>`))
+        }
+        await link(0, 2)
+        await link(1, 3)
+        const pres = await text(zip, "ppt/presentation.xml")
+        const rid = (n: number): string => [ ...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g) ][n]?.[1] as string
+        zip.file("ppt/presentation.xml", pres.replace("<p:defaultTextStyle",
+            `<p:custShowLst><p:custShow name="Kurz" id="0"><p:sldLst><p:sld r:id="${rid(1)}"/><p:sld r:id="${rid(2)}"/></p:sldLst></p:custShow></p:custShowLst><p:defaultTextStyle`))
+        writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", at: 0, placeholders: { title: { text: "N" } } } ])
+        await apply(deck, [ { op: "slide.rm", slide: "title:D" } ])
+        await expectIntact(deck)
+        const state = await readDeckState(await DeckArchive.open(deck))
+        const byTitle = new Map(state.slides.map((s) => [ s.title, s as { part: string, id: number } ]))
+        const out = await JSZip.loadAsync(readFileSync(deck))
+        const aRels = await text(out, relsOf((byTitle.get("A") as { part: string }).part))
+        expect(/\/slide" Target="([^"]+)"/.exec(aRels)?.[1]).toBe(path.posix.basename((byTitle.get("C") as { part: string }).part))
+        expect(await text(out, (byTitle.get("B") as { part: string }).part)).not.toContain("hlinkClick")
+        const outPres = await text(out, "ppt/presentation.xml")
+        const idOfRid = new Map([ ...outPres.matchAll(/<p:sldId [^>]*>/g) ].map((m) =>
+            [ /r:id="([^"]+)"/.exec(m[0])?.[1], Number(/\bid="(\d+)"/.exec(m[0])?.[1]) ]))
+        const show = [ ...outPres.matchAll(/<p:sld r:id="([^"]+)"/g) ].map((m) => idOfRid.get(m[1] as string))
+        expect(show).toEqual([ (byTitle.get("B") as { id: number }).id, (byTitle.get("C") as { id: number }).id ])
+    })
 })

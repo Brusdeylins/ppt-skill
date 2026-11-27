@@ -111,6 +111,10 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
         if (target === undefined || !names.has(path.posix.normalize(path.posix.join("ppt", target))))
             findings.push(`presentation.xml: sldId ${m[1]} does not resolve to a slide part`)
     }
+    /*  ... and every other r:id there (masters, custom shows) to a rel  */
+    for (const m of pres.matchAll(/<([\w:]+)\b[^>]*\br:id="([^"]+)"/g))
+        if (m[1] !== "p:sldId" && !relMap.has(m[2] as string))
+            findings.push(`presentation.xml: <${m[1] as string}> r:id ${m[2] as string} has no relationship`)
 
     /*  7. CT_Presentation is an ordered sequence: master id lists must
         precede sldIdLst (violations trigger the repair dialog)  */
