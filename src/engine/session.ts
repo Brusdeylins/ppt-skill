@@ -74,21 +74,26 @@ const withStdoutShield = async <T>(fn: () => Promise<T>): Promise<T> => {
     }
 }
 
-/**  automizer element selector: shape name plus its occurrence index  */
-type Selector = { name: string, nameIdx: number }
+/**  automizer element selector: shape name plus its occurrence index, and
+     the shape's creation id when it has one  */
+type Selector = { name: string, nameIdx: number, creationId?: string }
 
 /**  address a shape by name AND occurrence: automizer picks the first
      `p:cNvPr` with the name in document order (group children included),
      so a textbox named like a placeholder, earlier in z-order, would be
-     edited instead. Count the occurrences up to the shape `pick` accepts.  */
+     edited instead. Count the occurrences up to the shape `pick` accepts.
+     A shape with an `a16:creationId` (PowerPoint 2016+) must be addressed
+     by it: automizer then ignores nameIdx on the target slide.  */
 const selectorFor = (source: Document | null, name: string, pick: (shape: Element) => boolean): Selector => {
     let n = 0
     if (source !== null)
         for (const cNvPr of elements(source, "p:cNvPr")) {
             if (cNvPr.getAttribute("name") !== name)
                 continue
-            if (pick(cNvPr.parentNode?.parentNode as Element))
-                return { name, nameIdx: n }
+            if (pick(cNvPr.parentNode?.parentNode as Element)) {
+                const creationId = firstElement(cNvPr, "a16:creationId")?.getAttribute("id") ?? ""
+                return { name, nameIdx: n, ...(creationId !== "" && { creationId }) }
+            }
             n++
         }
     return { name, nameIdx: 0 }
@@ -171,22 +176,31 @@ const captureSlideTags = async (archive: DeckArchive, plan: MutationPlan): Promi
         const slideText = await archive.text(part)
         if (slideText === null || !slideText.includes("<p:custDataLst"))
             continue
-        const lst = firstElement(parseXml(slideText), "p:custDataLst")
-        if (lst === null)
-            continue
         const relsDoc = await archive.xml(`ppt/slides/_rels/${path.posix.basename(part)}.rels`)
         const rels = new Map(elements(relsDoc, "Relationship")
             .map((r) => [r.getAttribute("Id") ?? "", r]))
-        const tagsEl = firstElement(lst, "p:tags")
-        const children = [...elements(lst, "p:custData"), ...(tagsEl === null ? [] : [tagsEl])]
-        for (const el of children) {
-            const rel = rels.get(el.getAttribute("r:id") ?? "")
-            if (rel !== undefined)
-                refs.push({
-                    kind: el.nodeName,
-                    relType: rel.getAttribute("Type") ?? "",
-                    target: rel.getAttribute("Target") ?? ""
-                })
+
+        /*  the slide's own list (child of p:cSld) and every shape's list
+            (child of its p:nvPr, think-cell per-shape tags), keyed by owner  */
+        for (const lst of elements(parseXml(slideText), "p:custDataLst")) {
+            const parent = lst.parentNode as Element | null
+            const owner = parent?.nodeName === "p:nvPr"
+                ? firstElement(parent.parentNode as Element, "p:cNvPr")?.getAttribute("id") ?? null
+                : null
+            if (parent?.nodeName === "p:nvPr" && owner === null)
+                continue
+            const tagsEl = firstElement(lst, "p:tags")
+            const children = [...elements(lst, "p:custData"), ...(tagsEl === null ? [] : [tagsEl])]
+            for (const el of children) {
+                const rel = rels.get(el.getAttribute("r:id") ?? "")
+                if (rel !== undefined)
+                    refs.push({
+                        kind: el.nodeName,
+                        relType: rel.getAttribute("Type") ?? "",
+                        target: rel.getAttribute("Target") ?? "",
+                        owner
+                    })
+            }
         }
     }
     return out

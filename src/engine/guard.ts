@@ -17,6 +17,7 @@
 import JSZip from "jszip"
 import path from "node:path"
 import { createHash } from "node:crypto"
+import { parseXml, serializeXml } from "./xml.js"
 
 /**  what the plan allows to change on one output slide  */
 export interface SlideExpect {
@@ -37,23 +38,31 @@ const SKIP_RELS = [ "/slideLayout", "/notesSlide", "/hyperlink", "/slide" ]
 /**  rel types a slide carries without referencing them by id in its XML  */
 export const IMPLICIT_RELS = [ "/comments", "/themeOverride", "/vmlDrawing", "/slideUpdateInfo" ]
 
-/**  content hash of a part; for XML the declaration, byte-order mark,
-     whitespace between tags, relationship ids and layout ids are dropped
-     first, since the engine re-serializes and re-mints them on every apply
-     without changing content  */
+/**  content hash of a part. XML is hashed in a canonical form -- parsed
+     and re-serialized, so quoting, entity and empty-element spellings do
+     not matter (automizer re-serializes masters on every apply) -- with
+     relationship ids and layout ids blanked, since the engine re-mints
+     them without changing content  */
 const digest = async (zip: JSZip, part: string): Promise<string> => {
     const file = zip.file(part)
     if (file === null)
         return "missing"
     const bytes = await file.async("nodebuffer")
-    const data = /\.(xml|rels)$/.test(part)
-        ? bytes.toString("utf8")
-            .replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "")
+    let data: Buffer | string = bytes
+    if (/\.(xml|rels)$/.test(part)) {
+        let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "")
+        try {
+            xml = serializeXml(parseXml(xml))
+        }
+        catch {
+            /*  malformed XML is hashed as is (verify.ts reports it)  */
+        }
+        data = xml
             .replace(/>\s+</g, "><")
             .replace(/\br:(id|embed|link|pict|dm|lo|qs|cs)="[^"]*"/g, "r:$1=\"\"")
             .replace(/\brelId="[^"]*"/g, "relId=\"\"")
             .replace(/(<p:sldLayoutId\b[^>]*?\bid=")\d+"/g, "$1\"")
-        : bytes
+    }
     return createHash("sha1").update(data).digest("hex").slice(0, 12)
 }
 

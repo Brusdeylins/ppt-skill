@@ -10,7 +10,8 @@
 **  handed out again and its content overwritten -- another slide then
 **  shows the wrong image, chart style or embedded object. These patches
 **  seed each counter from the HIGHEST number of every part name the
-**  counter is used for, and give OLE embeddings a deck-unique name.
+**  counter is used for, and give OLE embeddings a deck-unique name. A last
+**  patch keeps picture bullets (`a:buBlip`) that automizer strips.
 **
 **  The patched members are private to automizer: installing fails loudly
 **  when one is missing, so an automizer upgrade cannot turn them into a
@@ -19,6 +20,7 @@
 
 import { CountHelper } from "pptx-automizer/dist/helper/count-helper.js"
 import { OLEObject } from "pptx-automizer/dist/shapes/ole.js"
+import { PlaceholderNormalizer } from "pptx-automizer/dist/classes/placeholder-normalizer.js"
 
 /**  the subset of automizer's archive API used here  */
 interface Archive {
@@ -93,3 +95,21 @@ patch(oleStatic.prototype, "prepare", async function (this: OleShape, targetTemp
     await this.updateSlideRels()
     await this.updateSlideXml()
 })
+
+/*  picture bullets: automizer strips every `a:buBlip` as "unsupported",
+    so bullets of kept slides silently turn into plain bullets. Their image
+    rel is copied with the slide anyway -- keep the element.  */
+interface Normalizer { host: { unsupportedTags: string[] } }
+const removeUnsupportedTags = (PlaceholderNormalizer as unknown as { prototype: Record<string, unknown> })
+    .prototype["removeUnsupportedTags"] as (this: Normalizer, xml: unknown) => void
+patch((PlaceholderNormalizer as unknown as { prototype: object }).prototype, "removeUnsupportedTags",
+    function (this: Normalizer, xml: unknown): void {
+        const tags = this.host.unsupportedTags
+        this.host.unsupportedTags = tags.filter((t) => t !== "a:buBlip")
+        try {
+            removeUnsupportedTags.call(this, xml)
+        }
+        finally {
+            this.host.unsupportedTags = tags
+        }
+    })

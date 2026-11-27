@@ -35,6 +35,8 @@ export interface SlideTagRef {
     relType: string
     /**  relationship target, relative to ppt/slides/  */
     target: string
+    /**  cNvPr id of the shape carrying the list, null for the slide's own  */
+    owner: string | null
 }
 
 /**  per-output-slide work items, in final slide order  */
@@ -662,11 +664,12 @@ const restoreSlideTags = async (post: Post, slide: Document, slideRels: Document
     const spTree = firstElement(slide, "p:spTree")
     if (cSld === null || spTree === null)
         return
-    const old = firstElement(slide, "p:custDataLst")
-    if (old !== null)
+    for (const old of elements(slide, "p:custDataLst"))
         old.parentNode?.removeChild(old)
-    const lst = slide.createElementNS(NS_P, "p:custDataLst")
+    const lists = new Map<string | null, Element>()
     for (const ref of refs) {
+        const lst = lists.get(ref.owner) ?? slide.createElementNS(NS_P, "p:custDataLst")
+        lists.set(ref.owner, lst)
         let target = ref.target
         let part = path.posix.normalize(path.posix.join("ppt/slides", target))
         if (post.zip.file(part) === null)
@@ -699,8 +702,22 @@ const restoreSlideTags = async (post: Post, slide: Document, slideRels: Document
         el.setAttributeNS(NS_R, "r:id", rid)
         lst.appendChild(el)
     }
-    if (lst.childNodes.length > 0)
-        cSld.insertBefore(lst, spTree.nextSibling)
+
+    /*  slide-level list after p:spTree; a shape's list into its p:nvPr
+        (before p:extLst), found by the shape id kept from the source  */
+    for (const [ owner, lst ] of lists) {
+        if (lst.childNodes.length === 0)
+            continue
+        if (owner === null) {
+            cSld.insertBefore(lst, spTree.nextSibling)
+            continue
+        }
+        const cNvPr = elements(slide, "p:cNvPr").find((el) => el.getAttribute("id") === owner)
+        const nvPr = cNvPr === undefined ? undefined
+            : elements(cNvPr.parentNode as Element, "p:nvPr").find((el) => el.parentNode === cNvPr.parentNode)
+        if (nvPr !== undefined)
+            nvPr.insertBefore(lst, elements(nvPr, "p:extLst").find((el) => el.parentNode === nvPr) ?? null)
+    }
 }
 
 /**  read a slide's title text (title/ctrTitle placeholder), "" if none  */

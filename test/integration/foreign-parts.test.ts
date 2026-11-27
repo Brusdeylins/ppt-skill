@@ -151,10 +151,13 @@ describe("parts of PowerPoint-authored decks", () => {
         await expectIntact(deck)
     })
 
-    it("fills the placeholder, not an earlier shape with the same name", async () => {
-        const deck = path.join(TMP, "foreign-names.pptx")
+    it.each([ false, true ])("fills the placeholder, not an earlier shape with the same name (creationIds: %s)", async (withIds) => {
+        const deck = path.join(TMP, `foreign-names-${String(withIds)}.pptx`)
+        const cid = (id: number): string => withIds
+            ? `<a:extLst><a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}"><a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{00000000-0000-0000-0000-0000000000${id}}"/></a:ext></a:extLst>`
+            : ""
         const sp = (id: number, name: string, txt: string): string =>
-            `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>`
+            `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}">${cid(id)}</p:cNvPr><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>`
             + "<p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"457200\"/></a:xfrm></p:spPr>"
             + `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${txt}</a:t></a:r></a:p></p:txBody></p:sp>`
         let bodyName = ""
@@ -163,10 +166,13 @@ describe("parts of PowerPoint-authored decks", () => {
             const xml = await text(zip, a)
             bodyName = [ ...xml.matchAll(/<p:cNvPr id="\d+" name="([^"]+)"\/>(?:(?!<\/p:nvSpPr>)[\s\S])*<p:ph [^>]*idx="1"/g) ][0]?.[1] ?? ""
 
-            /*  a same-named textbox and a group child named "Box" before the real top-level "Box"  */
+            /*  a same-named textbox and a group child named "Box" before the real top-level "Box";
+                the placeholders get creation ids too, as PowerPoint writes them  */
+            const withPhIds = withIds ? xml.replace(/<p:cNvPr id="(\d+)" name="([^"]+)"\/>/g,
+                (_m, id: string, name: string) => `<p:cNvPr id="${id}" name="${name}">${cid(Number(id))}</p:cNvPr>`) : xml
             const group = "<p:grpSp><p:nvGrpSpPr><p:cNvPr id=\"80\" name=\"Gruppe\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
                 + "<p:grpSpPr/>" + sp(81, "Box", "GROUP-CHILD") + "</p:grpSp>"
-            zip.file(a, xml.replace("</p:grpSpPr>", `</p:grpSpPr>${sp(78, bodyName, "KEEP-ME")}${group}${sp(82, "Box", "TOP")}`))
+            zip.file(a, withPhIds.replace("</p:grpSpPr>", `</p:grpSpPr>${sp(78, bodyName, "KEEP-ME")}${group}${sp(82, "Box", "TOP")}`))
         })
         expect(bodyName).not.toBe("")
         await apply(deck, [
@@ -237,6 +243,63 @@ describe("parts of PowerPoint-authored decks", () => {
                 expect(await (zip.file(`ppt/media/${picture as string}`) as JSZip.JSZipObject).async("string")).toBe(`smart-picture-${i + 1}`)
             }
             await expectIntact(deck)
+        }
+    })
+
+    it("accepts a master written with PowerPoint's and the Open XML SDK's spellings", async () => {
+        const deck = path.join(TMP, "foreign-master.pptx")
+        await craftDeck(deck, async (zip) => {
+            const master = "ppt/slideMasters/slideMaster1.xml"
+            zip.file(master, (await text(zip, master))
+                .replace("<p:cNvPr id=\"2\" name=\"Title Placeholder 1\"/>",
+                    "<p:cNvPr id='2' name='Title Placeholder 1' descr=\"Bild&#xA;&#xA;Automatisch generierte Beschreibung &apos;x&apos;\" />")
+                .replace("<a:lstStyle/>", "<a:lstStyle></a:lstStyle>"))
+        })
+        for (let round = 0; round < 2; round++)
+            await apply(deck, [ { op: "slide.fill", slide: "title:A", notes: `r${round}` } ])
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "C" } } } ])
+        await expectIntact(deck)
+    })
+
+    it("keeps slide-level and shape-level tags (think-cell) and picture bullets", async () => {
+        const deck = path.join(TMP, "foreign-tags.pptx")
+        await craftDeck(deck, async (zip, slides) => {
+            const b = slides[1] as string
+            for (const n of [ 1, 2 ]) {
+                zip.file(`ppt/tags/tag${n}.xml`, "<p:tagLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+                    + `<p:tag name="THINKCELL" val="t${n}"/></p:tagLst>`)
+                await addOverride(zip, `ppt/tags/tag${n}.xml`, "application/vnd.openxmlformats-officedocument.presentationml.tags+xml")
+            }
+            await addRel(zip, b, "rId93", "tags", "../tags/tag1.xml")
+            await addRel(zip, b, "rId94", "tags", "../tags/tag2.xml")
+            zip.file("ppt/media/bullet.png", Buffer.from("bullet-picture"))
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
+                "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
+            await addRel(zip, b, "rId95", "image", "../media/bullet.png")
+            zip.file(b, (await text(zip, b))
+                .replace("<p:ph type=\"title\"/>", "<p:ph type=\"title\"/><p:custDataLst><p:tags r:id=\"rId94\"/></p:custDataLst>")
+                .replace("</p:spTree>", "</p:spTree><p:custDataLst><p:tags r:id=\"rId93\"/></p:custDataLst>")
+                .replace("<a:p><a:r><a:t>B</a:t>", "<a:p><a:pPr><a:buBlip><a:blip r:embed=\"rId95\"/></a:buBlip></a:pPr><a:r><a:t>B</a:t>"))
+        })
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await apply(deck, [ { op: "slide.fill", slide: "title:A", notes: "n" } ])
+        await apply(deck, [ { op: "slide.copy", slide: "title:B" } ])
+        await expectIntact(deck)
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        for (const i of [ 1, 2 ]) {
+            const slide = (await readDeckState(await DeckArchive.open(deck))).slides[i] as { part: string }
+            const xml = await text(zip, slide.part)
+            const rels = await text(zip, relsOf(slide.part))
+            const tagOf = async (rid: string | undefined): Promise<string> => {
+                const target = new RegExp(`Id="${rid ?? ""}"[^>]*Target="([^"]+)"`).exec(rels)?.[1] ?? ""
+                return await text(zip, path.posix.normalize(path.posix.join("ppt/slides", target)))
+            }
+            const shapeRid = /<p:ph type="title"\/><p:custDataLst><p:tags r:id="([^"]+)"/.exec(xml)?.[1]
+            const slideRid = /<\/p:spTree><p:custDataLst><p:tags r:id="([^"]+)"/.exec(xml)?.[1]
+            expect(await tagOf(shapeRid)).toContain("t2")
+            expect(await tagOf(slideRid)).toContain("t1")
+            const bulletRid = /<a:buBlip><a:blip r:embed="([^"]+)"/.exec(xml)?.[1]
+            expect(await tagOf(bulletRid)).toBe("bullet-picture")
         }
     })
 })
