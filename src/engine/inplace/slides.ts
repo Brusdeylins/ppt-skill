@@ -314,10 +314,38 @@ const repairRels = (pkg: Package, part: string, slide: Document, rels: Document,
  */
 export const createSlide = async (pkg: Package, layoutPart: string): Promise<string> => {
     const part = pkg.alloc.part("ppt/slides", "slide", ".xml")
-    pkg.write(part, slideFromLayout(await pkg.text(layoutPart)))
+    const slide = parseXml(slideFromLayout(await pkg.text(layoutPart)))
     const rels = parseXml("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
         + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>")
     pkg.addRel(rels, `${REL}/slideLayout`, path.posix.relative("ppt/slides", layoutPart))
+
+    /*  cloned placeholders may reference layout relationships (a picture
+        fill, a hyperlink): the slide gets its own relationship to the same
+        target, as the layout's ids mean nothing on the slide  */
+    const layoutRels = new Map(Package.targets(layoutPart, await pkg.rels(layoutPart))
+        .map((t) => [ t.rel.getAttribute("Id") ?? "", t ]))
+    const ids = new Map<string, string>()
+    const relink = (el: Element): void => {
+        for (let i = 0; i < el.attributes.length; i++) {
+            const attr = el.attributes.item(i)
+            if (attr === null || attr.namespaceURI !== NS_R)
+                continue
+            const rel = layoutRels.get(attr.value)
+            if (rel !== undefined && !ids.has(attr.value))
+                ids.set(attr.value, pkg.addRel(rels, rel.type,
+                    rel.target === null ? rel.rel.getAttribute("Target") ?? "" : path.posix.relative("ppt/slides", rel.target),
+                    rel.target === null))
+            const id = ids.get(attr.value)
+            if (id !== undefined)
+                el.setAttributeNS(NS_R, attr.name, id)
+        }
+        for (let n = el.firstChild; n !== null; n = n.nextSibling)
+            if (n.nodeType === 1)
+                relink(n as Element)
+    }
+    if (slide.documentElement !== null)
+        relink(slide.documentElement)
+    pkg.write(part, slide)
     pkg.writeRels(part, rels)
     await pkg.typeAs(part, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")
     return part

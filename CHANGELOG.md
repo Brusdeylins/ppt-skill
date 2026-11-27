@@ -28,6 +28,10 @@
   duplicate relationships, a notes part shared with another slide) is
   repaired and reported with the new warning `W_REPAIRED`; all other
   slides stay untouched.
+- **Fix: new slides showed "the picture cannot be displayed".** A layout
+  placeholder with a picture fill (e.g. the decorative circle of a
+  corporate title layout) was cloned onto the new slide without its
+  relationship; the slide now gets its own relationship to the picture.
 - **`el.rm` removes every matching shape.** Two existing shapes of the same
   name were both addressed, but only the first one was removed.
 - **`el.add` elements are rendered once per apply.** PptxGenJS (now a
