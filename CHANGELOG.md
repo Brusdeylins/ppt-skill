@@ -62,6 +62,13 @@
   concurrent pptc), keyed without the slide list (adding a slide no longer
   creates a new cache file), drops the media of removed slides, and prunes
   seeds unused for two weeks.
+- **`pptx-automizer` pinned to exactly 0.9.4.** pptc patches its
+  internals; a new version must be checked deliberately. A contract test
+  replays the reported bug through the built bundle.
+- **Skill: recovery from `E_INTEGRITY`.** SKILL.md tells the agent to
+  re-read `state`, retry the ops one per apply, reach a still failing goal
+  with another op, and then report what is done and what is not, quoting
+  the findings. The `--template` guidance now says it is only for `new`.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

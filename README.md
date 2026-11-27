@@ -272,8 +272,9 @@ The single write path. Validates and plans the **whole** ops document first
 atomic write -- or nothing (`failedAt` in the error tells which op failed).
 
 - `--ops @file` / `--ops -` / `-e '<op-json>'` -- exactly one of these
-- `--template <tpl>` -- required whenever the document contains `slide.add`
-  (new slides are instantiated from the template's layouts)
+- `--template <tpl>` -- not needed on an existing deck: `slide.add` uses the
+  deck's own embedded layouts. A template whose layouts differ from the
+  deck's (another design or version) fails with `E_TEMPLATE`.
 - `--dry-run` -- full validation and planning, no write; warnings included
 - `--strict` -- lint warnings become exit 7: `W_TEXT_OVERFLOW` (planned
   text exceeds the placeholder capacity -- shorten or split),

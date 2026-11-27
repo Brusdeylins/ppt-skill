@@ -46,6 +46,8 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/elements.ts` | ElementSpec → PptxGenJS calls (automizer interop) |
 | `engine/post.ts` | zip post-pass: GC, notes, footer, background, slide visibility (`show="0"`), placeholder images, hyperlink rels, doc props, repair-trigger cleanup (stale rels, shape ids) |
 | `engine/verify.ts` | read-only integrity check against the known PowerPoint "repair" triggers; backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
+| `engine/guard.ts` | content self-check before every write: each slide the plan keeps must keep its notes and related parts (images, charts, embeddings), layouts/masters must not change (`E_INTEGRITY`) |
+| `engine/automizer-patches.ts` | part-name allocation fixes for pptx-automizer (media, chart, SmartArt counters from the highest number in use; deck-unique OLE names); fails loudly if an upgrade removes a patched member |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries |
 | `engine/parts.ts` | zip part access helpers (read/parse archive parts) |
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |
@@ -66,11 +68,14 @@ session     automizer: rebuild slide list (kept slides re-imported from the
             deck itself, new slides imported from the template's seed deck),
             callbacks apply DOM text + generated elements
 post-pass   zip level: GC orphan parts, prune presentation rels whose slide
-            part vanished, re-point notesSlide back-references, notes, footer,
-            background, slide visibility (re-apply `show="0"`), placeholder
-            images, hyperlink rels, doc props, uniquify cNvPr shape ids
-verify      self-check the produced bytes against the known repair triggers;
-            any finding aborts with E_INTEGRITY, nothing is written
+            part vanished, restore the planned sldIds (automizer renumbers
+            them by position), re-point notesSlide back-references, notes,
+            footer, background, slide visibility (re-apply `show="0"`),
+            placeholder images, hyperlink rels, doc props, uniquify cNvPr
+            shape ids
+verify      self-check the produced bytes against the known repair triggers,
+            and (guard) every kept slide against its source slide; any
+            finding aborts with E_INTEGRITY, nothing is written
 write       tmp file + rename (atomic), re-read → rev.after + ref→id map
 ```
 

@@ -14,7 +14,7 @@
 **
 **  The patched members are private to automizer: installing fails loudly
 **  when one is missing, so an automizer upgrade cannot turn them into a
-**  silent no-op (see test/integration/media-names.test.ts).
+**  silent no-op (see test/contract/bundle-patches.test.ts).
 */
 
 import { CountHelper } from "pptx-automizer/dist/helper/count-helper.js"

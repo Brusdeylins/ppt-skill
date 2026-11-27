@@ -125,8 +125,9 @@ Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 Pitfalls: the ops file is passed as `--ops @/abs/path.json` (note the `@`;
 `-` reads stdin). `slide.add` on an EXISTING deck needs **no** `--template`
 -- pptc reuses the deck's OWN embedded layouts (a deck is self-contained).
-Pass `--template` only when creating the deck (`new`) or to introduce a
-layout the deck does not already carry.
+Pass `--template` only when creating the deck (`new`). On an existing deck
+it can only repeat the deck's own template -- a different design fails
+with `E_TEMPLATE`; then drop `--template`.
 
 <flow>
 
@@ -447,11 +448,19 @@ layout the deck does not already carry.
     Then apply for real with `--rev <rev/>`; <rev>the new revision returned
     by apply</rev>.
 
-    **Verify the write (mandatory).** `apply` self-checks its output against
-    every known PowerPoint "repair" trigger and refuses to write a corrupt
-    deck. <if condition="exit 8 / E_INTEGRITY">the deck was NOT written and is
-    unchanged; this is an engine defect, not a content problem -- report the
-    `details.findings` to the user verbatim and stop (do not retry blindly).</if>
+    **Verify the write (mandatory).** `apply` self-checks its output --
+    against every known PowerPoint "repair" trigger, and that every slide
+    your ops did not touch keeps its content (notes, images, charts,
+    embedded objects) -- and refuses to write a deck that fails.
+    <if condition="exit 8 / E_INTEGRITY">the deck was NOT written and is unchanged; this is an engine defect, not a content
+    problem. Recover once, in this order: (1) re-read `state`, then apply
+    the same ops ONE op per apply (each with the new rev), so the steps
+    that work are saved; (2) for an op that still fails, reach the same
+    goal with another op (picture placeholder fill instead of `el.add`
+    image, `slide.copy` + `slide.fill` instead of `slide.add`); (3) then
+    tell the user what is done and what is not, and quote the
+    `details.findings` verbatim -- they name slide and kind of damage and
+    are the bug report. Never retry the identical apply.</if>
     After the apply succeeds, run `verify <deck>` as an explicit integrity
     check.
     <if condition="verify reports any `result.findings`">tell the user the deck
