@@ -11,7 +11,7 @@
 */
 
 import automizerPkg from "pptx-automizer"
-import { CountHelper } from "pptx-automizer/dist/helper/count-helper.js"
+import "./automizer-patches.js"
 import { readFileSync, rmSync } from "node:fs"
 import JSZip from "jszip"
 import path from "node:path"
@@ -38,15 +38,6 @@ const unwrapDefault = (mod: unknown): new (params: Record<string, unknown>) => I
     return candidate as new (params: Record<string, unknown>) => InstanceType<typeof automizerPkg.default>
 }
 const Automizer = unwrapDefault(automizerPkg)
-
-/*  automizer names new media `media<N>` with N counted from the `image*` files
-    only, so a later apply re-uses a taken name and overwrites media of other
-    slides. Start the counter at the highest number of any media file instead.  */
-type MediaArchive = { folder(dir: string): Promise<{ relativePath: string }[]> }
-;(CountHelper as unknown as { countImages: (archive: MediaArchive) => Promise<number> })
-    .countImages = async (archive: MediaArchive): Promise<number> =>
-        Math.max(0, ...(await archive.folder("ppt/media")).map((file) =>
-            Number(/^(?:image|media)(\d+)\./.exec(file.relativePath)?.[1] ?? "0")))
 
 /**  result facts of an executed session  */
 export interface SessionResult {

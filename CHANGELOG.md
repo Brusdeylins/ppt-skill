@@ -22,6 +22,24 @@
   slides keep their id; new and copied slides get an id above every id of
   the input deck (a removed id is never re-used). New slides join the
   section of their predecessor.
+- **Fix: parts of PowerPoint-authored decks were swapped or lost.**
+  Embedded OLE objects (Excel/Word) of different slides were written to
+  one file named after a slide-local rel id, so every slide showed the
+  last payload. Chart copies numbered their drawing and theme override
+  from a count of charts and could overwrite a slide's or layout's theme
+  override; SmartArt numbering had the same flaw. Each counter now starts
+  above the highest number in use, and OLE embeddings get deck-unique
+  names. The patched automizer internals live in
+  `engine/automizer-patches.ts` and fail loudly if an upgrade removes them.
+- **Fix: slide comments and theme overrides vanished on every apply.**
+  The post-pass dropped every slide relationship not referenced by id in
+  the slide XML; implicit ones (comments, theme override, VML drawing,
+  slide update info) are kept now.
+- **Embedded workbook names stay short.** automizer appended
+  `-created-<n>` to the name it read, so names grew with every apply
+  (about 350 characters after 35 applies); they are renamed to
+  `<base><n>.xlsx`. Orphaned SmartArt, chart drawing and theme override
+  parts are garbage-collected like charts and media.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,

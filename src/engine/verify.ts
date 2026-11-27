@@ -19,6 +19,7 @@ import JSZip from "jszip"
 import path from "node:path"
 import { readFileSync } from "node:fs"
 import { DOMParser } from "@xmldom/xmldom"
+import { ASSET_PART } from "./post.js"
 
 /**
  *  Validate an opened archive for the known PowerPoint repair triggers.
@@ -176,10 +177,10 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
         if (owners.length > 1)
             findings.push(`notesSlide ${part} is referenced by ${owners.length} slides (must be 1:1)`)
 
-    /*  8. charts, embeddings and media must be reachable from some part
+    /*  8. charts, SmartArt, embeddings and media must be reachable from some part
         (orphans accumulate over applies and bloat or break the file)  */
     const isAsset = (f: string): boolean =>
-        /^ppt\/(charts|embeddings|media)\//.test(f) && !f.includes("/_rels/")
+        ASSET_PART.test(f) && !f.includes("/_rels/")
     const live = new Set<string>()
     for (const n of names)
         if (n.endsWith(".rels")) {

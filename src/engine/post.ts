@@ -23,6 +23,7 @@ import { PptcError } from "../infra/errors.js"
 import { inchToEmu, type Frame } from "../core/model.js"
 import { HLINK_ATTR } from "./text.js"
 import { partText, cleanContentTypes } from "./parts.js"
+import { IMPLICIT_RELS } from "./guard.js"
 import { NS_A, NS_P, NS_R, NS_REL, elements, firstElement, parseXml, serializeXml } from "./xml.js"
 
 /**  one captured p:custDataLst child: the element kind plus the slide
@@ -199,8 +200,11 @@ const syncSectionRefs = async (zip: JSZip): Promise<void> => {
     zip.file(part, serializeXml(pres))
 }
 
-/**  rel types that are never referenced from the slide XML itself  */
-const STRUCTURAL_RELS = ["/slideLayout", "/notesSlide"]
+/**  rel types that are never referenced from the slide XML itself: layout,
+     notes and the implicit ones (comments, theme override, ...), which a
+     slide carries without an r:id -- pruning those loses comments and
+     colours of every slide on every apply  */
+const STRUCTURAL_RELS = ["/slideLayout", "/notesSlide", ...IMPLICIT_RELS]
 
 /**  drop slide relationships whose id no longer occurs in the slide XML
      (automizer accumulates one stale chart/image rel per re-import)  */
@@ -228,18 +232,48 @@ const pruneUnusedSlideRels = (slide: Document, slideRels: Document): boolean => 
     return changed
 }
 
-/**  GC charts, embeddings and media unreachable from any live part --
+/**  parts automizer copies per slide on every apply (charts with their
+     drawings and theme overrides, SmartArt, embeddings, media); unreachable
+     ones are garbage. Mirrored by the orphan check in engine/verify.ts.  */
+export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
+
+/**  normalise embedded workbook names: automizer appends `-created-<n>` to
+     the name it read, so it grows by one suffix per apply and chart
+     (e.g. `Worksheet-created--created-...-13.xlsx` after a few dozen
+     applies). Rename each to the first free `<base><n>.<ext>`.  */
+const normalizeEmbeddingNames = async (zip: JSZip): Promise<void> => {
+    const renames = new Map<string, string>()
+    for (const part of Object.keys(zip.files).filter((f) => /^ppt\/embeddings\/[^/]*-created-[^/]*$/.test(f))) {
+        const ext = path.posix.extname(part)
+        const base = path.posix.basename(part, ext).replace(/-created-.*$/, "").replace(/\d+$/, "")
+        let n = 1
+        while (zip.file(`ppt/embeddings/${base}${n}${ext}`) !== null)
+            n++
+        const target = `ppt/embeddings/${base}${n}${ext}`
+        zip.file(target, await (zip.file(part) as JSZip.JSZipObject).async("uint8array"))
+        zip.remove(part)
+        renames.set(path.posix.basename(part), path.posix.basename(target))
+    }
+    if (renames.size === 0)
+        return
+    const swap = (xml: string): string => xml.replace(/((?:Target|PartName)="[^"]*\/embeddings\/)([^"]+)"/g,
+        (m, prefix: string, name: string) => renames.has(name) ? `${prefix}${renames.get(name) as string}"` : m)
+    for (const part of Object.keys(zip.files).filter((f) => f.endsWith(".rels") || f === "[Content_Types].xml"))
+        zip.file(part, swap(await partText(zip, part)))
+}
+
+/**  GC assets unreachable from any live part --
      automizer re-imports duplicate chart parts on every apply, so without
      this the archive doubles its charts per round  */
 const gcAssets = async (zip: JSZip): Promise<void> => {
     const isAsset = (f: string): boolean =>
-        /^ppt\/(charts|embeddings|media)\//.test(f) && !f.endsWith("/") && !f.includes("/_rels/")
+        ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/")
     const assets = Object.keys(zip.files).filter(isAsset)
     if (assets.length === 0)
         return
     const live = new Set<string>()
     const queue = Object.keys(zip.files).filter((f) =>
-        f.endsWith(".rels") && !/^ppt\/(charts|embeddings|media)\//.test(f))
+        f.endsWith(".rels") && !isAsset(f.replace(/_rels\/([^/]+)\.rels$/, "$1")))
     while (queue.length > 0) {
         const relsPart = queue.pop() as string
         const relsText = await zip.file(relsPart)?.async("string")
@@ -860,9 +894,15 @@ export const postProcess = async (
     await dedupeSharedNotes(zip, slides)
     /*  replaced notes leave their old part behind -- sweep it now  */
     await gcParts(zip, slides)
+    await normalizeEmbeddingNames(zip)
     await gcAssets(zip)
     await syncSectionRefs(zip)
     await cleanContentTypes(zip)
     await syncAppProperties(zip, slides)
+    /*  drop empty folder entries (automizer's folder scans create them)  */
+    const names = Object.keys(zip.files)
+    for (const dir of names.filter((n) => n.endsWith("/")))
+        if (!names.some((n) => n !== dir && n.startsWith(dir)))
+            zip.remove(dir)
     return await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
 }
