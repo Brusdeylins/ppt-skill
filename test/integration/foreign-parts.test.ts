@@ -72,6 +72,44 @@ const craftDeck = async (file: string, craft: (zip: JSZip, slides: string[]) => 
     writeFileSync(file, await zip.generateAsync({ type: "nodebuffer" }))
 }
 
+/**  add a minimal SmartArt (data, layout, style, colors, drawing, one
+     picture in the data part) as part number n with frame shape id `frame`  */
+const addSmartArt = async (zip: JSZip, slide: string, n: number, frame: number): Promise<void> => {
+    const NS_DGM = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+    const CT = "application/vnd.openxmlformats-officedocument.drawingml."
+    const rid = (k: number): string => `rId${80 + 10 * n + k}`
+    const part = (kind: string): string => `ppt/diagrams/${kind}${n}.xml`
+    zip.file(`ppt/media/smart${n}.png`, Buffer.from(`smart-picture-${n}`))
+    zip.file(part("data"), `<dgm:dataModel xmlns:dgm="${NS_DGM}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`
+        + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><dgm:ptLst/>"
+        + "<dgm:bg><a:blipFill><a:blip r:embed=\"rId1\"/></a:blipFill></dgm:bg><dgm:extLst><a:ext uri=\"x\">"
+        + `<dsp:dataModelExt xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" relId="${rid(5)}" minVer="x"/>`
+        + "</a:ext></dgm:extLst></dgm:dataModel>")
+    zip.file(`ppt/diagrams/_rels/data${n}.xml.rels`, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        + `<Relationship Id="rId1" Type="${REL}/image" Target="../media/smart${n}.png"/></Relationships>`)
+    for (const kind of [ "layout", "quickStyle", "colors" ])
+        zip.file(part(kind), `<dgm:${kind === "layout" ? "layoutDef" : kind === "colors" ? "colorsDef" : "styleDef"} xmlns:dgm="${NS_DGM}"/>`)
+    zip.file(part("drawing"), "<dsp:drawing xmlns:dsp=\"http://schemas.microsoft.com/office/drawing/2008/diagram\"><dsp:spTree/></dsp:drawing>")
+    await addOverride(zip, part("data"), `${CT}diagramData+xml`)
+    await addOverride(zip, part("layout"), `${CT}diagramLayout+xml`)
+    await addOverride(zip, part("quickStyle"), `${CT}diagramStyle+xml`)
+    await addOverride(zip, part("colors"), `${CT}diagramColors+xml`)
+    await addOverride(zip, part("drawing"), "application/vnd.ms-office.drawingml.diagramDrawing+xml")
+    await addRel(zip, slide, rid(1), "diagramData", `../diagrams/data${n}.xml`)
+    await addRel(zip, slide, rid(2), "diagramLayout", `../diagrams/layout${n}.xml`)
+    await addRel(zip, slide, rid(3), "diagramQuickStyle", `../diagrams/quickStyle${n}.xml`)
+    await addRel(zip, slide, rid(4), "diagramColors", `../diagrams/colors${n}.xml`)
+    const rels = relsOf(slide)
+    zip.file(rels, (await text(zip, rels)).replace("</Relationships>",
+        `<Relationship Id="${rid(5)}" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="../diagrams/drawing${n}.xml"/></Relationships>`))
+    zip.file(slide, (await text(zip, slide)).replace("</p:spTree>",
+        `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${frame}" name="Diagramm ${n}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>`
+        + "<p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></p:xfrm>"
+        + `<a:graphic><a:graphicData uri="${NS_DGM}"><dgm:relIds xmlns:dgm="${NS_DGM}" r:dm="${rid(1)}" r:lo="${rid(2)}" r:qs="${rid(3)}" r:cs="${rid(4)}"/>`
+        + "</a:graphicData></a:graphic></p:graphicFrame></p:spTree>"))
+}
+
 beforeAll(() => {
     mkdirSync(TMP, { recursive: true })
 })
@@ -202,44 +240,11 @@ describe("parts of PowerPoint-authored decks", () => {
 
     it("keeps SmartArt editable and its pictures on every apply", async () => {
         const deck = path.join(TMP, "foreign-smartart.pptx")
-        const NS_DGM = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
-        const CT = "application/vnd.openxmlformats-officedocument.drawingml."
         await craftDeck(deck, async (zip, slides) => {
             zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
                 "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
-            for (const [ i, slide ] of slides.entries()) {
-                const n = i + 1
-                const part = (kind: string): string => `ppt/diagrams/${kind}${n}.xml`
-                zip.file(`ppt/media/smart${n}.png`, Buffer.from(`smart-picture-${n}`))
-                zip.file(part("data"), `<dgm:dataModel xmlns:dgm="${NS_DGM}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`
-                    + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><dgm:ptLst/>"
-                    + "<dgm:bg><a:blipFill><a:blip r:embed=\"rId1\"/></a:blipFill></dgm:bg><dgm:extLst><a:ext uri=\"x\">"
-                    + "<dsp:dataModelExt xmlns:dsp=\"http://schemas.microsoft.com/office/drawing/2008/diagram\" relId=\"rId85\" minVer=\"x\"/>"
-                    + "</a:ext></dgm:extLst></dgm:dataModel>")
-                zip.file(`ppt/diagrams/_rels/data${n}.xml.rels`, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                    + `<Relationship Id="rId1" Type="${REL}/image" Target="../media/smart${n}.png"/></Relationships>`)
-                for (const kind of [ "layout", "quickStyle", "colors" ])
-                    zip.file(part(kind), `<dgm:${kind === "layout" ? "layoutDef" : kind === "colors" ? "colorsDef" : "styleDef"} xmlns:dgm="${NS_DGM}"/>`)
-                zip.file(part("drawing"), "<dsp:drawing xmlns:dsp=\"http://schemas.microsoft.com/office/drawing/2008/diagram\"><dsp:spTree/></dsp:drawing>")
-                await addOverride(zip, part("data"), `${CT}diagramData+xml`)
-                await addOverride(zip, part("layout"), `${CT}diagramLayout+xml`)
-                await addOverride(zip, part("quickStyle"), `${CT}diagramStyle+xml`)
-                await addOverride(zip, part("colors"), `${CT}diagramColors+xml`)
-                await addOverride(zip, part("drawing"), "application/vnd.ms-office.drawingml.diagramDrawing+xml")
-                await addRel(zip, slide, "rId81", "diagramData", `../diagrams/data${n}.xml`)
-                await addRel(zip, slide, "rId82", "diagramLayout", `../diagrams/layout${n}.xml`)
-                await addRel(zip, slide, "rId83", "diagramQuickStyle", `../diagrams/quickStyle${n}.xml`)
-                await addRel(zip, slide, "rId84", "diagramColors", `../diagrams/colors${n}.xml`)
-                const rels = relsOf(slide)
-                zip.file(rels, (await text(zip, rels)).replace("</Relationships>",
-                    `<Relationship Id="rId85" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="../diagrams/drawing${n}.xml"/></Relationships>`))
-                zip.file(slide, (await text(zip, slide)).replace("</p:spTree>",
-                    "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"91\" name=\"Diagramm\"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>"
-                    + "<p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></p:xfrm>"
-                    + `<a:graphic><a:graphicData uri="${NS_DGM}"><dgm:relIds xmlns:dgm="${NS_DGM}" r:dm="rId81" r:lo="rId82" r:qs="rId83" r:cs="rId84"/>`
-                    + "</a:graphicData></a:graphic></p:graphicFrame></p:spTree>"))
-            }
+            for (const [ i, slide ] of slides.entries())
+                await addSmartArt(zip, slide, i + 1, 91)
         })
         for (let round = 0; round < 3; round++) {
             await apply(deck, [ { op: "meta.props", set: { title: `Runde ${round}` } } ])
@@ -350,5 +355,71 @@ describe("parts of PowerPoint-authored decks", () => {
             [ /r:id="([^"]+)"/.exec(m[0])?.[1], Number(/\bid="(\d+)"/.exec(m[0])?.[1]) ]))
         const show = [ ...outPres.matchAll(/<p:sld r:id="([^"]+)"/g) ].map((m) => idOfRid.get(m[1] as string))
         expect(show).toEqual([ (byTitle.get("B") as { id: number }).id, (byTitle.get("C") as { id: number }).id ])
+    })
+
+    it("accepts presentation rels written Target-before-Id (.NET packaging order)", async () => {
+        const deck = path.join(TMP, "foreign-relorder.pptx")
+        await craftDeck(deck, async (zip) => {
+            const rels = "ppt/_rels/presentation.xml.rels"
+            zip.file(rels, (await text(zip, rels)).replace(/<Relationship Id="([^"]+)" Type="([^"]+)" Target="([^"]+)"\/>/g,
+                "<Relationship Type=\"$2\" Target=\"$3\" Id=\"$1\"/>"))
+        })
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "C" } } } ])
+        await expectIntact(deck)
+    })
+
+    it("re-points a master's slide link (action button) and drops it with its slide", async () => {
+        const deck = path.join(TMP, "foreign-masterlink.pptx")
+        await craftDeck(deck, async (zip, slides) => {
+            const master = "ppt/slideMasters/slideMaster1.xml"
+            await addRel(zip, master, "rId99", "slide", `../slides/${path.posix.basename(slides[1] as string)}`)
+            zip.file(master, (await text(zip, master)).replace("<p:cNvPr id=\"2\" name=\"Title Placeholder 1\"/>",
+                "<p:cNvPr id=\"2\" name=\"Title Placeholder 1\"><a:hlinkClick r:id=\"rId99\" action=\"ppaction://hlinksldjump\"/></p:cNvPr>"))
+        })
+        const masterLink = async (): Promise<string | undefined> =>
+            /\/slide" Target="([^"]+)"/.exec(await text(await JSZip.loadAsync(readFileSync(deck)), "ppt/slideMasters/_rels/slideMaster1.xml.rels"))?.[1]
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", at: 0, placeholders: { title: { text: "N" } } } ])
+        const b = (await readDeckState(await DeckArchive.open(deck))).slides.find((x) => x.title === "B") as { part: string }
+        expect(await masterLink()).toBe(`../slides/${path.posix.basename(b.part)}`)
+        await apply(deck, [ { op: "slide.rm", slide: "title:B" } ])
+        expect(await masterLink()).toBeUndefined()
+        expect(await text(await JSZip.loadAsync(readFileSync(deck)), "ppt/slideMasters/slideMaster1.xml")).not.toContain("hlinkClick")
+        await apply(deck, [ { op: "meta.props", set: { title: "y" } } ])
+        await expectIntact(deck)
+    })
+
+    it("re-wires the remaining SmartArt by its frame after el.rm of another", async () => {
+        const deck = path.join(TMP, "foreign-smartart-two.pptx")
+        await craftDeck(deck, async (zip, slides) => {
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
+                "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
+            await addSmartArt(zip, slides[0] as string, 1, 91)
+            await addSmartArt(zip, slides[0] as string, 2, 92)
+        })
+        await apply(deck, [ { op: "el.rm", slide: "title:A", name: "Diagramm 1" } ])
+        await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        await expectIntact(deck)
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const data = (await relatedPart(deck, 0, "diagramData"))?.part as string
+        const picture = /Target="\.\.\/media\/([^"]+)"/.exec(await text(zip, relsOf(data)))?.[1]
+        expect(await text(zip, `ppt/media/${picture as string}`)).toBe("smart-picture-2")
+    })
+
+    it("accepts single-quoted attributes on slides (no false E_INTEGRITY)", async () => {
+        const deck = path.join(TMP, "foreign-quotes.pptx")
+        await craftDeck(deck, async (zip, slides) => {
+            const b = slides[1] as string
+            zip.file("ppt/media/q.png", Buffer.from("quoted-picture"))
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ",
+                "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
+            await addRel(zip, b, "rId77", "image", "../media/q.png")
+            zip.file(b, (await text(zip, b)).replace("</p:spTree>",
+                "<p:pic><p:nvPicPr><p:cNvPr id='77' name='Bild'/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>"
+                + "<p:blipFill><a:blip r:embed='rId77'/></p:blipFill><p:spPr/></p:pic></p:spTree>"))
+        })
+        await apply(deck, [ { op: "slide.fill", slide: "title:A", notes: "n" } ])
+        await expectIntact(deck)
+        expect((await relatedPart(deck, 1, "image"))?.bytes.toString()).toBe("quoted-picture")
     })
 })

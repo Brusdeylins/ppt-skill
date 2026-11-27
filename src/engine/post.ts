@@ -18,7 +18,7 @@
 import JSZip from "jszip"
 import { readFileSync } from "node:fs"
 import path from "node:path"
-import type { Document, Element } from "@xmldom/xmldom"
+import type { Document, Element, Node } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
 import { inchToEmu, type Frame } from "../core/model.js"
 import { HLINK_ATTR } from "./text.js"
@@ -35,8 +35,19 @@ export interface SlideTagRef {
     relType: string
     /**  relationship target, relative to ppt/slides/  */
     target: string
-    /**  cNvPr id of the shape carrying the list, null for the slide's own  */
+    /**  shape carrying the list as `<cNvPr id>#<occurrence of that id>`,
+         null for the slide's own list  */
     owner: string | null
+}
+
+/**  a SmartArt of a source slide  */
+export interface DiagramSource {
+    /**  cNvPr id of the graphicFrame holding it  */
+    frame: string | null
+    /**  its data part  */
+    data: string
+    /**  its drawing part (linked from the data part), null when absent  */
+    drawing: string | null
 }
 
 /**  per-output-slide work items, in final slide order  */
@@ -59,8 +70,8 @@ export interface PostSlideWork {
     hidden: boolean
     /**  images to insert into picture placeholders  */
     images: { phIdx: number, path: string, frame?: Frame }[]
-    /**  source SmartArt data parts of a kept slide, in document order  */
-    diagrams: string[]
+    /**  source SmartArt of a kept slide: frame shape id, data and drawing part  */
+    diagrams: DiagramSource[]
     /**  slide-tags references (p:custDataLst) captured from the source
          slide, to restore after the automizer rebuild; empty = none  */
     slideTags: SlideTagRef[]
@@ -99,6 +110,12 @@ const removeParts = async (zip: JSZip, parts: string[]): Promise<void> => {
     zip.file("[Content_Types].xml", ct)
 }
 
+/**  the back-reference of a notes part to its slide: the /slide rel the
+     notes XML does not use (a used one is a hyperlink to another slide)  */
+const isBackref = (rel: Element, notesXml: string): boolean =>
+    (rel.getAttribute("Type") ?? "").endsWith("/slide")
+        && !notesXml.includes(`"${rel.getAttribute("Id") ?? ""}"`)
+
 /**  garbage-collect slide and notes parts no longer referenced  */
 const gcParts = async (zip: JSZip, kept: string[]): Promise<void> => {
     const keptSet = new Set(kept)
@@ -123,8 +140,9 @@ const gcParts = async (zip: JSZip, kept: string[]): Promise<void> => {
                 if (noteRelsText === undefined)
                     continue
                 const noteRels = parseXml(noteRelsText)
+                const notesXml = await zip.file(notesPart)?.async("string") ?? ""
                 for (const back of elements(noteRels, "Relationship"))
-                    if ((back.getAttribute("Type") ?? "").endsWith("/slide"))
+                    if (isBackref(back, notesXml))
                         back.setAttribute("Target", `../slides/${path.posix.basename(slide)}`)
                 zip.file(noteRelsPart, serializeXml(noteRels))
             }
@@ -273,10 +291,14 @@ const pruneUnusedSlideRels = (slide: Document, slideRels: Document, keep: Set<st
      part, which now holds another slide or nothing. A link to a removed
      slide is dropped together with its hyperlink.
      @returns whether the rels or the slide changed  */
-const remapSlideLinks = (owner: string, doc: Document | null, rels: Document, partMap: Map<string, string>): boolean => {
+const remapSlideLinks = (owner: string, doc: Document | null, rels: Document, partMap: Map<string, string>,
+    usedOnly = false): boolean => {
     let changed = false
+    const xml = usedOnly && doc !== null ? serializeXml(doc) : ""
     for (const rel of elements(rels, "Relationship")) {
         if (!/\/relationships\/slide$/.test(rel.getAttribute("Type") ?? "") || rel.getAttribute("TargetMode") === "External")
+            continue
+        if (usedOnly && !xml.includes(`"${rel.getAttribute("Id") ?? ""}"`))
             continue
         const target = rel.getAttribute("Target") ?? ""
         const input = path.posix.normalize(path.posix.join(path.posix.dirname(owner), target))
@@ -329,23 +351,35 @@ const remapCustomShows = async (zip: JSZip, inputRidToId: Record<string, number>
      (`dsp:dataModelExt relId`), not from the slide XML -- point it at the
      drawing of the same number and keep that rel from being pruned.
      @returns the ids of the drawing rels to keep  */
-const wireDiagrams = async (zip: JSZip, slide: Document, slideRels: Document, sources: string[]): Promise<Set<string>> => {
+const wireDiagrams = async (zip: JSZip, slide: Document, slideRels: Document, sources: DiagramSource[]): Promise<Set<string>> => {
     const keep = new Set<string>()
     const rels = elements(slideRels, "Relationship")
     const targetOf = new Map(rels.map((r) => [ r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? "" ]))
-    const dataRefs = elements(slide, "dgm:relIds").map((el) => targetOf.get(el.getAttribute("r:dm") ?? "") ?? "")
-    for (const [ k, target ] of dataRefs.entries()) {
-        const n = /data(\d+)\.xml$/.exec(target)?.[1]
+    const unused = [ ...sources ]
+    for (const relIds of elements(slide, "dgm:relIds")) {
+        const n = /data(\d+)\.xml$/.exec(targetOf.get(relIds.getAttribute("r:dm") ?? "") ?? "")?.[1]
         if (n === undefined)
             continue
-        const source = /data(\d+)\.xml$/.exec(sources[k] ?? "")?.[1]
-        if (source !== undefined && source !== n)
-            for (const kind of [ "data", "drawing" ]) {
-                const from = zip.file(`ppt/diagrams/_rels/${kind}${source}.xml.rels`)
-                const to = `ppt/diagrams/_rels/${kind}${n}.xml.rels`
-                if (from !== null && zip.file(to) === null)
-                    zip.file(to, await from.async("string"))
+
+        /*  the source SmartArt of this frame, by the frame's shape id  */
+        let frame: Node | null = relIds
+        while (frame !== null && frame.nodeName !== "p:graphicFrame")
+            frame = frame.parentNode
+        const frameId = frame === null ? null : firstElement(frame as Element, "p:cNvPr")?.getAttribute("id") ?? null
+        const k = unused.findIndex((src) => src.frame === frameId)
+        const src = k < 0 ? undefined : unused.splice(k, 1)[0]
+        const copy = async (from: string, to: string): Promise<void> => {
+            const file = zip.file(from)
+            if (file !== null && from !== to)
+                zip.file(to, await file.async("uint8array"))
+        }
+        if (src !== undefined) {
+            await copy(`ppt/diagrams/_rels/${path.posix.basename(src.data)}.rels`, `ppt/diagrams/_rels/data${n}.xml.rels`)
+            if (src.drawing !== null) {
+                await copy(src.drawing, `ppt/diagrams/drawing${n}.xml`)
+                await copy(`ppt/diagrams/_rels/${path.posix.basename(src.drawing)}.rels`, `ppt/diagrams/_rels/drawing${n}.xml.rels`)
             }
+        }
         const drawingRel = rels.find((r) => (r.getAttribute("Type") ?? "").endsWith("/diagramDrawing")
             && r.getAttribute("Target") === `../diagrams/drawing${n}.xml`)
         const dataPart = `ppt/diagrams/data${n}.xml`
@@ -361,9 +395,10 @@ const wireDiagrams = async (zip: JSZip, slide: Document, slideRels: Document, so
 
 /**  parts automizer copies per slide on every apply (charts with their
      drawings and theme overrides, SmartArt, embeddings, media) plus slide
-     comments; unreachable ones (e.g. of a removed slide) are garbage.
+     comments and tags; unreachable ones (e.g. of a removed slide) are
+     garbage.
      Mirrored by the orphan check in engine/verify.ts.  */
-export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
+export const ASSET_PART = /^ppt\/(charts|embeddings|media|diagrams|drawings|comments|tags)\/|^ppt\/theme\/themeOverride[^/]*\.xml$/
 
 /**  normalise embedded workbook names: automizer appends `-created-<n>` to
      the name it read, so it grows by one suffix per apply and chart
@@ -707,8 +742,9 @@ const dedupeSharedNotes = async (zip: JSZip, slides: string[]): Promise<void> =>
     const setBackref = async (notesPart: string, slidePart: string): Promise<void> => {
         const relsPart = `ppt/notesSlides/_rels/${path.posix.basename(notesPart)}.rels`
         const doc = parseXml(await partText(zip, relsPart))
+        const notesXml = await zip.file(notesPart)?.async("string") ?? ""
         for (const back of elements(doc, "Relationship"))
-            if ((back.getAttribute("Type") ?? "").endsWith("/slide"))
+            if (isBackref(back, notesXml))
                 back.setAttribute("Target", `../slides/${path.posix.basename(slidePart)}`)
         zip.file(relsPart, serializeXml(doc))
     }
@@ -740,7 +776,7 @@ const dedupeSharedNotes = async (zip: JSZip, slides: string[]): Promise<void> =>
      @returns the clone's part name  */
 const clonePart = async (zip: JSZip, part: string): Promise<string> => {
     const ext = path.posix.extname(part)
-    const stem = part.slice(0, part.length - ext.length)
+    const stem = part.slice(0, part.length - ext.length).replace(/(-pptc-\d+)+$/, "")
     let n = 2
     let clone = `${stem}-pptc-${n}${ext}`
     while (zip.file(clone) !== null)
@@ -830,7 +866,8 @@ const restoreSlideTags = async (post: Post, slide: Document, slideRels: Document
             cSld.insertBefore(lst, spTree.nextSibling)
             continue
         }
-        const cNvPr = elements(slide, "p:cNvPr").find((el) => el.getAttribute("id") === owner)
+        const [ shapeId, nth ] = owner.split("#")
+        const cNvPr = elements(slide, "p:cNvPr").filter((el) => el.getAttribute("id") === shapeId)[Number(nth ?? "0")]
         const nvPr = cNvPr === undefined ? undefined
             : elements(cNvPr.parentNode as Element, "p:nvPr").find((el) => el.parentNode === cNvPr.parentNode)
         if (nvPr !== undefined)
@@ -1081,6 +1118,20 @@ export const postProcess = async (
         if (job !== undefined || idsChanged || relsChanged || linksChanged) {
             zip.file(slidePart, serializeXml(slide))
             zip.file(relsPart, serializeXml(slideRels))
+        }
+    }
+    /*  slide links hosted outside slides: action buttons on masters and
+        layouts, hyperlinks in SmartArt and in notes  */
+    for (const relsPart of Object.keys(zip.files).filter((f) =>
+        /^ppt\/(slideMasters|slideLayouts|diagrams|notesSlides)\/_rels\/[^/]+\.rels$/.test(f))) {
+        const owner = relsPart.replace(/_rels\/([^/]+)\.rels$/, "$1")
+        if (zip.file(owner) === null)
+            continue
+        const relsDoc = parseXml(await partText(zip, relsPart))
+        const ownerDoc = parseXml(await partText(zip, owner))
+        if (remapSlideLinks(owner, ownerDoc, relsDoc, partMap, owner.startsWith("ppt/notesSlides/"))) {
+            zip.file(relsPart, serializeXml(relsDoc))
+            zip.file(owner, serializeXml(ownerDoc))
         }
     }
     if (props !== null)

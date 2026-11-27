@@ -73,7 +73,10 @@
   Slide-to-slide hyperlinks (agenda/navigation, outline view) still named
   the input slide part, which after an apply holds another slide or none:
   they now point at the same slide again, and a link to a removed slide is
-  dropped with its hyperlink. Custom shows are re-pointed the same way
+  dropped with its hyperlink -- also for links hosted on masters and
+  layouts (action buttons), in SmartArt and in notes (a notes hyperlink to
+  another slide is no longer mistaken for the notes' back-reference).
+  Custom shows are re-pointed the same way
   (they dangled after every apply); `verify` reports any `r:id` in
   `presentation.xml` without a relationship. Sections stay contiguous after
   `slide.move` and `slide.copy`: moved, copied and new slides join their

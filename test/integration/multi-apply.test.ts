@@ -18,7 +18,7 @@ import { buildEmptyDeck } from "../../src/engine/seed.js"
 import { DeckArchive, readDeckState } from "../../src/engine/reader.js"
 import { expectIntact } from "../util/integrity.js"
 import { executeOps, type ExecuteOptions } from "../../src/commands/apply.js"
-import { verifyContent, type SlideExpect } from "../../src/engine/guard.js"
+import { digestBytes, verifyContent, type SlideExpect } from "../../src/engine/guard.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
@@ -207,6 +207,26 @@ describe("content guard", () => {
         gone.file(slideRels, (await (gone.file(slideRels) as JSZip.JSZipObject).async("string"))
             .replace(/<Relationship [^>]*\/image"[^>]*\/>/, ""))
         expect(await verifyContent(before, gone, expects)).toEqual({ blocked: [], lost: [ { slide: 0, what: "image" } ] })
+
+        /*  ... unless an op replaced the slide's text (picture bullets go with it)  */
+        expect(await verifyContent(before, gone, [ { ...expects[0] as SlideExpect, textReplaced: true } ]))
+            .toEqual({ blocked: [], lost: [] })
+
+        /*  el.add ("grow"): the planned image is expected by content, a foreign one blocks  */
+        const grown = async (bytes: Buffer): Promise<JSZip> => {
+            const zip = await JSZip.loadAsync(readFileSync(deck))
+            zip.file("ppt/media/extra.png", bytes)
+            zip.file(slideRels, (await (zip.file(slideRels) as JSZip.JSZipObject).async("string")).replace("</Relationships>",
+                "<Relationship Id=\"rId77\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/extra.png\"/></Relationships>"))
+            const slideXml = await (zip.file(part) as JSZip.JSZipObject).async("string")
+            zip.file(part, slideXml.replace("</p:spTree>", "<p:pic><p:blipFill><a:blip r:embed=\"rId77\"/></p:blipFill></p:pic></p:spTree>"))
+            return zip
+        }
+        const planned = Buffer.from("planned-image")
+        const grow: SlideExpect = { ...expects[0] as SlideExpect, assets: "grow",
+            grow: { images: [ digestBytes(planned) ], fallbacks: 0, charts: 0 } }
+        expect(await verifyContent(before, await grown(planned), [ grow ])).toEqual({ blocked: [], lost: [] })
+        expect((await verifyContent(before, await grown(Buffer.from("foreign")), [ grow ])).blocked).toHaveLength(1)
     })
 })
 

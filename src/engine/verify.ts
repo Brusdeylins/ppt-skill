@@ -68,7 +68,7 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
     /*  3. every internal relationship target must exist; rel ids unique  */
     for (const n of names)
         if (n.endsWith(".rels")) {
-            const relIds = [...(await text(n)).matchAll(/<Relationship Id="([^"]+)"/g)].map((m) => m[1])
+            const relIds = [...(await text(n)).matchAll(/<Relationship\b[^>]*>/g)].map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1])
             const dupIds = [...new Set(relIds.filter((id) => relIds.indexOf(id) !== relIds.lastIndexOf(id)))]
             if (dupIds.length > 0)
                 findings.push(`${n}: duplicate relationship ids ${dupIds.join(",")}`)
@@ -104,8 +104,8 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
     /*  6. every sldId in the presentation must resolve to a slide part  */
     const pres = await text("ppt/presentation.xml")
     const rels = await text("ppt/_rels/presentation.xml.rels")
-    const relMap = new Map([...rels.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)]
-        .map((m) => [m[1] as string, m[2] as string]))
+    const relMap = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)]
+        .map((m) => [/\bId="([^"]+)"/.exec(m[0])?.[1] ?? "", /\bTarget="([^"]+)"/.exec(m[0])?.[1] ?? ""]))
     for (const m of pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)) {
         const target = relMap.get(m[1] as string)
         if (target === undefined || !names.has(path.posix.normalize(path.posix.join("ppt", target))))
@@ -135,9 +135,11 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
         dead-target check (#3) misses them, and a thousand-strong rels file
         makes PowerPoint demand a repair. Every /slide rel must be live.  */
     const liveSlideRids = new Set([...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map((m) => m[1]))
-    for (const m of rels.matchAll(/<Relationship Id="([^"]+)"[^>]*Type="[^"]*\/slide"[^>]*\/>/g))
-        if (!liveSlideRids.has(m[1] as string))
-            findings.push(`presentation.xml.rels: dangling slide relationship ${m[1]} (no sldId references it)`)
+    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+        const id = /\bId="([^"]+)"/.exec(m[0])?.[1] ?? ""
+        if (/\bType="[^"]*\/slide"/.test(m[0]) && !liveSlideRids.has(id))
+            findings.push(`presentation.xml.rels: dangling slide relationship ${id} (no sldId references it)`)
+    }
 
     /*  7b. section slide references must resolve to existing sldIds  */
     const realIds = new Set([...pres.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => m[1] as string))

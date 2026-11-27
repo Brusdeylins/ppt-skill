@@ -15,16 +15,16 @@ import "./automizer-patches.js"
 import { readFileSync, rmSync } from "node:fs"
 import JSZip from "jszip"
 import path from "node:path"
-import type { Document, Element } from "@xmldom/xmldom"
+import type { Document, Element, Node } from "@xmldom/xmldom"
 import { PptcError, toPptcError } from "../infra/errors.js"
 import type { MutationPlan, SlidePlanEntry } from "../core/ops/registry.js"
 import { atomicWrite, cacheDir } from "../infra/fs.js"
 import { addElement, type GenRoot, type GenSlide } from "./elements.js"
-import { postProcess, type PostSlideWork, type SlideTagRef } from "./post.js"
+import { postProcess, type DiagramSource, type PostSlideWork, type SlideTagRef } from "./post.js"
 import type { DeckArchive } from "./reader.js"
 import { elements, firstElement, parseXml } from "./xml.js"
 import { verifyBytes } from "./verify.js"
-import { verifyContent, type SlideExpect } from "./guard.js"
+import { digestBytes, verifyContent, type SlideExpect } from "./guard.js"
 import type { LintWarning } from "../core/lint.js"
 import { ensureSeed, ensureSeedFromDeck } from "./seed.js"
 import { setShapeText } from "./text.js"
@@ -94,8 +94,12 @@ const selectorFor = (source: Document | null, name: string, pick: (shape: Elemen
             if (cNvPr.getAttribute("name") !== name)
                 continue
             if (pick(cNvPr.parentNode?.parentNode as Element)) {
+
+                /*  a creation id helps only when it is unique on the slide  */
                 const creationId = firstElement(cNvPr, "a16:creationId")?.getAttribute("id") ?? ""
-                return { name, nameIdx: n, ...(creationId !== "" && { creationId }) }
+                const unique = creationId !== "" && elements(source, "a16:creationId")
+                    .filter((el) => el.getAttribute("id") === creationId).length === 1
+                return { name, nameIdx: n, ...(unique && { creationId }) }
             }
             n++
         }
@@ -138,13 +142,14 @@ const slideCallback = (entry: SlidePlanEntry, source: Document | null) =>
                 planned.name ?? undefined)
     }
 
-/**  the SmartArt data parts of every re-imported source slide, in plan
-     order and document order (the post-pass maps them to their copies)  */
-const captureDiagramSources = async (archive: DeckArchive, plan: MutationPlan): Promise<string[][]> => {
-    const out: string[][] = []
+/**  the SmartArt of every re-imported source slide, in plan order: frame
+     shape id, data part and the drawing part its data part links to (the
+     post-pass maps them to automizer's renumbered copies)  */
+const captureDiagramSources = async (archive: DeckArchive, plan: MutationPlan): Promise<DiagramSource[][]> => {
+    const out: DiagramSource[][] = []
     for (const entry of plan.entries) {
-        const parts: string[] = []
-        out.push(parts)
+        const found: DiagramSource[] = []
+        out.push(found)
         if (entry.source.kind !== "self")
             continue
         const part = entry.source.part
@@ -154,8 +159,24 @@ const captureDiagramSources = async (archive: DeckArchive, plan: MutationPlan): 
         const rels = await archive.xml(`ppt/slides/_rels/${path.posix.basename(part)}.rels`)
         const targetOf = new Map(elements(rels, "Relationship").map((r) =>
             [ r.getAttribute("Id") ?? "", r.getAttribute("Target") ?? "" ]))
-        for (const el of elements(parseXml(slideText), "dgm:relIds"))
-            parts.push(path.posix.normalize(path.posix.join("ppt/slides", targetOf.get(el.getAttribute("r:dm") ?? "") ?? "")))
+        const resolve = (rid: string): string | null => {
+            const target = targetOf.get(rid)
+            return target === undefined ? null : path.posix.normalize(path.posix.join("ppt/slides", target))
+        }
+        for (const el of elements(parseXml(slideText), "dgm:relIds")) {
+            const data = resolve(el.getAttribute("r:dm") ?? "")
+            if (data === null)
+                continue
+            let frame: Node | null = el
+            while (frame !== null && frame.nodeName !== "p:graphicFrame")
+                frame = frame.parentNode
+            const relId = /<dsp:dataModelExt\b[^>]*?\brelId="([^"]+)"/.exec(await archive.text(data) ?? "")?.[1]
+            found.push({
+                frame: frame === null ? null : firstElement(frame as Element, "p:cNvPr")?.getAttribute("id") ?? null,
+                data,
+                drawing: relId === undefined ? null : resolve(relId)
+            })
+        }
     }
     return out
 }
@@ -185,11 +206,16 @@ const captureSlideTags = async (archive: DeckArchive, plan: MutationPlan): Promi
 
         /*  the slide's own list (child of p:cSld) and every shape's list
             (child of its p:nvPr, think-cell per-shape tags), keyed by owner  */
-        for (const lst of elements(parseXml(slideText), "p:custDataLst")) {
+        const slideDoc = parseXml(slideText)
+        const allCNvPr = elements(slideDoc, "p:cNvPr")
+        for (const lst of elements(slideDoc, "p:custDataLst")) {
             const parent = lst.parentNode as Element | null
-            const owner = parent?.nodeName === "p:nvPr"
-                ? firstElement(parent.parentNode as Element, "p:cNvPr")?.getAttribute("id") ?? null
-                : null
+            const cNvPr = parent?.nodeName === "p:nvPr" ? firstElement(parent.parentNode as Element, "p:cNvPr") : null
+            const shapeId = cNvPr?.getAttribute("id") ?? null
+
+            /*  owner = shape id plus its occurrence (ids may repeat on a slide)  */
+            const owner = cNvPr === null || shapeId === null ? null
+                : `${shapeId}#${allCNvPr.filter((el) => el.getAttribute("id") === shapeId).indexOf(cNvPr)}`
             if (parent?.nodeName === "p:nvPr" && owner === null)
                 continue
             const tagsEl = firstElement(lst, "p:tags")
@@ -264,7 +290,7 @@ const executePlan = async (
         background: entry.background,
         hidden: entry.hidden,
         slideTags: slideTags[i] as SlideTagRef[],
-        diagrams: diagramSources[i] as string[],
+        diagrams: diagramSources[i] as DiagramSource[],
         images: entry.fills
             .filter((f) => f.image !== undefined)
             .map((f) => ({
@@ -285,7 +311,13 @@ const executePlan = async (
         label: `id:${(work[i] as PostSlideWork).slideId} '${entry.title ?? ""}'`,
         notes: entry.notes !== null,
         assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
-            ? "any" : entry.elements.length > 0 ? "grow" : "same"
+            ? "any" : entry.elements.length > 0 ? "grow" : "same",
+        grow: {
+            images: entry.elements.flatMap((e) => e.spec.type === "image" ? [ digestBytes(readFileSync(e.spec.path)) ] : []),
+            fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
+            charts: entry.elements.filter((e) => e.spec.type === "chart").length
+        },
+        textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append)
     }))
     const content = await verifyContent(archive.zip, await JSZip.loadAsync(finalBytes), expects)
     const findings = [ ...await verifyBytes(finalBytes, archive.zip), ...content.blocked ]
