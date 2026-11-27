@@ -11,6 +11,7 @@
 */
 
 import automizerPkg from "pptx-automizer"
+import { CountHelper } from "pptx-automizer/dist/helper/count-helper.js"
 import { readFileSync, rmSync } from "node:fs"
 import path from "node:path"
 import type { Element } from "@xmldom/xmldom"
@@ -35,6 +36,15 @@ const unwrapDefault = (mod: unknown): new (params: Record<string, unknown>) => I
     return candidate as new (params: Record<string, unknown>) => InstanceType<typeof automizerPkg.default>
 }
 const Automizer = unwrapDefault(automizerPkg)
+
+/*  automizer names new media `media<N>` with N counted from the `image*` files
+    only, so a later apply re-uses a taken name and overwrites media of other
+    slides. Start the counter at the highest number of any media file instead.  */
+type MediaArchive = { folder(dir: string): Promise<{ relativePath: string }[]> }
+;(CountHelper as unknown as { countImages: (archive: MediaArchive) => Promise<number> })
+    .countImages = async (archive: MediaArchive): Promise<number> =>
+        Math.max(0, ...(await archive.folder("ppt/media")).map((file) =>
+            Number(/^(?:image|media)(\d+)\./.exec(file.relativePath)?.[1] ?? "0")))
 
 /**  result facts of an executed session  */
 export interface SessionResult {
@@ -187,7 +197,7 @@ const executePlan = async (
         PowerPoint "repair" trigger, so a finding here is a residual defect.
         Fail atomically rather than emit a .pptx the user only discovers is
         broken when PowerPoint refuses to open it. The target stays untouched.  */
-    const findings = await verifyBytes(finalBytes)
+    const findings = await verifyBytes(finalBytes, archive.zip)
     if (findings.length > 0)
         throw new PptcError("E_INTEGRITY",
             `the engine produced ${findings.length} integrity violation(s); deck not written`,

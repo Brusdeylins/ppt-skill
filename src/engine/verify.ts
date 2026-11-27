@@ -202,10 +202,23 @@ export const verifyArchive = async (zip: JSZip): Promise<string[]> => {
  *  Validate a deck given its bytes.
  *
  *  @param bytes - the .pptx contents
+ *  @param before - optional pre-apply archive to detect overwritten media
  *  @returns list of findings; empty when clean
  */
-export const verifyBytes = async (bytes: Buffer): Promise<string[]> =>
-    await verifyArchive(await JSZip.loadAsync(bytes))
+export const verifyBytes = async (bytes: Buffer, before?: JSZip): Promise<string[]> => {
+    const zip = await JSZip.loadAsync(bytes)
+    const findings = await verifyArchive(zip)
+
+    /*  with the pre-apply archive: a media file kept under its name must keep
+        its bytes, or another slide silently shows the new image  */
+    if (before !== undefined)
+        for (const n of Object.keys(before.files).filter((f) => f.startsWith("ppt/media/") && !f.endsWith("/"))) {
+            const after = zip.file(n)
+            if (after !== null && !(await after.async("nodebuffer")).equals(await (before.file(n) as JSZip.JSZipObject).async("nodebuffer")))
+                findings.push(`${n}: existing media file overwritten with different content`)
+        }
+    return findings
+}
 
 /**
  *  Validate a deck file on disk.

@@ -762,7 +762,10 @@ export const postProcess = async (
     const slides = await referencedSlides(zip)
     await gcParts(zip, slides)
 
-    let mediaSeq = 1
+    /*  continue after the pptcImage media of EARLIER applies, or a new
+        placeholder image overwrites the image of another slide  */
+    let mediaSeq = 1 + Math.max(0, ...Object.keys(zip.files).map((f) =>
+        Number(/^ppt\/media\/pptcImage(\d+)\./.exec(f)?.[1] ?? "0")))
     for (let i = 0; i < slides.length; i++) {
         const slidePart = slides[i] as string
         const job = work[i]

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: images added in a later apply overwrote media of other slides.**
+  `pptx-automizer` numbers new media `media<N>` from a count of the
+  `image*` files only, so every apply re-used the same name and replaced
+  an existing image (e.g. `media12.svg`); the other slide silently showed
+  the new picture. The counter now starts at the highest number of any
+  `image*`/`media*` file. Picture placeholder images (`pptcImage<N>`) had
+  the same flaw and now continue after the existing numbers.
+- **Self-verify catches overwritten media.** `apply` fails with
+  `E_INTEGRITY` (deck untouched) if a media file that existed before the
+  apply changed its content.
+
 ## 1.0.10
 
 - **Removed the version banner and every update check.** The skills no
