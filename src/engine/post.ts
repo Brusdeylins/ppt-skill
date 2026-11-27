@@ -38,6 +38,9 @@ export interface SlideTagRef {
 
 /**  per-output-slide work items, in final slide order  */
 export interface PostSlideWork {
+    /**  sldId of the output slide: the original id for kept slides, a fresh
+         one (above every id of the input deck) for new and copied slides  */
+    slideId: number
     /**  speaker notes text to set, null = leave untouched  */
     notes: string | null
     /**  footer text to clone in from the layout, null = leave untouched  */
@@ -146,18 +149,54 @@ const gcParts = async (zip: JSZip, kept: string[]): Promise<void> => {
         zip.file(presRelsPart, serializeXml(presRels))
 }
 
-/**  drop section slide references whose sldId vanished (user-created
-     sections survive edits; stale refs would point at removed slides)  */
-const pruneSectionRefs = async (zip: JSZip): Promise<void> => {
+/**  give every output slide its planned sldId back: automizer renumbers the
+     ids by position on every write, which silently re-targets `id:`
+     selectors and shifts section membership  */
+const restoreSlideIds = async (zip: JSZip, ids: number[]): Promise<void> => {
+    const part = "ppt/presentation.xml"
+    const pres = parseXml(await partText(zip, part))
+    const sldIds = elements(pres, "p:sldId")
+    if (sldIds.length !== ids.length)
+        throw new PptcError("E_ENGINE", `slide id restore: ${sldIds.length} slides, ${ids.length} planned`)
+    sldIds.forEach((s, i) => s.setAttribute("id", String(ids[i])))
+    zip.file(part, serializeXml(pres))
+}
+
+/**  sync user-created sections with the slide list: drop refs to removed
+     slides, and put each new slide into the section of its predecessor
+     (the first section when it leads the deck), as PowerPoint does  */
+const syncSectionRefs = async (zip: JSZip): Promise<void> => {
     const part = "ppt/presentation.xml"
     const xml = await partText(zip, part)
     if (!xml.includes("<p14:sectionLst"))
         return
-    const ids = new Set([...xml.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g)].map((m) => m[1] as string))
-    const out = xml.replace(/<p14:sldId id="(\d+)"[^>]*\/>/g,
-        (m, id: string) => ids.has(id) ? m : "")
-    if (out !== xml)
-        zip.file(part, out)
+    const pres = parseXml(xml)
+    const order = elements(pres, "p:sldId").map((s) => s.getAttribute("id") ?? "")
+    const live = new Set(order)
+    const refOf = new Map<string, Element>()
+    for (const ref of elements(pres, "p14:sldId")) {
+        const id = ref.getAttribute("id") ?? ""
+        if (live.has(id) && !refOf.has(id))
+            refOf.set(id, ref)
+        else
+            ref.parentNode?.removeChild(ref)
+    }
+    const firstList = firstElement(pres, "p14:sldIdLst")
+    if (firstList === null)
+        return
+    order.forEach((id, i) => {
+        if (refOf.has(id))
+            return
+        const ref = pres.createElementNS(firstList.namespaceURI, "p14:sldId")
+        ref.setAttribute("id", id)
+        const prev = i > 0 ? refOf.get(order[i - 1] as string) : undefined
+        if (prev !== undefined)
+            prev.parentNode?.insertBefore(ref, prev.nextSibling)
+        else
+            firstList.insertBefore(ref, firstList.firstChild)
+        refOf.set(id, ref)
+    })
+    zip.file(part, serializeXml(pres))
 }
 
 /**  rel types that are never referenced from the slide XML itself  */
@@ -425,10 +464,19 @@ const ensureNotesOverride = async (zip: JSZip, notesPart: string): Promise<void>
             `<Override PartName="/${notesPart}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/></Types>`))
 }
 
+/**  first free pptc notes part name -- never derived from the slide part
+     name, which automizer renumbers on every apply (a later slide with the
+     same number would overwrite the notes of another slide)  */
+const freeNotesPart = (zip: JSZip): string => {
+    let n = 1
+    while (zip.file(`ppt/notesSlides/notesSlide-pptc-${n}.xml`) !== null)
+        n++
+    return `ppt/notesSlides/notesSlide-pptc-${n}.xml`
+}
+
 /**  write speaker notes: create or replace the slide's notesSlide part  */
 const setNotes = async (post: Post, slidePart: string, slideRels: Document, text: string): Promise<void> => {
-    const base = path.posix.basename(slidePart, ".xml")
-    const notesPart = `ppt/notesSlides/notesSlide-pptc-${base}.xml`
+    const notesPart = freeNotesPart(post.zip)
     const escaped = text.split("\n").map((line) =>
         `<a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("")
     post.zip.file(notesPart,
@@ -473,13 +521,11 @@ const wireHyperlinks = (post: Post, slide: Document, slideRels: Document): void 
     }
 }
 
-/**  ensure every slide owns its own notesSlide. The pptc notes part name is
-     derived from the slide part basename, but pptx-automizer renumbers slide
-     parts across applies, so a stale notes rel can survive on a slide whose
-     basename no longer matches -- leaving two slides pointing at one notes
-     part that carries a single back-reference. PowerPoint repairs that. Any
-     shared pptc notes part is cloned so each referencing slide gets its own,
-     with a back-reference to it.  */
+/**  ensure every slide owns its own notesSlide. automizer does not copy
+     pptc notes parts on re-import, so a copied slide (or a deck from an
+     older pptc) can leave two slides pointing at one notes part with a
+     single back-reference. PowerPoint repairs that. Any shared pptc notes
+     part is cloned so each referencing slide gets its own.  */
 const dedupeSharedNotes = async (zip: JSZip, slides: string[]): Promise<void> => {
     /*  notes part -> referencing slide parts, in slide order  */
     const refs = new Map<string, string[]>()
@@ -509,9 +555,7 @@ const dedupeSharedNotes = async (zip: JSZip, slides: string[]): Promise<void> =>
         await setBackref(notesPart, owners[0] as string)
         for (let i = 1; i < owners.length; i++) {
             const slidePart = owners[i] as string
-            let clone = `ppt/notesSlides/notesSlide-pptc-${path.posix.basename(slidePart, ".xml")}.xml`
-            if (clone === notesPart || zip.file(clone) !== null)
-                clone = `ppt/notesSlides/notesSlide-pptc-${path.posix.basename(slidePart, ".xml")}-${i}.xml`
+            const clone = freeNotesPart(zip)
             zip.file(clone, await partText(zip, notesPart))
             zip.file(`ppt/notesSlides/_rels/${path.posix.basename(clone)}.rels`,
                 await partText(zip, `ppt/notesSlides/_rels/${path.posix.basename(notesPart)}.rels`))
@@ -761,6 +805,7 @@ export const postProcess = async (
     const post: Post = { zip, rid: maxRid + 1, tagsSeen: new Set() }
     const slides = await referencedSlides(zip)
     await gcParts(zip, slides)
+    await restoreSlideIds(zip, work.map((w) => w.slideId))
 
     /*  continue after the pptcImage media of EARLIER applies, or a new
         placeholder image overwrites the image of another slide  */
@@ -813,8 +858,10 @@ export const postProcess = async (
     /*  final sweeps: orphan assets, stale section refs and stale or
         duplicate content-type overrides accumulate across applies  */
     await dedupeSharedNotes(zip, slides)
+    /*  replaced notes leave their old part behind -- sweep it now  */
+    await gcParts(zip, slides)
     await gcAssets(zip)
-    await pruneSectionRefs(zip)
+    await syncSectionRefs(zip)
     await cleanContentTypes(zip)
     await syncAppProperties(zip, slides)
     return await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })

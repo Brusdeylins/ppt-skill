@@ -9,6 +9,19 @@
   the new picture. The counter now starts at the highest number of any
   `image*`/`media*` file. Picture placeholder images (`pptcImage<N>`) had
   the same flaw and now continue after the existing numbers.
+- **Fix: speaker notes jumped to another slide.** The pptc notes part was
+  named after the slide part (`notesSlide-pptc-slide4.xml`), but slide
+  parts are renumbered on every apply, so a later slide with the same
+  number overwrote the notes of another slide (or the deck got stuck on
+  `E_INTEGRITY` for a shared notes part). Notes parts now get the first
+  free `notesSlide-pptc-<n>.xml`; replaced notes no longer leave the old
+  part behind.
+- **Fix: slide ids are stable now.** automizer renumbered every `sldId`
+  by position on each write, so `id:` selectors silently hit another slide
+  after an insert, remove or move, and section membership shifted. Kept
+  slides keep their id; new and copied slides get an id above every id of
+  the input deck (a removed id is never re-used). New slides join the
+  section of their predecessor.
 - **Self-verify catches overwritten media.** `apply` fails with
   `E_INTEGRITY` (deck untouched) if a media file that existed before the
   apply changed its content.

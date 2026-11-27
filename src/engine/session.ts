@@ -178,7 +178,12 @@ const executePlan = async (
     }
     await pres.write(tmpName)
 
+    /*  new and copied slides get ids above every id of the input deck, so a
+        stale `id:` of a removed slide never silently hits a new slide  */
+    const presXml = await archive.zip.file("ppt/presentation.xml")?.async("string") ?? ""
+    let nextId = Math.max(255, ...[ ...presXml.matchAll(/<p:sldId [^>]*\bid="(\d+)"/g) ].map((m) => Number(m[1])))
     const work: PostSlideWork[] = plan.entries.map((entry, i) => ({
+        slideId: entry.virtualId > 0 ? entry.virtualId : ++nextId,
         notes: entry.notes,
         footer: entry.footer,
         background: entry.background,
