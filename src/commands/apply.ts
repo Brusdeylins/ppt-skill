@@ -8,12 +8,14 @@
 **  only then executes the engine session with one atomic write.
 */
 
+import path from "node:path"
 import { PptcError } from "../infra/errors.js"
 import { planOps } from "../core/ops/planner.js"
 import { OpsDocumentSchema, type OpsDocument } from "../schema/ops.js"
 import { DeckArchive, readDeckState, readTemplateInfo } from "../engine/reader.js"
 import type { Layout } from "../core/model.js"
 import { runSession } from "../engine/session.js"
+import { IMAGE_TYPES } from "../engine/post.js"
 import { parseJson, requireFile, resolvePayload } from "../infra/fs.js"
 import { parse, type Parsed } from "../infra/args.js"
 import { DEFAULT_MIN_FONT_PT, type LintWarning } from "../core/lint.js"
@@ -113,6 +115,21 @@ export const executeOps = async (
 
     /*  plan everything before touching anything  */
     const plan = planOps(doc, deck, deckInfo.layouts, template, opts.minFontPt)
+    /*  image files are read by the engine only: check them now, so that
+        --dry-run already reports a missing or unsupported file  */
+    for (const entry of plan.entries) {
+        for (const fill of entry.fills)
+            if (fill.image !== undefined) {
+                requireFile(fill.image, "image")
+                const ext = path.extname(fill.image).slice(1).toLowerCase()
+                if (IMAGE_TYPES[ext] === undefined)
+                    throw new PptcError("E_SCHEMA", `unsupported image type '.${ext}' for a picture placeholder`,
+                        { supported: Object.keys(IMAGE_TYPES) })
+            }
+        for (const el of entry.elements)
+            if (el.spec.type === "image")
+                requireFile(el.spec.path, "image")
+    }
     if (opts.strict && plan.warnings.length > 0)
         throw new PptcError("E_LINT",
             `${plan.warnings.length} lint finding(s) under --strict`,

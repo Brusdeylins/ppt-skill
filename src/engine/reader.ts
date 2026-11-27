@@ -542,7 +542,8 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
         const part = path.posix.normalize(path.posix.join("ppt", target))
         const partBase = path.posix.basename(part)
         const slideXmlText = await archive.text(part) ?? ""
-        hashParts.push(`${id}:${slideXmlText}`)
+        hashParts.push(`${id}:${slideXmlText}`,
+            await archive.text(`ppt/slides/_rels/${partBase}.rels`) ?? "")
         const doc = parseXml(slideXmlText)
 
         /*  layout of this slide  */
@@ -643,7 +644,9 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
 
     return {
         file: archive.file,
-        rev: contentHash(...hashParts, JSON.stringify(slides.map((s) => s.id))),
+        /*  notes live in their own part: hash them too, or a notes-only edit
+            by someone else would pass an --expect-rev check  */
+        rev: contentHash(...hashParts, JSON.stringify(slides.map((s) => [ s.id, s.notes ]))),
         slideSize: info.slideSize,
         slides,
         customProps

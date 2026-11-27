@@ -11,13 +11,14 @@
 */
 
 import JSZip from "jszip"
-import { readFileSync, writeFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
 import path from "node:path"
 import type { Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
 import { seedPlaceholderName } from "../core/model.js"
-import { cacheDir, contentHash } from "../infra/fs.js"
+import { atomicWrite, cacheDir, contentHash } from "../infra/fs.js"
 import { cleanContentTypes } from "./parts.js"
+import { gcAssets } from "./post.js"
 import { NS_A, elements, firstElement, parseXml, serializeElement } from "./xml.js"
 
 /**  seed format generation: bump to invalidate all cached seeds  */
@@ -180,7 +181,9 @@ export const buildSeed = async (templateBytes: Buffer): Promise<{ bytes: Buffer,
     zip.file("ppt/_rels/presentation.xml.rels", presRels.replace("</Relationships>", `${rels}</Relationships>`))
 
     /*  templates may carry stale or duplicate content-type overrides
-        of their own -- sweep them so every derived deck starts clean  */
+        of their own -- sweep them so every derived deck starts clean; a
+        seed derived from a deck also drops the media of its removed slides  */
+    await gcAssets(zip)
     await cleanContentTypes(zip)
 
     return {
@@ -199,11 +202,32 @@ export const buildSeed = async (templateBytes: Buffer): Promise<{ bytes: Buffer,
  */
 export const ensureSeed = async (templatePath: string): Promise<string> => {
     const bytes = readFileSync(templatePath)
-    const seedPath = path.join(cacheDir(), `seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`)
-    if (!existsSync(seedPath)) {
-        const seed = await buildSeed(bytes)
-        writeFileSync(seedPath, seed.bytes)
+    return await cachedSeed(`seed-${SEED_FORMAT}-${contentHash(bytes)}.pptx`, bytes)
+}
+
+/**  seeds unused for this long are dropped from the cache  */
+const SEED_MAX_AGE_MS = 14 * 24 * 3600 * 1000
+
+/**  return the cached seed of a name, building it atomically on a miss (a
+     concurrent pptc never reads a half-written seed); every use refreshes
+     its mtime, and seeds unused for two weeks are pruned  */
+const cachedSeed = async (name: string, source: Buffer): Promise<string> => {
+    const dir = cacheDir()
+    const seedPath = path.join(dir, name)
+    if (existsSync(seedPath)) {
+        const now = new Date()
+        utimesSync(seedPath, now, now)
     }
+    else
+        atomicWrite(seedPath, (await buildSeed(source)).bytes)
+    for (const f of readdirSync(dir).filter((f) => /^seed-.*\.pptx$/.test(f)))
+        try {
+            if (Date.now() - statSync(path.join(dir, f)).mtimeMs > SEED_MAX_AGE_MS)
+                rmSync(path.join(dir, f), { force: true })
+        }
+        catch {
+            /*  another pptc pruned it first  */
+        }
     return seedPath
 }
 
@@ -227,14 +251,13 @@ export const ensureSeedFromDeck = async (deckPath: string): Promise<string> => {
             || f === "ppt/presentation.xml")
         .sort()
     const design: string[] = []
+
+    /*  the slide list and sections of presentation.xml change with every
+        slide add/remove but never affect the seed -- keep them out of the key  */
     for (const part of designParts)
-        design.push(`${part}:${await (zip.file(part) as JSZip.JSZipObject).async("string")}`)
-    const seedPath = path.join(cacheDir(), `seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`)
-    if (!existsSync(seedPath)) {
-        const seed = await buildSeed(bytes)
-        writeFileSync(seedPath, seed.bytes)
-    }
-    return seedPath
+        design.push(`${part}:${(await (zip.file(part) as JSZip.JSZipObject).async("string"))
+            .replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, "").replace(/<p:extLst>[\s\S]*<\/p:extLst>/, "")}`)
+    return await cachedSeed(`seed-deck-${SEED_FORMAT}-${contentHash(...design)}.pptx`, bytes)
 }
 
 /**

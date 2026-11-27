@@ -166,3 +166,23 @@ describe("content guard", () => {
         expect(await verifyContent(before, after, [ { ...expects[0] as SlideExpect, notes: true, assets: "any" } ])).toEqual([])
     })
 })
+
+describe("plan-time checks and rev", () => {
+    it("reports a missing image already in --dry-run", async () => {
+        const deck = path.join(TMP, "multi-dryrun.pptx")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ addTitled("A") ])
+        await expect(executeOps(deck, { ops: [ { op: "el.add", slide: "title:A", elements: [
+            { type: "image", name: "X", frame: { x: 1, y: 1, w: 1, h: 1 }, path: path.join(TMP, "does-not-exist.png") } ] } ] } as never,
+        { ...opts, dryRun: true })).rejects.toMatchObject({ code: "E_FILE" })
+    })
+
+    it("changes the rev when only the notes change", async () => {
+        const deck = path.join(TMP, "multi-rev.pptx")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ addTitled("A", undefined, "n1") ])
+        const before = (await readDeckState(await DeckArchive.open(deck))).rev
+        await apply(deck, [ { op: "slide.fill", slide: "title:A", notes: "n2" } ])
+        expect((await readDeckState(await DeckArchive.open(deck))).rev).not.toBe(before)
+    })
+})

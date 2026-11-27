@@ -265,7 +265,7 @@ const normalizeEmbeddingNames = async (zip: JSZip): Promise<void> => {
 /**  GC assets unreachable from any live part --
      automizer re-imports duplicate chart parts on every apply, so without
      this the archive doubles its charts per round  */
-const gcAssets = async (zip: JSZip): Promise<void> => {
+export const gcAssets = async (zip: JSZip): Promise<void> => {
     const isAsset = (f: string): boolean =>
         ASSET_PART.test(f) && !f.endsWith("/") && !f.includes("/_rels/")
     const assets = Object.keys(zip.files).filter(isAsset)
@@ -413,9 +413,11 @@ const setFooter = async (zip: JSZip, slidePart: string, slide: Document, text: s
 }
 
 /**  content-type defaults for image media  */
-const IMAGE_TYPES: Record<string, string> = {
+export const IMAGE_TYPES: Record<string, string> = {
     png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
-    gif: "image/gif", svg: "image/svg+xml", webp: "image/webp"
+    gif: "image/gif", svg: "image/svg+xml", webp: "image/webp",
+    bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff",
+    emf: "image/x-emf", wmf: "image/x-wmf"
 }
 
 /**  ensure a `<Default Extension=...>` entry exists for an image extension  */

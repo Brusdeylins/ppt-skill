@@ -52,6 +52,16 @@
   a foreign layout. `apply --template` now fails with `E_TEMPLATE` unless
   the template's layouts (names and placeholders) equal the deck's; the
   fix is to omit `--template`.
+- **Smaller fixes.** `--dry-run` now reports a missing image file
+  (`E_FILE`) or an unsupported picture-placeholder format (`E_SCHEMA`)
+  instead of the real apply failing in the engine; `.bmp`, `.tif`, `.emf`
+  and `.wmf` placeholder images get their correct content type (they were
+  registered as PNG). The `rev` token also covers speaker notes and slide
+  relationships, so a notes-only change by someone else trips `--rev`.
+  The seed cache is written atomically (no half-written seed for a
+  concurrent pptc), keyed without the slide list (adding a slide no longer
+  creates a new cache file), drops the media of removed slides, and prunes
+  seeds unused for two weeks.
 - **Self-verify checks content, not only structure.** Before writing,
   `apply` compares a fingerprint of every slide the plan keeps (speaker
   notes text, type and content hash of every related image, chart,
