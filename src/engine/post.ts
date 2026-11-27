@@ -167,40 +167,67 @@ const restoreSlideIds = async (zip: JSZip, ids: number[]): Promise<void> => {
     zip.file(part, serializeXml(pres))
 }
 
-/**  sync user-created sections with the slide list: drop refs to removed
-     slides, and put each new slide into the section of its predecessor
-     (the first section when it leads the deck), as PowerPoint does  */
+/**  sync user-created sections with the slide list. Sections are
+     contiguous runs of the slide order, so the slides that kept their
+     relative order (the longest increasing run of their old positions)
+     keep their section; removed slides drop out; new, copied and moved
+     slides join the section of their predecessor (the first section when
+     they lead the deck) -- as PowerPoint files them  */
 const syncSectionRefs = async (zip: JSZip): Promise<void> => {
     const part = "ppt/presentation.xml"
     const xml = await partText(zip, part)
     if (!xml.includes("<p14:sectionLst"))
         return
     const pres = parseXml(xml)
-    const order = elements(pres, "p:sldId").map((s) => s.getAttribute("id") ?? "")
-    const live = new Set(order)
-    const refOf = new Map<string, Element>()
-    for (const ref of elements(pres, "p14:sldId")) {
-        const id = ref.getAttribute("id") ?? ""
-        if (live.has(id) && !refOf.has(id))
-            refOf.set(id, ref)
-        else
-            ref.parentNode?.removeChild(ref)
-    }
-    const firstList = firstElement(pres, "p14:sldIdLst")
-    if (firstList === null)
+    const sections = elements(pres, "p14:section")
+    const lists = sections.map((sec) => firstElement(sec, "p14:sldIdLst"))
+    if (sections.length === 0 || lists.some((l) => l === null))
         return
-    order.forEach((id, i) => {
-        if (refOf.has(id))
-            return
-        const ref = pres.createElementNS(firstList.namespaceURI, "p14:sldId")
-        ref.setAttribute("id", id)
-        const prev = i > 0 ? refOf.get(order[i - 1] as string) : undefined
-        if (prev !== undefined)
-            prev.parentNode?.insertBefore(ref, prev.nextSibling)
-        else
-            firstList.insertBefore(ref, firstList.firstChild)
-        refOf.set(id, ref)
+    const sectionOf = new Map<string, number>()
+    const oldPos = new Map<string, number>()
+    sections.forEach((sec, k) => {
+        for (const ref of elements(sec, "p14:sldId")) {
+            const id = ref.getAttribute("id") ?? ""
+            if (!sectionOf.has(id)) {
+                sectionOf.set(id, k)
+                oldPos.set(id, oldPos.size)
+            }
+        }
     })
+    const order = elements(pres, "p:sldId").map((s) => s.getAttribute("id") ?? "")
+
+    /*  longest increasing run of old positions (O(n^2), decks are small)  */
+    const kept = order.filter((id) => oldPos.has(id))
+    const len = kept.map(() => 1)
+    const prev = kept.map(() => -1)
+    for (let i = 0; i < kept.length; i++)
+        for (let j = 0; j < i; j++)
+            if ((oldPos.get(kept[j] as string) as number) < (oldPos.get(kept[i] as string) as number)
+                && (len[j] as number) + 1 > (len[i] as number)) {
+                len[i] = (len[j] as number) + 1
+                prev[i] = j
+            }
+    const stable = new Set<string>()
+    for (let i = len.indexOf(Math.max(0, ...len)); i >= 0; i = prev[i] as number)
+        stable.add(kept[i] as string)
+
+    const members: string[][] = sections.map(() => [])
+    let current = 0
+    for (const id of order) {
+        if (stable.has(id))
+            current = sectionOf.get(id) as number
+        members[current]?.push(id)
+    }
+    for (const [ k, list ] of lists.entries()) {
+        const l = list as Element
+        for (const ref of elements(l, "p14:sldId"))
+            l.removeChild(ref)
+        for (const id of members[k] as string[]) {
+            const ref = pres.createElementNS(l.namespaceURI, "p14:sldId")
+            ref.setAttribute("id", id)
+            l.appendChild(ref)
+        }
+    }
     zip.file(part, serializeXml(pres))
 }
 

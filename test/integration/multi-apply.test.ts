@@ -138,6 +138,41 @@ describe("sections across applies", () => {
     })
 })
 
+describe("sections across moves and copies", () => {
+    it("keeps sections contiguous: moved and copied slides join their predecessor's section", async () => {
+        const deck = path.join(TMP, "multi-sections-move.pptx")
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ "A", "B", "C", "D", "E", "F" ].map((t) => addTitled(t)))
+        const ids = (await slidesOf(deck)).map((s) => s.id)
+        const sec = (name: string, n: number, from: number, to: number): string =>
+            `<p14:section name="${name}" id="{${n}1111111-2222-3333-4444-555555555555}"><p14:sldIdLst>`
+            + ids.slice(from, to).map((id) => `<p14:sldId id="${id}"/>`).join("") + "</p14:sldIdLst></p14:section>"
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        const pres = await (zip.file("ppt/presentation.xml") as JSZip.JSZipObject).async("string")
+        const ext = "<p:ext uri=\"{521415D9-36F7-43E2-AB2F-B90AF26B5E84}\">"
+            + "<p14:sectionLst xmlns:p14=\"http://schemas.microsoft.com/office/powerpoint/2010/main\">"
+            + sec("S1", 1, 0, 2) + sec("S2", 2, 2, 4) + sec("S3", 3, 4, 6) + "</p14:sectionLst></p:ext>"
+        zip.file("ppt/presentation.xml", pres.includes("<p:extLst>")
+            ? pres.replace("<p:extLst>", `<p:extLst>${ext}`)
+            : pres.replace("</p:presentation>", `<p:extLst>${ext}</p:extLst></p:presentation>`))
+        writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+
+        await apply(deck, [ { op: "slide.move", slide: "title:A", to: 5 } ])
+        await apply(deck, [ { op: "slide.move", slide: "title:D", to: 0 } ])
+        await apply(deck, [ { op: "slide.copy", slide: "title:C", ref: "c" },
+            { op: "slide.fill", slide: "$c", placeholders: { title: { text: "C2" } } } ])
+        await expectIntact(deck)
+        const slides = await slidesOf(deck)
+        expect(slides.map((s) => s.title)).toEqual([ "D", "B", "C", "C2", "E", "F", "A" ])
+        const id = (t: string): number => (slides.find((s) => s.title === t) as { id: number }).id
+        expect(await sectionsOf(deck)).toEqual({
+            S1: [ id("D"), id("B") ],
+            S2: [ id("C"), id("C2") ],
+            S3: [ id("E"), id("F"), id("A") ]
+        })
+    })
+})
+
 describe("content guard", () => {
     it("reports notes and media that change on a slide no op touched", async () => {
         const deck = path.join(TMP, "multi-guard.pptx")
