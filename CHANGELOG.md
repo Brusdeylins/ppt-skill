@@ -22,9 +22,14 @@
   slides keep their id; new and copied slides get an id above every id of
   the input deck (a removed id is never re-used). New slides join the
   section of their predecessor.
-- **Self-verify catches overwritten media.** `apply` fails with
-  `E_INTEGRITY` (deck untouched) if a media file that existed before the
-  apply changed its content.
+- **Self-verify checks content, not only structure.** Before writing,
+  `apply` compares a fingerprint of every slide the plan keeps (speaker
+  notes text, type and content hash of every related image, chart,
+  workbook and embedded object) and of every layout, master and theme with
+  the input deck. Anything that changed although no op asked for it fails
+  the apply with `E_INTEGRITY` (deck untouched); `details.findings` names
+  the slide (`id:` and title) and what would have changed. A media file
+  that existed before the apply must also keep its bytes.
 
 ## 1.0.10
 

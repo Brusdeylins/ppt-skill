@@ -5,7 +5,8 @@
 **
 **  Integration: identities that must survive a sequence of applies --
 **  speaker notes stay with their slide, sldIds stay stable (so `id:`
-**  selectors keep their target) and sections keep their members.
+**  selectors keep their target) and sections keep their members; plus the
+**  content guard that turns any such slip into E_INTEGRITY.
 */
 
 import { beforeAll, describe, expect, it } from "vitest"
@@ -17,6 +18,7 @@ import { buildEmptyDeck } from "../../src/engine/seed.js"
 import { DeckArchive, readDeckState } from "../../src/engine/reader.js"
 import { expectIntact } from "../util/integrity.js"
 import { executeOps, type ExecuteOptions } from "../../src/commands/apply.js"
+import { verifyContent, type SlideExpect } from "../../src/engine/guard.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
@@ -133,5 +135,34 @@ describe("sections across applies", () => {
             Intro: [ id("F"), id("B") ],
             Main:  [ id("C"), id("D"), id("E") ]
         })
+    })
+})
+
+describe("content guard", () => {
+    it("reports notes and media that change on a slide no op touched", async () => {
+        const deck = path.join(TMP, "multi-guard.pptx")
+        const png = path.join(TMP, "multi-guard.png")
+        writeFileSync(png, Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"))
+        writeFileSync(deck, await buildEmptyDeck(TEMPLATE))
+        await apply(deck, [ addTitled("A", undefined, "a1"), { op: "el.add", slide: "title:A", elements: [
+            { type: "image", name: "Bild", frame: { x: 1, y: 1.5, w: 2, h: 2 }, path: png } ] } ])
+        const before = await JSZip.loadAsync(readFileSync(deck))
+        const part = ((await readDeckState(await DeckArchive.open(deck))).slides[0] as { part: string }).part
+        const expects: SlideExpect[] = [ { source: part, label: "A", notes: false, assets: "same" } ]
+        expect(await verifyContent(before, before, expects)).toEqual([])
+
+        /*  tamper: swap the notes text and the image bytes of the untouched slide  */
+        const after = await JSZip.loadAsync(readFileSync(deck))
+        for (const f of Object.keys(after.files)) {
+            if (/^ppt\/notesSlides\/[^/]+\.xml$/.test(f))
+                after.file(f, (await (after.file(f) as JSZip.JSZipObject).async("string")).replace("a1", "zz"))
+            if (/^ppt\/media\/.+\.png$/.test(f))
+                after.file(f, Buffer.from("other"))
+        }
+        const findings = await verifyContent(before, after, expects)
+        expect(findings.some((f) => f.includes("speaker notes"))).toBe(true)
+        expect(findings.some((f) => f.includes("images, charts"))).toBe(true)
+        expect(await verifyContent(before, after, [ { ...expects[0] as SlideExpect, notes: true, assets: "any" } ])).toEqual([])
     })
 })

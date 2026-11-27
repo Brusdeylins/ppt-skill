@@ -13,6 +13,7 @@
 import automizerPkg from "pptx-automizer"
 import { CountHelper } from "pptx-automizer/dist/helper/count-helper.js"
 import { readFileSync, rmSync } from "node:fs"
+import JSZip from "jszip"
 import path from "node:path"
 import type { Element } from "@xmldom/xmldom"
 import { PptcError, toPptcError } from "../infra/errors.js"
@@ -23,6 +24,7 @@ import { postProcess, type PostSlideWork, type SlideTagRef } from "./post.js"
 import type { DeckArchive } from "./reader.js"
 import { elements, firstElement, parseXml } from "./xml.js"
 import { verifyBytes } from "./verify.js"
+import { verifyContent, type SlideExpect } from "./guard.js"
 import { ensureSeed, ensureSeedFromDeck } from "./seed.js"
 import { setShapeText } from "./text.js"
 
@@ -202,7 +204,17 @@ const executePlan = async (
         PowerPoint "repair" trigger, so a finding here is a residual defect.
         Fail atomically rather than emit a .pptx the user only discovers is
         broken when PowerPoint refuses to open it. The target stays untouched.  */
-    const findings = await verifyBytes(finalBytes, archive.zip)
+    const expects: SlideExpect[] = plan.entries.map((entry, i) => ({
+        source: entry.source.kind === "self" ? entry.source.part : null,
+        label: `id:${(work[i] as PostSlideWork).slideId} '${entry.title ?? ""}'`,
+        notes: entry.notes !== null,
+        assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
+            ? "any" : entry.elements.length > 0 ? "grow" : "same"
+    }))
+    const findings = [
+        ...await verifyBytes(finalBytes, archive.zip),
+        ...await verifyContent(archive.zip, await JSZip.loadAsync(finalBytes), expects)
+    ]
     if (findings.length > 0)
         throw new PptcError("E_INTEGRITY",
             `the engine produced ${findings.length} integrity violation(s); deck not written`,
