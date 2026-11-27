@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.11
 
 - **Fix: images added in a later apply overwrote media of other slides.**
   `pptx-automizer` numbers new media `media<N>` from a count of the
