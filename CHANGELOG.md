@@ -93,7 +93,9 @@
   footer band, textboxes and shapes with text, tables, charts and groups;
   pictures, lines, prompt boxes and textboxes or shapes without text (a
   panel) never count -- in the apply that adds them and in later ones, so
-  text added onto an earlier apply's panel passes `--strict`. A
+  text added onto an earlier apply's panel passes `--strict`; a panel
+  that `el.set` gives text (not at the back) warns for every element
+  lying over it, existing or added in the document. A
   `forward`/`backward` step of a new element counts only the shapes there
   at its op, not those later ops add.
 - **Text layout.** Textboxes and shapes take `valign` and `margin`;
@@ -134,9 +136,11 @@
   by kind: `el.rm` drops the element's earlier edits and stacking moves,
   a later `slide.fill` text replaces an earlier `el.set` text (an
   `append` to it fails with `E_SCHEMA`) and `title:` selectors follow,
-  and an `el.set` on a footer, slide-number or date placeholder holds
-  although a `slide.fill` sets that field anew in the document (`false`
-  removes it, a later `el.set` on it fails with `E_ADDR_NOTFOUND`).
+  and an `el.set` on a footer, slide-number or date placeholder -- its
+  stacking move included -- holds although a `slide.fill` sets that field
+  anew in the document (on the layout's copy, or on the slide's own one a
+  layout without that placeholder keeps; `false` removes it, a later
+  `el.set` on it fails with `E_ADDR_NOTFOUND`).
 - **Alt text.** Every `el.add` element takes `altText` and `title`, and
   `el.set` sets or (with `""`) removes them on any element
   (`cNvPr@descr`/`@title`). PptxGenJS described every `el.add` picture by
@@ -169,7 +173,9 @@
   them.
 - **Slide number and date.** The fill fields `slideNumber` and `date`
   clone the layout's slide-number and date placeholders with their field
-  (`true` -- nothing on a layout without one) or remove them (`false`); `pptc footer` takes `--number` and
+  (`true` -- on a layout without one the slide keeps its own, if any;
+  likewise a `footer` text goes into the slide's own footer there) or
+  remove them (`false`); `pptc footer` takes `--number` and
   `--date`. Footer, slide-number and date clones now go in front of the
   shape tree's extension list (a footer used to be appended after it) and
   get relationships of their own for what the layout content references

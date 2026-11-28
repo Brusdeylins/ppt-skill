@@ -144,7 +144,8 @@ Elements (tables, charts, free shapes)
     groups; a panel WITHOUT text, pictures and lines never count (text
     placed on a text-less panel, now or in a later apply, raises nothing),
     a panel with text counts unless it was sent to the back in the same
-    ops document.
+    ops document, and a panel `el.set` gives text (not at the back) is a
+    finding for every element lying over it.
 -   **Element font sizes -- from the template, readable, few.** Free
     `el.add` elements (chips, cards, captions, diagram labels,
     annotations) carry no template size of their own -- NEVER invent one.

@@ -22,8 +22,8 @@ import { seedPlaceholderName, type Frame, type ShapeInfo } from "../model.js"
 import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain } from "../lint.js"
 import { layoutTable } from "../table-grid.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
-import { PROMPT_BOX_PREFIX, checkTable, existingShapes, nameMatches, overlapObstacles, plannedFrame,
-    rotatedBox, specFrame } from "./elements.js"
+import { PROMPT_BOX_PREFIX, blank, checkTable, coveringOverlaps, existingShapes, nameMatches, overlapObstacles,
+    plannedAtBack, plannedFrame, rotatedBox, specFrame, textless } from "./elements.js"
 import { slideAddrOf, type ElementPatch, type OpHandler, type PlanContext, type PlannedEdit,
     type SlidePlanEntry } from "./registry.js"
 
@@ -386,6 +386,7 @@ export const elSet: OpHandler<ElSetOp> = {
         /*  an element generated earlier in the same run: patch its spec  */
         const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name))
         if (planned !== undefined) {
+            const panel = (planned.spec.type === "shape" || planned.spec.type === "textbox") && blank(planned.spec.text)
             patchSpec(planned.spec, set, op.name)
             if (set.zOrder !== undefined)
                 entry.zOrder.push({ target: planned, zOrder: set.zOrder, add: false })
@@ -395,6 +396,10 @@ export const elSet: OpHandler<ElSetOp> = {
                 if (overlap !== null)
                     ctx.plan.warnings.push(overlap)
             }
+            /*  a panel that gets text: what lies over it hides that text  */
+            if (panel && !prompt && frame !== null && !blank((planned.spec as { text?: RichText }).text)
+                && !plannedAtBack(entry, planned))
+                ctx.plan.warnings.push(...coveringOverlaps(ctx, entry, planned, op.name, frame, slideAddr))
             return
         }
 
@@ -463,7 +468,14 @@ export const elSet: OpHandler<ElSetOp> = {
             entry.zOrder.push({ target: target.name, zOrder: set.zOrder, add: false })
             delete set.zOrder
         }
+        const panel = textless(entry, target)
         if (fieldsOf(set).length > 0)
             entry.edits.push({ name: target.name, set })
+        /*  a panel that gets text: what lies over it hides that text  */
+        if (panel && !prompt && !textless(entry, target) && !plannedAtBack(entry, target.name)) {
+            const frame = plannedFrame(entry, target.name, target.frame)
+            if (frame !== null)
+                ctx.plan.warnings.push(...coveringOverlaps(ctx, entry, target.name, target.name, frame, slideAddr))
+        }
     }
 }

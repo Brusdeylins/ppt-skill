@@ -15,7 +15,8 @@ import type { ElementSpec, RichText } from "../../schema/payloads.js"
 import { seedPlaceholderName, type Frame, type ShapeInfo } from "../model.js"
 import { dropEdits, slideAddrOf, type OpHandler, type PlanContext, type PlannedElement, type SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
-import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain, type Obstacle } from "../lint.js"
+import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain, type LintWarning, type Obstacle,
+    type SlideAddr } from "../lint.js"
 import { nearestAspect } from "../describe/position.js"
 import { layoutTable } from "../table-grid.js"
 
@@ -113,7 +114,7 @@ export const plannedAtBack = (entry: SlidePlanEntry, target: string | PlannedEle
     entry.zOrder.findLast((z) => z.target === target)?.zOrder === "back"
 
 /**  whether rich text shows no text (empty or whitespace only)  */
-const blank = (text: RichText | undefined): boolean =>
+export const blank = (text: RichText | undefined): boolean =>
     text === undefined || richTextToPlain(text).join("").trim() === ""
 
 /**
@@ -124,7 +125,7 @@ const blank = (text: RichText | undefined): boolean =>
  *  @param shape - the shape as read from the deck
  *  @returns true when it shows no text
  */
-const textless = (entry: SlidePlanEntry, shape: ShapeInfo): boolean => {
+export const textless = (entry: SlidePlanEntry, shape: ShapeInfo): boolean => {
     if (shape.placeholderIdx !== null || (shape.type !== "shape" && shape.type !== "textbox"))
         return false
     const edit = entry.edits.findLast((e) => e.name === shape.name && e.set.text !== undefined)
@@ -172,6 +173,72 @@ export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: 
             obstacles.push({ name: planned.name ?? planned.spec.type, frame })
     }
     return obstacles
+}
+
+/**
+ *  The stacking order of a slide's elements after the moves planned so
+ *  far, back to front: the existing top-level shapes as read (without
+ *  those removed), the elements the document adds entering in front, all
+ *  moved in op order as the engine moves them.
+ *
+ *  @param ctx - the plan context
+ *  @param entry - the plan entry
+ *  @returns full shape names and planned elements, back to front
+ */
+const plannedStack = (ctx: PlanContext, entry: SlidePlanEntry): (string | PlannedElement)[] => {
+    const order: (string | PlannedElement)[] = existingShapes(ctx, entry).map((sh) => sh.name)
+        .filter((name) => !entry.removeNames.includes(name))
+    for (const z of entry.zOrder) {
+        let at = order.indexOf(z.target)
+        if (z.add) {
+            if (at >= 0)
+                order.splice(at, 1)
+            order.push(z.target)
+            at = order.length - 1
+        }
+        if (at < 0)
+            continue
+        order.splice(at, 1)
+        const to = z.zOrder === "front" ? order.length : z.zOrder === "back" ? 0
+            : z.zOrder === "forward" ? Math.min(at + 1, order.length) : Math.max(at - 1, 0)
+        order.splice(to, 0, z.target)
+    }
+    return order
+}
+
+/**
+ *  Overlap warnings for the elements lying over an element that shows
+ *  text from now on (a panel el.set gives text): each one that covers it
+ *  hides part of that text -- existing shapes and elements the document
+ *  adds, in their planned stacking order. Lines, connectors and prompt
+ *  boxes cover nothing.
+ *
+ *  @param ctx - the plan context
+ *  @param entry - the plan entry
+ *  @param target - the element: a full shape name or a planned element
+ *  @param name - its display name
+ *  @param frame - its planned frame
+ *  @param slide - the slide address of the warnings
+ *  @returns one W_ELEMENT_OVERLAP per covering element
+ */
+export const coveringOverlaps = (ctx: PlanContext, entry: SlidePlanEntry, target: string | PlannedElement,
+    name: string, frame: Frame, slide: SlideAddr): LintWarning[] => {
+    const order = plannedStack(ctx, entry)
+    const at = order.indexOf(target)
+    const shapes = existingShapes(ctx, entry)
+    const warnings: LintWarning[] = []
+    for (const above of at < 0 ? [] : order.slice(at + 1)) {
+        const sh = typeof above === "string" ? shapes.find((s) => s.name === above) : undefined
+        const cover = typeof above !== "string" ? specFrame(above.spec)
+            : sh === undefined || sh.type === "connector" ? null : plannedFrame(entry, above, sh.frame)
+        const coverName = typeof above === "string" ? above : above.name ?? above.spec.type
+        if (cover === null || coverName.startsWith(PROMPT_BOX_PREFIX))
+            continue
+        const overlap = lintElementOverlap(coverName, cover, [ { name, frame } ], slide)
+        if (overlap !== null)
+            warnings.push(overlap)
+    }
+    return warnings
 }
 
 /**  op handler: el.add  */

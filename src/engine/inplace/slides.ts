@@ -169,7 +169,9 @@ const bandShapes = (slide: Document, type: BandType): Element[] =>
  *  Set a footer-band placeholder of a slide: remove the slide's own, then
  *  (unless `content` is false) clone the layout's with its relationships --
  *  the footer with the given text, the slide number and date with their
- *  field -- in front of the shape tree's extension list.
+ *  field -- in front of the shape tree's extension list. Without such a
+ *  placeholder on the layout, the slide keeps its own (shown means
+ *  present, never removed), a footer text goes into it.
  *
  *  @param pkg - the deck package
  *  @param part - the slide part
@@ -181,8 +183,8 @@ const bandShapes = (slide: Document, type: BandType): Element[] =>
  *                   false to remove the placeholder
  *  @param lang - the language of the footer text
  *  @returns the image parts the slide now relates to (layout content), the
- *           image parts the removed placeholder showed and the
- *           relationship ids it referenced
+ *           image parts the removed placeholder showed, the relationship
+ *           ids it referenced and the layout's copy (null when none came)
  */
 const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, rels: Document, layoutPart: string | null,
     type: BandType, content: string | boolean, lang: string): Promise<{ images: string[], removed: string[], refs: string[],
@@ -191,16 +193,24 @@ const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, r
     const spTree = firstElement(slide, "p:spTree")
     if (spTree === null)
         return { images: [], removed: [], refs, clone: null }
+    const source = content === false || layoutPart === null || !pkg.has(layoutPart) ? undefined
+        : elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type)
+
+    /*  none on the layout: the slide's own stays, with the footer text  */
+    if (content !== false && source === undefined) {
+        if (typeof content === "string")
+            for (const txBody of bandShapes(slide, type).map((sp) => firstElement(sp, "p:txBody")))
+                if (txBody !== null)
+                    setBodyText(txBody, content, false, lang, false, true)
+        return { images: [], removed: [], refs, clone: null }
+    }
     for (const sp of bandShapes(slide, type)) {
         refs.push(...relRefs(sp).map((ref) => ref.attr.value))
         sp.parentNode?.removeChild(sp)
     }
     const removed = pkg.targets(part, rels).filter((t) => t.kind === "image" && t.target !== null && refs.includes(t.id))
         .map((t) => t.target as string)
-    if (content === false || layoutPart === null || !pkg.has(layoutPart))
-        return { images: [], removed, refs, clone: null }
-    const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type)
-    if (source === undefined)
+    if (source === undefined || layoutPart === null)
         return { images: [], removed, refs, clone: null }
     const clone = slide.importNode(source, true) as Element
     firstElement(clone, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()))
@@ -651,15 +661,20 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         for (const sp of content === null ? [] : bandShapes(slide, type))
             banded.set(firstElement(sp, "p:cNvPr")?.getAttribute("name") ?? "", type)
     const clones = new Map<BandType, Element>()
+    /*  a shape by name; a footer-band placeholder the layout's copy
+        replaced is that copy (one the slide kept is found by its name)  */
+    const bandShape = (name: string): Element | null => {
+        const band = banded.get(name)
+        const clone = band === undefined ? undefined : clones.get(band)
+        return clone ?? findShape(slide, name, isTopLevel)
+    }
 
     /*  el.set changes of existing elements, in op order; what the changed
         elements referenced before may become unused (links, images)  */
     const swaps: ImageSwap[] = []
     const applyEdits = async (edits: PlannedEdit[]): Promise<void> => {
         for (const edit of edits) {
-            const band = banded.get(edit.name)
-            const shape = need(band === undefined ? findShape(slide, edit.name, isTopLevel) : clones.get(band) ?? null,
-                `element '${edit.name}'`)
+            const shape = need(bandShape(edit.name), `element '${edit.name}'`)
             for (const ref of relRefs(shape))
                 unused.add(ref.attr.value)
             /*  every swap counts (the content guard checks them as a
@@ -715,7 +730,7 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
             spTree.insertBefore(shape, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
     }
     for (const z of entry.zOrder) {
-        const shape = typeof z.target === "string" ? findShape(slide, z.target, isTopLevel) : placed.get(z.target) ?? null
+        const shape = typeof z.target === "string" ? bandShape(z.target) : placed.get(z.target) ?? null
         if (shape === null)
             continue
         if (z.add) {

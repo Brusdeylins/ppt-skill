@@ -16400,9 +16400,10 @@ Example:
 
 Set the footer of one slide -- or, without --slide, of EVERY slide.
 Clones the layout's footer placeholder; layouts without one (typically
-title/closing layouts) are skipped silently. --number and --date show
-the slide number and the date as well (the layout's placeholders with
-their fields); with one of them the text may be omitted.
+title/closing layouts) are skipped silently -- a footer the slide has
+of its own then takes the text. --number and --date show the slide
+number and the date as well (the layout's placeholders with their
+fields); with one of them the text may be omitted.
 Options: --slide SEL, --number, --date, --rev R, --strict, --dry-run.
 
 Example:
@@ -16498,8 +16499,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                                    "image": { "image": "photo.png",
                                               "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
-                 "slideNumber": true, "date": false,  // show/remove (true:
-                                            // nothing when the layout has none)
+                 "slideNumber": true, "date": false,  // show/remove (true on
+                                            // a layout without one: the slide
+                                            // keeps its own, if any)
                  "background": { "color": "1F4E79" },
                  "hidden": true,            // optional: hide/show the slide
                  "section": "Teil 2" }      // start a section at the slide
@@ -16554,7 +16556,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  band, textboxes/shapes with text, tables, charts and
                  groups -- never pictures, picture placeholders, lines,
                  prompt boxes or textboxes/shapes without text (a panel,
-                 also in later applies)
+                 also in later applies); a panel el.set gives text (not
+                 at the back) warns for each element lying over it
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -17563,6 +17566,41 @@ var overlapObstacles = (ctx, entry, self2 = null) => {
   }
   return obstacles;
 };
+var plannedStack = (ctx, entry) => {
+  const order = existingShapes(ctx, entry).map((sh) => sh.name).filter((name) => !entry.removeNames.includes(name));
+  for (const z2 of entry.zOrder) {
+    let at = order.indexOf(z2.target);
+    if (z2.add) {
+      if (at >= 0)
+        order.splice(at, 1);
+      order.push(z2.target);
+      at = order.length - 1;
+    }
+    if (at < 0)
+      continue;
+    order.splice(at, 1);
+    const to = z2.zOrder === "front" ? order.length : z2.zOrder === "back" ? 0 : z2.zOrder === "forward" ? Math.min(at + 1, order.length) : Math.max(at - 1, 0);
+    order.splice(to, 0, z2.target);
+  }
+  return order;
+};
+var coveringOverlaps = (ctx, entry, target, name, frame, slide) => {
+  const order = plannedStack(ctx, entry);
+  const at = order.indexOf(target);
+  const shapes = existingShapes(ctx, entry);
+  const warnings = [];
+  for (const above of at < 0 ? [] : order.slice(at + 1)) {
+    const sh = typeof above === "string" ? shapes.find((s) => s.name === above) : void 0;
+    const cover = typeof above !== "string" ? specFrame(above.spec) : sh === void 0 || sh.type === "connector" ? null : plannedFrame(entry, above, sh.frame);
+    const coverName = typeof above === "string" ? above : above.name ?? above.spec.type;
+    if (cover === null || coverName.startsWith(PROMPT_BOX_PREFIX))
+      continue;
+    const overlap = lintElementOverlap(coverName, cover, [{ name, frame }], slide);
+    if (overlap !== null)
+      warnings.push(overlap);
+  }
+  return warnings;
+};
 var elAdd = {
   name: "el.add",
   plan(ctx, op) {
@@ -17948,6 +17986,7 @@ var elSet = {
     }
     const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name));
     if (planned !== void 0) {
+      const panel2 = (planned.spec.type === "shape" || planned.spec.type === "textbox") && blank(planned.spec.text);
       patchSpec(planned.spec, set2, op.name);
       if (set2.zOrder !== void 0)
         entry.zOrder.push({ target: planned, zOrder: set2.zOrder, add: false });
@@ -17957,6 +17996,8 @@ var elSet = {
         if (overlap !== null)
           ctx.plan.warnings.push(overlap);
       }
+      if (panel2 && !prompt && frame !== null && !blank(planned.spec.text) && !plannedAtBack(entry, planned))
+        ctx.plan.warnings.push(...coveringOverlaps(ctx, entry, planned, op.name, frame, slideAddr));
       return;
     }
     const shapes = editableShapes(ctx, entry).filter((sh) => !entry.removeNames.includes(sh.name));
@@ -18013,8 +18054,14 @@ var elSet = {
       entry.zOrder.push({ target: target.name, zOrder: set2.zOrder, add: false });
       delete set2.zOrder;
     }
+    const panel = textless(entry, target);
     if (fieldsOf(set2).length > 0)
       entry.edits.push({ name: target.name, set: set2 });
+    if (panel && !prompt && !textless(entry, target) && !plannedAtBack(entry, target.name)) {
+      const frame = plannedFrame(entry, target.name, target.frame);
+      if (frame !== null)
+        ctx.plan.warnings.push(...coveringOverlaps(ctx, entry, target.name, target.name, frame, slideAddr));
+    }
   }
 };
 
@@ -42032,15 +42079,21 @@ var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, conten
   const spTree = firstElement(slide, "p:spTree");
   if (spTree === null)
     return { images: [], removed: [], refs, clone: null };
+  const source = content === false || layoutPart === null || !pkg.has(layoutPart) ? void 0 : elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type);
+  if (content !== false && source === void 0) {
+    if (typeof content === "string") {
+      for (const txBody2 of bandShapes2(slide, type).map((sp) => firstElement(sp, "p:txBody")))
+        if (txBody2 !== null)
+          setBodyText(txBody2, content, false, lang, false, true);
+    }
+    return { images: [], removed: [], refs, clone: null };
+  }
   for (const sp of bandShapes2(slide, type)) {
     refs.push(...relRefs(sp).map((ref) => ref.attr.value));
     sp.parentNode?.removeChild(sp);
   }
   const removed = pkg.targets(part, rels).filter((t) => t.kind === "image" && t.target !== null && refs.includes(t.id)).map((t) => t.target);
-  if (content === false || layoutPart === null || !pkg.has(layoutPart))
-    return { images: [], removed, refs, clone: null };
-  const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type);
-  if (source === void 0)
+  if (source === void 0 || layoutPart === null)
     return { images: [], removed, refs, clone: null };
   const clone2 = slide.importNode(source, true);
   firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()));
@@ -42343,14 +42396,15 @@ var editSlide = async (pkg, work) => {
     for (const sp of content === null ? [] : bandShapes2(slide, type))
       banded.set(firstElement(sp, "p:cNvPr")?.getAttribute("name") ?? "", type);
   const clones = /* @__PURE__ */ new Map();
+  const bandShape = (name) => {
+    const band = banded.get(name);
+    const clone2 = band === void 0 ? void 0 : clones.get(band);
+    return clone2 ?? findShape(slide, name, isTopLevel);
+  };
   const swaps = [];
   const applyEdits = async (edits) => {
     for (const edit of edits) {
-      const band = banded.get(edit.name);
-      const shape = need(
-        band === void 0 ? findShape(slide, edit.name, isTopLevel) : clones.get(band) ?? null,
-        `element '${edit.name}'`
-      );
+      const shape = need(bandShape(edit.name), `element '${edit.name}'`);
       for (const ref of relRefs(shape))
         unused.add(ref.attr.value);
       const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape));
@@ -42395,7 +42449,7 @@ var editSlide = async (pkg, work) => {
       spTree.insertBefore(shape, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
   };
   for (const z2 of entry.zOrder) {
-    const shape = typeof z2.target === "string" ? findShape(slide, z2.target, isTopLevel) : placed.get(z2.target) ?? null;
+    const shape = typeof z2.target === "string" ? bandShape(z2.target) : placed.get(z2.target) ?? null;
     if (shape === null)
       continue;
     if (z2.add) {

@@ -159,9 +159,10 @@ Example:
 
 Set the footer of one slide -- or, without --slide, of EVERY slide.
 Clones the layout's footer placeholder; layouts without one (typically
-title/closing layouts) are skipped silently. --number and --date show
-the slide number and the date as well (the layout's placeholders with
-their fields); with one of them the text may be omitted.
+title/closing layouts) are skipped silently -- a footer the slide has
+of its own then takes the text. --number and --date show the slide
+number and the date as well (the layout's placeholders with their
+fields); with one of them the text may be omitted.
 Options: --slide SEL, --number, --date, --rev R, --strict, --dry-run.
 
 Example:
@@ -266,8 +267,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                                    "image": { "image": "photo.png",
                                               "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
-                 "slideNumber": true, "date": false,  // show/remove (true:
-                                            // nothing when the layout has none)
+                 "slideNumber": true, "date": false,  // show/remove (true on
+                                            // a layout without one: the slide
+                                            // keeps its own, if any)
                  "background": { "color": "1F4E79" },
                  "hidden": true,            // optional: hide/show the slide
                  "section": "Teil 2" }      // start a section at the slide
@@ -322,7 +324,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  band, textboxes/shapes with text, tables, charts and
                  groups -- never pictures, picture placeholders, lines,
                  prompt boxes or textboxes/shapes without text (a panel,
-                 also in later applies)
+                 also in later applies); a panel el.set gives text (not
+                 at the back) warns for each element lying over it
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }

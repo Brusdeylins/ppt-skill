@@ -9,8 +9,9 @@
 **  op order (a step counts the shapes there at that op), `state` lists the
 **  shapes back to front, an element sent to the back covers nothing and
 **  is no obstacle of later ones (no overlap warning), nor is a panel
-**  without text (also in a later apply, under --strict), the content guard
-**  accepts the reorder and untouched slides keep their bytes.
+**  without text (also in a later apply, under --strict) -- until el.set
+**  gives it text: each element lying over it warns then --, the content
+**  guard accepts the reorder and untouched slides keep their bytes.
 */
 
 import { describe, expect, it } from "vitest"
@@ -159,6 +160,35 @@ describe("z-order", () => {
         expect(await apply(deck, [ { op: "el.set", slide: "0", name: "Panel", text: "Hinweis", zOrder: "front" },
             { op: "el.add", slide: "0", elements: [ text("T4", 1, 5.5) ] } ])).toEqual([
             expect.objectContaining({ code: "W_ELEMENT_OVERLAP", element: "T4", covers: expect.stringMatching(/^Panel-/) }) ])
+    })
+
+    it("warns for the elements lying over a panel that gets text", async () => {
+        const deck = await freshDeck("z-covered.pptx")
+        const overlaps = (warnings: unknown[]): { element: string, covers: string }[] =>
+            (warnings as { code: string, element: string, covers: string }[]).filter((w) => w.code === "W_ELEMENT_OVERLAP")
+                .map((w) => ({ element: w.element.replace(/-[0-9a-f-]{36}$/, ""), covers: w.covers.replace(/-[0-9a-f-]{36}$/, "") }))
+        const panel = (name: string, x: number, extra: Record<string, unknown> = {}): Record<string, unknown> =>
+            ({ type: "shape", name, shape: "rect", frame: { x, y: 2, w: 2.8, h: 3 }, fill: "lt2", ...extra })
+        const text = (name: string, x: number, extra: Record<string, unknown> = {}): Record<string, unknown> =>
+            ({ type: "textbox", name, frame: { x: x + 0.3, y: 2.5, w: 2, h: 1 }, text: name, ...extra })
+        expect(overlaps(await apply(deck, [ { op: "slide.add", layout: "Title Only", placeholders: { title: { text: "Titel" } } },
+            { op: "el.add", slide: "0", elements: [ panel("P1", 0.3), text("O1", 0.3), panel("P2", 3.4), panel("P4", 9.6),
+                panel("P5", 9.6, { zOrder: "back" }) ] } ]))).toEqual([])
+
+        /*  an existing element over an existing panel (a later apply)  */
+        expect(overlaps(await apply(deck, [ { op: "el.set", slide: "0", name: "P1", text: "Wichtig" } ])))
+            .toEqual([ { element: "O1", covers: "P1" } ])
+        /*  elements of the document over an existing and a planned panel  */
+        expect(overlaps(await apply(deck, [ { op: "el.add", slide: "0", elements: [ text("N2", 3.4) ] },
+            { op: "el.set", slide: "0", name: "P2", text: "Wichtig" },
+            { op: "el.add", slide: "0", elements: [ panel("P3", 6.5), text("T3", 6.5) ] },
+            { op: "el.set", slide: "0", name: "P3", text: "Wichtig" } ])))
+            .toEqual([ { element: "N2", covers: "P2" }, { element: "T3", covers: "P3" } ])
+
+        /*  nothing lies over it: a panel at the back, elements behind it  */
+        expect(overlaps(await apply(deck, [ { op: "el.add", slide: "0", elements: [ text("U4", 9.6, { zOrder: "back" }) ] },
+            { op: "el.set", slide: "0", name: "P4", text: "Vorne" },
+            { op: "el.set", slide: "0", name: "P5", text: "Hinten", zOrder: "back" } ]))).toEqual([])
     })
 
     it("rejects wrong values and types at plan time", async () => {

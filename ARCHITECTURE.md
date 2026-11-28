@@ -93,9 +93,10 @@ generate    PptxGenJS renders every el.add element of the apply into one
 slides      repairs of the slide's other parts (notes, charts, ...), then
             one pass per touched slide: text.replace on the existing
             content, removals, text, picture placeholders, el.set edits,
-            background, footer/slide number/date (an el.set on a band
-            placeholder set anew follows the layout's copy), notes, transplanted
-            elements, hyperlinks (slide links to the output part of their
+            background, footer/slide number/date (an el.set or stacking
+            move on a band placeholder set anew follows the layout's
+            copy; without one on the layout the slide's own stays), notes,
+            transplanted elements, hyperlinks (slide links to the output part of their
             target), visibility, links to removed slides, repairs
 package     sldIdLst (kept ids, fresh ids for new and copied slides), removed
             slides and links to them, then engine/post.ts: notes sweep, doc

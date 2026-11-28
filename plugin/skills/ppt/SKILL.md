@@ -143,8 +143,9 @@ Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 `slide.add`/`slide.fill` takes `placeholders` (a picture fill takes `fit`:
 `crop` -- the default --, `contain`, `stretch`), `notes`, `footer`,
 `slideNumber` and `date` (`true` shows the layout's slide-number / date
-field with its layout content -- nothing on a layout without that
-placeholder --, `false` removes it), `background`, `hidden` and `section`.
+field with its layout content -- on a layout without that placeholder
+the slide keeps its own, if any --, `false` removes it), `background`,
+`hidden` and `section`.
 
 Text and colors (every op that writes text or color): rich text paragraphs
 take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
@@ -211,7 +212,8 @@ textboxes and shapes WITH text, tables, charts, groups (existing or added
 earlier in the document). Never obstacles: pictures, picture placeholders,
 lines/connectors, prompt boxes, textboxes and shapes WITHOUT text (a panel
 -- also in later applies), and elements placed or moved to the back in the
-SAME document (a panel that gets text later counts again).
+SAME document (a panel that gets text later counts again). A panel that
+el.set gives text (not at the back) warns for each element lying over it.
 
 `el.set` changes an element IN PLACE (keeps its id, animations and links --
 prefer it over `el.rm` + `el.add`); at least one field, each checked

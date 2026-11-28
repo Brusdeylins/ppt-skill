@@ -338,7 +338,8 @@ the text of its notes body; a new one is built from the notes master
 
 Set the footer of one slide -- or, without `--slide`, of **every** slide.
 Works by cloning the layout's footer placeholder; layouts without one
-(typically title/closing layouts) are skipped silently. `--number` and
+(typically title/closing layouts) are skipped silently -- a footer the
+slide has of its own then takes the text. `--number` and
 `--date` show the slide number and the date as well (the layout's
 slide-number and date placeholders with their fields); with one of them
 the text may be omitted.
@@ -410,8 +411,9 @@ Anatomy:
   `background` and `hidden` (`true` hides the slide -- "Hide Slide" --,
   `false` shows it; omitted keeps the current state), `slideNumber` and
   `date` (`true` clones the layout's slide-number / date placeholder with
-  its field and layout content, a picture included -- nothing when the
-  layout has none --, `false` removes it with that content; omitted keeps
+  its field and layout content, a picture included -- on a layout
+  without one the slide keeps its own, if any, and `el.set` edits apply
+  to it --, `false` removes it with that content; omitted keeps
   it as it is), `section` (starts a PowerPoint section at
   the slide -- see [Sections](#sections)). Text accepts plain
   strings (`\n` = new paragraph, `\v` -- a vertical tab -- a line break
@@ -572,7 +574,9 @@ date area, textboxes and shapes with text (as the document leaves it),
 tables, charts and groups -- existing or added earlier in the document.
 Pictures, picture placeholders, lines and connectors, prompt boxes and
 textboxes or shapes without text (a plain panel -- in this apply and in
-later ones) never count. An element sent to the back in the document
+later ones) never count; a panel that `el.set` gives text (not at the
+back) is checked the other way round: each element lying over it --
+existing or added in the document -- covers its text. An element sent to the back in the document
 (`zOrder: "back"`, by `el.add` or `el.set`) lies behind every shape: it
 is not checked, and the elements after it in the same document may cover
 it (text on a background panel) -- until a later move takes it out of
@@ -614,8 +618,9 @@ on an element compose in op order: `el.rm` drops the edits and stacking
 moves planned for the element; a later `slide.fill` text replaces an
 earlier `el.set` text of the placeholder (an `append` to it fails with
 `E_SCHEMA` -- give the whole text once), and `title:` selectors follow;
-an `el.set` on a footer, slide-number or date placeholder holds although
-a `slide.fill` sets that field anew in the document (either order), and
+an `el.set` on a footer, slide-number or date placeholder (a stacking
+move included) holds although a `slide.fill` sets that field anew in the
+document (either order), and
 one removed by `false` is gone (`E_ADDR_NOTFOUND` for a later `el.set`). Every `el.add` element also takes `altText` and `title`; a picture
 is never described by its file path. Replacing an image keeps the old alt
 text: give `altText` together with `image`. Replacing an image destroys the old

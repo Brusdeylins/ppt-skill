@@ -10,17 +10,40 @@
 **  text replaces an earlier el.set text (an append to it is rejected) and
 **  the tracked title follows; an el.set on a footer, slide-number or date
 **  placeholder holds although a slide.fill sets that placeholder anew in
-**  the same document, in either order; one removed is gone.
+**  the same document, in either order -- a stacking move too, also when
+**  the layout's copy has another name; one removed is gone. On a layout
+**  without such a placeholder the slide keeps its own (a footer text goes
+**  into it), and the el.set edits apply to it.
 */
 
 import { beforeEach, describe, expect, it } from "vitest"
-import { apply, failure, freshDeck, stateOf } from "../util/elements.js"
+import { readFileSync, writeFileSync } from "node:fs"
+import JSZip from "jszip"
+import { relTargets, relsPartOf } from "../../src/engine/parts.js"
+import { elements, firstElement, parseXml, serializeXml } from "../../src/engine/xml.js"
+import { apply, craftSlide, failure, freshDeck, stateOf } from "../util/elements.js"
 
 let deck: string
 
 /**  a shape of slide 0 by name prefix  */
 const shape = async (name: string): Promise<{ name: string, text: string | null, altText?: string, fontColor?: string } | undefined> =>
     (await stateOf(deck)).slides[0]?.shapes.find((sh) => sh.name === name || sh.name.startsWith(`${name}-`)) as never
+
+/**  take the footer-band placeholders of these types off the layout of
+     slide 0 (a layout without them; the slide keeps its own)  */
+const dropFromLayout = async (types: string[]): Promise<void> => {
+    const part = (await stateOf(deck)).slides[0]?.part ?? ""
+    const zip = await JSZip.loadAsync(readFileSync(deck))
+    const rels = parseXml(await (zip.file(relsPartOf(part)) as JSZip.JSZipObject).async("string"))
+    const layout = relTargets(part, rels).find((r) => r.kind === "slideLayout")?.target ?? ""
+    const doc = parseXml(await (zip.file(layout) as JSZip.JSZipObject).async("string"))
+    const band = elements(doc, "p:sp").filter((sp) => types.includes(firstElement(sp, "p:ph")?.getAttribute("type") ?? ""))
+    expect(band).toHaveLength(types.length)
+    for (const sp of band)
+        sp.parentNode?.removeChild(sp)
+    zip.file(layout, serializeXml(doc))
+    writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+}
 
 /**  the name of a placeholder of slide 0 by kind  */
 const placeholder = async (kind: string): Promise<string> =>
@@ -102,5 +125,63 @@ describe("el.set on footer-band placeholders set anew", () => {
             { op: "slide.fill", slide: "0", date: false },
             { op: "el.set", slide: "0", name: date, altText: "Datum" }
         ])).toBe("E_ADDR_NOTFOUND")
+    })
+})
+
+describe("stacking moves on footer-band placeholders set anew", () => {
+    it("moves the layout's copy although it is named otherwise, in either order", async () => {
+        const rename = async (): Promise<void> => {
+            const footer = await placeholder("footer")
+            await craftSlide(deck, 0, (xml) => xml.replace(`name="${footer}"`, "name=\"Mein Fuss\""))
+        }
+        const back = async (): Promise<{ kind: string | null, text: string | null }> => {
+            const first = (await stateOf(deck)).slides[0]?.shapes[0]
+            return { kind: first?.placeholderKind ?? null, text: first?.text ?? null }
+        }
+        await rename()
+        await apply(deck, [
+            { op: "el.set", slide: "0", name: "Mein Fuss", zOrder: "back" },
+            { op: "slide.fill", slide: "0", footer: "Neu" }
+        ])
+        expect(await back()).toEqual({ kind: "footer", text: "Neu" })
+        await apply(deck, [ { op: "el.set", slide: "0", name: await placeholder("footer"), zOrder: "front" } ])
+        await rename()
+        await apply(deck, [
+            { op: "slide.fill", slide: "0", footer: "Neu 2" },
+            { op: "el.set", slide: "0", name: "Mein Fuss", zOrder: "back" }
+        ])
+        expect(await back()).toEqual({ kind: "footer", text: "Neu 2" })
+    })
+})
+
+describe("footer-band placeholders on a layout without them", () => {
+    it("keeps the slide's own on true and a footer text", async () => {
+        await dropFromLayout([ "sldNum", "ftr" ])
+        const number = await placeholder("slideNumber")
+        const footer = await placeholder("footer")
+        expect(number).not.toBe("")
+        await apply(deck, [ { op: "slide.fill", slide: "0", slideNumber: true, footer: "Anderer Fuss" } ])
+        expect(await placeholder("slideNumber")).toBe(number)
+        expect(await shape(footer)).toMatchObject({ text: "Anderer Fuss" })
+    })
+
+    it("applies an el.set on the kept placeholder, in either order", async () => {
+        await dropFromLayout([ "sldNum", "ftr" ])
+        const number = await placeholder("slideNumber")
+        const footer = await placeholder("footer")
+        await apply(deck, [
+            { op: "el.set", slide: "0", name: number, fontColor: "FF0000" },
+            { op: "slide.fill", slide: "0", slideNumber: true },
+            { op: "slide.fill", slide: "0", footer: "Fuss 2" },
+            { op: "el.set", slide: "0", name: footer, altText: "Fusszeile", zOrder: "back" }
+        ])
+        expect(await shape(number)).toMatchObject({ fontColor: "FF0000" })
+        expect(await shape(footer)).toMatchObject({ text: "Fuss 2", altText: "Fusszeile" })
+        expect((await stateOf(deck)).slides[0]?.shapes[0]?.name).toBe(footer)
+        await apply(deck, [
+            { op: "slide.fill", slide: "0", slideNumber: true },
+            { op: "el.set", slide: "0", name: number, fontColor: "00B050" }
+        ])
+        expect(await shape(number)).toMatchObject({ fontColor: "00B050" })
     })
 })
