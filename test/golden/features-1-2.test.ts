@@ -12,7 +12,8 @@
 **  direction and layout, theme colors, image fit and link, chart labels
 **  and axes), on the "Phase 4" slide those of the in-place edits (el.set
 **  frame, style, alt text, image and table, text.replace, slide number
-**  and date). Later phases of 1.2 extend the sequence.
+**  and date), on the "Phase 5" slides the slide links (action,
+**  relationship, target); the generic fingerprint carries the sections.
 */
 
 import { describe, expect, it } from "vitest"
@@ -148,6 +149,21 @@ const featurePrint = async (deck: string): Promise<unknown[]> => {
             return elements(shape, "a:r").map((r) =>
                 `${name}: ${firstElement(r, "a:t")?.textContent ?? ""}=${firstElement(r, "a:rPr")?.getAttribute("lang") ?? "-"}`)
         })
+        if (slide.title?.startsWith("Phase 5") === true) {
+            const rels = relTargets(slide.part, parseXml(await (zip.file(relsPartOf(slide.part)) as JSZip.JSZipObject).async("string")))
+            const titleOf = new Map(state.slides.map((s) => [ s.part, s.title ]))
+            const links = elements(doc, "a:hlinkClick").map((h) => {
+                let shape = h.parentNode as Element | null
+                while (shape !== null && ![ "p:sp", "p:pic", "p:graphicFrame" ].includes(shape.nodeName))
+                    shape = shape.parentNode as Element | null
+                const rel = rels.find((r) => r.id === h.getAttributeNS(NS_R, "id"))
+                return [ maskName(shape === null ? "" : firstElement(shape, "p:cNvPr")?.getAttribute("name") ?? ""),
+                    h.getAttribute("action") ?? "-", rel?.kind ?? "?",
+                    rel?.target === null ? rel.el.getAttribute("Target") : titleOf.get(rel?.target ?? "") ?? rel?.target ].join("|")
+            })
+            out.push({ pictures, runs, links })
+            continue
+        }
         if (slide.title !== "Phase 3" && slide.title !== "Phase 4") {
             out.push({ pictures, runs })
             continue
@@ -275,7 +291,33 @@ describe("golden 1.2 features", () => {
                     addRows: { rows: [ [ "gamma", 3 ] ] }, removeRows: [ 2 ] },
                 { op: "text.replace", find: "alpha", replace: "omega", slide: "title:Phase 4" },
                 { op: "slide.fill", slide: "title:Phase 4", slideNumber: true, date: true }
-            ] }
+            ] },
+            /*  phase 5: sections and slide links (C2, C3) -- the agenda links
+                forward to a slide added later in the document  */
+            { ops: [
+                { op: "slide.add", layout: "CONTENT", ref: "p5", section: "Phase 5", placeholders: { title: { text: "Phase 5" },
+                    body: { text: [ { runs: [ { text: "zu Phase 4", hyperlink: "slide:title:Phase 4" } ] },
+                        { runs: [ { text: "zum Ende", hyperlink: "slide:$p5e" } ] },
+                        { runs: [ { text: "Web", hyperlink: "https://example.com/" } ] } ] } } },
+                { op: "el.add", slide: "$p5", elements: [
+                    { type: "shape", name: "H-Back", shape: "roundRect", frame: { x: 8, y: 6, w: 1.5, h: 0.5 }, text: "Start",
+                        hyperlink: "slide:index:0" },
+                    { type: "image", name: "H-Pic", frame: { x: 6, y: 6, w: 1, h: 0.6 }, path: landscape, hyperlink: "slide:$p5e" },
+                    { type: "table", name: "H-Tab", frame: { x: 0.5, y: 6, w: 4 },
+                        data: { rows: [ [ { text: [ { runs: [ { text: "Phase 4", hyperlink: "slide:title:Phase 4" } ] } ] }, "x" ] ] } } ] },
+                { op: "slide.add", layout: "Title Only", ref: "p5e", section: "Ende", placeholders: { title: { text: "Phase 5 Ende" } } },
+                { op: "el.add", slide: "$p5e", elements: [ { type: "textbox", name: "H-Box", frame: { x: 8, y: 6, w: 1.5, h: 0.5 },
+                    text: "zurück", hyperlink: "slide:$p5" } ] }
+            ] },
+            /*  split, rename and remove sections; a slide link set in place  */
+            { ops: [
+                { op: "slide.fill", slide: "title:Phase 4", section: "Phase 4" },
+                { op: "section.rename", from: "Default Section", to: "Phasen 1-3" },
+                { op: "section.rm", name: "Ende" },
+                { op: "el.set", slide: "title:Phase 5 Ende", name: "PptcPh-0", hyperlink: "slide:title:Sprache" }
+            ] },
+            { ops: [ { op: "slide.fill", slide: "title:Phase 5 Ende", section: "Phase 4" } ], fails: "E_SCHEMA" },
+            { ops: [ { op: "el.set", slide: "title:Phase 5", name: "H-Back", hyperlink: "slide:title:Nirgends" } ], fails: "E_ADDR_NOTFOUND" }
         ]
 
         const prints: unknown[] = []

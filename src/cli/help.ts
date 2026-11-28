@@ -281,6 +281,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "axes": { "x": { "title", "min", "max", "format" }, "y" },
                  "stacked": "percent", "smooth", "holeSize" }
                image: "path", "fit": stretch|crop|contain, "hyperlink"
+               textbox/shape/image: "hyperlink" -- the click target of the
+                 whole element (URL or slide link, e.g. a back button)
                connector: "from": [x,y], "to": [x,y], "color", "widthPt",
                  "dash": solid|dash|dot|dashDot|longDash,
                  "startArrow"/"endArrow": none|arrow|triangle|stealth|
@@ -296,6 +298,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "fill", "fontColor" (placeholder/textbox/shape),
                  "border", "borderPt" (also picture/connector),
                  "altText", "title" (any element; "" removes),
+                 "hyperlink" (placeholder/textbox/shape/picture: URL or
+                   slide link; "" removes),
                  "image" (picture or filled picture placeholder: frame,
                    crop and animations stay -- only on explicit request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
@@ -335,6 +339,11 @@ paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
 "number"|false, "spaceBefore"/"spaceAfter" (pt), "lineSpacing" (1.5) },
 runs { "text", "bold", "italic", "underline", "strike", "superscript",
 "subscript", "size", "font", "color", "highlight", "hyperlink", "lang" }.
+Links: "hyperlink" takes a URL or a slide link "slide:SEL" -- slide:$ref,
+slide:id:256, slide:title:Agenda, slide:index:2 -- resolved after the
+whole document (slides added later count, moved ones follow; a target
+missing then fails with E_ADDR_NOTFOUND). A later removal of the target
+drops the link; copies keep it; 'state --level full' reads slide:id:N.
 Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
 bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).

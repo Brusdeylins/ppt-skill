@@ -5,7 +5,7 @@
 **
 **  core/ops/el-set: plan transformer of `el.set` -- the in-place change of
 **  one named element: text, frame, fill/border/font color, alt text and
-**  title, the image of a picture, the cells and rows of a table. Every
+**  title, the click target (URL or slide link), the image of a picture, the cells and rows of a table. Every
 **  field is checked against the element's type. An element planned earlier
 **  in the same document has its spec patched; an existing one gets a
 **  planned edit the engine applies after the slide's fills. A table's rows
@@ -41,6 +41,7 @@ const EXISTING_TYPES: Record<keyof ElementPatch, EditType[]> = {
     fontColor: [ "placeholder", "textbox", "shape" ],
     altText: ALL,
     title: ALL,
+    hyperlink: [ "placeholder", "textbox", "shape", "picture" ],
     image: [ "picture" ],
     cells: [ "table" ],
     addRows: [ "table" ],
@@ -57,6 +58,7 @@ const PLANNED_TYPES: Record<keyof ElementPatch, ElementSpec["type"][]> = {
     fontColor: [ "textbox", "shape" ],
     altText: [ "textbox", "shape", "table", "chart", "image", "connector" ],
     title: [ "textbox", "shape", "table", "chart", "image", "connector" ],
+    hyperlink: [ "textbox", "shape", "image" ],
     image: [ "image" ],
     cells: [ "table" ],
     addRows: [ "table" ],
@@ -273,6 +275,12 @@ const patchSpec = (spec: ElementSpec, set: ElementPatch, name: string): void => 
         spec.altText = set.altText
     if (set.title !== undefined)
         spec.title = set.title
+    if (set.hyperlink !== undefined && (spec.type === "textbox" || spec.type === "shape" || spec.type === "image")) {
+        if (set.hyperlink === "")
+            delete spec.hyperlink
+        else
+            spec.hyperlink = set.hyperlink
+    }
     switch (spec.type) {
         case "textbox":
         case "shape":

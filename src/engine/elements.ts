@@ -18,7 +18,7 @@ import { layoutTable } from "../core/table-grid.js"
 import { isSchemeColor, type ChartData, type ElementSpec, type Paragraph, type RichText,
     type SchemeColor, type TableCell, type TextDirection } from "../schema/payloads.js"
 import { fitImage, imageSize, type ImageSize } from "./image-size.js"
-import { BASELINE, paragraphRun } from "./text.js"
+import { BASELINE, paragraphRun, setClickLink } from "./text.js"
 import { NS_A, elements, firstElement } from "./xml.js"
 
 /*  the PptxGenJS surface used by pptc, typed structurally  */
@@ -353,6 +353,11 @@ export const finishShape = (shape: Element, el: ElementSpec): void => {
             cNvPr?.setAttribute(attr, value)
         else
             cNvPr?.removeAttribute(attr)
+
+    /*  the click target of a box or shape (PptxGenJS links runs and
+        pictures only); wired with the slide's other links  */
+    if ((el.type === "textbox" || el.type === "shape") && el.hyperlink !== undefined)
+        setClickLink(shape, el.hyperlink)
     if (el.type !== "image" || el.fit !== "crop")
         return
     const box = imageBox(el)

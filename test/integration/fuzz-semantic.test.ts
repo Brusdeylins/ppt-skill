@@ -8,9 +8,11 @@
 **  slide still has its own title, notes, image, chart, embedded OLE object,
 **  section and sldId, and its textboxes and table carry what el.set (text,
 **  frame, fill, alt text, image, table cells and rows) and text.replace
-**  made of them. Runs on a copy of the fixture serialized like
-**  PowerPoint does (CRLF after the XML declaration), and on the private
-**  corporate templates if present. A long run is configured by
+**  made of them; slide links jump to their target after moves and copies
+**  and are gone once the target is removed; section starts, renames and
+**  removals give the expected section of every slide. Runs on a copy of
+**  the fixture serialized like PowerPoint does (CRLF after the XML
+**  declaration), and on the private corporate templates if present. A long run is configured by
 **  PPTC_FUZZ_ROUNDS (rounds per seed) and PPTC_FUZZ_SEEDS (comma-separated
 **  seeds), e.g. `PPTC_FUZZ_ROUNDS=150 PPTC_FUZZ_SEEDS=1,2,3 npx vitest run
 **  test/integration/fuzz-semantic.test.ts`.
@@ -66,11 +68,11 @@ const powerPointStyled = async (file: string): Promise<string> => {
 /**  expected content of one slide; `boxes` maps a textbox name to
      "text|x|fill|altText" and the table to its cells  */
 interface Expected { title: string, notes: string, image: string | null, chart: string | null, ole: string | null, id: number | null,
-    section: string | null, boxes: Record<string, string> }
+    section: string | null, boxes: Record<string, string>, links: Record<string, string | null> }
 
 /**  what one slide actually shows  */
 interface Actual { title: string, notes: string | null, id: number, image: string | null, chart: string | null, ole: string | null, section: string | null,
-    boxes: Record<string, string> }
+    boxes: Record<string, string>, links: Record<string, string | null> }
 
 /**  the textboxes and the table of a slide as the fuzz model sees them  */
 const boxesOf = (shapes: ShapeInfo[]): Record<string, string> => {
@@ -91,6 +93,20 @@ const sectionNames = async (deck: string): Promise<string[]> => {
     return [ ...pres.matchAll(/<p14:section name="([^"]*)"/g) ].map((m) => m[1] as string)
 }
 
+/**  the link elements of a slide (`Link<n>`) with the title of the slide
+     their run or shape link jumps to, null when the link is gone  */
+const linksOf = (shapes: ShapeInfo[], titles: Map<number, string>): Record<string, string | null> => {
+    const out: Record<string, string | null> = {}
+    for (const sh of shapes) {
+        const name = /^(Link\d+)-[0-9a-f-]{36}$/.exec(sh.name)?.[1]
+        const link = sh.hyperlink ?? sh.paragraphs?.[0]?.runs[0]?.hyperlink
+        const id = /^slide:id:(\d+)$/.exec(link ?? "")?.[1]
+        if (name !== undefined)
+            out[name] = id === undefined ? null : titles.get(Number(id)) ?? `?${id}`
+    }
+    return out
+}
+
 /**  what the deck actually shows, per slide in order  */
 const actual = async (deck: string): Promise<Actual[]> => {
     const state = await readDeckState(await DeckArchive.open(deck))
@@ -102,6 +118,7 @@ const actual = async (deck: string): Promise<Actual[]> => {
             if (!sectionOf.has(Number(id[1])))
                 sectionOf.set(Number(id[1]), m[1] as string)
     const out: Actual[] = []
+    const titles = new Map(state.slides.map((s) => [ s.id, s.title ?? "" ]))
     for (const s of state.slides) {
         const rels = await zip.file(`ppt/slides/_rels/${path.posix.basename(s.part)}.rels`)?.async("string") ?? ""
         let image: string | null = null
@@ -118,7 +135,7 @@ const actual = async (deck: string): Promise<Actual[]> => {
                 ole = bytes.toString()
         }
         out.push({ title: s.title ?? "", notes: s.notes, id: s.id, image, chart, ole, section: sectionOf.get(s.id) ?? null,
-            boxes: boxesOf(s.shapes) })
+            boxes: boxesOf(s.shapes), links: linksOf(s.shapes, titles) })
     }
     return out
 }
@@ -230,7 +247,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
     let prev: Actual[] | null = null
     let order: string[] = []
     for (let round = 0; round < rounds; round++) {
-        const kind = model.length < 2 ? 0 : pick(17)
+        const kind = model.length < 2 ? 0 : pick(18)
         const ops: unknown[] = []
         let oleFor: string | null = null
 
@@ -261,7 +278,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
                 ops.push({ op: "el.add", slide: "$n", elements })
             oleFor = rnd() < 0.25 ? t : null
             model.splice(at, 0, { title: t, notes: `notes-${t}`, image: withImage ? t : null, chart: withChart ? `S-${t}` : null,
-                ole: oleFor === null ? null : `ole-${t}`, id: null, section: null, boxes })
+                ole: oleFor === null ? null : `ole-${t}`, id: null, section: null, boxes, links: {} })
 
             /*  the others keep their sections, the new slide starts its own  */
             if (section !== null) {
@@ -271,8 +288,15 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
         }
         else if (kind === 1) {
             const i = pick(model.length)
-            ops.push({ op: "slide.rm", slide: `title:${(model[i] as Expected).title}` })
+            const gone = (model[i] as Expected).title
+            ops.push({ op: "slide.rm", slide: `title:${gone}` })
             model.splice(i, 1)
+
+            /*  links to the removed slide are dropped  */
+            for (const m of model)
+                for (const [ name, to ] of Object.entries(m.links))
+                    if (to === gone)
+                        m.links[name] = null
         }
         else if (kind === 2) {
             const i = pick(model.length)
@@ -287,7 +311,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
             const t = title()
             ops.push({ op: "slide.copy", slide: `title:${src.title}`, ref: "c" },
                 { op: "slide.fill", slide: "$c", placeholders: { title: { text: t } } })
-            model.splice(i + 1, 0, { ...src, title: t, id: null, section: null, boxes: { ...src.boxes } })
+            model.splice(i + 1, 0, { ...src, title: t, id: null, section: null, boxes: { ...src.boxes }, links: { ...src.links } })
         }
         else if (kind === 4) {
             const target = model[pick(model.length)] as Expected
@@ -397,6 +421,20 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
             order.splice(k, 1)
             sectioned = true
         }
+        else if (kind === 17) {
+            /*  a slide link to another slide: a run of a textbox or the
+                whole shape, by title or by id  */
+            const host = model[pick(model.length)] as Expected
+            const others = model.filter((m) => m !== host)
+            const to = others[pick(others.length)] as Expected
+            const link = to.id !== null && rnd() < 0.3 ? `slide:id:${to.id}` : `slide:title:${to.title}`
+            ops.push({ op: "el.add", slide: `title:${host.title}`, elements: [ rnd() < 0.5
+                ? { type: "textbox", name: `Link${round}`, frame: { x: 0.5, y: 6, w: 2, h: 0.5 },
+                    text: [ { runs: [ { text: `zu ${to.title}`, hyperlink: link } ] } ] }
+                : { type: "shape", shape: "rect", name: `Link${round}`, frame: { x: 0.5, y: 6, w: 2, h: 0.5 },
+                    text: "zurück", hyperlink: link } ] })
+            host.links[`Link${round}`] = to.title
+        }
         else if (kind === 13) {
             /*  text.replace in the notes of one slide  */
             const target = model[pick(model.length)] as Expected
@@ -416,7 +454,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
                 m.section = sections?.get((got[i] as Actual).id) ?? null
         }
         const want = model.map((m, i) => ({ title: m.title, notes: m.notes, image: m.image, chart: m.chart, ole: m.ole,
-            id: m.id ?? (got[i] as Actual).id, section: m.section, boxes: m.boxes }))
+            id: m.id ?? (got[i] as Actual).id, section: m.section, boxes: m.boxes, links: m.links }))
         const where = `round ${round} (${JSON.stringify(ops).slice(0, 200)})`
         expect(got, where).toEqual(want)
         expect(await sectionNames(deck), where).toEqual(order)

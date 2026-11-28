@@ -21,6 +21,7 @@ import type { SlidePlanEntry } from "../../core/ops/registry.js"
 import { GenColors, addElement, finishChart, finishGenerated, finishShape, type GenRoot, type GenSlide } from "../elements.js"
 import { PartAllocator, relTarget, relsPartOf } from "../parts.js"
 import { NS_R, elements, firstElement, relRefs } from "../xml.js"
+import { HLINK_ATTR } from "../text.js"
 import { Package } from "./package.js"
 
 /**  the PptxGenJS API surface used here  */
@@ -161,6 +162,15 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string):
                 for (const { el, attr } of relRefs(shape)) {
                     let id = ids.get(attr.value)
                     const rel = genRels.get(attr.value)
+
+                    /*  a slide link went through PptxGenJS as a URL: it is
+                        wired with the slide's other links  */
+                    const link = rel?.target === null ? rel.el.getAttribute("Target") ?? "" : ""
+                    if (link.startsWith("slide:")) {
+                        el.removeAttributeNode(attr)
+                        el.setAttribute(HLINK_ATTR, link)
+                        continue
+                    }
                     if (id === undefined && rel !== undefined) {
                         const target = rel.target === null ? rel.el.getAttribute("Target") ?? ""
                             : relTarget(part, await pkg.clonePart(source, rel.target, copies))

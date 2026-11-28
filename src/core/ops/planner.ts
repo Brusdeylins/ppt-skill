@@ -19,12 +19,51 @@ import { elAdd, elRm, imgPrompts, metaProps } from "./elements.js"
 import { elSet } from "./el-set.js"
 import { textReplace } from "./replace.js"
 import { sectionRename, sectionRm } from "./sections.js"
+import { resolveEntry } from "./fill-common.js"
 
 /**  the op registry: one handler per op name  */
 const HANDLERS: ReadonlyMap<string, OpHandler> = new Map(
     ([slideAdd, slideFill, slideRm, slideMove, slideCopy,
         elAdd, elSet, elRm, imgPrompts, metaProps, textReplace, sectionRename, sectionRm] as OpHandler[])
         .map((h) => [h.name, h]))
+
+/**  the slide links (`slide:SEL` hyperlinks) anywhere in a value  */
+const slideLinks = (value: unknown, out = new Set<string>()): Set<string> => {
+    if (Array.isArray(value))
+        for (const v of value)
+            slideLinks(v, out)
+    else if (value !== null && typeof value === "object")
+        for (const [ key, v ] of Object.entries(value))
+            if (key === "hyperlink" && typeof v === "string" && v.startsWith("slide:"))
+                out.add(v)
+            else
+                slideLinks(v, out)
+    return out
+}
+
+/**
+ *  Resolve the slide links of the planned content against the plan after
+ *  the whole document: targets added later in the document count, moved
+ *  targets follow, removed ones fail.
+ *
+ *  @param ctx - planning context with the finished plan
+ *  @param doc - the ops document (to name the op of a failing link)
+ *  @throws PptcError E_ADDR_NOTFOUND / E_ADDR_AMBIGUOUS for a link whose
+ *          target does not exist after the document (or is not unique)
+ */
+const resolveLinks = (ctx: PlanContext, doc: OpsDocument): void => {
+    for (const link of slideLinks(ctx.plan.entries.map((e) => [ e.fills, e.elements, e.edits ])))
+        try {
+            ctx.plan.links.set(link, resolveEntry(ctx, link.slice("slide:".length)))
+        }
+        catch (err) {
+            if (!(err instanceof PptcError))
+                throw err
+            const at = doc.ops.findIndex((op) => slideLinks(op).has(link))
+            throw new PptcError(err.code, `op ${at} (${doc.ops[at]?.op ?? "?"}): slide link '${link}' has no target `
+                + `after the whole document: ${err.message}`, { failedAt: at, op: doc.ops[at]?.op, details: err.details })
+        }
+}
 
 /**
  *  Plan an ops document against the current deck state.
@@ -78,5 +117,6 @@ export const planOps = (
             throw err
         }
     })
+    resolveLinks(ctx, doc)
     return ctx.plan
 }

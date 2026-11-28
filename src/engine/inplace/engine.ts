@@ -472,6 +472,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
     warnings: LintWarning[]): Promise<void> => {
     const lang = await deckLang(pkg.zip, plan.customProps)
     const generated = await generateElements(plan.entries, lang)
+    const links = new Map([ ...plan.links ].map(([ link, entry ]) => [ link, (states[plan.entries.indexOf(entry)] as SlideState).part ]))
     for (const [ i, s ] of states.entries()) {
         if (!s.touched)
             continue
@@ -482,7 +483,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
             s.partReleased.push(...repair.released)
         }
         const own = await editSlide(pkg, {
-            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes, lang
+            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes, lang, links
         })
         actions.push(...own.actions)
         s.replacedImages = [ ...own.swaps, ...own.adopted.map((to) => ({ from: [], to })) ]

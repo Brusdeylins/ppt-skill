@@ -314,15 +314,25 @@ const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document
     return copy
 }
 
-/**  replace the `pptc-hlink` markers of the text writer by external
-     hyperlink relationships  */
-const wireHyperlinks = (pkg: Package, slide: Document, slideRels: Document): void => {
+/**  replace the `pptc-hlink` markers of the text writer, the el.add
+     finishing and el.set by relationships: an external hyperlink for a
+     URL, a slide relationship and a slide jump for a slide link  */
+const wireHyperlinks = (pkg: Package, part: string, slide: Document, slideRels: Document, links: Map<string, string>): void => {
     for (const hlink of elements(slide, "a:hlinkClick")) {
-        const url = hlink.getAttribute(HLINK_ATTR)
-        if (url === null)
+        const target = hlink.getAttribute(HLINK_ATTR)
+        if (target === null)
             continue
-        const rid = pkg.addRel(slideRels, `${REL}/hyperlink`, url, true)
         hlink.removeAttribute(HLINK_ATTR)
+        let rid: string
+        if (target.startsWith("slide:")) {
+            const to = links.get(target)
+            if (to === undefined)
+                throw new PptcError("E_ENGINE", `slide link '${target}' has no resolved target`)
+            rid = pkg.addRel(slideRels, `${REL}/slide`, relTarget(part, to))
+            hlink.setAttribute("action", "ppaction://hlinksldjump")
+        }
+        else
+            rid = pkg.addRel(slideRels, `${REL}/hyperlink`, target, true)
         hlink.setAttributeNS(NS_R, "r:id", rid)
     }
 }
@@ -385,6 +395,8 @@ export interface SlideWork {
     generated: Generated | null
     /**  the language of text that states none (the deck language)  */
     lang: string
+    /**  output slide part of every slide link of the plan  */
+    links: Map<string, string>
 }
 
 /**  what one slide pass did beyond its repairs: the images el.set
@@ -522,7 +534,7 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
     /*  generated elements, hyperlinks, visibility, links, repairs  */
     if (work.generated !== null)
         await work.generated.transplant(pkg, entry, slide, rels, part)
-    wireHyperlinks(pkg, slide, rels)
+    wireHyperlinks(pkg, part, slide, rels, work.links)
     setSlideVisibility(slide, entry.hidden)
     dropLinksToRemoved(pkg, part, slide, rels, work.removed)
     const dropped = repairRels(pkg, part, slide, rels, unused, forced).filter((id) => !unused.has(id) && !forced.has(id))

@@ -20,7 +20,7 @@ import type { RichText } from "../../schema/payloads.js"
 import { digestBytes } from "../guard.js"
 import { fitImage, imageSize } from "../image-size.js"
 import { REL } from "../parts.js"
-import { replaceInBody, setBodyText, setShapeText } from "../text.js"
+import { replaceInBody, setBodyText, setClickLink, setShapeText } from "../text.js"
 import { NS_A, NS_R, colorElement, elements, firstElement, relRefs } from "../xml.js"
 import type { Package } from "./package.js"
 
@@ -364,6 +364,8 @@ export const applyEdit = async (pkg: Package, slidePart: string, rels: Document,
         setDescription(shape, "descr", set.altText)
     if (set.title !== undefined)
         setDescription(shape, "title", set.title)
+    if (set.hyperlink !== undefined)
+        setClickLink(shape, set.hyperlink)
     if (set.cells !== undefined || set.addRows !== undefined || set.removeRows !== undefined)
         editTable(shape, set, lang)
     return swap

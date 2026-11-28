@@ -10,7 +10,7 @@
 */
 
 import { z } from "zod"
-import { ColorSchema, ElementSchema, FramePatchSchema, RichTextSchema } from "./payloads.js"
+import { ColorSchema, ElementSchema, FramePatchSchema, HyperlinkSchema, RichTextSchema } from "./payloads.js"
 
 /**
  *  Slide selector grammar:
@@ -131,7 +131,7 @@ const RowCellSchema = z.union([RichTextSchema, z.number(), z.boolean()])
 
 /**  the fields of `el.set` that change something  */
 const EL_SET_FIELDS = [ "text", "frame", "fill", "border", "borderPt", "fontColor", "altText", "title",
-    "image", "cells", "addRows", "removeRows" ] as const
+    "hyperlink", "image", "cells", "addRows", "removeRows" ] as const
 
 /**  Op: change a named element on a slide in place -- its text, frame,
      style, alt text, picture or table cells/rows; each field is checked
@@ -156,6 +156,9 @@ export const ElSetSchema = z.object({
          an empty string removes them  */
     altText: z.string().optional(),
     title: z.string().optional(),
+    /**  click target of the whole element (placeholders, textboxes,
+         shapes, pictures): a URL or a slide link; an empty string removes it  */
+    hyperlink: z.union([ HyperlinkSchema, z.literal("") ]).optional(),
     /**  replace the image of a picture or a filled picture placeholder; the
          frame, a crop (re-cropped to the new aspect) and animations stay  */
     image: z.string().min(1).optional(),

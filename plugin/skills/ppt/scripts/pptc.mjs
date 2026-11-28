@@ -16513,6 +16513,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "axes": { "x": { "title", "min", "max", "format" }, "y" },
                  "stacked": "percent", "smooth", "holeSize" }
                image: "path", "fit": stretch|crop|contain, "hyperlink"
+               textbox/shape/image: "hyperlink" -- the click target of the
+                 whole element (URL or slide link, e.g. a back button)
                connector: "from": [x,y], "to": [x,y], "color", "widthPt",
                  "dash": solid|dash|dot|dashDot|longDash,
                  "startArrow"/"endArrow": none|arrow|triangle|stealth|
@@ -16528,6 +16530,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "fill", "fontColor" (placeholder/textbox/shape),
                  "border", "borderPt" (also picture/connector),
                  "altText", "title" (any element; "" removes),
+                 "hyperlink" (placeholder/textbox/shape/picture: URL or
+                   slide link; "" removes),
                  "image" (picture or filled picture placeholder: frame,
                    crop and animations stay -- only on explicit request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
@@ -16567,6 +16571,11 @@ paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
 "number"|false, "spaceBefore"/"spaceAfter" (pt), "lineSpacing" (1.5) },
 runs { "text", "bold", "italic", "underline", "strike", "superscript",
 "subscript", "size", "font", "color", "highlight", "hyperlink", "lang" }.
+Links: "hyperlink" takes a URL or a slide link "slide:SEL" -- slide:$ref,
+slide:id:256, slide:title:Agenda, slide:index:2 -- resolved after the
+whole document (slides added later count, moved ones follow; a target
+missing then fails with E_ADDR_NOTFOUND). A later removal of the target
+drops the link; copies keep it; 'state --level full' reads slide:id:N.
 Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
 bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
@@ -17557,6 +17566,7 @@ var EXISTING_TYPES = {
   fontColor: ["placeholder", "textbox", "shape"],
   altText: ALL,
   title: ALL,
+  hyperlink: ["placeholder", "textbox", "shape", "picture"],
   image: ["picture"],
   cells: ["table"],
   addRows: ["table"],
@@ -17571,6 +17581,7 @@ var PLANNED_TYPES = {
   fontColor: ["textbox", "shape"],
   altText: ["textbox", "shape", "table", "chart", "image", "connector"],
   title: ["textbox", "shape", "table", "chart", "image", "connector"],
+  hyperlink: ["textbox", "shape", "image"],
   image: ["image"],
   cells: ["table"],
   addRows: ["table"],
@@ -17724,6 +17735,12 @@ var patchSpec = (spec, set2, name) => {
     spec.altText = set2.altText;
   if (set2.title !== void 0)
     spec.title = set2.title;
+  if (set2.hyperlink !== void 0 && (spec.type === "textbox" || spec.type === "shape" || spec.type === "image")) {
+    if (set2.hyperlink === "")
+      delete spec.hyperlink;
+    else
+      spec.hyperlink = set2.hyperlink;
+  }
   switch (spec.type) {
     case "textbox":
     case "shape":
@@ -18032,6 +18049,29 @@ var HANDLERS = new Map(
     sectionRm
   ].map((h) => [h.name, h])
 );
+var slideLinks = (value, out = /* @__PURE__ */ new Set()) => {
+  if (Array.isArray(value))
+    for (const v of value)
+      slideLinks(v, out);
+  else if (value !== null && typeof value === "object")
+    for (const [key, v] of Object.entries(value))
+      if (key === "hyperlink" && typeof v === "string" && v.startsWith("slide:"))
+        out.add(v);
+      else
+        slideLinks(v, out);
+  return out;
+};
+var resolveLinks = (ctx, doc) => {
+  for (const link of slideLinks(ctx.plan.entries.map((e) => [e.fills, e.elements, e.edits])))
+    try {
+      ctx.plan.links.set(link, resolveEntry(ctx, link.slice("slide:".length)));
+    } catch (err) {
+      if (!(err instanceof PptcError))
+        throw err;
+      const at = doc.ops.findIndex((op) => slideLinks(op).has(link));
+      throw new PptcError(err.code, `op ${at} (${doc.ops[at]?.op ?? "?"}): slide link '${link}' has no target after the whole document: ${err.message}`, { failedAt: at, op: doc.ops[at]?.op, details: err.details });
+    }
+};
 var planOps = (doc, deck, deckLayouts, template, minFontPt) => {
   if (doc.expectRev !== void 0 && doc.expectRev !== deck.rev)
     throw new PptcError(
@@ -18066,6 +18106,7 @@ var planOps = (doc, deck, deckLayouts, template, minFontPt) => {
       throw err;
     }
   });
+  resolveLinks(ctx, doc);
   return ctx.plan;
 };
 
@@ -37829,7 +37870,12 @@ var MarginSchema = external_exports.union([
   external_exports.number().min(0),
   external_exports.tuple([external_exports.number().min(0), external_exports.number().min(0), external_exports.number().min(0), external_exports.number().min(0)])
 ]);
-var HyperlinkSchema = external_exports.string().url();
+var SLIDE_LINK = /^slide:(id:\d+|title:.+|index:\d+|\$[A-Za-z][A-Za-z0-9_-]*)$/;
+var UrlSchema = external_exports.string().url();
+var HyperlinkSchema = external_exports.string().describe("a URL (https://...) or a slide link: slide:$ref, slide:id:256, slide:title:Agenda, slide:index:2").superRefine((v, ctx) => {
+  if (v.startsWith("slide:") ? !SLIDE_LINK.test(v) : !UrlSchema.safeParse(v).success)
+    ctx.addIssue({ code: "custom", message: "expected a URL or a slide link like 'slide:$ref', 'slide:id:256', 'slide:title:Agenda' or 'slide:index:2'" });
+});
 var fontProps = {
   bold: external_exports.boolean().optional(),
   italic: external_exports.boolean().optional(),
@@ -38057,6 +38103,8 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     ...boxTextProps,
     /**  text language of the element (paragraphs and runs may override)  */
     lang: LangSchema.optional(),
+    /**  click target of the whole box (URL or slide link)  */
+    hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
@@ -38096,6 +38144,9 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     ...boxTextProps,
     /**  text language of the shape's text  */
     lang: LangSchema.optional(),
+    /**  click target of the whole shape (URL or slide link), e.g. a
+         back button  */
+    hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
@@ -38107,7 +38158,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
          `crop` covers the frame and cuts the overhang off centered,
          `contain` shows the whole image in a centered, shrunk frame  */
     fit: external_exports.enum(["crop", "contain", "stretch"]).optional(),
-    /**  click target of the picture  */
+    /**  click target of the picture (URL or slide link)  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
     name: external_exports.string().optional()
@@ -38220,6 +38271,7 @@ var EL_SET_FIELDS = [
   "fontColor",
   "altText",
   "title",
+  "hyperlink",
   "image",
   "cells",
   "addRows",
@@ -38245,6 +38297,9 @@ var ElSetSchema = external_exports.object({
        an empty string removes them  */
   altText: external_exports.string().optional(),
   title: external_exports.string().optional(),
+  /**  click target of the whole element (placeholders, textboxes,
+       shapes, pictures): a URL or a slide link; an empty string removes it  */
+  hyperlink: external_exports.union([HyperlinkSchema, external_exports.literal("")]).optional(),
   /**  replace the image of a picture or a filled picture placeholder; the
        frame, a crop (re-cropped to the new aspect) and animations stay  */
   image: external_exports.string().min(1).optional(),
@@ -40869,6 +40924,18 @@ var children = (parent, names) => {
   return out;
 };
 var HLINK_ATTR = "pptc-hlink";
+var setClickLink = (shape, target) => {
+  const cNvPr = firstElement(shape, "p:cNvPr");
+  if (cNvPr === null)
+    return;
+  for (const old of children(cNvPr, ["a:hlinkClick"]))
+    cNvPr.removeChild(old);
+  if (target === null || target === "")
+    return;
+  const hlink = shape.ownerDocument.createElementNS(NS_A, "a:hlinkClick");
+  hlink.setAttribute(HLINK_ATTR, target);
+  cNvPr.insertBefore(hlink, cNvPr.firstChild);
+};
 var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
 var BASELINE = { superscript: 3e4, subscript: -25e3 };
 var buildRunProps = (doc, run, lang) => {
@@ -41350,6 +41417,8 @@ var applyEdit = async (pkg, slidePart, rels, shape, edit, lang) => {
     setDescription(shape, "descr", set2.altText);
   if (set2.title !== void 0)
     setDescription(shape, "title", set2.title);
+  if (set2.hyperlink !== void 0)
+    setClickLink(shape, set2.hyperlink);
   if (set2.cells !== void 0 || set2.addRows !== void 0 || set2.removeRows !== void 0)
     editTable(shape, set2, lang);
   return swap;
@@ -41592,13 +41661,21 @@ var unshareNotes = async (pkg, slidePart, slideRels) => {
   rel.el.setAttribute("Target", relTarget(slidePart, copy));
   return copy;
 };
-var wireHyperlinks = (pkg, slide, slideRels) => {
+var wireHyperlinks = (pkg, part, slide, slideRels, links) => {
   for (const hlink of elements(slide, "a:hlinkClick")) {
-    const url2 = hlink.getAttribute(HLINK_ATTR);
-    if (url2 === null)
+    const target = hlink.getAttribute(HLINK_ATTR);
+    if (target === null)
       continue;
-    const rid = pkg.addRel(slideRels, `${REL}/hyperlink`, url2, true);
     hlink.removeAttribute(HLINK_ATTR);
+    let rid;
+    if (target.startsWith("slide:")) {
+      const to = links.get(target);
+      if (to === void 0)
+        throw new PptcError("E_ENGINE", `slide link '${target}' has no resolved target`);
+      rid = pkg.addRel(slideRels, `${REL}/slide`, relTarget(part, to));
+      hlink.setAttribute("action", "ppaction://hlinksldjump");
+    } else
+      rid = pkg.addRel(slideRels, `${REL}/hyperlink`, target, true);
     hlink.setAttributeNS(NS_R, "r:id", rid);
   }
 };
@@ -41723,7 +41800,7 @@ var editSlide = async (pkg, work) => {
   }
   if (work.generated !== null)
     await work.generated.transplant(pkg, entry, slide, rels, part);
-  wireHyperlinks(pkg, slide, rels);
+  wireHyperlinks(pkg, part, slide, rels, work.links);
   setSlideVisibility(slide, entry.hidden);
   dropLinksToRemoved(pkg, part, slide, rels, work.removed);
   const dropped = repairRels(pkg, part, slide, rels, unused, forced).filter((id) => !unused.has(id) && !forced.has(id));
@@ -47314,6 +47391,8 @@ var finishShape = (shape, el) => {
       cNvPr?.setAttribute(attr, value);
     else
       cNvPr?.removeAttribute(attr);
+  if ((el.type === "textbox" || el.type === "shape") && el.hyperlink !== void 0)
+    setClickLink(shape, el.hyperlink);
   if (el.type !== "image" || el.fit !== "crop")
     return;
   const box = imageBox(el);
@@ -47542,6 +47621,12 @@ var generateElements = async (entries, lang) => {
         for (const { el, attr } of relRefs(shape)) {
           let id = ids.get(attr.value);
           const rel = genRels.get(attr.value);
+          const link = rel?.target === null ? rel.el.getAttribute("Target") ?? "" : "";
+          if (link.startsWith("slide:")) {
+            el.removeAttributeNode(attr);
+            el.setAttribute(HLINK_ATTR, link);
+            continue;
+          }
           if (id === void 0 && rel !== void 0) {
             const target = rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, await pkg.clonePart(source, rel.target, copies));
             id = pkg.addRel(rels, rel.type, target, rel.target === null);
@@ -47847,6 +47932,7 @@ var untouchedParts = (pkg, states) => {
 var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
   const lang = await deckLang(pkg.zip, plan.customProps);
   const generated = await generateElements(plan.entries, lang);
+  const links = new Map([...plan.links].map(([link, entry]) => [link, states[plan.entries.indexOf(entry)].part]));
   for (const [i, s] of states.entries()) {
     if (!s.touched)
       continue;
@@ -47863,7 +47949,8 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
       notesMaster: deck.notesMaster ?? "",
       generated,
       sharedNotes: s.sharedNotes,
-      lang
+      lang,
+      links
     });
     actions.push(...own2.actions);
     s.replacedImages = [...own2.swaps, ...own2.adopted.map((to) => ({ from: [], to }))];

@@ -78,8 +78,23 @@ export const MarginSchema = z.union([
     z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)])
 ])
 
-/**  Hyperlink target of a run or picture (a URL).  */
-export const HyperlinkSchema = z.string().url()
+/**  a slide link: `slide:` and a slide selector (`$ref`, `id:N`,
+     `title:...`, `index:N`), resolved after the whole ops document  */
+export const SLIDE_LINK = /^slide:(id:\d+|title:.+|index:\d+|\$[A-Za-z][A-Za-z0-9_-]*)$/
+
+/**  the URL check of a hyperlink that is no slide link  */
+const UrlSchema = z.string().url()
+
+/**  Click target of a run, shape or picture: a URL, or a jump to a slide
+     of the deck (`slide:$ref`, `slide:id:256`, `slide:title:Agenda`,
+     `slide:index:2`).  */
+export const HyperlinkSchema = z.string()
+    .describe("a URL (https://...) or a slide link: slide:$ref, slide:id:256, slide:title:Agenda, slide:index:2")
+    .superRefine((v, ctx) => {
+        if (v.startsWith("slide:") ? !SLIDE_LINK.test(v) : !UrlSchema.safeParse(v).success)
+            ctx.addIssue({ code: "custom", message: "expected a URL or a slide link like 'slide:$ref', 'slide:id:256', "
+                + "'slide:title:Agenda' or 'slide:index:2'" })
+    })
 
 /**  Character-level formatting shared by paragraphs and runs.  */
 const fontProps = {
@@ -321,6 +336,8 @@ export const ElementSchema = z.discriminatedUnion("type", [
         ...boxTextProps,
         /**  text language of the element (paragraphs and runs may override)  */
         lang: LangSchema.optional(),
+        /**  click target of the whole box (URL or slide link)  */
+        hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
         name: z.string().optional()
     }).strict(),
@@ -360,6 +377,9 @@ export const ElementSchema = z.discriminatedUnion("type", [
         ...boxTextProps,
         /**  text language of the shape's text  */
         lang: LangSchema.optional(),
+        /**  click target of the whole shape (URL or slide link), e.g. a
+             back button  */
+        hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
         name: z.string().optional()
     }).strict(),
@@ -371,7 +391,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
              `crop` covers the frame and cuts the overhang off centered,
              `contain` shows the whole image in a centered, shrunk frame  */
         fit: z.enum(["crop", "contain", "stretch"]).optional(),
-        /**  click target of the picture  */
+        /**  click target of the picture (URL or slide link)  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
         name: z.string().optional()

@@ -33,8 +33,30 @@ const children = (parent: Element, names: string[]): Element[] => {
     return out
 }
 
-/**  marker attribute the engine replaces by a hyperlink relationship  */
+/**  marker attribute the engine replaces by a hyperlink relationship: a
+     URL, or a slide link (`slide:SEL`) the plan resolved  */
 export const HLINK_ATTR = "pptc-hlink"
+
+/**
+ *  Set or clear the click target of a whole shape or picture (`a:hlinkClick`
+ *  in its `p:cNvPr`); the relationship is wired with the slide's other
+ *  links.
+ *
+ *  @param shape - the shape or picture
+ *  @param target - a URL or slide link, null or "" to remove the link
+ */
+export const setClickLink = (shape: Element, target: string | null): void => {
+    const cNvPr = firstElement(shape, "p:cNvPr")
+    if (cNvPr === null)
+        return
+    for (const old of children(cNvPr, [ "a:hlinkClick" ]))
+        cNvPr.removeChild(old)
+    if (target === null || target === "")
+        return
+    const hlink = (shape.ownerDocument as Document).createElementNS(NS_A, "a:hlinkClick")
+    hlink.setAttribute(HLINK_ATTR, target)
+    cNvPr.insertBefore(hlink, cNvPr.firstChild)
+}
 
 /**  normalize plain-string content into the paragraph form  */
 const toParagraphs = (text: RichText): Paragraph[] =>

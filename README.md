@@ -413,10 +413,21 @@ Anatomy:
   style), `spaceBefore`/`spaceAfter` (pt) and `lineSpacing` (a multiple,
   `1.5`); a run takes `bold`, `italic`, `underline`, `strike`,
   `superscript`, `subscript`, `size`, `font`, `color`, `highlight`,
-  `hyperlink` and `lang` (paragraph-level character fields apply to a
-  paragraph without runs). The same vocabulary works in `slide.fill`,
+  `hyperlink` (see *Links*) and `lang` (paragraph-level character fields
+  apply to a paragraph without runs). The same vocabulary works in `slide.fill`,
   `el.set` and `el.add`. There is no shrink-to-fit: text that overflows is
   shortened or split (`W_TEXT_OVERFLOW`).
+- **Links**: `hyperlink` -- on a run, and on a `textbox`, `shape` or
+  `image` as the click target of the whole element (`el.add`, `el.set`)
+  -- takes a URL or a slide link `slide:SEL`: `slide:$ref`,
+  `slide:id:256`, `slide:title:Agenda`, `slide:index:2`. A slide link is a
+  jump to that slide (a slide relationship with
+  `ppaction://hlinksldjump`); its target is resolved after the whole
+  document, so slides added later in it count, moved slides stay the
+  target, and a target that does not exist then fails with
+  `E_ADDR_NOTFOUND`. When a later apply removes the target, the link goes
+  (the text stays); a copied slide keeps its links. `state --level full`
+  reads links back as the URL or `slide:id:N`.
 - **Colors**: every color field takes a hex value (`"1F4E79"`, `"#1F4E79"`)
   or a theme slot -- `accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`,
   `dk1`, `lt1`, `dk2`, `lt2` -- written as a theme reference
@@ -464,11 +475,12 @@ except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
   and the text box layout shared with `shape`: `valign`
   (`top`/`middle`/`bottom`), `margin` (inner margin in inches: one value
   or `[left, top, right, bottom]`), `textDirection` (`horizontal`,
-  `rotate90`, `rotate270`, `stacked`).
+  `rotate90`, `rotate270`, `stacked`); `hyperlink` (URL or slide link:
+  the click target of the whole box).
 - **`shape`**: `shape` (preset: `rect`, `roundRect`, `ellipse`, arrows,
   flowchart shapes, ...), `text` (rich text), `fill`, `border`,
   `borderPt`, `fontColor`, `fontSize`, `lang`, `valign`, `margin`,
-  `textDirection`.
+  `textDirection`, `hyperlink` (e.g. a back button to `slide:title:Agenda`).
 - **`table`**: `data: {headers, rows, style}` (`style`: `headerBg`,
   `headerFg`, `altRowBg`, `fontSize`, `border`, `headerHeight`,
   `rowHeight`); `colWidths` (inches per column, as `state` reports them;
@@ -499,7 +511,7 @@ except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
   with `E_SCHEMA`.
 - **`image`**: `path`, `fit` (`stretch` -- the default --, `crop`:
   centered cover, `contain`: the whole image in a centered, shrunk frame),
-  `hyperlink` (URL).
+  `hyperlink` (URL or slide link).
 - **`connector`**: `from`/`to` `[x, y]`, `color`, `widthPt`, `dash`
   (`solid`, `dash`, `dot`, `dashDot`, `longDash`), `startArrow`/`endArrow`
   (`none`, `arrow`, `triangle`, `stealth`, `diamond`, `oval`) at the
@@ -522,6 +534,7 @@ field; each is checked against the element's type (`E_SCHEMA` otherwise):
 | `border`, `borderPt` | placeholder, textbox, shape, picture, connector | outline color and width in pt |
 | `fontColor` | placeholder, textbox, shape | color of every run |
 | `altText`, `title` | every element | alt text (`cNvPr@descr`) and title; `""` removes them |
+| `hyperlink` | placeholder, textbox, shape, picture | click target of the whole element: a URL or a slide link (`slide:SEL`); `""` removes it |
 | `image` | picture, filled picture placeholder | another image in place: frame, a crop (re-cut centered to the new aspect) and animations stay; an SVG shows through PowerPoint's SVG extension |
 | `cells` | table | `[{row, col, text}]` -- 0-based grid position, header row 0; a cell covered by a merge fails |
 | `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the row above (of the first row at 0); one value per column |
