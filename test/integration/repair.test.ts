@@ -773,3 +773,57 @@ describe("repairs inside charts and package metadata", () => {
         expect(copyRels).toContain("my%20image.png")
     })
 })
+
+describe("names, characters and metadata of real-world decks", () => {
+    it("keeps an escaped part name escaped once in a copy", async () => {
+        const deck = await craftDeck("escaped-copy", async (zip, [ a ]) => {
+            zip.file("ppt/media/my%20image.png", png("esc"))
+            zip.file("ppt/media/Bild-%C3%A4.png", png("uml"))
+            await addRel(zip, a as string, "rIdEsc", "image", "../media/my%20image.png")
+            await addRel(zip, a as string, "rIdUml", "image", "../media/Bild-%C3%A4.png")
+            await addShape(zip, a as string, pic(90, "Esc", "rIdEsc") + pic(91, "Uml", "rIdUml"))
+        })
+        await apply(deck, [ { op: "slide.copy", slide: "index:0" } ])
+        await expectIntact(deck)
+        const parts = (await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.part)
+        const rels = (await bytesIn(deck, relsOf(parts[1] as string))).toString()
+        expect(rels).toContain("Target=\"../media/my%20image.png\"")
+        expect(rels).toContain("Target=\"../media/Bild-%C3%A4.png\"")
+        expect(rels).not.toContain("%25")
+    })
+
+    it("treats a replacement character in slide text as valid", async () => {
+        const deck = await craftDeck("replacement-char", async (zip, [ a ]) => {
+            zip.file(a as string, (await text(zip, a as string)).replace("<a:t>A</a:t>", "<a:t>A \uFFFD kaputt</a:t>"))
+        })
+        expect(await verifyFile(deck)).toEqual([])
+        const res = await apply(deck, [ { op: "slide.copy", slide: "index:0" },
+            { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B \uFFFD" } } } ])
+        expect(res.warnings.map((w) => w.code)).not.toContain("W_INPUT_DEFECT")
+        await expectIntact(deck)
+    })
+
+    it("drops the relationships of a missing slide", async () => {
+        const deck = await craftDeck("orphan-rels", async (zip) => {
+            zip.file("ppt/slides/_rels/slide9.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + `<Relationship Id="rId1" Type="${REL}/image" Target="../media/none.png"/></Relationships>`)
+        })
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res).join(" ")).toContain("ppt/slides/_rels/slide9.xml.rels")
+        await expectIntact(deck)
+    })
+
+    it("keeps app properties without custom-show group when the counts happen to match", async () => {
+        const deck = await craftDeck("shows-no-group", async (zip) => {
+            const pres = await text(zip, "ppt/presentation.xml")
+            const rid = /<p:sldId [^>]*r:id="([^"]+)"/.exec(pres)?.[1] as string
+            const show = (n: number): string => `<p:custShow name="S${n}" id="${n}"><p:sldLst><p:sld r:id="${rid}"/></p:sldLst></p:custShow>`
+            zip.file("ppt/presentation.xml", pres.replace(/(<p:notesSz[^>]*\/>)/, `$1<p:custShowLst>${show(0)}${show(1)}${show(2)}</p:custShowLst>`))
+        })
+        const before = [ ...(await bytesIn(deck, "docProps/app.xml")).toString().matchAll(/<vt:lpstr>([^<]*)<\/vt:lpstr>/g) ].map((m) => m[1])
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "D" } } } ])
+        await expectIntact(deck)
+        const after = [ ...(await bytesIn(deck, "docProps/app.xml")).toString().matchAll(/<vt:lpstr>([^<]*)<\/vt:lpstr>/g) ].map((m) => m[1])
+        expect(after).toEqual([ ...before, "D" ])
+    })
+})

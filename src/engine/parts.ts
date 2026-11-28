@@ -93,6 +93,19 @@ export const findPart = (zip: JSZip, name: string): string | null => {
     return Object.keys(zip.files).find((f) => !f.endsWith("/") && f.toLowerCase() === lower) ?? null
 }
 
+/**
+ *  The relationship target from one part to another: relative, with the
+ *  characters a URI may not carry escaped -- a `%` of the part name stays,
+ *  since a conformant package names an escaped part by its escaped form.
+ *
+ *  @param from - the owning part
+ *  @param to - the target part
+ *  @returns the Target attribute value
+ */
+export const relTarget = (from: string, to: string): string =>
+    path.posix.relative(path.posix.dirname(from), to)
+        .replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@/%]/g, (c) => encodeURIComponent(c))
+
 /**  a target with percent-escapes resolved (`my%20image.png`), unchanged
      when it carries none or invalid ones  */
 const unescapeIri = (target: string): string => {

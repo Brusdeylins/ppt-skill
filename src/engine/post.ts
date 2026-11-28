@@ -115,7 +115,9 @@ const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> =>
     /*  the slide-title group: the last one, unless custom shows follow it  */
     const shows = elements(parseXml(await partText(zip, "ppt/presentation.xml")), "p:custShow").length
     const counts = [ ...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g) ].map((m) => Number(m[1]))
-    const at = shows > 0 && counts.length >= 2 && counts[counts.length - 1] === shows ? counts.length - 2 : counts.length - 1
+    const declared = Number(/<Slides>(\d+)<\/Slides>/.exec(xml)?.[1] ?? "-1")
+    const at = shows > 0 && counts.length >= 2 && counts[counts.length - 1] === shows && counts[counts.length - 2] === declared
+        ? counts.length - 2 : counts.length - 1
     const leading = counts.slice(0, at).reduce((a, b) => a + b, 0)
     const old = counts[at] ?? 0
     let seen = 0

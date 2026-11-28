@@ -51,7 +51,10 @@
   without slide part and app properties without title list no longer
   stop an apply; nor do repairs inside a chart or SmartArt part (a chart
   without its workbook), also on a copied slide. Custom-show titles in
-  the app properties stay after the slide titles.
+  the app properties stay after the slide titles. Copies keep escaped part
+  names escaped once (`my%20image.png`); a replacement character
+  (U+FFFD) in slide text is valid; relationships of a missing part are
+  dropped.
 - **`verify` checks more.** References to missing relationships in any
   part (1.0.x created such slides from layouts with picture fills), a
   notes part that names another slide, a slide listed twice and slide

@@ -24,7 +24,7 @@ import { atomicWrite } from "../../infra/fs.js"
 import { notesOwner, partDefects, type Finding, type PartView } from "../defects.js"
 import { byteGuard, digestBytes, verifyContent, type SlideExpect } from "../guard.js"
 import { finishPackage } from "../post.js"
-import { ASSET_PART, REL, RELS, findPart, layoutOrder, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
+import { ASSET_PART, REL, RELS, findPart, layoutOrder, relTarget, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
 import { findDefects } from "../verify.js"
 import { NS_P, NS_R, elements, firstElement } from "../xml.js"
@@ -191,6 +191,11 @@ export const preflight = async (plan: MutationPlan, archive: DeckArchive): Promi
      writes anything, so a defect of the input never hides one of the
      engine's own  */
 const repairPackage = async (pkg: Package, warnings: LintWarning[], repaired: Set<string>): Promise<void> => {
+    /*  a rels part whose owner is gone is garbage  */
+    for (const relsPart of Object.keys(pkg.zip.files).filter((f) => f.endsWith(".rels") && relsOwner(f) !== "" && !pkg.has(relsOwner(f)))) {
+        pkg.zip.remove(relsPart)
+        warnings.push(repairedWarning(DECK_WIDE, `the input deck carried relationships of a missing part; pptc removed ${relsPart}`))
+    }
     const owners = new Set(Object.keys(pkg.zip.files).filter((f) => !f.endsWith("/"))
         .map((f) => f.endsWith(".rels") ? relsOwner(f) : f).filter((f) => f === "" || /\.xml$/.test(f)))
     for (const part of [ ...owners ].filter(isPackagePart)) {
@@ -357,7 +362,7 @@ const writeSlideList = (pkg: Package, deck: Deck, states: SlideState[], matched:
         if (el === undefined) {
             el = pres.createElementNS(NS_P, "p:sldId")
             el.setAttribute("id", String(pkg.alloc.slideId()))
-            el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`, path.posix.relative("ppt", part)))
+            el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`, relTarget("ppt/presentation.xml", part)))
         }
         lst.appendChild(el)
     }
@@ -439,7 +444,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
         s.released = [ ...new Set([ ...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own.released ]) ]
         if (s.sharedNotes)
             actions.push("gave the slide its own notes part")
-        if (s.defects.length > 0)
+        if (s.defects.length > 0 && !states.slice(0, i).some((o) => o.part === s.part && o.touched))
             warnings.push(repairedWarning({ id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index: i, title: s.entry.title },
                 `the input deck carried PowerPoint repair triggers on this slide${s.entry.virtualId > 0 ? "" : " (or the slide it was copied from)"} `
                 + `(${s.defects.map((d) => d.text).join("; ")}); pptc ${actions.length > 0 ? actions.join(", ") : "repaired them"}`))

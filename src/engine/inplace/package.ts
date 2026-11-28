@@ -13,7 +13,7 @@ import JSZip from "jszip"
 import path from "node:path"
 import type { Document } from "@xmldom/xmldom"
 import {
-    EMPTY_RELS, IMAGE_TYPES, PartAllocator, RELS, appendRel, findPart, partText, relIs, relTargets,
+    EMPTY_RELS, IMAGE_TYPES, PartAllocator, RELS, appendRel, findPart, partText, relIs, relTarget, relTargets,
     relsPartOf, removeParts, type Rel
 } from "../parts.js"
 import { elements, parseXml, serializeXml } from "../xml.js"
@@ -223,10 +223,12 @@ export class Package {
                 el.parentNode?.removeChild(el)
                 continue
             }
+            if (next === undefined && from === this && relIs(rel, RELS.shared) && path.posix.dirname(part) === path.posix.dirname(copy))
+                continue
             if (next === undefined && from === this && relIs(rel, RELS.shared))
                 next = target
             next ??= await this.clonePart(from, target, done)
-            el.setAttribute("Target", encodeURI(path.posix.relative(path.posix.dirname(copy), next)))
+            el.setAttribute("Target", relTarget(copy, next))
         }
     }
 

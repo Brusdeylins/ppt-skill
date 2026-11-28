@@ -138,14 +138,10 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
         }
 
         /*  a dead target carries no content that could be lost; a repaired
-            one counts by its kind  */
+            one counts by its kind and its children  */
         if (zip.file(target) === null)
             continue
-        if (repaired.includes(target)) {
-            out.push(`${kind}:repaired`)
-            continue
-        }
-        let hash = await digest(zip, target)
+        let hash = repaired.includes(target) ? "repaired" : await digest(zip, target)
         if (depth > 0)
             hash += `[${(await relatedDigests(zip, target, null, depth - 1, [], repaired)).join(",")}]`
         out.push(`${kind}:${hash}`)

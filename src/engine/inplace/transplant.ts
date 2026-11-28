@@ -12,12 +12,11 @@
 
 import PptxGenJsPkg from "pptxgenjs"
 import { randomUUID } from "node:crypto"
-import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../../infra/errors.js"
 import type { SlidePlanEntry } from "../../core/ops/registry.js"
 import { addElement, type GenRoot, type GenSlide } from "../elements.js"
-import { PartAllocator } from "../parts.js"
+import { PartAllocator, relTarget } from "../parts.js"
 import { NS_R, elements, firstElement, relRefs } from "../xml.js"
 import { Package } from "./package.js"
 
@@ -111,7 +110,7 @@ export const generateElements = async (entries: SlidePlanEntry[]): Promise<Gener
                     const rel = genRels.get(attr.value)
                     if (id === undefined && rel !== undefined) {
                         const target = rel.target === null ? rel.el.getAttribute("Target") ?? ""
-                            : path.posix.relative(path.posix.dirname(part), await pkg.clonePart(source, rel.target, copies))
+                            : relTarget(part, await pkg.clonePart(source, rel.target, copies))
                         id = pkg.addRel(rels, rel.type, target, rel.target === null)
                         ids.set(attr.value, id)
                     }

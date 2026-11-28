@@ -2913,8 +2913,8 @@ var require_utils = __commonJS({
       var result = transform2[inputType][outputType](input2);
       return result;
     };
-    exports.resolve = function(path11) {
-      var parts = path11.split("/");
+    exports.resolve = function(path10) {
+      var parts = path10.split("/");
       var result = [];
       for (var index = 0; index < parts.length; index++) {
         var part = parts[index];
@@ -8767,18 +8767,18 @@ var require_object = __commonJS({
       var object2 = new ZipObject(name, zipObjectContent, o);
       this.files[name] = object2;
     };
-    var parentFolder = function(path11) {
-      if (path11.slice(-1) === "/") {
-        path11 = path11.substring(0, path11.length - 1);
+    var parentFolder = function(path10) {
+      if (path10.slice(-1) === "/") {
+        path10 = path10.substring(0, path10.length - 1);
       }
-      var lastSlash = path11.lastIndexOf("/");
-      return lastSlash > 0 ? path11.substring(0, lastSlash) : "";
+      var lastSlash = path10.lastIndexOf("/");
+      return lastSlash > 0 ? path10.substring(0, lastSlash) : "";
     };
-    var forceTrailingSlash = function(path11) {
-      if (path11.slice(-1) !== "/") {
-        path11 += "/";
+    var forceTrailingSlash = function(path10) {
+      if (path10.slice(-1) !== "/") {
+        path10 += "/";
       }
-      return path11;
+      return path10;
     };
     var folderAdd = function(name, createFolders) {
       createFolders = typeof createFolders !== "undefined" ? createFolders : defaults.createFolders;
@@ -22190,7 +22190,7 @@ var toPptcError = (err) => {
 var VERSION = true ? "1.1.0" : "0.0.0-dev";
 
 // src/commands/apply.ts
-import path8 from "node:path";
+import path7 from "node:path";
 
 // src/core/ops/registry.ts
 var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
@@ -23783,10 +23783,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path11) {
-  if (!path11)
+function getElementAtPath(obj, path10) {
+  if (!path10)
     return obj;
-  return path11.reduce((acc, key) => acc?.[key], obj);
+  return path10.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -24126,11 +24126,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path11, issues) {
+function prefixIssues(path10, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path11);
+    iss.path.unshift(path10);
     return iss;
   });
 }
@@ -24592,16 +24592,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path11 = []) => {
+  const processError = (error63, path10 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
       } else {
-        const fullpath = [...path11, ...issue2.path];
+        const fullpath = [...path10, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -24640,17 +24640,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path11 = []) => {
+  const processError = (error63, path10 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
       } else {
-        const fullpath = [...path11, ...issue2.path];
+        const fullpath = [...path10, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -24689,8 +24689,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path11 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path11) {
+  const path10 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path10) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -41828,13 +41828,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path11 = ref.slice(1).split("/").filter(Boolean);
-  if (path11.length === 0) {
+  const path10 = ref.slice(1).split("/").filter(Boolean);
+  if (path10.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path11[0] === defsKey) {
-    const key = path11[1] === void 0 ? void 0 : decodeJSONPointerSegment(path11[1]);
+  if (path10[0] === defsKey) {
+    const key = path10[1] === void 0 ? void 0 : decodeJSONPointerSegment(path10[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -43022,7 +43022,7 @@ var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 var NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 var parseXml = (xml, strict = false) => new import_xmldom.DOMParser({
   onError: (level, msg) => {
-    if (strict || level === "fatalError")
+    if (level === "fatalError" || strict && level === "error")
       throw new Error(msg);
   }
 }).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
@@ -43111,6 +43111,7 @@ var findPart = (zip, name) => {
   const lower = name.toLowerCase();
   return Object.keys(zip.files).find((f) => !f.endsWith("/") && f.toLowerCase() === lower) ?? null;
 };
+var relTarget = (from, to) => path2.posix.relative(path2.posix.dirname(from), to).replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@/%]/g, (c) => encodeURIComponent(c));
 var unescapeIri = (target) => {
   try {
     return decodeURIComponent(target);
@@ -43493,7 +43494,7 @@ var phFacts = (sp) => {
 var layoutPartsInOrder = async (archive) => {
   const presRels = await archive.xml("ppt/_rels/presentation.xml.rels");
   const pres = await archive.xml("ppt/presentation.xml");
-  const relTarget = (rels, rid) => {
+  const relTarget2 = (rels, rid) => {
     for (const rel of elements(rels, "Relationship"))
       if (rel.getAttribute("Id") === rid)
         return rel.getAttribute("Target");
@@ -43501,7 +43502,7 @@ var layoutPartsInOrder = async (archive) => {
   };
   const parts = [];
   for (const masterId of elements(pres, "p:sldMasterId")) {
-    const target = relTarget(presRels, masterId.getAttribute("r:id") ?? "");
+    const target = relTarget2(presRels, masterId.getAttribute("r:id") ?? "");
     if (target === null)
       continue;
     const masterPart = path3.posix.join("ppt", target);
@@ -43510,7 +43511,7 @@ var layoutPartsInOrder = async (archive) => {
       path3.posix.join(path3.posix.dirname(masterPart), "_rels", `${path3.posix.basename(masterPart)}.rels`)
     );
     for (const layoutId of elements(master, "p:sldLayoutId")) {
-      const lt = relTarget(masterRels, layoutId.getAttribute("r:id") ?? "");
+      const lt = relTarget2(masterRels, layoutId.getAttribute("r:id") ?? "");
       if (lt !== null)
         parts.push({
           part: path3.posix.normalize(path3.posix.join("ppt/slideMasters", lt)),
@@ -43927,7 +43928,7 @@ var readDeckState = async (archive) => {
 // src/engine/inplace/engine.ts
 var import_jszip6 = __toESM(require_lib3(), 1);
 import { readFileSync as readFileSync6 } from "node:fs";
-import path7 from "node:path";
+import path6 from "node:path";
 
 // src/engine/defects.ts
 var finding = (rule, part, detail) => ({ rule, part, text: `${part}: ${detail}` });
@@ -44029,11 +44030,7 @@ var relatedDigests = async (zip, part, xml, depth, skip = [], repaired = []) => 
     }
     if (zip.file(target) === null)
       continue;
-    if (repaired.includes(target)) {
-      out.push(`${kind}:repaired`);
-      continue;
-    }
-    let hash2 = await digest(zip, target);
+    let hash2 = repaired.includes(target) ? "repaired" : await digest(zip, target);
     if (depth > 0)
       hash2 += `[${(await relatedDigests(zip, target, null, depth - 1, [], repaired)).join(",")}]`;
     out.push(`${kind}:${hash2}`);
@@ -44223,7 +44220,8 @@ var syncAppProperties = async (zip, slides) => {
     titles.push(slideTitle(parseXml(await partText(zip, slidePart))));
   const shows = elements(parseXml(await partText(zip, "ppt/presentation.xml")), "p:custShow").length;
   const counts = [...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].map((m) => Number(m[1]));
-  const at = shows > 0 && counts.length >= 2 && counts[counts.length - 1] === shows ? counts.length - 2 : counts.length - 1;
+  const declared = Number(/<Slides>(\d+)<\/Slides>/.exec(xml)?.[1] ?? "-1");
+  const at = shows > 0 && counts.length >= 2 && counts[counts.length - 1] === shows && counts[counts.length - 2] === declared ? counts.length - 2 : counts.length - 1;
   const leading = counts.slice(0, at).reduce((a, b) => a + b, 0);
   const old = counts[at] ?? 0;
   let seen = 0;
@@ -44703,10 +44701,12 @@ var Package = class _Package {
         el.parentNode?.removeChild(el);
         continue;
       }
+      if (next === void 0 && from === this && relIs(rel, RELS.shared) && path4.posix.dirname(part) === path4.posix.dirname(copy))
+        continue;
       if (next === void 0 && from === this && relIs(rel, RELS.shared))
         next = target;
       next ??= await this.clonePart(from, target, done);
-      el.setAttribute("Target", encodeURI(path4.posix.relative(path4.posix.dirname(copy), next)));
+      el.setAttribute("Target", relTarget(copy, next));
     }
   }
   /**
@@ -45209,7 +45209,7 @@ var setNotes = async (pkg, slidePart, slideRels, text, notesMaster) => {
   pkg.write(
     relsPartOf(notesPart),
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${path5.posix.relative("ppt/notesSlides", notesMaster)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${relTarget(notesPart, notesMaster)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
   );
   await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml");
   for (const rel of pkg.targets(slidePart, slideRels))
@@ -45229,7 +45229,7 @@ var unshareNotes = async (pkg, slidePart, slideRels) => {
     pkg.addRel(copyRels, `${REL}/slide`, `../slides/${path5.posix.basename(slidePart)}`);
     pkg.writeRels(copy, copyRels);
   }
-  rel.el.setAttribute("Target", `../notesSlides/${path5.posix.basename(copy)}`);
+  rel.el.setAttribute("Target", relTarget(slidePart, copy));
 };
 var wireHyperlinks = (pkg, slide, slideRels) => {
   for (const hlink of elements(slide, "a:hlinkClick")) {
@@ -45261,7 +45261,7 @@ var createSlide = async (pkg, layoutPart) => {
   const part = pkg.alloc.part("ppt/slides", "slide", ".xml");
   const slide = parseXml(slideFromLayout(await pkg.text(layoutPart)));
   const rels = parseXml(EMPTY_RELS);
-  pkg.addRel(rels, `${REL}/slideLayout`, path5.posix.relative("ppt/slides", layoutPart));
+  pkg.addRel(rels, `${REL}/slideLayout`, relTarget(part, layoutPart));
   const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [t.id, t]));
   const ids = /* @__PURE__ */ new Map();
   for (const { el, attr } of slide.documentElement === null ? [] : relRefs(slide.documentElement)) {
@@ -45270,7 +45270,7 @@ var createSlide = async (pkg, layoutPart) => {
       ids.set(attr.value, pkg.addRel(
         rels,
         rel.type,
-        rel.target === null ? rel.el.getAttribute("Target") ?? "" : path5.posix.relative("ppt/slides", rel.target),
+        rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, rel.target),
         rel.target === null
       ));
     const id = ids.get(attr.value);
@@ -45360,7 +45360,6 @@ var editSlide = async (pkg, work) => {
 // src/engine/inplace/transplant.ts
 var import_pptxgenjs = __toESM(require_pptxgen_cjs(), 1);
 import { randomUUID } from "node:crypto";
-import path6 from "node:path";
 
 // src/engine/elements.ts
 var chartType = (gen, type) => {
@@ -45597,7 +45596,7 @@ var generateElements = async (entries) => {
           let id = ids.get(attr.value);
           const rel = genRels.get(attr.value);
           if (id === void 0 && rel !== void 0) {
-            const target = rel.target === null ? rel.el.getAttribute("Target") ?? "" : path6.posix.relative(path6.posix.dirname(part), await pkg.clonePart(source, rel.target, copies));
+            const target = rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, await pkg.clonePart(source, rel.target, copies));
             id = pkg.addRel(rels, rel.type, target, rel.target === null);
             ids.set(attr.value, id);
           }
@@ -45674,6 +45673,10 @@ var preflight = async (plan, archive) => {
     throw new PptcError("E_TEMPLATE", "the deck has no notes master, which speaker notes need -- add a note to any slide in PowerPoint once, then retry");
 };
 var repairPackage = async (pkg, warnings, repaired) => {
+  for (const relsPart of Object.keys(pkg.zip.files).filter((f) => f.endsWith(".rels") && relsOwner(f) !== "" && !pkg.has(relsOwner(f)))) {
+    pkg.zip.remove(relsPart);
+    warnings.push(repairedWarning(DECK_WIDE, `the input deck carried relationships of a missing part; pptc removed ${relsPart}`));
+  }
   const owners = new Set(Object.keys(pkg.zip.files).filter((f) => !f.endsWith("/")).map((f) => f.endsWith(".rels") ? relsOwner(f) : f).filter((f) => f === "" || /\.xml$/.test(f)));
   for (const part of [...owners].filter(isPackagePart)) {
     const view = await viewOf(pkg, part);
@@ -45814,7 +45817,7 @@ var writeSlideList = (pkg, deck, states, matched, removed, force) => {
     if (el === void 0) {
       el = pres.createElementNS(NS_P, "p:sldId");
       el.setAttribute("id", String(pkg.alloc.slideId()));
-      el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`, path7.posix.relative("ppt", part)));
+      el.setAttributeNS(NS_R, "r:id", pkg.addRel(presRels, `${REL}/slide`, relTarget("ppt/presentation.xml", part)));
     }
     lst.appendChild(el);
   }
@@ -45883,7 +45886,7 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
     if (s.sharedNotes)
       actions.push("gave the slide its own notes part");
-    if (s.defects.length > 0)
+    if (s.defects.length > 0 && !states.slice(0, i).some((o) => o.part === s.part && o.touched))
       warnings.push(repairedWarning(
         { id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index: i, title: s.entry.title },
         `the input deck carried PowerPoint repair triggers on this slide${s.entry.virtualId > 0 ? "" : " (or the slide it was copied from)"} (${s.defects.map((d) => d.text).join("; ")}); pptc ${actions.length > 0 ? actions.join(", ") : "repaired them"}`
@@ -45950,7 +45953,7 @@ var executePlan = async (outFile, plan, archive) => {
       `the engine produced ${findings.length} integrity violation(s); deck not written`,
       { findings }
     );
-  atomicWrite(path7.resolve(outFile), finalBytes);
+  atomicWrite(path6.resolve(outFile), finalBytes);
   const refIndexes = {};
   for (const [name, entry] of plan.refs)
     refIndexes[name] = plan.entries.indexOf(entry);
@@ -46053,7 +46056,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     for (const fill of entry.fills)
       if (fill.image !== void 0) {
         requireFile(fill.image, "image");
-        const ext = path8.extname(fill.image).slice(1).toLowerCase();
+        const ext = path7.extname(fill.image).slice(1).toLowerCase();
         if (ext !== "" && IMAGE_TYPES[ext] === void 0)
           throw new PptcError(
             "E_SCHEMA",
@@ -46125,7 +46128,7 @@ var cmdApply = async (argv) => {
 
 // src/commands/new.ts
 import { existsSync as existsSync2, rmSync as rmSync2 } from "node:fs";
-import path9 from "node:path";
+import path8 from "node:path";
 var cmdNew = async (argv) => {
   const args = parse3(argv, {
     "template": { type: "string" },
@@ -46141,12 +46144,12 @@ var cmdNew = async (argv) => {
     throw new PptcError("E_FILE", `'${deckFile}' already exists -- use --force to overwrite`);
   const opsArg = args.str("ops");
   if (opsArg === null) {
-    atomicWrite(path9.resolve(deckFile), await buildEmptyDeck(templatePath));
-    return { file: path9.resolve(deckFile), result: { created: true, slideCount: 0 } };
+    atomicWrite(path8.resolve(deckFile), await buildEmptyDeck(templatePath));
+    return { file: path8.resolve(deckFile), result: { created: true, slideCount: 0 } };
   }
   const rawDoc = parseJson(resolvePayload(opsArg));
   const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc;
-  const stage = path9.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
+  const stage = path8.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
   try {
     atomicWrite(stage, await buildEmptyDeck(templatePath));
     const result = await executeOps(stage, doc, {
@@ -46154,7 +46157,7 @@ var cmdNew = async (argv) => {
       dryRun: false,
       strict: args.flag("strict"),
       expectRev: null,
-      outFile: path9.resolve(deckFile),
+      outFile: path8.resolve(deckFile),
       minFontPt: minFontPtArg(args)
     });
     return { ...result, result: { ...result.result, created: true } };
@@ -46344,7 +46347,7 @@ var cmdMove = async (argv) => {
 
 // src/commands/tpl.ts
 import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
-import path10 from "node:path";
+import path9 from "node:path";
 
 // src/core/describe/minimap.ts
 var MAP_W = 40;
@@ -46484,12 +46487,12 @@ var cmdTplList = (argv) => {
   if (!existsSync3(dir))
     throw new PptcError("E_FILE", `directory not found: '${dir}'`);
   const templates = readdirSync(dir).filter((f) => /\.(potx|pptx)$/i.test(f)).sort().map((f) => ({
-    file: path10.join(dir, f),
-    sidecar: existsSync3(path10.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
+    file: path9.join(dir, f),
+    sidecar: existsSync3(path9.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
   }));
   if (args.flag("plain"))
-    return { plain: templates.length === 0 ? `(no templates in ${path10.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
-  return { result: { dir: path10.resolve(dir), templates } };
+    return { plain: templates.length === 0 ? `(no templates in ${path9.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
+  return { result: { dir: path9.resolve(dir), templates } };
 };
 var cmdTplDescribe = async (argv) => {
   const args = parse3(argv, {
@@ -46501,19 +46504,19 @@ var cmdTplDescribe = async (argv) => {
   const { info, sidecar } = await loadTemplate(file2);
   const filtered = filterLayouts(info, args.str("layout"));
   if (args.flag("plain"))
-    return { plain: narrateTemplate(filtered, path10.basename(file2), sidecar) };
+    return { plain: narrateTemplate(filtered, path9.basename(file2), sidecar) };
   if ((args.str("format") ?? "text") === "json")
-    return { file: path10.resolve(file2), result: filtered };
+    return { file: path9.resolve(file2), result: filtered };
   return {
-    file: path10.resolve(file2),
-    result: { description: narrateTemplate(filtered, path10.basename(file2), sidecar) }
+    file: path9.resolve(file2),
+    result: { description: narrateTemplate(filtered, path9.basename(file2), sidecar) }
   };
 };
 var cmdTplInspect = async (argv) => {
   const args = parse3(argv, { "layout": { type: "string" } }, ["template"]);
   const file2 = args.positionals[0];
   const { info } = await loadTemplate(file2);
-  return { file: path10.resolve(file2), result: filterLayouts(info, args.str("layout")) };
+  return { file: path9.resolve(file2), result: filterLayouts(info, args.str("layout")) };
 };
 var validate2 = (info, hasNotesMaster) => {
   const issues = [];
@@ -46547,11 +46550,11 @@ var cmdTplValidate = async (argv) => {
     throw new PptcError("E_LINT", "template validation failed", { issues });
   if (args.flag("plain"))
     return { plain: [
-      `${path10.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
+      `${path9.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
       ...issues.map((i) => `  ${i.severity}: ${i.message}`)
     ].join("\n") };
   return {
-    file: path10.resolve(file2),
+    file: path9.resolve(file2),
     result: {
       status: issues.length === 0 ? "ok" : "warn",
       layouts: info.layouts.map((l) => ({ index: l.index, name: l.name })),

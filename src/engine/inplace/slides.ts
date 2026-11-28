@@ -17,7 +17,7 @@ import { PptcError } from "../../infra/errors.js"
 import { inchToEmu, type Frame } from "../../core/model.js"
 import type { SlidePlanEntry } from "../../core/ops/registry.js"
 import { notesOwner } from "../defects.js"
-import { EMPTY_RELS, PartAllocator, REL, relsPartOf } from "../parts.js"
+import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.js"
 import { slideFromLayout } from "../seed.js"
 import { HLINK_ATTR, setShapeText } from "../text.js"
 import { NS_A, NS_P, NS_R, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
@@ -183,7 +183,7 @@ const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, te
     pkg.write(relsPartOf(notesPart),
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
         + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-        + `<Relationship Id="rId1" Type="${REL}/notesMaster" Target="${path.posix.relative("ppt/notesSlides", notesMaster)}"/>`
+        + `<Relationship Id="rId1" Type="${REL}/notesMaster" Target="${relTarget(notesPart, notesMaster)}"/>`
         + `<Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path.posix.basename(slidePart)}"/>`
         + "</Relationships>")
     await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml")
@@ -207,7 +207,7 @@ const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document
         pkg.addRel(copyRels, `${REL}/slide`, `../slides/${path.posix.basename(slidePart)}`)
         pkg.writeRels(copy, copyRels)
     }
-    rel.el.setAttribute("Target", `../notesSlides/${path.posix.basename(copy)}`)
+    rel.el.setAttribute("Target", relTarget(slidePart, copy))
 }
 
 /**  replace the `pptc-hlink` markers of the text writer by external
@@ -252,7 +252,7 @@ export const createSlide = async (pkg: Package, layoutPart: string): Promise<str
     const part = pkg.alloc.part("ppt/slides", "slide", ".xml")
     const slide = parseXml(slideFromLayout(await pkg.text(layoutPart)))
     const rels = parseXml(EMPTY_RELS)
-    pkg.addRel(rels, `${REL}/slideLayout`, path.posix.relative("ppt/slides", layoutPart))
+    pkg.addRel(rels, `${REL}/slideLayout`, relTarget(part, layoutPart))
 
     /*  cloned placeholders may reference layout relationships (a picture
         fill, a hyperlink): the slide gets its own relationship to the same
@@ -263,7 +263,7 @@ export const createSlide = async (pkg: Package, layoutPart: string): Promise<str
         const rel = layoutRels.get(attr.value)
         if (rel !== undefined && !ids.has(attr.value))
             ids.set(attr.value, pkg.addRel(rels, rel.type,
-                rel.target === null ? rel.el.getAttribute("Target") ?? "" : path.posix.relative("ppt/slides", rel.target),
+                rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, rel.target),
                 rel.target === null))
         const id = ids.get(attr.value)
         if (id !== undefined)
