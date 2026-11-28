@@ -126,4 +126,13 @@ describe("picture placeholder fit", () => {
             placeholders: { 2: { text: "x", fit: "crop" } } } ] } as never, opts))
             .rejects.toSatisfy((err: unknown) => err instanceof PptcError && err.code === "E_SCHEMA")
     })
+
+    it("rejects the fit 'shrink'", async () => {
+        await expect(executeOps(DECK, { ops: [ { op: "slide.add", layout: "PICTURE",
+            placeholders: { image: { image: LANDSCAPE, fit: "shrink" } } } ] } as never, opts))
+            .rejects.toSatisfy((err: unknown) => err instanceof PptcError && err.code === "E_SCHEMA")
+        await expect(executeOps(DECK, { ops: [ { op: "slide.fill", slide: "0",
+            placeholders: { image: { image: LANDSCAPE, fit: "shrink" } } } ] } as never, opts))
+            .rejects.toSatisfy((err: unknown) => err instanceof PptcError && err.code === "E_SCHEMA")
+    })
 })

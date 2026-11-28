@@ -304,12 +304,15 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "altText", "title" (any element; "" removes),
                  "hyperlink" (placeholder/textbox/shape/picture: URL or
                    slide link; "" removes),
-                 "image" (picture or filled picture placeholder: frame,
-                   crop and animations stay -- only on explicit request),
+                 "image" (picture or filled picture placeholder: frame
+                   and animations stay, the image is cropped centered to
+                   fit the frame -- only on explicit request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
                    header row 0), "addRows": { "at", "rows" } (format of
-                   the row above), "removeRows": [ 2 ]
-               -- also on elements planned earlier in the document
+                   the neighbouring body row), "removeRows": [ 2 ]
+               -- also on elements planned earlier in the document (a
+                  planned connector takes no hyperlink, a planned image
+                  no border)
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }

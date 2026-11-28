@@ -536,9 +536,9 @@ field; each is checked against the element's type (`E_SCHEMA` otherwise):
 | `fontColor` | placeholder, textbox, shape | color of every run |
 | `altText`, `title` | every element | alt text (`cNvPr@descr`) and title; `""` removes them |
 | `hyperlink` | placeholder, textbox, shape, picture | click target of the whole element: a URL or a slide link (`slide:SEL`); `""` removes it |
-| `image` | picture, filled picture placeholder | another image in place: frame, a crop (re-cut centered to the new aspect) and animations stay; an SVG shows through PowerPoint's SVG extension |
+| `image` | picture, filled picture placeholder | another image in place: the frame and animations stay, the image is cropped centered to fit the frame (like a picture placeholder fill; an image of unknown size stretches); an SVG shows through PowerPoint's SVG extension |
 | `cells` | table | `[{row, col, text}]` -- 0-based grid position, header row 0; a cell covered by a merge fails |
-| `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the row above (of the first row at 0); one value per column |
+| `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the neighbouring body row (the row above; at 1, below the header row 0, the first body row; the first row at 0); one value per column |
 | `removeRows` | table | `[indices]` -- rows taken out; a row of a vertical merge fails |
 
 Table fields apply in the order `removeRows`, `addRows`, `cells`, each seeing
@@ -546,8 +546,8 @@ the result of the one before; the table style and the cell formatting
 stay, and the frame's height follows the rows. An element generated or a
 picture placeholder filled earlier in the same document is changed in its
 plan instead (the `el.add` vocabulary: a planned connector takes `border`/
-`borderPt` as its `color`/`widthPt`, a planned textbox `fontColor` on its
-runs). Every `el.add` element also takes `altText` and `title`; a picture
+`borderPt` as its `color`/`widthPt` but no `hyperlink`, a planned image no
+`border`/`borderPt`, a planned textbox `fontColor` on its runs). Every `el.add` element also takes `altText` and `title`; a picture
 is never described by its file path. Replacing an image destroys the old
 one in the deck -- the skill does it only on the user's explicit request.
 

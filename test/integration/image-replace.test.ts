@@ -4,10 +4,11 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  Integration: el.set `image` replaces the image of a picture or a
-**  filled picture placeholder in place -- frame, crop (re-cut to the new
-**  aspect) and animations stay, the other images of the slide stay, the
-**  old media part goes when nothing else uses it. The content guard
-**  accepts exactly the declared swap: without it the same output fails.
+**  filled picture placeholder in place -- frame and animations stay, the
+**  image is cut centered to fit the frame (a crop is re-cut), the other
+**  images of the slide stay, the old media part goes when nothing else
+**  uses it. The content guard accepts exactly the declared swap: without
+**  it the same output fails.
 */
 
 import { beforeAll, describe, expect, it } from "vitest"
@@ -97,6 +98,27 @@ describe("el.set image", () => {
         expect(after.box).toBe(before.box)
         expect(after.crop).toMatch(/^l=,t=\d+,r=,b=\d+$/)
         expect((await stateOf(deck)).slides[1]?.shapes.find((sh) => sh.name === name)?.altText).toBe("hochkant")
+    })
+
+    it("cuts an image of another aspect to fit an uncropped picture's frame, centered; the frame stays", async () => {
+        await apply(deck, [ { op: "el.add", slide: "0", elements: [
+            { type: "image", name: "D", frame: { x: 1, y: 5, w: 4, h: 2 }, path: WIDE, fit: "stretch" } ] } ])
+        const before = await pictureFacts(0, "D")
+        expect(before.crop).toBe("none")
+        await apply(deck, [ { op: "el.set", slide: "0", name: "D", image: TALL } ])
+        const after = await pictureFacts(0, "D")
+        expect(after.box).toBe(before.box)
+        expect(after.crop).toBe("l=,t=35938,r=,b=35938")
+
+        /*  a frame set with the image: the crop fits the new frame  */
+        await apply(deck, [ { op: "el.set", slide: "0", name: "D", frame: { w: 2, h: 2 }, image: WIDE } ])
+        expect((await pictureFacts(0, "D")).crop).toBe("l=21875,t=,r=21875,b=")
+
+        /*  an image of unknown size stretches  */
+        const unknown = path.join(TMP, "image-replace-unknown.png")
+        writeFileSync(unknown, Buffer.from("not really a png"))
+        await apply(deck, [ { op: "el.set", slide: "0", name: "D", image: unknown } ])
+        expect((await pictureFacts(0, "D")).crop).toBe("l=,t=,r=,b=")
     })
 
     it("swaps one picture twice in one document", async () => {

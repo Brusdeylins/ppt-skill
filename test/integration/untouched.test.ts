@@ -99,6 +99,59 @@ const checkAround = async (deck: string, media: Media): Promise<void> => {
     await applyAndCheck(deck, [ { op: "meta.props", set: { title: "untouched", custom: { k: "v" } } } ], () => [])
 }
 
+/**  the parts whose bytes differ between two decks (added and removed
+     parts included)  */
+const changedParts = async (before: JSZip, after: JSZip): Promise<string[]> => {
+    const names = [ ...new Set([ ...Object.keys(before.files), ...Object.keys(after.files) ]) ]
+    const changed: string[] = []
+    for (const name of names.filter((n) => !n.endsWith("/")).sort()) {
+        const a = before.file(name)
+        const b = after.file(name)
+        if (a === null || b === null || !(await a.async("nodebuffer")).equals(await b.async("nodebuffer")))
+            changed.push(name)
+    }
+    return changed
+}
+
+/**  the 1.2 in-place ops, each confined to one slide (or to the section
+     list of presentation.xml): the other slides keep every byte  */
+const checkInPlaceOps = async (deck: string, media: Media): Promise<void> => {
+    await executeOps(deck, { ops: [
+        { op: "slide.add", layout: "Title Only", ref: "a", section: "S1", placeholders: { title: { text: "Eins" } } },
+        { op: "el.add", slide: "$a", elements: [
+            { type: "textbox", name: "Box", frame: { x: 0.5, y: 1.5, w: 4, h: 0.6 }, text: "Alpha einmalig" },
+            { type: "shape", name: "Form", shape: "rect", frame: { x: 5, y: 1.5, w: 2, h: 1 }, text: "Form" },
+            { type: "image", name: "Bild", frame: { x: 0.5, y: 3, w: 2, h: 2 }, path: media.png },
+            { type: "table", name: "Tab", frame: { x: 3, y: 3, w: 4 }, data: { rows: [ [ "a", "b" ], [ "c", "d" ] ] } } ] },
+        { op: "slide.add", layout: "CONTENT", ref: "b", section: "S2", placeholders: { title: { text: "Zwei" }, body: { text: "Beta" } } },
+        { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Drei" }, body: { text: "Gamma" } } }
+    ] } as never, opts)
+    const ids = (await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.id)
+    const a = ids[ids.length - 3] as number
+    const b = ids[ids.length - 2] as number
+    const c = ids[ids.length - 1] as number
+    await applyAndCheck(deck, [ { op: "text.replace", find: "Alpha einmalig", replace: "Omega" } ], () => [ a ])
+    await applyAndCheck(deck, [ { op: "el.set", slide: `id:${a}`, name: "Box", text: "neu" } ], () => [ a ])
+    await applyAndCheck(deck, [ { op: "el.set", slide: `id:${a}`, name: "Tab", cells: [ { row: 1, col: 1, text: "x" } ] } ], () => [ a ])
+    await applyAndCheck(deck, [ { op: "el.set", slide: `id:${a}`, name: "Bild", image: media.png2 } ], () => [ a ])
+    await applyAndCheck(deck, [ { op: "el.set", slide: `id:${a}`, name: "Form", frame: { x: 5.5, y: 2 } } ], () => [ a ])
+    await applyAndCheck(deck, [ { op: "slide.fill", slide: `id:${b}`, slideNumber: true } ], () => [ b ])
+    await applyAndCheck(deck, [ { op: "slide.fill", slide: `id:${b}`, date: true } ], () => [ b ])
+    await applyAndCheck(deck, [ { op: "slide.fill", slide: `id:${c}`, section: "S3" } ], () => [])
+    await applyAndCheck(deck, [ { op: "el.add", slide: `id:${a}`, elements: [
+        { type: "shape", name: "Sprung", shape: "rect", frame: { x: 8, y: 6, w: 1, h: 0.5 }, text: "Drei",
+            hyperlink: `slide:id:${c}` } ] } ], () => [ a ])
+
+    /*  section ops change nothing but the section list  */
+    for (const op of [ { op: "section.rename", from: "S2", to: "Mitte" }, { op: "section.rm", name: "Mitte" } ]) {
+        const before = await JSZip.loadAsync(readFileSync(deck))
+        await applyAndCheck(deck, [ op ], () => [])
+        const changed = await changedParts(before, await JSZip.loadAsync(readFileSync(deck)))
+        expect(changed.filter((p) => !/^ppt\/presentation\.xml$|^docProps\//.test(p)), `${op.op} changes only presentation.xml`).toEqual([])
+        expect(changed).toContain("ppt/presentation.xml")
+    }
+}
+
 describe("untouched slides keep their bytes", () => {
     let media: Media
     beforeAll(() => {
@@ -112,6 +165,16 @@ describe("untouched slides keep their bytes", () => {
         for (const step of fixedScenario(info.layouts, media))
             await executeOps(deck, { ops: step(await readDeckState(await DeckArchive.open(deck))) } as never, opts)
         await checkAround(deck, media)
+    }, 120000)
+
+    it("around the in-place ops on one slide (text.replace, el.set, number/date, sections, slide links)", async () => {
+        mkdirSync(TMP, { recursive: true })
+        const deck = path.join(TMP, "inplace.pptx")
+        writeFileSync(deck, await buildEmptyDeck(FIXTURE))
+        const info = await readTemplateInfo(await DeckArchive.open(FIXTURE))
+        for (const step of fixedScenario(info.layouts, media))
+            await executeOps(deck, { ops: step(await readDeckState(await DeckArchive.open(deck))) } as never, opts)
+        await checkInPlaceOps(deck, media)
     }, 120000)
 
     it.skipIf(!existsSync(DEMO))("on the demo deck", async () => {

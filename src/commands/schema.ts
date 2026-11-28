@@ -11,25 +11,12 @@
 import { z, type ZodType } from "zod"
 import { PptcError } from "../infra/errors.js"
 import { parse } from "../infra/args.js"
-import {
-    ElAddSchema, ElRmSchema, ElSetSchema, ImgPromptsSchema, MetaPropsSchema,
-    OpsDocumentSchema, OP_NAMES, SlideAddSchema, SlideCopySchema,
-    SlideFillSchema, SlideMoveSchema, SlideRmSchema, TextReplaceSchema
-} from "../schema/ops.js"
+import { OpSchema, OpsDocumentSchema, OP_NAMES } from "../schema/ops.js"
 
-/**  op name to schema mapping  */
+/**  op name to schema mapping, derived from the members of the op union so a
+     new op can never miss its `pptc schema <op>` entry  */
 const SCHEMAS: Record<string, ZodType> = {
-    "slide.add": SlideAddSchema,
-    "slide.fill": SlideFillSchema,
-    "slide.rm": SlideRmSchema,
-    "slide.move": SlideMoveSchema,
-    "slide.copy": SlideCopySchema,
-    "el.add": ElAddSchema,
-    "el.rm": ElRmSchema,
-    "el.set": ElSetSchema,
-    "img.prompts": ImgPromptsSchema,
-    "meta.props": MetaPropsSchema,
-    "text.replace": TextReplaceSchema,
+    ...Object.fromEntries(OpSchema.options.map((s) => [ s.shape.op.value, s ])),
     "document": OpsDocumentSchema
 }
 

@@ -4,8 +4,8 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  Integration: el.set on a table in place -- `cells` sets texts by grid
-**  position (header row 0), `addRows` inserts rows in the format of their
-**  neighbour, `removeRows` takes rows out; the table style and the cell
+**  position (header row 0), `addRows` inserts rows in the format of the
+**  neighbouring body row, `removeRows` takes rows out; the table style and the cell
 **  formatting stay, the frame's height follows the rows, merged cells are
 **  respected (a covered cell, a row of a vertical merge or a position
 **  inside one fail at plan time), and state reads the result.
@@ -13,6 +13,7 @@
 
 import { beforeAll, describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
+import type { Element } from "@xmldom/xmldom"
 import { elements, firstElement } from "../../src/engine/xml.js"
 import { apply, failure, freshDeck, shapeNamed, slideDoc, stateOf } from "../util/elements.js"
 
@@ -57,6 +58,27 @@ describe("el.set table cells and rows", () => {
         const fill = elements(tcPr, "a:solidFill").find((f) => f.parentNode === tcPr) as never
         expect(firstElement(fill, "a:srgbClr")?.getAttribute("val")).toBe("FFEEDD")
         expect(after.merges).toEqual(before.merges)
+    })
+
+    it("adds rows at 1 in the format of the first body row, not of the header row", async () => {
+        const own = await freshDeck("table-edit-header.pptx")
+        await apply(own, [
+            { op: "slide.add", layout: "Title Only", ref: "s", placeholders: { title: { text: "Kopf" } } },
+            { op: "el.add", slide: "$s", elements: [ { type: "table", name: "Tab", frame: { x: 0.5, y: 1.5, w: 6 },
+                data: { headers: [ "A", "B" ], style: { headerBg: "1F4E79", headerFg: "FFFFFF", headerHeight: 0.6, rowHeight: 0.3 },
+                    rows: [ [ "1", "2" ], [ "3", "4" ] ] } } ] }
+        ])
+
+        /*  a row's format: its height, cell and run properties  */
+        const format = (row: Element): string => [ row.getAttribute("h"),
+            ...[ ...elements(row, "a:tcPr"), ...elements(row, "a:rPr") ].map((el) => el.toString()) ].join("|")
+        const rowsOf = async (): Promise<Element[]> => elements(shapeNamed(await slideDoc(own, 0), "Tab"), "a:tr")
+        const [ header, body ] = (await rowsOf()).map(format)
+        expect(body).not.toBe(header)
+        await apply(own, [ { op: "el.set", slide: "0", name: "Tab", addRows: { at: 1, rows: [ [ "x", "y" ] ] } } ])
+        const rows = await rowsOf()
+        expect(rows.map((r) => elements(r, "a:t").map((t) => t.textContent).join(","))).toEqual([ "A,B", "x,y", "1,2", "3,4" ])
+        expect(format(rows[1] as Element)).toBe(body)
     })
 
     it("removes rows and shrinks the frame; the sequence of a document sees every step", async () => {

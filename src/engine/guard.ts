@@ -35,8 +35,9 @@ export interface SlideExpect {
          hash (`digestBytes` of the file), plus generated PNG fallbacks of
          SVG images and charts by count  */
     grow?: { images: string[], fallbacks: number, charts: number }
-    /**  whether an op replaces text on the slide (which may drop an inline
-         picture, e.g. a picture bullet, legitimately)  */
+    /**  whether an op replaces a whole text body or removes a table row,
+         or a text.replace removed a picture-filled run -- which may drop an
+         inline picture (a picture bullet, a cell fill) legitimately  */
     textReplaced?: boolean
     /**  images an op put in place of others (el.set image) or brought in
          with layout content (footer, slide number, date): the new image

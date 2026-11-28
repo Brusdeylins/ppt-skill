@@ -34,9 +34,9 @@ export const isSchemeColor = (color: string): color is SchemeColor =>
      a theme reference that follows the template's color scheme  */
 export const ColorSchema = z
     .string()
-    .regex(/^(#?[0-9a-fA-F]{6}|accent[1-6]|tx[12]|bg[12]|dk[12]|lt[12])$/,
+    .regex(new RegExp(`^(#?[0-9a-fA-F]{6}|${SCHEME_COLORS.join("|")})$`),
         "expected a 6-digit hex color like '#1F4E79' or a theme color "
-        + "(accent1-accent6, tx1, tx2, bg1, bg2, dk1, lt1, dk2, lt2)")
+        + `(${SCHEME_COLORS.join(", ")})`)
     .transform((s) => isSchemeColor(s) ? s : s.replace("#", "").toUpperCase())
 
 /**  Geometry of a box in inches; `x`/`y` are required, size may be omitted.  */

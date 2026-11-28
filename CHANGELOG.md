@@ -76,7 +76,7 @@
   table's columns and rows scale), `fill`, `border`, `borderPt`,
   `fontColor`, `altText`, `title`, `hyperlink`, `image` and, for tables,
   `cells` (`[{row, col, text}]`, 0-based grid position, header row 0),
-  `addRows` (`{at, rows}`, in the format of the row above) and
+  `addRows` (`{at, rows}`, in the format of the neighbouring body row) and
   `removeRows` (indices) -- each checked against the element's type at
   plan time (`E_SCHEMA` otherwise; text for a table, chart, picture,
   connector or group used to vanish silently or replace the text of a
@@ -95,9 +95,10 @@
   its local file path, which leaked into the deck; the description is now
   the given alt text or none.
 - **Image replace.** `el.set` `image` puts another image into a picture
-  or a filled picture placeholder: a new media part, the frame, the
-  animations and a crop (re-cut centered to the new aspect) stay, an SVG
-  shows through PowerPoint's SVG extension. The content guard learned the
+  or a filled picture placeholder: a new media part, the frame and the
+  animations stay, the image is cropped centered to fit the frame (an
+  image of unknown size stretches), an SVG shows through PowerPoint's SVG
+  extension. The content guard learned the
   swap: the new image (by content hash) must come, the old one may go --
   any other change of the slide's images still fails the apply.
 - **Text replace.** The new op `text.replace {find, replace, slide,

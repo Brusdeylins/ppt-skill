@@ -106,6 +106,8 @@ interface SlideState {
     replacedImages: { from: string[], to: string }[]
     /**  replacements of each text.replace op in its existing content  */
     replaced: { op: number, count: number }[]
+    /**  whether a text.replace removed a run that showed an image  */
+    runImages: boolean
 }
 
 /**
@@ -363,7 +365,7 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
             sourceRepairs = (await closure(pkg, entry.source.part)).slice(1)
                 .filter((v) => partDefects(v, exists).length > 0).map((v) => v.part)
         states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [],
-            replacedImages: [], replaced: [] })
+            replacedImages: [], replaced: [], runImages: false })
     }
     return states
 }
@@ -433,7 +435,7 @@ const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> =
 
 /**  what the content guard allows to change on each output slide  */
 const expectations = (states: SlideState[]): SlideExpect[] =>
-    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages }, i) => ({
+    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages, runImages }, i) => ({
         source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
         notes: entry.notes !== null || entry.replaces.some((r) => r.notes),
@@ -444,9 +446,15 @@ const expectations = (states: SlideState[]): SlideExpect[] =>
             fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
             charts: entry.elements.filter((e) => e.spec.type === "chart").length
         },
+
+        /*  a picture may go only with text that replaces a whole text body
+            (a picture bullet, a picture-filled run), with a removed table
+            row (a picture cell fill) or with a run a text.replace removed
+            -- not with text.replace otherwise (run text only, paragraph
+            properties stay) nor with added rows (copies)  */
         textReplaced: entry.edits.some((e) => e.set.text !== undefined || e.set.cells !== undefined
-            || e.set.addRows !== undefined || e.set.removeRows !== undefined)
-            || entry.fills.some((f) => f.text !== undefined && !f.append) || entry.replaces.length > 0,
+            || e.set.removeRows !== undefined)
+            || entry.fills.some((f) => f.text !== undefined && !f.append) || runImages,
         replaced: replacedImages,
         released,
         repaired: { before: sourceRepairs, after: repairs, released: partReleased }
@@ -488,6 +496,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
         actions.push(...own.actions)
         s.replacedImages = [ ...own.swaps, ...own.adopted.map((to) => ({ from: [], to })) ]
         s.replaced = own.replaced
+        s.runImages = own.runImages
 
         /*  a slide listed twice is edited twice: the first pass released  */
         s.released = [ ...new Set([ ...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own.released ]) ]

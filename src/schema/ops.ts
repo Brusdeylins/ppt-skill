@@ -160,7 +160,8 @@ export const ElSetSchema = z.object({
          shapes, pictures): a URL or a slide link; an empty string removes it  */
     hyperlink: z.union([ HyperlinkSchema, z.literal("") ]).optional(),
     /**  replace the image of a picture or a filled picture placeholder; the
-         frame, a crop (re-cropped to the new aspect) and animations stay  */
+         frame and animations stay, the image is cropped centered to fit the
+         frame (an image of unknown size stretches)  */
     image: z.string().min(1).optional(),
     /**  table: set cell texts by 0-based grid position (header row 0)  */
     cells: z.array(z.object({
@@ -169,7 +170,9 @@ export const ElSetSchema = z.object({
         text: RichTextSchema
     }).strict()).min(1).optional(),
     /**  table: insert rows at a 0-based row position (default: append);
-         they take the format of the row above (the first row at 0)  */
+         they take the format of the neighbouring body row: the row above
+         (the first body row at 1, below the header row 0; the first row
+         at 0)  */
     addRows: z.object({
         at: z.number().int().min(0).optional(),
         rows: z.array(z.array(RowCellSchema).min(1)).min(1)

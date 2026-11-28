@@ -16536,12 +16536,15 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "altText", "title" (any element; "" removes),
                  "hyperlink" (placeholder/textbox/shape/picture: URL or
                    slide link; "" removes),
-                 "image" (picture or filled picture placeholder: frame,
-                   crop and animations stay -- only on explicit request),
+                 "image" (picture or filled picture placeholder: frame
+                   and animations stay, the image is cropped centered to
+                   fit the frame -- only on explicit request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
                    header row 0), "addRows": { "at", "rows" } (format of
-                   the row above), "removeRows": [ 2 ]
-               -- also on elements planned earlier in the document
+                   the neighbouring body row), "removeRows": [ 2 ]
+               -- also on elements planned earlier in the document (a
+                  planned connector takes no hyperlink, a planned image
+                  no border)
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -37850,8 +37853,8 @@ var SCHEME_COLORS = [
 ];
 var isSchemeColor = (color) => SCHEME_COLORS.includes(color);
 var ColorSchema = external_exports.string().regex(
-  /^(#?[0-9a-fA-F]{6}|accent[1-6]|tx[12]|bg[12]|dk[12]|lt[12])$/,
-  "expected a 6-digit hex color like '#1F4E79' or a theme color (accent1-accent6, tx1, tx2, bg1, bg2, dk1, lt1, dk2, lt2)"
+  new RegExp(`^(#?[0-9a-fA-F]{6}|${SCHEME_COLORS.join("|")})$`),
+  `expected a 6-digit hex color like '#1F4E79' or a theme color (${SCHEME_COLORS.join(", ")})`
 ).transform((s) => isSchemeColor(s) ? s : s.replace("#", "").toUpperCase());
 var FrameSchema = external_exports.object({
   x: external_exports.number().min(0),
@@ -38305,7 +38308,8 @@ var ElSetSchema = external_exports.object({
        shapes, pictures): a URL or a slide link; an empty string removes it  */
   hyperlink: external_exports.union([HyperlinkSchema, external_exports.literal("")]).optional(),
   /**  replace the image of a picture or a filled picture placeholder; the
-       frame, a crop (re-cropped to the new aspect) and animations stay  */
+       frame and animations stay, the image is cropped centered to fit the
+       frame (an image of unknown size stretches)  */
   image: external_exports.string().min(1).optional(),
   /**  table: set cell texts by 0-based grid position (header row 0)  */
   cells: external_exports.array(external_exports.object({
@@ -38314,7 +38318,9 @@ var ElSetSchema = external_exports.object({
     text: RichTextSchema
   }).strict()).min(1).optional(),
   /**  table: insert rows at a 0-based row position (default: append);
-       they take the format of the row above (the first row at 0)  */
+       they take the format of the neighbouring body row: the row above
+       (the first body row at 1, below the header row 0; the first row
+       at 0)  */
   addRows: external_exports.object({
     at: external_exports.number().int().min(0).optional(),
     rows: external_exports.array(external_exports.array(RowCellSchema).min(1)).min(1)
@@ -41289,7 +41295,7 @@ var editTable = (shape, set2, lang) => {
   if (set2.addRows !== void 0) {
     const rows = rowsOf(tbl);
     const at = set2.addRows.at ?? rows.length;
-    const model = rows[at > 0 ? at - 1 : 0];
+    const model = at === 1 && rows.length > 1 ? rows[1] : rows[at > 0 ? at - 1 : 0];
     if (model === void 0)
       throw new PptcError("E_ENGINE", "table without rows");
     const anchor2 = rows[at] ?? children2(tbl, ["a:extLst"])[0] ?? null;
@@ -41360,16 +41366,19 @@ var replaceImage = async (pkg, slidePart, rels, shape, file2) => {
     extEl.appendChild(svg);
     extLst.appendChild(extEl);
   }
-  const srcRect = children2(blipFill, ["a:srcRect"])[0];
-  const cropped = srcRect !== void 0 && ["l", "t", "r", "b"].some((a) => Number(srcRect.getAttribute(a) ?? "0") !== 0);
   const box = boxOf(transformOf(shape));
-  if (cropped && box !== null) {
+  if (box !== null && children2(blipFill, ["a:tile"]).length === 0) {
     const crop = fitImage(box, imageSize(bytes), "crop").crop;
-    for (const a of ["l", "t", "r", "b"])
-      srcRect.removeAttribute(a);
-    for (const [side, value] of Object.entries(crop ?? {}))
-      if (value !== 0)
-        srcRect.setAttribute(side, String(value));
+    let srcRect = children2(blipFill, ["a:srcRect"])[0];
+    if (srcRect === void 0 && crop !== null)
+      srcRect = ensureChild(blipFill, "a:srcRect", ["a:tile", "a:stretch"]);
+    if (srcRect !== void 0) {
+      for (const a of ["l", "t", "r", "b"])
+        srcRect.removeAttribute(a);
+      for (const [side, value] of Object.entries(crop ?? {}))
+        if (value !== 0)
+          srcRect.setAttribute(side, String(value));
+    }
   }
   return { from, to: digestBytes(bytes) };
 };
@@ -41396,9 +41405,9 @@ var applyEdit = async (pkg, slidePart, rels, shape, edit, lang) => {
         "a:rtl",
         "a:extLst"
       ]);
-  const swap = set2.image === void 0 ? null : await replaceImage(pkg, slidePart, rels, shape, set2.image);
   if (set2.frame !== void 0)
     setFrame(shape, set2.frame);
+  const swap = set2.image === void 0 ? null : await replaceImage(pkg, slidePart, rels, shape, set2.image);
   if (set2.fill !== void 0) {
     const props = shapeProps(shape);
     if (props !== null)
@@ -41733,11 +41742,15 @@ var editSlide = async (pkg, work) => {
   }
   const unused = /* @__PURE__ */ new Set();
   const replaced = [];
+  const images = new Set(pkg.targets(part, rels).filter((t) => t.kind === "image").map((t) => t.id));
+  let runImages = false;
   for (const replace of entry.replaces) {
     const done = replaceExisting(slide, replace);
     replaced.push({ op: replace.op, count: done.count });
-    for (const id of done.refs)
+    for (const id of done.refs) {
       unused.add(id);
+      runImages ||= images.has(id);
+    }
   }
   for (const shape of [...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape)])
     for (const ref of relRefs(shape))
@@ -41819,7 +41832,7 @@ var editSlide = async (pkg, work) => {
     if (file2 !== null)
       adopted.push(digestBytes(await file2.async("nodebuffer")));
   }
-  return { ...repaired, swaps, adopted, replaced };
+  return { ...repaired, swaps, adopted, replaced, runImages };
 };
 
 // node_modules/pptxgenjs/dist/pptxgen.es.js
@@ -47852,7 +47865,8 @@ var classifySlides = async (pkg, plan, parts, removed) => {
       released: [],
       partReleased: [],
       replacedImages: [],
-      replaced: []
+      replaced: [],
+      runImages: false
     });
   }
   return states;
@@ -47908,7 +47922,7 @@ var removeSlides = async (pkg, removed) => {
     }
   }
 };
-var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages }, i) => ({
+var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages, runImages }, i) => ({
   source: entry.source.kind === "self" && touched ? entry.source.part : null,
   label: `#${i} '${entry.title ?? ""}'`,
   notes: entry.notes !== null || entry.replaces.some((r) => r.notes),
@@ -47918,7 +47932,12 @@ var expectations = (states) => states.map(({ entry, touched, released, repairs, 
     fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
     charts: entry.elements.filter((e) => e.spec.type === "chart").length
   },
-  textReplaced: entry.edits.some((e) => e.set.text !== void 0 || e.set.cells !== void 0 || e.set.addRows !== void 0 || e.set.removeRows !== void 0) || entry.fills.some((f) => f.text !== void 0 && !f.append) || entry.replaces.length > 0,
+  /*  a picture may go only with text that replaces a whole text body
+      (a picture bullet, a picture-filled run), with a removed table
+      row (a picture cell fill) or with a run a text.replace removed
+      -- not with text.replace otherwise (run text only, paragraph
+      properties stay) nor with added rows (copies)  */
+  textReplaced: entry.edits.some((e) => e.set.text !== void 0 || e.set.cells !== void 0 || e.set.removeRows !== void 0) || entry.fills.some((f) => f.text !== void 0 && !f.append) || runImages,
   replaced: replacedImages,
   released,
   repaired: { before: sourceRepairs, after: repairs, released: partReleased }
@@ -47959,6 +47978,7 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
     actions.push(...own2.actions);
     s.replacedImages = [...own2.swaps, ...own2.adopted.map((to) => ({ from: [], to }))];
     s.replaced = own2.replaced;
+    s.runImages = own2.runImages;
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
     if (s.sharedNotes)
       actions.push("gave the slide its own notes part");
@@ -48283,17 +48303,7 @@ var cmdNew = async (argv) => {
 
 // src/commands/schema.ts
 var SCHEMAS = {
-  "slide.add": SlideAddSchema,
-  "slide.fill": SlideFillSchema,
-  "slide.rm": SlideRmSchema,
-  "slide.move": SlideMoveSchema,
-  "slide.copy": SlideCopySchema,
-  "el.add": ElAddSchema,
-  "el.rm": ElRmSchema,
-  "el.set": ElSetSchema,
-  "img.prompts": ImgPromptsSchema,
-  "meta.props": MetaPropsSchema,
-  "text.replace": TextReplaceSchema,
+  ...Object.fromEntries(OpSchema.options.map((s) => [s.shape.op.value, s])),
   "document": OpsDocumentSchema
 };
 var cmdSchema = (argv) => {

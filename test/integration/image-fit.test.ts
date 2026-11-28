@@ -16,7 +16,7 @@ import JSZip from "jszip"
 import { inchToEmu } from "../../src/core/model.js"
 import { relTargets, relsPartOf } from "../../src/engine/parts.js"
 import { NS_R, firstElement, parseXml } from "../../src/engine/xml.js"
-import { TMP, apply, freshDeck, png, shapeOf } from "../util/elements.js"
+import { TMP, apply, failure, freshDeck, png, shapeOf } from "../util/elements.js"
 
 let deck: string
 const LANDSCAPE = path.join(TMP, "el-fit-landscape.png")
@@ -60,6 +60,11 @@ describe("el.add image fit", () => {
         const cw = Math.round(h * 9 / 16)
         expect(await picture("Contained", { path: PORTRAIT, fit: "contain" }))
             .toEqual({ crop: null, box: [ x + Math.round((w - cw) / 2), y, cw, h ] })
+    })
+
+    it("rejects the fit 'shrink'", async () => {
+        expect(await failure(deck, [ { op: "el.add", slide: "0", elements: [
+            { type: "image", name: "Shrunk", frame, path: LANDSCAPE, fit: "shrink" } ] } ])).toBe("E_SCHEMA")
     })
 
     it("links the picture to a URL", async () => {

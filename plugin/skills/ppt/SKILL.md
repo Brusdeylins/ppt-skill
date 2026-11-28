@@ -190,14 +190,16 @@ altText, title               any element ("" removes)
 hyperlink    placeholder, textbox, shape, picture: click target, URL or
              slide link ("" removes)
 image        picture / filled picture placeholder -- ONLY on the user's
-             explicit request; frame, crop and animations stay
+             explicit request; frame and animations stay, the image is
+             cropped centered to fit the frame
 cells        table: [{row, col, text}] (0-based, header row 0)
-addRows      table: {at?, rows} (format of the row above)
+addRows      table: {at?, rows} (format of the neighbouring body row)
 removeRows   table: [indices] (applied first, then addRows, then cells)
 ```
 
 It also patches elements and picture fills planned earlier in the SAME
-ops document. `text.replace {find, replace, slide?, matchCase?, wholeWord?,
+ops document (a planned connector takes no hyperlink, a planned image no
+border). `text.replace {find, replace, slide?, matchCase?, wholeWord?,
 notes?}` replaces plain text in shapes, placeholders and table cells (notes
 only with `notes: true`, fields never), across formatted runs, and sees
 every earlier op of the document; report `result.replacements` (count and

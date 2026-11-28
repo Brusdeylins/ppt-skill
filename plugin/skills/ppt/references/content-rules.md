@@ -124,7 +124,8 @@ Elements (tables, charts, free shapes)
     checks); decorative shapes need none. Missing alt text on an existing
     element is set with `el.set` `altText`, never by re-adding it.
 -   **Images are replaced only on request.** `el.set` `image` swaps the
-    picture in place (frame, crop and animations stay) and the old image
+    picture in place (frame and animations stay, the image is cropped to
+    fit the frame) and the old image
     is gone from the deck -- do it only when the user explicitly asks for
     that image to change, never as a side effect of another edit.
 -   **Never cover existing text fields** (placeholders incl. the

@@ -400,12 +400,14 @@ export interface SlideWork {
 }
 
 /**  what one slide pass did beyond its repairs: the images el.set
-     replaced, the images layout content brought in, and the replacements
-     of each text.replace in the slide's existing content  */
+     replaced, the images layout content brought in, the replacements of
+     each text.replace in the slide's existing content, and whether a
+     text.replace removed a run that showed an image (a picture-filled run)  */
 export interface SlideEdited extends Repair {
     swaps: ImageSwap[]
     adopted: string[]
     replaced: { op: number, count: number }[]
+    runImages: boolean
 }
 
 /**
@@ -445,11 +447,15 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         before any other op changes it (earlier ops' changes are left out)  */
     const unused = new Set<string>()
     const replaced: { op: number, count: number }[] = []
+    const images = new Set(pkg.targets(part, rels).filter((t) => t.kind === "image").map((t) => t.id))
+    let runImages = false
     for (const replace of entry.replaces) {
         const done = replaceExisting(slide, replace)
         replaced.push({ op: replace.op, count: done.count })
-        for (const id of done.refs)
+        for (const id of done.refs) {
             unused.add(id)
+            runImages ||= images.has(id)
+        }
     }
 
     /*  removals, then text; relationships only removed shapes or replaced
@@ -549,5 +555,5 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         if (file !== null)
             adopted.push(digestBytes(await file.async("nodebuffer")))
     }
-    return { ...repaired, swaps, adopted, replaced }
+    return { ...repaired, swaps, adopted, replaced, runImages }
 }

@@ -206,7 +206,7 @@ const cellBody = (tc: Element): Element => {
 const cellText = (value: RichText | number | boolean): RichText =>
     typeof value === "number" || typeof value === "boolean" ? String(value) : value
 
-/**  remove rows, add rows in the format of their neighbour, set cells;
+/**  remove rows, add rows in the format of the neighbouring body row, set cells;
      the frame's height follows the rows  */
 const editTable = (shape: Element, set: PlannedEdit["set"], lang: string): void => {
     const tbl = firstElement(shape, "a:tbl")
@@ -221,7 +221,10 @@ const editTable = (shape: Element, set: PlannedEdit["set"], lang: string): void 
     if (set.addRows !== undefined) {
         const rows = rowsOf(tbl)
         const at = set.addRows.at ?? rows.length
-        const model = rows[at > 0 ? at - 1 : 0]
+
+        /*  the row above is the format model -- but the header row 0 only
+            when no body row follows: at 1 the first body row is the model  */
+        const model = at === 1 && rows.length > 1 ? rows[1] : rows[at > 0 ? at - 1 : 0]
         if (model === undefined)
             throw new PptcError("E_ENGINE", "table without rows")
         const anchor = rows[at] ?? children(tbl, [ "a:extLst" ])[0] ?? null
@@ -267,7 +270,7 @@ export interface ImageSwap {
 }
 
 /**  replace the image of a picture: a new media part, the blip (and an SVG
-     extension) pointing at it, a crop re-cut to the new aspect  */
+     extension) pointing at it, a crop cut to fit the frame centered  */
 const replaceImage = async (pkg: Package, slidePart: string, rels: Document, shape: Element, file: string): Promise<ImageSwap> => {
     const doc = shape.ownerDocument as Document
     const blipFill = children(shape, [ "p:blipFill" ])[0] ?? null
@@ -311,17 +314,22 @@ const replaceImage = async (pkg: Package, slidePart: string, rels: Document, sha
         extLst.appendChild(extEl)
     }
 
-    /*  a cropped picture is cropped anew: centered, to the new aspect  */
-    const srcRect = children(blipFill, [ "a:srcRect" ])[0]
-    const cropped = srcRect !== undefined && [ "l", "t", "r", "b" ].some((a) => Number(srcRect.getAttribute(a) ?? "0") !== 0)
+    /*  the frame stays; the image covers it, cut off centered to the
+        frame's aspect (an old crop is cut anew) -- an unknown image size
+        or frame stretches, a tiled fill stays as it is  */
     const box = boxOf(transformOf(shape))
-    if (cropped && box !== null) {
+    if (box !== null && children(blipFill, [ "a:tile" ]).length === 0) {
         const crop = fitImage(box, imageSize(bytes), "crop").crop
-        for (const a of [ "l", "t", "r", "b" ])
-            srcRect.removeAttribute(a)
-        for (const [ side, value ] of Object.entries(crop ?? {}))
-            if (value !== 0)
-                srcRect.setAttribute(side, String(value))
+        let srcRect = children(blipFill, [ "a:srcRect" ])[0]
+        if (srcRect === undefined && crop !== null)
+            srcRect = ensureChild(blipFill, "a:srcRect", [ "a:tile", "a:stretch" ])
+        if (srcRect !== undefined) {
+            for (const a of [ "l", "t", "r", "b" ])
+                srcRect.removeAttribute(a)
+            for (const [ side, value ] of Object.entries(crop ?? {}))
+                if (value !== 0)
+                    srcRect.setAttribute(side, String(value))
+        }
     }
     return { from, to: digestBytes(bytes) }
 }
@@ -347,9 +355,11 @@ export const applyEdit = async (pkg: Package, slidePart: string, rels: Document,
             setSolidFill(rPr, set.fontColor, [ "a:effectLst", "a:effectDag", "a:highlight", "a:uLnTx", "a:uLn",
                 "a:uFillTx", "a:uFill", "a:latin", "a:ea", "a:cs", "a:sym", "a:hlinkClick", "a:hlinkMouseOver",
                 "a:rtl", "a:extLst" ])
-    const swap = set.image === undefined ? null : await replaceImage(pkg, slidePart, rels, shape, set.image)
+
+    /*  the frame first: a new image is cut to fit the final frame  */
     if (set.frame !== undefined)
         setFrame(shape, set.frame)
+    const swap = set.image === undefined ? null : await replaceImage(pkg, slidePart, rels, shape, set.image)
     if (set.fill !== undefined) {
         const props = shapeProps(shape)
         if (props !== null)
