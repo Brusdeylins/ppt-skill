@@ -43,8 +43,9 @@ export interface SlideExpect {
     released?: string[]
     /**  parts of the slide's content a repair changed (W_REPAIRED): in the
          input (`before`, source names) and the output (`after`) -- they
-         count by kind only  */
-    repaired?: { before: string[], after: string[] }
+         count by kind, and the relationships their repair released
+         (`released`) leave their children  */
+    repaired?: { before: string[], after: string[], released: string[] }
 }
 
 /**  a part's text in canonical form (parsed and re-serialized), so that
@@ -118,7 +119,7 @@ const computeDigest = async (zip: JSZip, part: string): Promise<string> => {
 /**  type-tagged hashes of the parts a part relates to (charts one level
      deeper, so a swapped workbook or chart style is caught as well)  */
 const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number,
-    skip: string[] = [], repaired: string[] = []): Promise<string[]> => {
+    skip: string[] = [], repaired: string[] = [], released: string[] = []): Promise<string[]> => {
     const out: string[] = []
     const seen = new Set<string>(skip)
     for (const rel of await readRels(zip, part)) {
@@ -141,9 +142,10 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
             one counts by its kind and its children  */
         if (zip.file(target) === null)
             continue
-        let hash = repaired.includes(target) ? "repaired" : await digest(zip, target)
+        const fixed = repaired.includes(target)
+        let hash = fixed ? "repaired" : await digest(zip, target)
         if (depth > 0)
-            hash += `[${(await relatedDigests(zip, target, null, depth - 1, [], repaired)).join(",")}]`
+            hash += `[${(await relatedDigests(zip, target, null, depth - 1, fixed ? released : [], repaired)).join(",")}]`
         out.push(`${kind}:${hash}`)
     }
     return out.sort()
@@ -159,9 +161,9 @@ const notesText = async (zip: JSZip, slidePart: string): Promise<string | null> 
 
 /**  fingerprint of one slide: notes text and related-part hashes  */
 const slidePrint = async (zip: JSZip, slidePart: string, skip: string[] = [],
-    repaired: string[] = []): Promise<{ notes: string | null, assets: string[] }> => {
+    repaired: string[] = [], released: string[] = []): Promise<{ notes: string | null, assets: string[] }> => {
     const xml = await canonText(zip, slidePart) ?? ""
-    return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip, repaired) }
+    return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip, repaired, released) }
 }
 
 /**  slide part paths in presentation order  */
@@ -217,8 +219,8 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
         const outPart = outParts[i]
         if (exp.source === null || outPart === undefined)
             continue
-        const was = await slidePrint(before, exp.source, exp.released, exp.repaired?.before)
-        const now = await slidePrint(after, outPart, [], exp.repaired?.after)
+        const was = await slidePrint(before, exp.source, exp.released, exp.repaired?.before, exp.repaired?.released)
+        const now = await slidePrint(after, outPart, [], exp.repaired?.after, exp.repaired?.released)
         if (!exp.notes && was.notes !== now.notes) {
             if (now.notes === null || now.notes === "")
                 lost.push({ slide: i, what: "speaker notes" })

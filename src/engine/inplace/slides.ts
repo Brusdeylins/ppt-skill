@@ -183,7 +183,7 @@ const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, te
     pkg.write(relsPartOf(notesPart),
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
         + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-        + `<Relationship Id="rId1" Type="${REL}/notesMaster" Target="${relTarget(notesPart, notesMaster)}"/>`
+        + `<Relationship Id="rId1" Type="${REL}/notesMaster" Target="${xmlEscape(relTarget(notesPart, notesMaster), true)}"/>`
         + `<Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path.posix.basename(slidePart)}"/>`
         + "</Relationships>")
     await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml")
@@ -204,7 +204,7 @@ const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document
     const copy = await pkg.clonePart(pkg, notesPart, new Map([ [ owner ?? slidePart, slidePart ] ]))
     if (owner === null) {
         const copyRels = await pkg.rels(copy)
-        pkg.addRel(copyRels, `${REL}/slide`, `../slides/${path.posix.basename(slidePart)}`)
+        pkg.addRel(copyRels, `${REL}/slide`, relTarget(copy, slidePart))
         pkg.writeRels(copy, copyRels)
     }
     rel.el.setAttribute("Target", relTarget(slidePart, copy))
@@ -381,8 +381,10 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
     wireHyperlinks(pkg, slide, rels)
     setSlideVisibility(slide, entry.hidden)
     dropLinksToRemoved(pkg, part, slide, rels, work.removed)
-    repairRels(pkg, part, slide, rels, unused, forced)
+    const dropped = repairRels(pkg, part, slide, rels, unused, forced).filter((id) => !unused.has(id) && !forced.has(id))
     const repaired = repairContent(pkg, part, slide, rels)
+    if (dropped.length > 0)
+        repaired.actions.unshift(`dropped relationships ${dropped.join(",")}`)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
     return repaired

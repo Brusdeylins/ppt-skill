@@ -61,7 +61,7 @@ const parseDeck = async (zip: JSZip, findings: Finding[]): Promise<Deck> => {
     const rels = new Map<string, Rel[]>()
     for (const [ n, doc ] of docs)
         if (n.endsWith(".rels"))
-            rels.set(relsOwner(n), relTargets(relsOwner(n), doc, zip))
+            rels.set(findPart(zip, relsOwner(n)) ?? relsOwner(n), relTargets(findPart(zip, relsOwner(n)) ?? relsOwner(n), doc, zip))
     return { zip, names, docs, rels }
 }
 

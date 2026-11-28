@@ -43022,7 +43022,7 @@ var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 var NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 var parseXml = (xml, strict = false) => new import_xmldom.DOMParser({
   onError: (level, msg) => {
-    if (level === "fatalError" || strict && level === "error")
+    if (level === "fatalError" || strict && !/replacement character/i.test(msg))
       throw new Error(msg);
   }
 }).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
@@ -43440,7 +43440,12 @@ var DeckArchive = class _DeckArchive {
     const text = await this.text(part);
     if (text === null)
       throw new PptcError("E_TEMPLATE", `archive part missing: ${part}`);
-    const doc = parseXml(text);
+    let doc;
+    try {
+      doc = parseXml(text);
+    } catch (err) {
+      throw new PptcError("E_FILE", `part ${part} is not well-formed XML: ${String(err).slice(0, 120)}`);
+    }
     this.cache.set(part, doc);
     return doc;
   }
@@ -44014,7 +44019,7 @@ var computeDigest = async (zip, part) => {
   }
   return createHash2("sha1").update(data).digest("hex").slice(0, 12);
 };
-var relatedDigests = async (zip, part, xml, depth, skip = [], repaired = []) => {
+var relatedDigests = async (zip, part, xml, depth, skip = [], repaired = [], released = []) => {
   const out = [];
   const seen = new Set(skip);
   for (const rel of await readRels(zip, part)) {
@@ -44030,9 +44035,10 @@ var relatedDigests = async (zip, part, xml, depth, skip = [], repaired = []) => 
     }
     if (zip.file(target) === null)
       continue;
-    let hash2 = repaired.includes(target) ? "repaired" : await digest(zip, target);
+    const fixed = repaired.includes(target);
+    let hash2 = fixed ? "repaired" : await digest(zip, target);
     if (depth > 0)
-      hash2 += `[${(await relatedDigests(zip, target, null, depth - 1, [], repaired)).join(",")}]`;
+      hash2 += `[${(await relatedDigests(zip, target, null, depth - 1, fixed ? released : [], repaired)).join(",")}]`;
     out.push(`${kind}:${hash2}`);
   }
   return out.sort();
@@ -44042,9 +44048,9 @@ var notesText = async (zip, slidePart) => {
   const xml = notes === null ? null : await canonText(zip, notes);
   return xml === null ? null : [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("\n");
 };
-var slidePrint = async (zip, slidePart, skip = [], repaired = []) => {
+var slidePrint = async (zip, slidePart, skip = [], repaired = [], released = []) => {
   const xml = await canonText(zip, slidePart) ?? "";
-  return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip, repaired) };
+  return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip, repaired, released) };
 };
 var slideParts = async (zip) => {
   const pres = await canonText(zip, "ppt/presentation.xml");
@@ -44071,8 +44077,8 @@ var verifyContent = async (before, after, expects, repaired = /* @__PURE__ */ ne
     const outPart = outParts[i];
     if (exp.source === null || outPart === void 0)
       continue;
-    const was = await slidePrint(before, exp.source, exp.released, exp.repaired?.before);
-    const now = await slidePrint(after, outPart, [], exp.repaired?.after);
+    const was = await slidePrint(before, exp.source, exp.released, exp.repaired?.before, exp.repaired?.released);
+    const now = await slidePrint(after, outPart, [], exp.repaired?.after, exp.repaired?.released);
     if (!exp.notes && was.notes !== now.notes) {
       if (now.notes === null || now.notes === "")
         lost.push({ slide: i, what: "speaker notes" });
@@ -44378,7 +44384,7 @@ var parseDeck = async (zip, findings) => {
   const rels = /* @__PURE__ */ new Map();
   for (const [n, doc] of docs)
     if (n.endsWith(".rels"))
-      rels.set(relsOwner(n), relTargets(relsOwner(n), doc, zip));
+      rels.set(findPart(zip, relsOwner(n)) ?? relsOwner(n), relTargets(findPart(zip, relsOwner(n)) ?? relsOwner(n), doc, zip));
   return { zip, names, docs, rels };
 };
 var partRules = (deck) => {
@@ -44701,10 +44707,8 @@ var Package = class _Package {
         el.parentNode?.removeChild(el);
         continue;
       }
-      if (next === void 0 && from === this && relIs(rel, RELS.shared) && path4.posix.dirname(part) === path4.posix.dirname(copy))
-        continue;
       if (next === void 0 && from === this && relIs(rel, RELS.shared))
-        next = target;
+        continue;
       next ??= await this.clonePart(from, target, done);
       el.setAttribute("Target", relTarget(copy, next));
     }
@@ -45209,7 +45213,7 @@ var setNotes = async (pkg, slidePart, slideRels, text, notesMaster) => {
   pkg.write(
     relsPartOf(notesPart),
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${relTarget(notesPart, notesMaster)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${xmlEscape(relTarget(notesPart, notesMaster), true)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
   );
   await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml");
   for (const rel of pkg.targets(slidePart, slideRels))
@@ -45226,7 +45230,7 @@ var unshareNotes = async (pkg, slidePart, slideRels) => {
   const copy = await pkg.clonePart(pkg, notesPart, /* @__PURE__ */ new Map([[owner ?? slidePart, slidePart]]));
   if (owner === null) {
     const copyRels = await pkg.rels(copy);
-    pkg.addRel(copyRels, `${REL}/slide`, `../slides/${path5.posix.basename(slidePart)}`);
+    pkg.addRel(copyRels, `${REL}/slide`, relTarget(copy, slidePart));
     pkg.writeRels(copy, copyRels);
   }
   rel.el.setAttribute("Target", relTarget(slidePart, copy));
@@ -45350,8 +45354,10 @@ var editSlide = async (pkg, work) => {
   wireHyperlinks(pkg, slide, rels);
   setSlideVisibility(slide, entry.hidden);
   dropLinksToRemoved(pkg, part, slide, rels, work.removed);
-  repairRels(pkg, part, slide, rels, unused, forced);
+  const dropped = repairRels(pkg, part, slide, rels, unused, forced).filter((id) => !unused.has(id) && !forced.has(id));
   const repaired = repairContent(pkg, part, slide, rels);
+  if (dropped.length > 0)
+    repaired.actions.unshift(`dropped relationships ${dropped.join(",")}`);
   pkg.write(part, slide);
   pkg.writeRels(part, rels);
   return repaired;
@@ -45797,7 +45803,7 @@ var classifySlides = async (pkg, plan, parts, removed) => {
     let sourceRepairs = repairs;
     if (entry.virtualId <= 0 && entry.source.kind === "self" && repairs.length > 0)
       sourceRepairs = (await closure(pkg, entry.source.part)).slice(1).filter((v) => partDefects(v, exists).length > 0).map((v) => v.part);
-    states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [] });
+    states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [] });
   }
   return states;
 };
@@ -45842,7 +45848,7 @@ var removeSlides = async (pkg, removed) => {
     }
   }
 };
-var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs }, i) => ({
+var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased }, i) => ({
   source: entry.source.kind === "self" && touched ? entry.source.part : null,
   label: `#${i} '${entry.title ?? ""}'`,
   notes: entry.notes !== null,
@@ -45854,14 +45860,14 @@ var expectations = (states) => states.map(({ entry, touched, released, repairs, 
   },
   textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== void 0 && !f.append),
   released,
-  repaired: { before: sourceRepairs, after: repairs }
+  repaired: { before: sourceRepairs, after: repairs, released: partReleased }
 }));
 var untouchedParts = (pkg, states) => {
   const written = new Set(states.filter((s) => s.touched).flatMap((s) => [s.part, ...s.repairs]));
   const untouched = /* @__PURE__ */ new Map();
   for (const s of states.filter((s2) => !s2.touched))
     for (const { part } of s.closure)
-      for (const p of pkg.has(relsPartOf(part)) ? [part, relsPartOf(part)] : [part])
+      for (const p of [part, findPart(pkg.zip, relsPartOf(part))].filter((n) => n !== null))
         if (!written.has(p) && !written.has(relsOwner(p)))
           untouched.set(p, pkg.zip.file(p));
   return untouched;
@@ -45872,8 +45878,11 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
     if (!s.touched)
       continue;
     const actions = [];
-    for (const owner of s.repairs)
-      actions.push(...(await repairPart(pkg, owner)).actions.map((a) => `${a} in ${owner}`));
+    for (const owner of s.repairs) {
+      const repair = await repairPart(pkg, owner);
+      actions.push(...repair.actions.map((a) => `${a} in ${owner}`));
+      s.partReleased.push(...repair.released);
+    }
     const own2 = await editSlide(pkg, {
       part: s.part,
       entry: s.entry,
@@ -45886,7 +45895,7 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
     if (s.sharedNotes)
       actions.push("gave the slide its own notes part");
-    if (s.defects.length > 0 && !states.slice(0, i).some((o) => o.part === s.part && o.touched))
+    if (s.defects.length > 0 && (actions.length > 0 || !states.slice(0, i).some((o) => o.touched && o.defects.length > 0 && (o.part === s.part || o.repairs.some((r) => s.repairs.includes(r))))))
       warnings.push(repairedWarning(
         { id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index: i, title: s.entry.title },
         `the input deck carried PowerPoint repair triggers on this slide${s.entry.virtualId > 0 ? "" : " (or the slide it was copied from)"} (${s.defects.map((d) => d.text).join("; ")}); pptc ${actions.length > 0 ? actions.join(", ") : "repaired them"}`

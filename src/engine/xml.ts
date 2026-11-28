@@ -32,9 +32,9 @@ export const parseXml = (xml: string, strict = false): Document =>
     new DOMParser({
         onError: (level, msg): void => {
             /*  lenient: recoverable errors are tolerated silently (no stderr
-                noise), only fatal ones fail; strict: errors fail too --
-                warnings never (e.g. a U+FFFD character in valid text)  */
-            if (level === "fatalError" || (strict && level === "error"))
+                noise), only fatal ones fail; strict: everything fails but
+                the warning about a U+FFFD character, which is valid text  */
+            if (level === "fatalError" || (strict && !/replacement character/i.test(msg)))
                 throw new Error(msg)
         }
     }).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml")

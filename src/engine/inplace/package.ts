@@ -223,10 +223,10 @@ export class Package {
                 el.parentNode?.removeChild(el)
                 continue
             }
-            if (next === undefined && from === this && relIs(rel, RELS.shared) && path.posix.dirname(part) === path.posix.dirname(copy))
-                continue
+
+            /*  a copy lies next to its original: a shared target stays as written  */
             if (next === undefined && from === this && relIs(rel, RELS.shared))
-                next = target
+                continue
             next ??= await this.clonePart(from, target, done)
             el.setAttribute("Target", relTarget(copy, next))
         }

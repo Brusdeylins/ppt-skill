@@ -94,6 +94,8 @@ interface SlideState {
     defects: Finding[]
     /**  relationship ids whose content a named repair removed (W_REPAIRED)  */
     released: string[]
+    /**  the same, released inside the repaired parts of its content  */
+    partReleased: string[]
 }
 
 /**
@@ -338,7 +340,7 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
         if (entry.virtualId <= 0 && entry.source.kind === "self" && repairs.length > 0)
             sourceRepairs = (await closure(pkg, entry.source.part)).slice(1)
                 .filter((v) => partDefects(v, exists).length > 0).map((v) => v.part)
-        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [] })
+        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [] })
     }
     return states
 }
@@ -394,7 +396,7 @@ const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> =
 
 /**  what the content guard allows to change on each output slide  */
 const expectations = (states: SlideState[]): SlideExpect[] =>
-    states.map(({ entry, touched, released, repairs, sourceRepairs }, i) => ({
+    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased }, i) => ({
         source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
         notes: entry.notes !== null,
@@ -407,7 +409,7 @@ const expectations = (states: SlideState[]): SlideExpect[] =>
         },
         textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append),
         released,
-        repaired: { before: sourceRepairs, after: repairs }
+        repaired: { before: sourceRepairs, after: repairs, released: partReleased }
     }))
 
 /**  the parts of untouched slides with their input entry, for the byte
@@ -418,7 +420,7 @@ const untouchedParts = (pkg: Package, states: SlideState[]): Map<string, JSZip.J
     const untouched = new Map<string, JSZip.JSZipObject | null>()
     for (const s of states.filter((s) => !s.touched))
         for (const { part } of s.closure)
-            for (const p of pkg.has(relsPartOf(part)) ? [ part, relsPartOf(part) ] : [ part ])
+            for (const p of [ part, findPart(pkg.zip, relsPartOf(part)) ].filter((n): n is string => n !== null))
                 if (!written.has(p) && !written.has(relsOwner(p)))
                     untouched.set(p, pkg.zip.file(p))
     return untouched
@@ -433,8 +435,11 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
         if (!s.touched)
             continue
         const actions: string[] = []
-        for (const owner of s.repairs)
-            actions.push(...(await repairPart(pkg, owner)).actions.map((a) => `${a} in ${owner}`))
+        for (const owner of s.repairs) {
+            const repair = await repairPart(pkg, owner)
+            actions.push(...repair.actions.map((a) => `${a} in ${owner}`))
+            s.partReleased.push(...repair.released)
+        }
         const own: Repair = await editSlide(pkg, {
             part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes
         })
@@ -444,7 +449,8 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
         s.released = [ ...new Set([ ...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own.released ]) ]
         if (s.sharedNotes)
             actions.push("gave the slide its own notes part")
-        if (s.defects.length > 0 && !states.slice(0, i).some((o) => o.part === s.part && o.touched))
+        if (s.defects.length > 0 && (actions.length > 0 || !states.slice(0, i).some((o) => o.touched && o.defects.length > 0
+            && (o.part === s.part || o.repairs.some((r) => s.repairs.includes(r))))))
             warnings.push(repairedWarning({ id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index: i, title: s.entry.title },
                 `the input deck carried PowerPoint repair triggers on this slide${s.entry.virtualId > 0 ? "" : " (or the slide it was copied from)"} `
                 + `(${s.defects.map((d) => d.text).join("; ")}); pptc ${actions.length > 0 ? actions.join(", ") : "repaired them"}`))

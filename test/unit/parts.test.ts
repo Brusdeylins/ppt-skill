@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest"
 import JSZip from "jszip"
-import { PartAllocator, findPart, relTargets, relsOwner } from "../../src/engine/parts.js"
+import { PartAllocator, findPart, relTarget, relTargets, relsOwner } from "../../src/engine/parts.js"
 import type { PartView } from "../../src/engine/defects.js"
 import { parseXml } from "../../src/engine/xml.js"
 
@@ -59,5 +59,16 @@ describe("part names and relationships", () => {
             + `<Relationship Id="b" Type="${T}/image" Target="/ppt/media/j.png"/>`
             + `<Relationship Id="c" Type="${T}/hyperlink" Target="https://x" TargetMode="External"/>`).rels
         expect(rels.map((r) => r.target)).toEqual([ "ppt/media/i.png", "ppt/media/j.png", null ])
+    })
+})
+
+describe("relationship targets", () => {
+    it("escapes what a URI may not carry and keeps escapes", () => {
+        const t = (to: string): string => relTarget("ppt/slides/slide1.xml", to)
+        expect(t("ppt/media/my image.png")).toBe("../media/my%20image.png")
+        expect(t("ppt/media/Bild-ä.png")).toBe("../media/Bild-%C3%A4.png")
+        expect(t("ppt/media/a#b?c[1].png")).toBe("../media/a%23b%3Fc%5B1%5D.png")
+        expect(t("ppt/media/my%20image.png")).toBe("../media/my%20image.png")
+        expect(t("ppt/slides/slide2.xml")).toBe("slide2.xml")
     })
 })

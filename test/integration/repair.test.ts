@@ -827,3 +827,42 @@ describe("names, characters and metadata of real-world decks", () => {
         expect(after).toEqual([ ...before, "D" ])
     })
 })
+
+describe("repairs of the release candidate", () => {
+    it("repairs a chart fill whose picture is dead but whose SVG is live", async () => {
+        const deck = await chartDeck("chart-fill-svg", "")
+        const zip = await JSZip.loadAsync(readFileSync(deck))
+        zip.file("ppt/media/s.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>")
+        zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ", "<Default Extension=\"svg\" ContentType=\"image/svg+xml\"/><Default "))
+        zip.file("ppt/charts/_rels/chart91.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+            + `<Relationship Id="rIdSvg" Type="${REL}/image" Target="../media/s.svg"/></Relationships>`)
+        zip.file("ppt/charts/chart91.xml", (await text(zip, "ppt/charts/chart91.xml")).replace("<c:plotArea><c:layout/>",
+            "<c:plotArea><c:layout/><c:spPr><a:blipFill xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:blip r:embed=\"rIdGone\"><a:extLst>"
+            + "<a:ext uri=\"{96DAC541-7B7A-43D3-8B79-37D633B846F1}\"><asvg:svgBlip xmlns:asvg=\"http://schemas.microsoft.com/office/drawing/2016/SVG/main\" r:embed=\"rIdSvg\"/>"
+            + "</a:ext></a:extLst></a:blip></a:blipFill></c:spPr>"))
+        writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res).join(" ")).toContain("a picture fill")
+        await expectIntact(deck)
+    })
+
+    it("reports an unquoted attribute value as malformed", async () => {
+        const deck = await craftDeck("unquoted-attr", async (zip, [ , b ]) => {
+            zip.file(b as string, (await text(zip, b as string)).replace(/<p:cNvPr id="(\d+)"/, "<p:cNvPr id=$1"))
+        })
+        expect((await verifyFile(deck)).join(" ")).toContain("malformed XML")
+    })
+
+    it("keeps an untouched slide whose relationships part differs in case", async () => {
+        let slide = ""
+        const deck = await craftDeck("rels-case", async (zip, [ , b ]) => {
+            slide = b as string
+            const rels = await text(zip, relsOf(slide))
+            zip.remove(relsOf(slide))
+            zip.file(relsOf(slide).replace(/slide(\d+)\.xml\.rels$/, "SLIDE$1.XML.rels"), rels)
+        })
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:0", placeholders: { title: { text: "A2" } } } ])
+        expect(res.warnings.map((w) => w.code)).not.toContain("W_INPUT_DEFECT")
+        expect(await verifyFile(deck)).toEqual([])
+    })
+})

@@ -84,7 +84,13 @@ export class DeckArchive {
         const text = await this.text(part)
         if (text === null)
             throw new PptcError("E_TEMPLATE", `archive part missing: ${part}`)
-        const doc = parseXml(text)
+        let doc: Document
+        try {
+            doc = parseXml(text)
+        }
+        catch (err) {
+            throw new PptcError("E_FILE", `part ${part} is not well-formed XML: ${String(err).slice(0, 120)}`)
+        }
         this.cache.set(part, doc)
         return doc
     }

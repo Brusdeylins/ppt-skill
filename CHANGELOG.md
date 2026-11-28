@@ -54,7 +54,8 @@
   the app properties stay after the slide titles. Copies keep escaped part
   names escaped once (`my%20image.png`); a replacement character
   (U+FFFD) in slide text is valid; relationships of a missing part are
-  dropped.
+  dropped; a relationships part named in another letter case than its
+  part is found.
 - **`verify` checks more.** References to missing relationships in any
   part (1.0.x created such slides from layouts with picture fills), a
   notes part that names another slide, a slide listed twice and slide
