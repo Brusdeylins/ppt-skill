@@ -11,11 +11,11 @@
 
 import { PptcError } from "../../infra/errors.js"
 import type { Op } from "../../schema/ops.js"
-import type { ElementSpec } from "../../schema/payloads.js"
+import type { ElementSpec, RichText } from "../../schema/payloads.js"
 import { seedPlaceholderName, type Frame, type ShapeInfo } from "../model.js"
-import { slideAddrOf, type OpHandler, type PlanContext, type PlannedElement, type SlidePlanEntry } from "./registry.js"
+import { dropEdits, slideAddrOf, type OpHandler, type PlanContext, type PlannedElement, type SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
-import { lintElementOverlap, lintFontSize, richTextSizes, type Obstacle } from "../lint.js"
+import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain, type Obstacle } from "../lint.js"
 import { nearestAspect } from "../describe/position.js"
 import { layoutTable } from "../table-grid.js"
 
@@ -112,10 +112,32 @@ export const plannedFrame = (entry: SlidePlanEntry, name: string, frame: Frame |
 export const plannedAtBack = (entry: SlidePlanEntry, target: string | PlannedElement): boolean =>
     entry.zOrder.findLast((z) => z.target === target)?.zOrder === "back"
 
+/**  whether rich text shows no text (empty or whitespace only)  */
+const blank = (text: RichText | undefined): boolean =>
+    text === undefined || richTextToPlain(text).join("").trim() === ""
+
+/**
+ *  Whether an existing non-placeholder textbox or autoshape carries no
+ *  text after the el.set edits planned for it so far (a plain panel).
+ *
+ *  @param entry - the plan entry
+ *  @param shape - the shape as read from the deck
+ *  @returns true when it shows no text
+ */
+const textless = (entry: SlidePlanEntry, shape: ShapeInfo): boolean => {
+    if (shape.placeholderIdx !== null || (shape.type !== "shape" && shape.type !== "textbox"))
+        return false
+    const edit = entry.edits.findLast((e) => e.name === shape.name && e.set.text !== undefined)
+    return edit !== undefined ? blank(edit.set.text) : (shape.text ?? "").trim() === ""
+}
+
 /**  text-bearing obstacles a new element must not cover: text placeholders
-     (incl. footer/slide-number/date), existing text shapes and elements
-     planned earlier -- picture placeholders and prompt boxes are exempt,
-     and so is an element placed or moved to the back so far (a background
+     (incl. footer/slide-number/date), textboxes and autoshapes with text,
+     tables, charts and groups -- existing or planned earlier, alike in one
+     apply and across applies. Exempt are picture placeholders, pictures,
+     lines and connectors, prompt boxes, a textbox or autoshape without
+     text (a plain panel; its text as el.set leaves it) and an element
+     placed or moved to the back so far in the document (a background
      panel lies behind every shape, text on it covers nothing). Frames
      planned by el.set count; `self` (a shape name) is left out.  */
 export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: string | null = null): Obstacle[] => {
@@ -137,14 +159,15 @@ export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: 
         const frame = plannedFrame(entry, sh.name, sh.frame)
         if (frame !== null && sh.name !== self && !sh.name.startsWith(PROMPT_BOX_PREFIX)
             && sh.placeholderKind !== "picture" && sh.type !== "picture"
-            && sh.type !== "connector" && !plannedAtBack(entry, sh.name)
+            && sh.type !== "connector" && !plannedAtBack(entry, sh.name) && !textless(entry, sh)
             /*  shapes removed earlier in the same document are gone  */
             && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
             obstacles.push({ name: sh.name, frame })
     }
     for (const planned of entry.elements) {
         const frame = specFrame(planned.spec)
-        if (frame !== null && !plannedAtBack(entry, planned)
+        const panel = (planned.spec.type === "shape" || planned.spec.type === "textbox") && blank(planned.spec.text)
+        if (frame !== null && !panel && planned.spec.type !== "image" && !plannedAtBack(entry, planned)
             && (planned.name === null || (!planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self)))
             obstacles.push({ name: planned.name ?? planned.spec.type, frame })
     }
@@ -210,15 +233,20 @@ export const elRm: OpHandler<Extract<Op, { op: "el.rm" }>> = {
     name: "el.rm",
     plan(ctx, op): void {
         const entry = resolveEntry(ctx, op.slide)
-        /*  cancel elements generated earlier in the same run  */
+        /*  cancel elements generated earlier in the same run, with their
+            stacking moves  */
         const plannedBefore = entry.elements.length
         entry.elements = entry.elements.filter((e) =>
             e.name === null || !nameMatches(e.name, op.name))
         const cancelled = plannedBefore - entry.elements.length
-        /*  remove all matching existing elements (full names, incl. UUID suffix)  */
+        entry.zOrder = entry.zOrder.filter((z) => typeof z.target === "string" || entry.elements.includes(z.target))
+        /*  remove all matching existing elements (full names, incl. UUID
+            suffix); the edits planned for them go with them  */
         const matches = existingShapes(ctx, entry).filter((sh) => nameMatches(sh.name, op.name))
-        for (const shape of matches)
+        for (const shape of matches) {
             entry.removeNames.push(shape.name)
+            dropEdits(entry, shape.name)
+        }
         if (cancelled === 0 && matches.length === 0)
             throw new PptcError("E_ADDR_NOTFOUND",
                 `slide has no element named '${op.name}'`,

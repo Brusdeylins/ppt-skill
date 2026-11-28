@@ -91,6 +91,11 @@ describe("text.replace on existing content", () => {
         expect(await failure(deck, [ { op: "text.replace", find: "", replace: "x" } ])).toBe("E_SCHEMA")
         expect(await failure(deck, [ { op: "text.replace", find: "x", replace: "y", slide: "id:9999" } ])).toBe("E_ADDR_NOTFOUND")
     })
+
+    it("rejects a line break in find or replace (it works within a paragraph)", async () => {
+        for (const [ find, replace ] of [ [ "a\nb", "x" ], [ "a\rb", "x" ], [ "Hallo", "Zeile 1\nZeile 2" ], [ "Hallo", "x\r" ] ])
+            expect(await failure(deck, [ { op: "text.replace", find, replace } ])).toBe("E_SCHEMA")
+    })
 })
 
 describe("text.replace in sequence", () => {

@@ -139,7 +139,12 @@ Elements (tables, charts, free shapes)
     `--strict` the apply fails (exit 7). On a finding, REPOSITION the
     element, never ignore it. A background panel behind text is no
     overlay: give it `zOrder: "back"` -- it lies behind every shape and
-    raises no finding, neither itself nor the text placed on it later.
+    raises no finding itself. The lint counts text placeholders, the
+    footer band, textboxes and shapes with text, tables, charts and
+    groups; a panel WITHOUT text, pictures and lines never count (text
+    placed on a text-less panel, now or in a later apply, raises nothing),
+    a panel with text counts unless it was sent to the back in the same
+    ops document.
 -   **Element font sizes -- from the template, readable, few.** Free
     `el.add` elements (chips, cards, captions, diagram labels,
     annotations) carry no template size of their own -- NEVER invent one.

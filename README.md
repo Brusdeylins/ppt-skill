@@ -290,9 +290,9 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
 - `--dry-run` -- full validation and planning, no write; warnings included
 - `--strict` -- lint warnings become exit 7: `W_TEXT_OVERFLOW` (planned
   text exceeds the placeholder capacity -- shorten or split),
-  `W_ELEMENT_OVERLAP` (an `el.add` element covers a text-bearing shape,
-  incl. the footer/slide-number area -- reposition it; prompt boxes and
-  elements placed or moved to the back are exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
+  `W_ELEMENT_OVERLAP` (an `el.add` or moved element covers a text-bearing
+  shape, incl. the footer/slide-number area -- reposition it; see the
+  overlap lint below for what counts) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
   readable minimum -- enlarge it). Not escalated, since it is found during
   the write: `W_REPAIRED` (the input deck carried PowerPoint repair
   triggers on a slide or a layout -- duplicate shape ids, dead or duplicate
@@ -567,10 +567,17 @@ then one shape up/down) and -- except connectors -- a
   `from`/`to` end.
 
 The overlap lint (`W_ELEMENT_OVERLAP`) takes the box a rotated element
-covers, and leaves out an element sent to the back (`zOrder: "back"`,
-by `el.add` or `el.set`), which lies behind every shape: it is not
-checked, and the elements after it may cover it (text on a background
-panel) -- until a later move takes it out of the back; the capacity of a placeholder with vertical text (rotated by 90 or
+covers. Its obstacles are text placeholders and the footer/slide-number/
+date area, textboxes and shapes with text (as the document leaves it),
+tables, charts and groups -- existing or added earlier in the document.
+Pictures, picture placeholders, lines and connectors, prompt boxes and
+textboxes or shapes without text (a plain panel -- in this apply and in
+later ones) never count. An element sent to the back in the document
+(`zOrder: "back"`, by `el.add` or `el.set`) lies behind every shape: it
+is not checked, and the elements after it in the same document may cover
+it (text on a background panel) -- until a later move takes it out of
+the back; in a later apply such a panel counts only if it carries text.
+The capacity of a placeholder with vertical text (rotated by 90 or
 270 degrees in the layout) swaps its width and height, and a `\v` line
 break counts as a line.
 
@@ -582,14 +589,14 @@ field; each is checked against the element's type (`E_SCHEMA` otherwise):
 | Field | Elements | Effect |
 |---|---|---|
 | `text` | placeholder, textbox, shape | new rich text in the first paragraph's and run's format (alignment, bullets, font, size, color, language): a paragraph or run that sets fields of its own changes only those |
-| `frame` | every element (rotation: not table/chart) | `{x, y, w, h, rotation}` -- the given keys move, resize or rotate it, the others stay; a placeholder that inherits its frame gets the layout's frame written into the slide; a group keeps its children's coordinates (they scale with it); a table's columns and rows scale to the new size |
+| `frame` | every element (rotation: not table/chart) | `{x, y, w, h, rotation}` -- the given keys move, resize or rotate it, the others stay (`w` or `h` 0 only on a line or connector: a horizontal or vertical one); a placeholder that inherits its frame gets the layout's frame written into the slide; a group keeps its children's coordinates (they scale with it); a table's columns and rows scale to the new size |
 | `fill` | placeholder, textbox, shape | solid fill; keeps the element's transparency and its text color -- give `fontColor` with a fill the text must contrast with |
 | `transparency` | placeholder, textbox, shape | transparency of the solid fill in percent (`0` opaque - `100` invisible): of the new `fill`, else of the element's own (one without a solid fill of its own needs `fill`: `E_SCHEMA`) |
 | `border`, `borderPt` | placeholder, textbox, shape, picture, connector | outline color and width in pt |
 | `fontColor` | placeholder, textbox, shape | color of every run |
 | `altText`, `title` | every element | alt text (`cNvPr@descr`) and title; `""` removes them |
 | `hyperlink` | placeholder, textbox, shape, picture | click target of the whole element: a URL or a slide link (`slide:SEL`); `""` removes it |
-| `image` | picture, filled picture placeholder | another image in place: the frame and animations stay, the image is cropped centered to fit the frame (like a picture placeholder fill; an image of unknown size stretches); an SVG shows through PowerPoint's SVG extension |
+| `image` | picture, filled picture placeholder | another image in place: the frame and animations stay, the image is cropped centered to fit the frame (like a picture placeholder fill; an image of unknown size stretches) -- a picture fitted with `contain` keeps its shrunk frame, so give `frame` with the swap; an SVG shows through PowerPoint's SVG extension |
 | `cells` | table | `[{row, col, text}]` -- 0-based grid position, header row 0; a cell covered by a merge fails |
 | `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the neighbouring body row (the row above; at 1, below the header row 0, the first body row; the first row at 0 -- not above a header row: `E_SCHEMA`); one value per column |
 | `removeRows` | table | `[indices]` -- rows taken out; a row of a vertical merge fails; removing row 0 of a table with a header row leaves it without one |
@@ -600,8 +607,16 @@ the result of the one before; the table style and the cell formatting
 stay, and the frame's height follows the rows. An element generated or a
 picture placeholder filled earlier in the same document is changed in its
 plan instead (the `el.add` vocabulary: a planned connector takes `border`/
-`borderPt` as its `color`/`widthPt` but no `hyperlink`, a planned image no
-`border`/`borderPt`, a planned textbox `fontColor` on its runs). Every `el.add` element also takes `altText` and `title`; a picture
+`borderPt` as its `color`/`widthPt` but no `frame` -- its `from`/`to`
+place it -- and no `hyperlink`, a planned image no `border`/`borderPt`, a
+planned textbox `fontColor` on its runs). Ops of one document that meet
+on an element compose in op order: `el.rm` drops the edits and stacking
+moves planned for the element; a later `slide.fill` text replaces an
+earlier `el.set` text of the placeholder (an `append` to it fails with
+`E_SCHEMA` -- give the whole text once), and `title:` selectors follow;
+an `el.set` on a footer, slide-number or date placeholder holds although
+a `slide.fill` sets that field anew in the document (either order), and
+one removed by `false` is gone (`E_ADDR_NOTFOUND` for a later `el.set`). Every `el.add` element also takes `altText` and `title`; a picture
 is never described by its file path. Replacing an image keeps the old alt
 text: give `altText` together with `image`. Replacing an image destroys the old
 one in the deck -- the skill does it only on the user's explicit request.
@@ -610,7 +625,9 @@ one in the deck -- the skill does it only on the user's explicit request.
 
 `{ "op": "text.replace", "find": "2025", "replace": "2026", "slide": SEL,
 "matchCase": false, "wholeWord": false, "notes": false }` replaces plain
-text in every shape, placeholder and table cell of the deck -- or of
+text -- a case-insensitive substring match by default (`matchCase`,
+`wholeWord` narrow it), within one paragraph (a line break in `find` or
+`replace` fails with `E_SCHEMA`) -- in every shape, placeholder and table cell of the deck -- or of
 `slide` only --, in the speaker notes with `notes: true`, never in fields
 (slide number, date) and never in charts or SmartArt: a targeted slide
 whose chart (its titles, series names and categories -- not its numbers)
@@ -621,7 +638,7 @@ sees the deck after every earlier op of the document (text set or
 elements added before it are replaced, later ones are not), and slide
 `title:` selectors after it see the new titles. Zero matches is no error.
 The apply result reports every `text.replace` in `result.replacements`
-(not under `--dry-run`): `{ "op": 2, "count": 5, "slides": [ { "id": 257,
+(not under `--dry-run`, which gives no preview of the counts): `{ "op": 2, "count": 5, "slides": [ { "id": 257,
 "index": 1, "count": 5 } ] }` -- `op` is its position in the document,
 the counts are per output slide (a copy made after the op counts its own).
 

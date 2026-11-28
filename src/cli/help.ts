@@ -106,7 +106,8 @@ Options:
   --dry-run         validate and plan only, no write; warnings included
   --strict          lint warnings become exit 7: W_TEXT_OVERFLOW
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add
-                    element covers a text shape -- reposition it),
+                    or moved element covers a text-bearing shape --
+                    reposition it; see 'pptc help ops' for what counts),
                     W_FONT_TOO_SMALL (a run/element font is below the
                     readable minimum -- enlarge it). Not escalated, as
                     they are found during the write: W_REPAIRED (the input
@@ -265,7 +266,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                                    "image": { "image": "photo.png",
                                               "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
-                 "slideNumber": true, "date": false,  // show/remove
+                 "slideNumber": true, "date": false,  // show/remove (true:
+                                            // nothing when the layout has none)
                  "background": { "color": "1F4E79" },
                  "hidden": true,            // optional: hide/show the slide
                  "section": "Teil 2" }      // start a section at the slide
@@ -315,7 +317,12 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "zOrder": front (default) | back | forward | backward
                  (placed in front, then moved; "back" lies behind every
                  shape: no W_ELEMENT_OVERLAP for it or for the elements
-                 placed over it later)
+                 placed over it later in the document)
+               W_ELEMENT_OVERLAP obstacles: text placeholders, the footer
+                 band, textboxes/shapes with text, tables, charts and
+                 groups -- never pictures, picture placeholders, lines,
+                 prompt boxes or textboxes/shapes without text (a panel,
+                 also in later applies)
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -323,7 +330,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                    paragraph's and run's format, merged with the fields
                    a paragraph or run sets),
                  "frame": { "x", "y", "w", "h", "rotation" } (given keys
-                   change; not rotation on table/chart),
+                   change; not rotation on table/chart; "w"/"h" 0 only
+                   on a line/connector),
                  "fill", "fontColor" (placeholder/textbox/shape),
                  "transparency" (placeholder/textbox/shape: 0-100 % of
                    the new fill, else of the element's own solid fill;
@@ -334,7 +342,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                    slide link; "" removes),
                  "image" (picture or filled picture placeholder: frame
                    and animations stay, the image is cropped centered to
-                   fit the frame -- only on explicit request),
+                   fit the frame -- a contain-fitted picture keeps its
+                   shrunk frame, give "frame" with it -- only on explicit
+                   request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
                    header row 0), "addRows": { "at", "rows" } (format of
                    the neighbouring body row; never above a header row),
@@ -342,8 +352,13 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "zOrder": front|back|forward|backward (any element; in
                    op order, after the document's new elements)
                -- also on elements planned earlier in the document (a
-                  planned connector takes no hyperlink, a planned image
-                  no border)
+                  planned connector takes no frame and no hyperlink, a
+                  planned image no border). Ops on one element compose
+                  in op order: el.rm drops its earlier edits, a later
+                  slide.fill text replaces an earlier el.set text (an
+                  append to it: E_SCHEMA), an el.set on a footer, slide-
+                  number or date placeholder holds when slide.fill sets
+                  that field in the document (false removes it)
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -353,7 +368,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                so they travel with the file and 'state' reads them back
                { "op": "meta.props", "set": { "title": "Q3",
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
-  text.replace find/replace plain text in shapes, placeholders and table
+  text.replace find/replace plain text (a case-insensitive substring
+               match by default, within one paragraph: no line break in
+               "find"/"replace") in shapes, placeholders and table
                cells of the deck (or of "slide"), notes only on request,
                fields, charts and SmartArt never (W_REPLACE_SKIPPED when
                a targeted slide's chart text -- titles, series names,
@@ -364,6 +381,7 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "slide": SEL, "matchCase": false, "wholeWord": false,
                  "notes": false }
                -> result.replacements: [{ "op", "count", "slides" }]
+                  (absent under --dry-run: no preview of the counts)
   section.rename { "op": "section.rename", "from": "Teil 2", "to": "Ergebnis" }
   section.rm   { "op": "section.rm", "name": "Teil 2" } -- the slides stay
                and join the previous section (the next one for the first)

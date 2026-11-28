@@ -88,7 +88,12 @@
   and come after the document's new elements are in place; `state --level
   full` lists the shapes back to front. An element sent to the back
   covers nothing, so the overlap lint leaves it out -- also as an
-  obstacle of the elements after it (text on a background panel). A
+  obstacle of the elements after it in the document (text on a
+  background panel). The lint's obstacles are text placeholders and the
+  footer band, textboxes and shapes with text, tables, charts and groups;
+  pictures, lines, prompt boxes and textboxes or shapes without text (a
+  panel) never count -- in the apply that adds them and in later ones, so
+  text added onto an earlier apply's panel passes `--strict`. A
   `forward`/`backward` step of a new element counts only the shapes there
   at its op, not those later ops add.
 - **Text layout.** Textboxes and shapes take `valign` and `margin`;
@@ -107,7 +112,8 @@
   `frame` (`x`, `y`, `w`, `h`, `rotation` -- the given keys move, resize
   or rotate; a placeholder that inherits its frame gets the layout's frame
   written into the slide, a group keeps its children's coordinates, a
-  table's columns and rows scale), `fill`, `transparency`, `border`, `borderPt`,
+  table's columns and rows scale, a horizontal or vertical line or
+  connector keeps its own flat frame -- `w` or `h` 0 only there), `fill`, `transparency`, `border`, `borderPt`,
   `fontColor`, `altText`, `title`, `hyperlink`, `image`, `zOrder` and, for tables,
   `cells` (`[{row, col, text}]`, 0-based grid position, header row 0),
   `addRows` (`{at, rows}`, in the format of the neighbouring body row;
@@ -123,7 +129,14 @@
   it; the overlap lint sees the planned frames and lints a moved element.
   New text that sets no format keeps the first paragraph's and run's
   format (alignment, bullets, font, size, color, language) instead of
-  falling back to the layout's.
+  falling back to the layout's. Ops of one document that meet on an
+  element compose in op order although the engine applies a slide's work
+  by kind: `el.rm` drops the element's earlier edits and stacking moves,
+  a later `slide.fill` text replaces an earlier `el.set` text (an
+  `append` to it fails with `E_SCHEMA`) and `title:` selectors follow,
+  and an `el.set` on a footer, slide-number or date placeholder holds
+  although a `slide.fill` sets that field anew in the document (`false`
+  removes it, a later `el.set` on it fails with `E_ADDR_NOTFOUND`).
 - **Alt text.** Every `el.add` element takes `altText` and `title`, and
   `el.set` sets or (with `""`) removes them on any element
   (`cNvPr@descr`/`@title`). PptxGenJS described every `el.add` picture by
@@ -133,11 +146,16 @@
   or a filled picture placeholder: a new media part, the frame and the
   animations stay, the image is cropped centered to fit the frame (an
   image of unknown size stretches), an SVG shows through PowerPoint's SVG
-  extension. The content guard learned the
+  extension; a picture fitted with `contain` keeps its shrunk frame, so
+  the skill gives `frame` with the swap. The content guard learned the
   swap: the new image (by content hash) must come, the old one may go --
+  counted as a multiset, so an image moved from one picture to another
+  or two exchanged images pass in either op order and are still checked;
   any other change of the slide's images still fails the apply.
 - **Text replace.** The new op `text.replace {find, replace, slide,
-  matchCase, wholeWord, notes}` replaces plain text in the shapes,
+  matchCase, wholeWord, notes}` replaces plain text -- a case-insensitive
+  substring match by default, within one paragraph (a line break in
+  `find` or `replace` fails with `E_SCHEMA`) -- in the shapes,
   placeholders and table cells of the deck or one slide, in the notes on
   request, never in fields. A match may span runs split by formatting: the
   first touched run takes the replacement and keeps its format. The op
@@ -145,11 +163,13 @@
   elements, footers and notes are replaced while planning, the existing
   content by the engine without what an earlier op replaced or removed --
   and title selectors after it see the new titles. The apply result
-  reports `replacements` per op (count and slides); zero matches is no
-  error.
+  reports `replacements` per op (count and slides; not under `--dry-run`,
+  which previews no counts); zero matches is no error. The content guard
+  lets the notes of a slide change only where a replacement counted in
+  them.
 - **Slide number and date.** The fill fields `slideNumber` and `date`
   clone the layout's slide-number and date placeholders with their field
-  (`true`) or remove them (`false`); `pptc footer` takes `--number` and
+  (`true` -- nothing on a layout without one) or remove them (`false`); `pptc footer` takes `--number` and
   `--date`. Footer, slide-number and date clones now go in front of the
   shape tree's extension list (a footer used to be appended after it) and
   get relationships of their own for what the layout content references

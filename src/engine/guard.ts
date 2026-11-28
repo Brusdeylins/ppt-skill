@@ -238,29 +238,21 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
 
         /*  parts that vanished are a loss; a part that appeared or changed
             is foreign content -- unless it is a vanished part that only
-            lost some of its own children (e.g. a picture inside SmartArt)  */
-        const gone = minus(was.assets, now.assets)
-        const added = minus(now.assets, was.assets)
-
-        /*  a replaced image: exactly the new one comes, the old may go  */
-        for (const swap of exp.replaced ?? []) {
-            const k = swap.to === null ? -1 : added.indexOf(`image:${swap.to}[]`)
-
-            /*  an image put in place of one with the same content changes
-                nothing the fingerprint sees  */
-            if (k < 0 && swap.to !== null && swap.from.includes(swap.to))
-                continue
-            if (k < 0 && swap.to !== null) {
-                blocked.push(`slide ${exp.label}: the image an op put in place (${swap.to}) is missing`)
-                continue
-            }
-            if (k >= 0)
-                added.splice(k, 1)
-            for (const from of swap.from) {
-                const g = gone.indexOf(`image:${from}[]`)
-                if (g >= 0)
-                    gone.splice(g, 1)
-            }
+            lost some of its own children (e.g. a picture inside SmartArt).
+            Replaced images count as a multiset: the new ones (`to`) join
+            what the slide had and must come, the old ones (`from`) may go
+            -- so an image moved between pictures or two exchanged images
+            are checked in any op order  */
+        const image = (hash: string): string => `image:${hash}[]`
+        const replaced = exp.replaced ?? []
+        const comes = replaced.flatMap((swap) => swap.to === null ? [] : [ image(swap.to) ])
+        const expected = [ ...was.assets, ...comes ]
+        const added = minus(now.assets, expected)
+        let gone = minus(expected, now.assets)
+        gone = minus(gone, replaced.flatMap((swap) => swap.from.map(image)))
+        for (const entry of minus(comes, minus(comes, gone))) {
+            blocked.push(`slide ${exp.label}: the image an op put in place (${entry.slice(6, -2)}) is missing`)
+            gone.splice(gone.indexOf(entry), 1)
         }
 
         /*  "grow": the planned elements account for their images (by

@@ -16,7 +16,7 @@ import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../../infra/errors.js"
 import { inchToEmu, type Frame } from "../../core/model.js"
-import type { PlannedElement, SlidePlanEntry } from "../../core/ops/registry.js"
+import type { PlannedEdit, PlannedElement, SlidePlanEntry } from "../../core/ops/registry.js"
 import type { ZOrder } from "../../schema/payloads.js"
 import { notesOwner } from "../defects.js"
 import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.js"
@@ -161,6 +161,10 @@ const adoptLayoutRels = async (pkg: Package, part: string, rels: Document, layou
 /**  the footer-band placeholders: footer, slide number and date  */
 type BandType = "ftr" | "sldNum" | "dt"
 
+/**  the slide's own placeholders of a footer-band type  */
+const bandShapes = (slide: Document, type: BandType): Element[] =>
+    elements(slide, "p:sp").filter((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type)
+
 /**
  *  Set a footer-band placeholder of a slide: remove the slide's own, then
  *  (unless `content` is false) clone the layout's with its relationships --
@@ -181,23 +185,23 @@ type BandType = "ftr" | "sldNum" | "dt"
  *           relationship ids it referenced
  */
 const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, rels: Document, layoutPart: string | null,
-    type: BandType, content: string | boolean, lang: string): Promise<{ images: string[], removed: string[], refs: string[] }> => {
+    type: BandType, content: string | boolean, lang: string): Promise<{ images: string[], removed: string[], refs: string[],
+    clone: Element | null }> => {
     const refs: string[] = []
     const spTree = firstElement(slide, "p:spTree")
     if (spTree === null)
-        return { images: [], removed: [], refs }
-    for (const sp of elements(slide, "p:sp"))
-        if (firstElement(sp, "p:ph")?.getAttribute("type") === type) {
-            refs.push(...relRefs(sp).map((ref) => ref.attr.value))
-            sp.parentNode?.removeChild(sp)
-        }
+        return { images: [], removed: [], refs, clone: null }
+    for (const sp of bandShapes(slide, type)) {
+        refs.push(...relRefs(sp).map((ref) => ref.attr.value))
+        sp.parentNode?.removeChild(sp)
+    }
     const removed = pkg.targets(part, rels).filter((t) => t.kind === "image" && t.target !== null && refs.includes(t.id))
         .map((t) => t.target as string)
     if (content === false || layoutPart === null || !pkg.has(layoutPart))
-        return { images: [], removed, refs }
+        return { images: [], removed, refs, clone: null }
     const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type)
     if (source === undefined)
-        return { images: [], removed, refs }
+        return { images: [], removed, refs, clone: null }
     const clone = slide.importNode(source, true) as Element
     firstElement(clone, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()))
     const txBody = firstElement(clone, "p:txBody")
@@ -211,7 +215,7 @@ const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, r
             props.setAttribute("lang", lang)
     const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone)
     spTree.insertBefore(clone, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
-    return { images, removed, refs }
+    return { images, removed, refs, clone }
 }
 
 /**  the frame of a shape's own `a:xfrm` in EMU, null when it has none  */
@@ -537,13 +541,15 @@ export interface SlideWork {
 
 /**  what one slide pass did beyond its repairs: the images el.set
      replaced, the images layout content brought in, the replacements of
-     each text.replace in the slide's existing content, and whether a
-     text.replace removed a run that showed an image (a picture-filled run)  */
+     each text.replace in the slide's existing content, whether a
+     text.replace removed a run that showed an image (a picture-filled run),
+     and how many replacements it made in the slide's existing notes  */
 export interface SlideEdited extends Repair {
     swaps: ImageSwap[]
     adopted: ImageSwap[]
     replaced: { op: number, count: number }[]
     runImages: boolean
+    notesReplaced: number
 }
 
 /**
@@ -637,45 +643,61 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
             throw missing(`empty picture placeholder idx ${fill.phIdx}`)
     }
 
+    /*  the footer-band placeholders set anew: their edits follow the
+        layout's copy that replaces them (below)  */
+    const bandSet = [ [ "ftr", entry.footer ], [ "sldNum", entry.slideNumber ], [ "dt", entry.date ] ] as const
+    const banded = new Map<string, BandType>()
+    for (const [ type, content ] of bandSet)
+        for (const sp of content === null ? [] : bandShapes(slide, type))
+            banded.set(firstElement(sp, "p:cNvPr")?.getAttribute("name") ?? "", type)
+    const clones = new Map<BandType, Element>()
+
     /*  el.set changes of existing elements, in op order; what the changed
         elements referenced before may become unused (links, images)  */
     const swaps: ImageSwap[] = []
-    for (const edit of entry.edits) {
-        const shape = need(findShape(slide, edit.name, isTopLevel), `element '${edit.name}'`)
-        for (const ref of relRefs(shape))
-            unused.add(ref.attr.value)
-        const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape))
-
-        /*  an image swapped again in the same apply: only the last stays  */
-        const again = swap === null ? undefined : swaps.find((s) => s.to !== null && swap.from.includes(s.to))
-        if (swap !== null && again !== undefined) {
-            again.from.push(...swap.from.filter((f) => f !== again.to))
-            again.to = swap.to
+    const applyEdits = async (edits: PlannedEdit[]): Promise<void> => {
+        for (const edit of edits) {
+            const band = banded.get(edit.name)
+            const shape = need(band === undefined ? findShape(slide, edit.name, isTopLevel) : clones.get(band) ?? null,
+                `element '${edit.name}'`)
+            for (const ref of relRefs(shape))
+                unused.add(ref.attr.value)
+            /*  every swap counts (the content guard checks them as a
+                multiset, an image swapped again included)  */
+            const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape))
+            if (swap !== null)
+                swaps.push(swap)
         }
-        else if (swap !== null)
-            swaps.push(swap)
     }
+    await applyEdits(entry.edits.filter((e) => !banded.has(e.name)))
 
     /*  background, footer, slide number, date, notes  */
     if (entry.background !== null)
         setBackground(slide, entry.background)
     const bands: { images: string[], removed: string[] }[] = []
-    for (const [ type, content ] of [ [ "ftr", entry.footer ], [ "sldNum", entry.slideNumber ], [ "dt", entry.date ] ] as const)
+    for (const [ type, content ] of bandSet)
         if (content !== null) {
             const band = await setBandPlaceholder(pkg, part, slide, rels, layoutPart, type, content, work.lang)
             bands.push(band)
+            if (band.clone !== null)
+                clones.set(type, band.clone)
             for (const id of band.refs)
                 unused.add(id)
         }
+    await applyEdits(entry.edits.filter((e) => banded.has(e.name)))
     const notesReplaces = entry.notes === null ? entry.replaces.filter((r) => r.notes) : []
+    let notesReplaced = 0
     if (entry.notes !== null)
         await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang, work.sharedNotes)
     else if (work.sharedNotes || notesReplaces.length > 0) {
         const copy = await unshareNotes(pkg, part, rels)
         if (copy !== null && notesReplaces.length > 0) {
             const notes = await pkg.xml(copy)
-            for (const replace of notesReplaces)
-                replaced.push({ op: replace.op, count: replaceNotes(notes, replace) })
+            for (const replace of notesReplaces) {
+                const count = replaceNotes(notes, replace)
+                replaced.push({ op: replace.op, count })
+                notesReplaced += count
+            }
             pkg.write(copy, notes)
         }
     }
@@ -731,5 +753,5 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
             adopted.push({ from, to: null })
         to.forEach((hash, i) => adopted.push({ from: i === 0 ? from : [], to: hash }))
     }
-    return { ...repaired, swaps, adopted, replaced, runImages }
+    return { ...repaired, swaps, adopted, replaced, runImages, notesReplaced }
 }

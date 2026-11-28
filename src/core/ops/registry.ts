@@ -183,6 +183,40 @@ export const newPlanEntry = (
     section: null
 })
 
+/**
+ *  Drop every el.set edit and stacking move planned so far for an
+ *  existing element (it is removed: el.rm, or a footer-band placeholder
+ *  turned off).
+ *
+ *  @param entry - the plan entry
+ *  @param name - the full shape name
+ */
+export const dropEdits = (entry: SlidePlanEntry, name: string): void => {
+    entry.edits = entry.edits.filter((e) => e.name !== name)
+    entry.zOrder = entry.zOrder.filter((z) => z.target !== name)
+}
+
+/**
+ *  Drop the text of the el.set edits planned so far for an existing
+ *  element whose text a later op replaces (a slide.fill of the
+ *  placeholder, a footer-band placeholder set anew); an edit left
+ *  without changes goes.
+ *
+ *  @param entry - the plan entry
+ *  @param name - the full shape name
+ *  @returns whether an edit's text was dropped
+ */
+export const supersedeText = (entry: SlidePlanEntry, name: string): boolean => {
+    let dropped = false
+    for (const edit of entry.edits)
+        if (edit.name === name && edit.set.text !== undefined) {
+            delete edit.set.text
+            dropped = true
+        }
+    entry.edits = entry.edits.filter((e) => Object.values(e.set).some((v) => v !== undefined))
+    return dropped
+}
+
 /**  the complete mutation plan an apply run executes  */
 export interface MutationPlan {
     /**  output slides in final order  */

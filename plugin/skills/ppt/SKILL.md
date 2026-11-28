@@ -143,7 +143,8 @@ Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 `slide.add`/`slide.fill` takes `placeholders` (a picture fill takes `fit`:
 `crop` -- the default --, `contain`, `stretch`), `notes`, `footer`,
 `slideNumber` and `date` (`true` shows the layout's slide-number / date
-field with its layout content, `false` removes it), `background`, `hidden` and `section`.
+field with its layout content -- nothing on a layout without that
+placeholder --, `false` removes it), `background`, `hidden` and `section`.
 
 Text and colors (every op that writes text or color): rich text paragraphs
 take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
@@ -202,9 +203,15 @@ connector from, to, color, widthPt, dash solid|dash|dot|dashDot|longDash,
           startArrow/endArrow none|arrow|triangle|stealth|diamond|oval
 every     name, altText, title (accessibility: give images and charts an
           altText in <deck-lang/>), zOrder front (default)|back|forward|
-          backward (a background panel: back -- it covers nothing,
-          and text on it raises no overlap)
+          backward (a background panel: back -- it covers nothing)
 ```
+
+W_ELEMENT_OVERLAP obstacles: text placeholders and the footer band,
+textboxes and shapes WITH text, tables, charts, groups (existing or added
+earlier in the document). Never obstacles: pictures, picture placeholders,
+lines/connectors, prompt boxes, textboxes and shapes WITHOUT text (a panel
+-- also in later applies), and elements placed or moved to the back in the
+SAME document (a panel that gets text later counts again).
 
 `el.set` changes an element IN PLACE (keeps its id, animations and links --
 prefer it over `el.rm` + `el.add`); at least one field, each checked
@@ -214,7 +221,8 @@ against the element's type (authoritative: `schema el.set`):
 text         placeholder, textbox, shape -- in the first paragraph's and
              run's format; fields a paragraph or run sets change only those
 frame        {x, y, w, h, rotation}: given keys change (any element; no
-             rotation on table/chart); inherited placeholder frames work
+             rotation on table/chart; w or h 0 only on a line/connector);
+             inherited placeholder frames work
 fill, fontColor              placeholder, textbox, shape (a new fill
                              keeps the text color: give fontColor too)
 transparency                 placeholder, textbox, shape: 0-100 % of the
@@ -226,8 +234,9 @@ hyperlink    placeholder, textbox, shape, picture: click target, URL or
              slide link ("" removes)
 image        picture / filled picture placeholder -- ONLY on the user's
              explicit request; frame and animations stay, the image is
-             cropped centered to fit the frame; the old alt text stays --
-             give altText with the new image
+             cropped centered to fit the frame (a contain-fitted picture
+             keeps its shrunk frame: give frame with the swap); the old
+             alt text stays -- give altText with the new image
 cells        table: [{row, col, text}] (0-based, header row 0)
 addRows      table: {at?, rows} (format of the neighbouring body row;
              never above a header row)
@@ -236,13 +245,22 @@ zOrder       any element: front|back|forward|backward, in op order
 ```
 
 It also patches elements and picture fills planned earlier in the SAME
-ops document (a planned connector takes no hyperlink, a planned image no
-border). `text.replace {find, replace, slide?, matchCase?, wholeWord?,
-notes?}` replaces plain text in shapes, placeholders and table cells (notes
-only with `notes: true`, fields, charts and SmartArt never --
+ops document (a planned connector takes no frame -- give its from/to --
+and no hyperlink, a planned image no border). Ops on one element compose
+in op order: `el.rm` drops the element's earlier edits; a later
+`slide.fill` text replaces an earlier `el.set` text (appending to it:
+E_SCHEMA -- give the whole text once); an `el.set` on a footer,
+slide-number or date placeholder holds although `slide.fill` sets that
+field in the same document (`false` removes it: a later `el.set` on it is
+E_ADDR_NOTFOUND). `text.replace {find, replace, slide?, matchCase?, wholeWord?,
+notes?}` replaces plain text -- a case-insensitive substring match by
+default (`matchCase`, `wholeWord` narrow it), within one paragraph (a line
+break in find or replace: E_SCHEMA) -- in shapes, placeholders and table
+cells (notes only with `notes: true`, fields, charts and SmartArt never --
 W_REPLACE_SKIPPED for chart titles, series names, categories and SmartArt text), across formatted runs, and sees
 every earlier op of the document; report `result.replacements` (count and
-slides per op) to the user -- zero matches is no error, say so.
+slides per op) to the user -- zero matches is no error, say so. Under
+`--dry-run` there is no `replacements` (no preview of the counts).
 
 Sections: `section: "Name"` in a fill starts a PowerPoint section at that
 slide; it runs to the next section start, so a slide inside a section

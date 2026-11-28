@@ -8,7 +8,8 @@
 **  planned element to the front or back or one step; the moves follow the
 **  op order (a step counts the shapes there at that op), `state` lists the
 **  shapes back to front, an element sent to the back covers nothing and
-**  is no obstacle of later ones (no overlap warning), the content guard
+**  is no obstacle of later ones (no overlap warning), nor is a panel
+**  without text (also in a later apply, under --strict), the content guard
 **  accepts the reorder and untouched slides keep their bytes.
 */
 
@@ -16,7 +17,8 @@ import { describe, expect, it } from "vitest"
 import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import JSZip from "jszip"
-import { TMP, apply, failure, freshDeck, png, stateOf } from "../util/elements.js"
+import { executeOps } from "../../src/commands/apply.js"
+import { OPTS, TMP, apply, failure, freshDeck, png, stateOf } from "../util/elements.js"
 
 /**  the names of a slide's elements and title back to front, generated
      suffixes cut (the footer band placeholders left out)  */
@@ -123,9 +125,40 @@ describe("z-order", () => {
             { op: "el.set", slide: "0", name: "Mid", zOrder: "back" },
             { op: "el.add", slide: "0", elements: [ text("U", 0.5, 4) ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
 
-        /*  brought to the front again, it counts again  */
-        expect(codes(await apply(deck, [ { op: "el.set", slide: "0", name: "Card", zOrder: "front" },
+        /*  brought to the front again with text, it counts again (a
+            panel without text never does)  */
+        expect(codes(await apply(deck, [ { op: "el.set", slide: "0", name: "Card", zOrder: "front", text: "Karte" },
             { op: "el.add", slide: "0", elements: [ text("V", 7.5, 2.7) ] } ]))).toContain("W_ELEMENT_OVERLAP")
+    })
+
+    it("leaves a panel without text out as an obstacle, in later applies and under --strict", async () => {
+        const deck = await freshDeck("z-textless.pptx")
+        const codes = (warnings: unknown[]): string[] => (warnings as { code: string }[]).map((w) => w.code)
+        const strict = async (ops: unknown[]): Promise<unknown> =>
+            await executeOps(deck, { ops } as never, { ...OPTS, strict: true })
+        const text = (name: string, x: number, y: number): Record<string, unknown> =>
+            ({ type: "textbox", name, frame: { x, y, w: 3, h: 0.8 }, text: name })
+        await apply(deck, [ { op: "slide.add", layout: "Title Only", placeholders: { title: { text: "Titel" } } },
+            { op: "el.add", slide: "0", elements: [ { type: "shape", name: "Panel", shape: "roundRect",
+                frame: { x: 0.5, y: 2, w: 12, h: 4.5 }, fill: "lt2", transparency: 50, zOrder: "back" }, text("T1", 1, 2.5) ] } ])
+
+        /*  the panel from the first apply covers nothing in the next ones  */
+        await expect(strict([ { op: "el.add", slide: "0", elements: [ text("T2", 6, 4.5) ] } ])).resolves.toBeDefined()
+        await expect(strict([ { op: "el.set", slide: "0", name: "T1", frame: { y: 3.2 } } ])).resolves.toBeDefined()
+
+        /*  a planned shape without text or picture, in front, is no
+            obstacle either, as in a later apply  */
+        const photo = path.join(TMP, "z-textless.png")
+        writeFileSync(photo, png(40, 30))
+        expect(codes(await apply(deck, [ { op: "el.add", slide: "0", elements: [
+            { type: "shape", name: "Card", shape: "rect", frame: { x: 6, y: 2.2, w: 3, h: 1.5 }, fill: "accent1" },
+            { type: "image", name: "Foto", frame: { x: 9.5, y: 2.2, w: 2.5, h: 1.5 }, path: photo } ] },
+            { op: "el.add", slide: "0", elements: [ text("T3", 6.2, 2.4), text("T5", 9.7, 2.4) ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
+
+        /*  a panel that gets text is one  */
+        expect(await apply(deck, [ { op: "el.set", slide: "0", name: "Panel", text: "Hinweis", zOrder: "front" },
+            { op: "el.add", slide: "0", elements: [ text("T4", 1, 5.5) ] } ])).toEqual([
+            expect.objectContaining({ code: "W_ELEMENT_OVERLAP", element: "T4", covers: expect.stringMatching(/^Panel-/) }) ])
     })
 
     it("rejects wrong values and types at plan time", async () => {

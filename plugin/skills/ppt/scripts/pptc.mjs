@@ -16350,7 +16350,8 @@ Options:
   --dry-run         validate and plan only, no write; warnings included
   --strict          lint warnings become exit 7: W_TEXT_OVERFLOW
                     (shorten/split text), W_ELEMENT_OVERLAP (an el.add
-                    element covers a text shape -- reposition it),
+                    or moved element covers a text-bearing shape --
+                    reposition it; see 'pptc help ops' for what counts),
                     W_FONT_TOO_SMALL (a run/element font is below the
                     readable minimum -- enlarge it). Not escalated, as
                     they are found during the write: W_REPAIRED (the input
@@ -16497,7 +16498,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                                    "image": { "image": "photo.png",
                                               "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
-                 "slideNumber": true, "date": false,  // show/remove
+                 "slideNumber": true, "date": false,  // show/remove (true:
+                                            // nothing when the layout has none)
                  "background": { "color": "1F4E79" },
                  "hidden": true,            // optional: hide/show the slide
                  "section": "Teil 2" }      // start a section at the slide
@@ -16547,7 +16549,12 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "zOrder": front (default) | back | forward | backward
                  (placed in front, then moved; "back" lies behind every
                  shape: no W_ELEMENT_OVERLAP for it or for the elements
-                 placed over it later)
+                 placed over it later in the document)
+               W_ELEMENT_OVERLAP obstacles: text placeholders, the footer
+                 band, textboxes/shapes with text, tables, charts and
+                 groups -- never pictures, picture placeholders, lines,
+                 prompt boxes or textboxes/shapes without text (a panel,
+                 also in later applies)
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -16555,7 +16562,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                    paragraph's and run's format, merged with the fields
                    a paragraph or run sets),
                  "frame": { "x", "y", "w", "h", "rotation" } (given keys
-                   change; not rotation on table/chart),
+                   change; not rotation on table/chart; "w"/"h" 0 only
+                   on a line/connector),
                  "fill", "fontColor" (placeholder/textbox/shape),
                  "transparency" (placeholder/textbox/shape: 0-100 % of
                    the new fill, else of the element's own solid fill;
@@ -16566,7 +16574,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                    slide link; "" removes),
                  "image" (picture or filled picture placeholder: frame
                    and animations stay, the image is cropped centered to
-                   fit the frame -- only on explicit request),
+                   fit the frame -- a contain-fitted picture keeps its
+                   shrunk frame, give "frame" with it -- only on explicit
+                   request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
                    header row 0), "addRows": { "at", "rows" } (format of
                    the neighbouring body row; never above a header row),
@@ -16574,8 +16584,13 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "zOrder": front|back|forward|backward (any element; in
                    op order, after the document's new elements)
                -- also on elements planned earlier in the document (a
-                  planned connector takes no hyperlink, a planned image
-                  no border)
+                  planned connector takes no frame and no hyperlink, a
+                  planned image no border). Ops on one element compose
+                  in op order: el.rm drops its earlier edits, a later
+                  slide.fill text replaces an earlier el.set text (an
+                  append to it: E_SCHEMA), an el.set on a footer, slide-
+                  number or date placeholder holds when slide.fill sets
+                  that field in the document (false removes it)
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -16585,7 +16600,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                so they travel with the file and 'state' reads them back
                { "op": "meta.props", "set": { "title": "Q3",
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
-  text.replace find/replace plain text in shapes, placeholders and table
+  text.replace find/replace plain text (a case-insensitive substring
+               match by default, within one paragraph: no line break in
+               "find"/"replace") in shapes, placeholders and table
                cells of the deck (or of "slide"), notes only on request,
                fields, charts and SmartArt never (W_REPLACE_SKIPPED when
                a targeted slide's chart text -- titles, series names,
@@ -16596,6 +16613,7 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "slide": SEL, "matchCase": false, "wholeWord": false,
                  "notes": false }
                -> result.replacements: [{ "op", "count", "slides" }]
+                  (absent under --dry-run: no preview of the counts)
   section.rename { "op": "section.rename", "from": "Teil 2", "to": "Ergebnis" }
   section.rm   { "op": "section.rm", "name": "Teil 2" } -- the slides stay
                and join the previous section (the next one for the first)
@@ -16732,6 +16750,20 @@ var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
   replaced: [],
   section: null
 });
+var dropEdits = (entry, name) => {
+  entry.edits = entry.edits.filter((e) => e.name !== name);
+  entry.zOrder = entry.zOrder.filter((z2) => z2.target !== name);
+};
+var supersedeText = (entry, name) => {
+  let dropped = false;
+  for (const edit of entry.edits)
+    if (edit.name === name && edit.set.text !== void 0) {
+      delete edit.set.text;
+      dropped = true;
+    }
+  entry.edits = entry.edits.filter((e) => Object.values(e.set).some((v) => v !== void 0));
+  return dropped;
+};
 var slideAddrOf = (ctx, entry) => ({
   id: entry.virtualId > 0 ? entry.virtualId : null,
   index: ctx.plan.entries.indexOf(entry),
@@ -17111,6 +17143,7 @@ var placeholderShapeName = (ctx, entry, ph) => {
     );
   return shape.name;
 };
+var bandShapes = (ctx, part) => (ctx.deck.slides.find((s) => s.part === part)?.shapes ?? []).filter((sh) => sh.placeholderKind !== null && isFooterKind(sh.placeholderKind));
 var planFill = (ctx, entry, fill, added = false) => {
   const layout = entryLayout(ctx, entry);
   for (const [key, content] of Object.entries(fill.placeholders ?? {})) {
@@ -17143,9 +17176,15 @@ var planFill = (ctx, entry, fill, added = false) => {
       if (ph.kind === "title")
         entry.title = richTextToPlain(content.text).join(" ");
     }
+    const phName = placeholderShapeName(ctx, entry, ph);
+    if (content.text !== void 0 && entry.edits.some((e) => e.name === phName && e.set.text !== void 0)) {
+      if (content.append === true)
+        throw new PptcError("E_SCHEMA", `placeholder ${ph.idx} ('${ph.name}') gets its text from an earlier el.set of the document -- give the whole text there instead of appending`);
+      supersedeText(entry, phName);
+    }
     entry.fills.push({
       phIdx: ph.idx,
-      phName: placeholderShapeName(ctx, entry, ph),
+      phName,
       append: content.append ?? false,
       ...content.text !== void 0 && { text: content.text },
       ...content.image !== void 0 && { image: content.image, fit: content.fit ?? "crop" },
@@ -17164,6 +17203,13 @@ var planFill = (ctx, entry, fill, added = false) => {
     entry.slideNumber = fill.slideNumber;
   if (fill.date !== void 0)
     entry.date = fill.date;
+  const shapes = entry.source.kind === "self" ? bandShapes(ctx, entry.source.part) : [];
+  for (const [kind, content] of [["footer", fill.footer], ["slideNumber", fill.slideNumber], ["date", fill.date]])
+    for (const shape of content === void 0 ? [] : shapes.filter((sh) => sh.placeholderKind === kind))
+      if (content === false)
+        dropEdits(entry, shape.name);
+      else
+        supersedeText(entry, shape.name);
   if (fill.section !== void 0)
     startSection(ctx, entry, fill.section, added);
 };
@@ -17483,6 +17529,13 @@ var plannedFrame = (entry, name, frame) => {
   return f === null || f.w === 0 || f.h === 0 ? null : f.rotation === void 0 ? f : rotatedBox(f);
 };
 var plannedAtBack = (entry, target) => entry.zOrder.findLast((z2) => z2.target === target)?.zOrder === "back";
+var blank = (text) => text === void 0 || richTextToPlain(text).join("").trim() === "";
+var textless = (entry, shape) => {
+  if (shape.placeholderIdx !== null || shape.type !== "shape" && shape.type !== "textbox")
+    return false;
+  const edit = entry.edits.findLast((e) => e.name === shape.name && e.set.text !== void 0);
+  return edit !== void 0 ? blank(edit.set.text) : (shape.text ?? "").trim() === "";
+};
 var overlapObstacles = (ctx, entry, self2 = null) => {
   const obstacles = [];
   const layout = entryLayout(ctx, entry);
@@ -17499,12 +17552,13 @@ var overlapObstacles = (ctx, entry, self2 = null) => {
   }
   for (const sh of shapes) {
     const frame = plannedFrame(entry, sh.name, sh.frame);
-    if (frame !== null && sh.name !== self2 && !sh.name.startsWith(PROMPT_BOX_PREFIX) && sh.placeholderKind !== "picture" && sh.type !== "picture" && sh.type !== "connector" && !plannedAtBack(entry, sh.name) && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
+    if (frame !== null && sh.name !== self2 && !sh.name.startsWith(PROMPT_BOX_PREFIX) && sh.placeholderKind !== "picture" && sh.type !== "picture" && sh.type !== "connector" && !plannedAtBack(entry, sh.name) && !textless(entry, sh) && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
       obstacles.push({ name: sh.name, frame });
   }
   for (const planned of entry.elements) {
     const frame = specFrame(planned.spec);
-    if (frame !== null && !plannedAtBack(entry, planned) && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self2))
+    const panel = (planned.spec.type === "shape" || planned.spec.type === "textbox") && blank(planned.spec.text);
+    if (frame !== null && !panel && planned.spec.type !== "image" && !plannedAtBack(entry, planned) && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self2))
       obstacles.push({ name: planned.name ?? planned.spec.type, frame });
   }
   return obstacles;
@@ -17549,9 +17603,12 @@ var elRm = {
     const plannedBefore = entry.elements.length;
     entry.elements = entry.elements.filter((e) => e.name === null || !nameMatches(e.name, op.name));
     const cancelled = plannedBefore - entry.elements.length;
+    entry.zOrder = entry.zOrder.filter((z2) => typeof z2.target === "string" || entry.elements.includes(z2.target));
     const matches = existingShapes(ctx, entry).filter((sh) => nameMatches(sh.name, op.name));
-    for (const shape of matches)
+    for (const shape of matches) {
       entry.removeNames.push(shape.name);
+      dropEdits(entry, shape.name);
+    }
     if (cancelled === 0 && matches.length === 0)
       throw new PptcError(
         "E_ADDR_NOTFOUND",
@@ -17802,6 +17859,8 @@ var patchTable = (spec, set2, name) => {
 var colored = (text, color) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line, color })) : text.map((p) => p.runs === void 0 ? { ...p, color } : { ...p, runs: p.runs.map((r) => ({ ...r, color })) });
 var patchSpec = (spec, set2, name) => {
   checkFields(name, spec.type, fieldsOf(set2), PLANNED_TYPES);
+  if (set2.frame?.w === 0 || set2.frame?.h === 0)
+    throw new PptcError("E_SCHEMA", `element '${name}' is a ${spec.type} -- a zero 'w' or 'h' applies to existing lines and connectors only`);
   if (spec.type !== "connector" && set2.frame !== void 0) {
     for (const [key, value] of Object.entries(set2.frame))
       if (value !== void 0)
@@ -17857,7 +17916,7 @@ var patchSpec = (spec, set2, name) => {
   }
 };
 var completeFrame = (ctx, entry, shape, patch) => {
-  if (plannedFrame(entry, shape.name, shape.frame) !== null)
+  if (shape.frame !== null || entry.edits.some((e) => e.name === shape.name && e.set.frame !== void 0))
     return patch;
   const inherited = shape.placeholderIdx === null ? null : entryLayout(ctx, entry)?.placeholders.find((p) => p.idx === shape.placeholderIdx)?.frame ?? null;
   const base = inherited ?? {};
@@ -17915,6 +17974,8 @@ var elSet = {
         { candidates: matches.map((sh) => sh.name) }
       );
     const target = matches[0];
+    if (target.placeholderKind === "slideNumber" && entry.slideNumber === false || target.placeholderKind === "date" && entry.date === false)
+      throw new PptcError("E_ADDR_NOTFOUND", `element '${target.name}' was removed by an earlier op (slide.fill ${target.placeholderKind}: false)`);
     const imageFill = entry.fills.find((f) => f.image !== void 0 && f.phName === target.name);
     const type = imageFill !== void 0 ? "picture" : target.type === "shape" && LINE_GEOMETRY.test(target.shape ?? "") ? "connector" : target.type;
     if (set2.image !== void 0 && type === "placeholder" && target.placeholderKind === "picture")
@@ -17925,6 +17986,8 @@ var elSet = {
     checkFields(target.name, type, fieldsOf(set2), EXISTING_TYPES);
     if (set2.frame?.rotation !== void 0 && ["table", "chart", "other"].includes(type))
       throw new PptcError("E_SCHEMA", `element '${target.name}' is a ${type} -- it cannot be rotated`);
+    if ((set2.frame?.w === 0 || set2.frame?.h === 0) && type !== "connector")
+      throw new PptcError("E_SCHEMA", `element '${target.name}' is a ${type} -- a zero 'w' or 'h' applies to lines and connectors only`);
     if (imageFill !== void 0 && set2.image !== void 0) {
       imageFill.image = set2.image;
       delete set2.image;
@@ -37976,8 +38039,8 @@ var FrameSchema = external_exports.object({
 var FramePatchSchema = external_exports.object({
   x: external_exports.number().min(0).optional(),
   y: external_exports.number().min(0).optional(),
-  w: external_exports.number().positive().optional(),
-  h: external_exports.number().positive().optional(),
+  w: external_exports.number().min(0).optional(),
+  h: external_exports.number().min(0).optional(),
   rotation: external_exports.number().min(-360).max(360).optional()
 }).strict().refine((f) => Object.values(f).some((v) => v !== void 0), "a frame needs at least one of x, y, w, h, rotation");
 var LangSchema = external_exports.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "expected a language tag like 'de-DE' or 'en-US'");
@@ -38501,10 +38564,14 @@ var ElSetSchema = external_exports.object({
   (op) => EL_SET_FIELDS.some((f) => op[f] !== void 0),
   `el.set needs at least one of ${EL_SET_FIELDS.join(", ")}`
 );
+var ReplaceStringSchema = XmlStringSchema.refine(
+  (v) => !/[\r\n]/.test(v),
+  "text.replace works within a paragraph -- no line break (\\n, \\r)"
+);
 var TextReplaceSchema = external_exports.object({
   op: external_exports.literal("text.replace"),
-  find: XmlStringSchema.min(1),
-  replace: XmlStringSchema,
+  find: ReplaceStringSchema.min(1),
+  replace: ReplaceStringSchema,
   /**  only this slide; the whole deck when omitted  */
   slide: SlideSelectorSchema.optional(),
   /**  match upper/lower case exactly (default false)  */
@@ -39922,23 +39989,16 @@ var verifyContent = async (before, after, expects, repaired = /* @__PURE__ */ ne
     }
     if (exp.assets === "any")
       continue;
-    const gone = minus(was.assets, now.assets);
-    const added = minus(now.assets, was.assets);
-    for (const swap of exp.replaced ?? []) {
-      const k = swap.to === null ? -1 : added.indexOf(`image:${swap.to}[]`);
-      if (k < 0 && swap.to !== null && swap.from.includes(swap.to))
-        continue;
-      if (k < 0 && swap.to !== null) {
-        blocked.push(`slide ${exp.label}: the image an op put in place (${swap.to}) is missing`);
-        continue;
-      }
-      if (k >= 0)
-        added.splice(k, 1);
-      for (const from of swap.from) {
-        const g = gone.indexOf(`image:${from}[]`);
-        if (g >= 0)
-          gone.splice(g, 1);
-      }
+    const image = (hash2) => `image:${hash2}[]`;
+    const replaced = exp.replaced ?? [];
+    const comes = replaced.flatMap((swap) => swap.to === null ? [] : [image(swap.to)]);
+    const expected = [...was.assets, ...comes];
+    const added = minus(now.assets, expected);
+    let gone = minus(expected, now.assets);
+    gone = minus(gone, replaced.flatMap((swap) => swap.from.map(image)));
+    for (const entry of minus(comes, minus(comes, gone))) {
+      blocked.push(`slide ${exp.label}: the image an op put in place (${entry.slice(6, -2)}) is missing`);
+      gone.splice(gone.indexOf(entry), 1);
     }
     if (exp.assets === "grow" && exp.grow !== void 0) {
       const images = [...exp.grow.images];
@@ -41966,22 +42026,22 @@ var adoptLayoutRels = async (pkg, part, rels, layoutPart, scope) => {
   }
   return images;
 };
+var bandShapes2 = (slide, type) => elements(slide, "p:sp").filter((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type);
 var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, content, lang) => {
   const refs = [];
   const spTree = firstElement(slide, "p:spTree");
   if (spTree === null)
-    return { images: [], removed: [], refs };
-  for (const sp of elements(slide, "p:sp"))
-    if (firstElement(sp, "p:ph")?.getAttribute("type") === type) {
-      refs.push(...relRefs(sp).map((ref) => ref.attr.value));
-      sp.parentNode?.removeChild(sp);
-    }
+    return { images: [], removed: [], refs, clone: null };
+  for (const sp of bandShapes2(slide, type)) {
+    refs.push(...relRefs(sp).map((ref) => ref.attr.value));
+    sp.parentNode?.removeChild(sp);
+  }
   const removed = pkg.targets(part, rels).filter((t) => t.kind === "image" && t.target !== null && refs.includes(t.id)).map((t) => t.target);
   if (content === false || layoutPart === null || !pkg.has(layoutPart))
-    return { images: [], removed, refs };
+    return { images: [], removed, refs, clone: null };
   const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type);
   if (source === void 0)
-    return { images: [], removed, refs };
+    return { images: [], removed, refs, clone: null };
   const clone2 = slide.importNode(source, true);
   firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()));
   const txBody = firstElement(clone2, "p:txBody");
@@ -41992,7 +42052,7 @@ var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, conten
       props.setAttribute("lang", lang);
   const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone2);
   spTree.insertBefore(clone2, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
-  return { images, removed, refs };
+  return { images, removed, refs, clone: clone2 };
 };
 var xfrmBox = (xfrm) => {
   const off = xfrm === null ? null : firstElement(xfrm, "a:off");
@@ -42277,38 +42337,54 @@ var editSlide = async (pkg, work) => {
     if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame, imageSize(bytes), fill.fit ?? "crop"))
       throw missing(`empty picture placeholder idx ${fill.phIdx}`);
   }
+  const bandSet = [["ftr", entry.footer], ["sldNum", entry.slideNumber], ["dt", entry.date]];
+  const banded = /* @__PURE__ */ new Map();
+  for (const [type, content] of bandSet)
+    for (const sp of content === null ? [] : bandShapes2(slide, type))
+      banded.set(firstElement(sp, "p:cNvPr")?.getAttribute("name") ?? "", type);
+  const clones = /* @__PURE__ */ new Map();
   const swaps = [];
-  for (const edit of entry.edits) {
-    const shape = need(findShape(slide, edit.name, isTopLevel), `element '${edit.name}'`);
-    for (const ref of relRefs(shape))
-      unused.add(ref.attr.value);
-    const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape));
-    const again = swap === null ? void 0 : swaps.find((s) => s.to !== null && swap.from.includes(s.to));
-    if (swap !== null && again !== void 0) {
-      again.from.push(...swap.from.filter((f) => f !== again.to));
-      again.to = swap.to;
-    } else if (swap !== null)
-      swaps.push(swap);
-  }
+  const applyEdits = async (edits) => {
+    for (const edit of edits) {
+      const band = banded.get(edit.name);
+      const shape = need(
+        band === void 0 ? findShape(slide, edit.name, isTopLevel) : clones.get(band) ?? null,
+        `element '${edit.name}'`
+      );
+      for (const ref of relRefs(shape))
+        unused.add(ref.attr.value);
+      const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape));
+      if (swap !== null)
+        swaps.push(swap);
+    }
+  };
+  await applyEdits(entry.edits.filter((e) => !banded.has(e.name)));
   if (entry.background !== null)
     setBackground(slide, entry.background);
   const bands = [];
-  for (const [type, content] of [["ftr", entry.footer], ["sldNum", entry.slideNumber], ["dt", entry.date]])
+  for (const [type, content] of bandSet)
     if (content !== null) {
       const band = await setBandPlaceholder(pkg, part, slide, rels, layoutPart, type, content, work.lang);
       bands.push(band);
+      if (band.clone !== null)
+        clones.set(type, band.clone);
       for (const id of band.refs)
         unused.add(id);
     }
+  await applyEdits(entry.edits.filter((e) => banded.has(e.name)));
   const notesReplaces = entry.notes === null ? entry.replaces.filter((r) => r.notes) : [];
+  let notesReplaced = 0;
   if (entry.notes !== null)
     await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang, work.sharedNotes);
   else if (work.sharedNotes || notesReplaces.length > 0) {
     const copy = await unshareNotes(pkg, part, rels);
     if (copy !== null && notesReplaces.length > 0) {
       const notes = await pkg.xml(copy);
-      for (const replace of notesReplaces)
-        replaced.push({ op: replace.op, count: replaceNotes(notes, replace) });
+      for (const replace of notesReplaces) {
+        const count = replaceNotes(notes, replace);
+        replaced.push({ op: replace.op, count });
+        notesReplaced += count;
+      }
       pkg.write(copy, notes);
     }
   }
@@ -42355,7 +42431,7 @@ var editSlide = async (pkg, work) => {
       adopted.push({ from, to: null });
     to.forEach((hash2, i) => adopted.push({ from: i === 0 ? from : [], to: hash2 }));
   }
-  return { ...repaired, swaps, adopted, replaced, runImages };
+  return { ...repaired, swaps, adopted, replaced, runImages, notesReplaced };
 };
 
 // node_modules/pptxgenjs/dist/pptxgen.es.js
@@ -48524,7 +48600,8 @@ var classifySlides = async (pkg, plan, parts, removed) => {
       partReleased: [],
       replacedImages: [],
       replaced: [],
-      runImages: false
+      runImages: false,
+      notesReplaced: 0
     });
   }
   return states;
@@ -48580,10 +48657,12 @@ var removeSlides = async (pkg, removed) => {
     }
   }
 };
-var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages, runImages }, i) => ({
+var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages, runImages, notesReplaced }, i) => ({
   source: entry.source.kind === "self" && touched ? entry.source.part : null,
   label: `#${i} '${entry.title ?? ""}'`,
-  notes: entry.notes !== null || entry.replaces.some((r) => r.notes),
+  /*  notes change when an op sets them or a text.replace replaced
+      in them (counted by the slide pass)  */
+  notes: entry.notes !== null || notesReplaced > 0,
   assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== void 0) ? "any" : entry.elements.length > 0 ? "grow" : "same",
   grow: {
     images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync8(e.spec.path))] : []),
@@ -48637,6 +48716,7 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
     s.replacedImages = [...own2.swaps, ...own2.adopted];
     s.replaced = own2.replaced;
     s.runImages = own2.runImages;
+    s.notesReplaced = own2.notesReplaced;
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
     if (s.sharedNotes)
       actions.push("gave the slide its own notes part");

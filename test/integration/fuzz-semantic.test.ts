@@ -7,8 +7,9 @@
 **  model after EVERY apply -- not only "the file is intact", but every
 **  slide still has its own title, notes, image, chart, embedded OLE object,
 **  section and sldId, and its textboxes and table carry what el.set (text,
-**  frame, fill, alt text, image, table cells and rows) and text.replace
-**  made of them; slide links jump to their target after moves and copies
+**  frame, fill, transparency, alt text, image, table cells and rows) and
+**  text.replace made of them, its textboxes stack as el.add and el.set
+**  `zOrder` (front, back) placed them; slide links jump to their target after moves and copies
 **  and are gone once the target is removed; section starts, renames and
 **  removals give the expected section of every slide. Runs on a copy of
 **  the fixture serialized like PowerPoint does (CRLF after the XML
@@ -66,13 +67,14 @@ const powerPointStyled = async (file: string): Promise<string> => {
 }
 
 /**  expected content of one slide; `boxes` maps a textbox name to
-     "text|x|fill|altText" and the table to its cells  */
+     "text|x|fill|altText|transparency" and the table to its cells,
+     `stack` lists the textboxes back to front  */
 interface Expected { title: string, notes: string, image: string | null, chart: string | null, ole: string | null, id: number | null,
-    section: string | null, boxes: Record<string, string>, links: Record<string, string | null> }
+    section: string | null, boxes: Record<string, string>, stack: string[], links: Record<string, string | null> }
 
 /**  what one slide actually shows  */
 interface Actual { title: string, notes: string | null, id: number, image: string | null, chart: string | null, ole: string | null, section: string | null,
-    boxes: Record<string, string>, links: Record<string, string | null> }
+    boxes: Record<string, string>, stack: string[], links: Record<string, string | null> }
 
 /**  the textboxes and the table of a slide as the fuzz model sees them  */
 const boxesOf = (shapes: ShapeInfo[]): Record<string, string> => {
@@ -81,10 +83,14 @@ const boxesOf = (shapes: ShapeInfo[]): Record<string, string> => {
         const name = /^((?:Box|Tab)\d*)-[0-9a-f-]{36}$/.exec(sh.name)?.[1]
         if (name !== undefined)
             out[name] = name.startsWith("Tab") ? JSON.stringify(sh.table)
-                : [ sh.text ?? "", sh.frame?.x ?? "", sh.fill ?? "", sh.altText ?? "" ].join("|")
+                : [ sh.text ?? "", sh.frame?.x ?? "", sh.fill ?? "", sh.altText ?? "", sh.transparency ?? "" ].join("|")
     }
     return out
 }
+
+/**  the textboxes of a slide back to front  */
+const stackOf = (shapes: ShapeInfo[]): string[] =>
+    shapes.flatMap((sh) => /^(Box\d+)-[0-9a-f-]{36}$/.exec(sh.name)?.[1] ?? [])
 
 /**  the section names of the deck in order, as the file lists them  */
 const sectionNames = async (deck: string): Promise<string[]> => {
@@ -135,7 +141,7 @@ const actual = async (deck: string): Promise<Actual[]> => {
                 ole = bytes.toString()
         }
         out.push({ title: s.title ?? "", notes: s.notes, id: s.id, image, chart, ole, section: sectionOf.get(s.id) ?? null,
-            boxes: boxesOf(s.shapes), links: linksOf(s.shapes, titles) })
+            boxes: boxesOf(s.shapes), stack: stackOf(s.shapes), links: linksOf(s.shapes, titles) })
     }
     return out
 }
@@ -278,7 +284,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
                 ops.push({ op: "el.add", slide: "$n", elements })
             oleFor = rnd() < 0.25 ? t : null
             model.splice(at, 0, { title: t, notes: `notes-${t}`, image: withImage ? t : null, chart: withChart ? `S-${t}` : null,
-                ole: oleFor === null ? null : `ole-${t}`, id: null, section: null, boxes, links: {} })
+                ole: oleFor === null ? null : `ole-${t}`, id: null, section: null, boxes, stack: [], links: {} })
 
             /*  the others keep their sections, the new slide starts its own  */
             if (section !== null) {
@@ -311,7 +317,8 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
             const t = title()
             ops.push({ op: "slide.copy", slide: `title:${src.title}`, ref: "c" },
                 { op: "slide.fill", slide: "$c", placeholders: { title: { text: t } } })
-            model.splice(i + 1, 0, { ...src, title: t, id: null, section: null, boxes: { ...src.boxes }, links: { ...src.links } })
+            model.splice(i + 1, 0, { ...src, title: t, id: null, section: null, boxes: { ...src.boxes }, stack: [ ...src.stack ],
+                links: { ...src.links } })
         }
         else if (kind === 4) {
             const target = model[pick(model.length)] as Expected
@@ -328,9 +335,14 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
         }
         else if (kind === 9) {
             const target = model[pick(model.length)] as Expected
+            const back = rnd() < 0.3
             ops.push({ op: "el.add", slide: `title:${target.title}`, elements: [
-                { type: "textbox", name: `Box${round}`, frame: { x: 8, y: 5, w: 2, h: 1 }, text: `Box ${round}` } ] })
+                { type: "textbox", name: `Box${round}`, frame: { x: 8, y: 5, w: 2, h: 1 }, text: `Box ${round}`, ...(back && { zOrder: "back" }) } ] })
             let text = `Box ${round}`
+            if (back)
+                target.stack.unshift(`Box${round}`)
+            else
+                target.stack.push(`Box${round}`)
 
             /*  sequence: a replace in the same document sees the new box  */
             if (rnd() < 0.3) {
@@ -341,25 +353,37 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
                         if (name.startsWith("Box"))
                             m.boxes[name] = box.replace(/^Box/i, "Kiste")
             }
-            target.boxes[`Box${round}`] = `${text}|8||`
+            target.boxes[`Box${round}`] = `${text}|8|||`
         }
         else if (kind === 10 && model.some((m) => Object.keys(m.boxes).some((b) => b.startsWith("Box")))) {
-            /*  el.set text, frame, fill and alt text of a textbox  */
+            /*  el.set text, frame, fill, transparency, alt text and the
+                stacking order of a textbox  */
             const target = model.filter((m) => Object.keys(m.boxes).some((b) => b.startsWith("Box")))[0] as Expected
             const name = Object.keys(target.boxes).filter((b) => b.startsWith("Box"))[0] as string
-            const [ text, x, fill, alt ] = (target.boxes[name] as string).split("|")
+            const [ text, x, fill, alt, transparency ] = (target.boxes[name] as string).split("|")
             const set: Record<string, unknown> = {}
-            const next = { text, x, fill, alt }
+            const next = { text, x, fill, alt, transparency }
             if (rnd() < 0.5)
                 next.text = set["text"] = `neu ${round}`
             if (rnd() < 0.5)
                 set["frame"] = { x: Number(next.x = String(7 + pick(4) / 4)) }
             if (rnd() < 0.5)
                 next.fill = set["fill"] = [ "FFC000", "00B050", "7030A0" ][pick(3)] as string
+            if (next.fill !== "" && rnd() < 0.4)
+                next.transparency = String(set["transparency"] = 10 * (1 + pick(8)))
+            if (rnd() < 0.3) {
+                const zOrder = rnd() < 0.5 ? "front" : "back"
+                set["zOrder"] = zOrder
+                target.stack.splice(target.stack.indexOf(name), 1)
+                if (zOrder === "back")
+                    target.stack.unshift(name)
+                else
+                    target.stack.push(name)
+            }
             if (rnd() < 0.5 || Object.keys(set).length === 0)
                 next.alt = set["altText"] = `alt ${round}`
             ops.push({ op: "el.set", slide: `title:${target.title}`, name, ...set })
-            target.boxes[name] = [ next.text, next.x, next.fill, next.alt ].join("|")
+            target.boxes[name] = [ next.text, next.x, next.fill, next.alt, next.transparency ].join("|")
         }
         else if (kind === 11 && model.some((m) => m.image !== null)) {
             /*  el.set image: another picture in place  */
@@ -454,7 +478,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
                 m.section = sections?.get((got[i] as Actual).id) ?? null
         }
         const want = model.map((m, i) => ({ title: m.title, notes: m.notes, image: m.image, chart: m.chart, ole: m.ole,
-            id: m.id ?? (got[i] as Actual).id, section: m.section, boxes: m.boxes, links: m.links }))
+            id: m.id ?? (got[i] as Actual).id, section: m.section, boxes: m.boxes, stack: m.stack, links: m.links }))
         const where = `round ${round} (${JSON.stringify(ops).slice(0, 200)})`
         expect(got, where).toEqual(want)
         expect(await sectionNames(deck), where).toEqual(order)

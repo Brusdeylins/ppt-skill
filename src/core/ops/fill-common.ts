@@ -12,9 +12,10 @@
 import { PptcError } from "../../infra/errors.js"
 import { resolveSlide } from "../selector.js"
 import { lintFontSize, lintPlaceholderText, richTextSizes, richTextToPlain } from "../lint.js"
-import { isFooterKind, seedPlaceholderName, type Layout, type Placeholder } from "../model.js"
+import { isFooterKind, seedPlaceholderName, type Layout, type Placeholder, type ShapeInfo } from "../model.js"
 import type { PlaceholderFill } from "../../schema/ops.js"
-import { selectableEntries, slideAddrOf, type PlanContext, type SlidePlanEntry } from "./registry.js"
+import { dropEdits, selectableEntries, slideAddrOf, supersedeText, type PlanContext,
+    type SlidePlanEntry } from "./registry.js"
 import { startSection } from "./sections.js"
 
 /**
@@ -137,6 +138,12 @@ const placeholderShapeName = (ctx: PlanContext, entry: SlidePlanEntry, ph: Place
     return shape.name
 }
 
+/**  the footer-band placeholders (footer, slide number, date) of a kept
+     slide as read from the deck  */
+const bandShapes = (ctx: PlanContext, part: string): ShapeInfo[] =>
+    (ctx.deck.slides.find((s) => s.part === part)?.shapes ?? [])
+        .filter((sh) => sh.placeholderKind !== null && isFooterKind(sh.placeholderKind))
+
 /**
  *  Plan the fill portion of an op onto an entry: resolve placeholder keys,
  *  lint text capacity, track the slide title.
@@ -178,9 +185,18 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
             if (ph.kind === "title")
                 entry.title = richTextToPlain(content.text).join(" ")
         }
+        const phName = placeholderShapeName(ctx, entry, ph)
+        /*  the engine applies fills before el.set edits: the text of an
+            earlier el.set on the placeholder gives way to this fill  */
+        if (content.text !== undefined && entry.edits.some((e) => e.name === phName && e.set.text !== undefined)) {
+            if (content.append === true)
+                throw new PptcError("E_SCHEMA", `placeholder ${ph.idx} ('${ph.name}') gets its text from an `
+                    + "earlier el.set of the document -- give the whole text there instead of appending")
+            supersedeText(entry, phName)
+        }
         entry.fills.push({
             phIdx: ph.idx,
-            phName: placeholderShapeName(ctx, entry, ph),
+            phName,
             append: content.append ?? false,
             ...(content.text !== undefined && { text: content.text }),
             ...(content.image !== undefined && { image: content.image, fit: content.fit ?? "crop" }),
@@ -199,6 +215,16 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
         entry.slideNumber = fill.slideNumber
     if (fill.date !== undefined)
         entry.date = fill.date
+    /*  a footer-band placeholder set anew replaces the slide's own: the
+        text of an earlier el.set on it gives way, a removed one takes its
+        edits and stacking moves along  */
+    const shapes = entry.source.kind === "self" ? bandShapes(ctx, entry.source.part) : []
+    for (const [ kind, content ] of [ [ "footer", fill.footer ], [ "slideNumber", fill.slideNumber ], [ "date", fill.date ] ] as const)
+        for (const shape of content === undefined ? [] : shapes.filter((sh) => sh.placeholderKind === kind))
+            if (content === false)
+                dropEdits(entry, shape.name)
+            else
+                supersedeText(entry, shape.name)
     if (fill.section !== undefined)
         startSection(ctx, entry, fill.section, added)
 }

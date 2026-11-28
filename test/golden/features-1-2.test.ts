@@ -13,7 +13,9 @@
 **  and axes), on the "Phase 4" slide those of the in-place edits (el.set
 **  frame, style, alt text, image and table, text.replace, slide number
 **  and date), on the "Phase 5" slides the slide links (action,
-**  relationship, target); the generic fingerprint carries the sections.
+**  relationship, target), on the "Phase 6" slide the stacking order with
+**  preset geometries, fill transparency and theme fonts (el.add, el.set);
+**  the generic fingerprint carries the sections.
 */
 
 import { describe, expect, it } from "vitest"
@@ -114,6 +116,15 @@ const editFacts = (shape: Element): string[] => {
     ]
 }
 
+/**  the XML facts of the 1.2 stacking-order slide ("Phase 6") in one
+     shape: preset geometry, fill transparency, theme fonts  */
+const stackFacts = (shape: Element): string => [
+    maskName(firstElement(shape, "p:cNvPr")?.getAttribute("name") ?? ""),
+    `prst=${firstElement(shape, "a:prstGeom")?.getAttribute("prst") ?? "-"}`,
+    `alpha=${elements(shape, "a:alpha").map((a) => a.getAttribute("val")).join(",")}`,
+    `fonts=${[ "a:latin", "a:ea", "a:cs" ].flatMap((t) => elements(shape, t).map((f) => f.getAttribute("typeface"))).join(",")}`
+].join("|")
+
 /**  the facts of a chart part: grouping, labels, legend, axes, colors  */
 const chartFacts = (chart: Element): string[] => {
     const vals = (tag: string): string => [ ...new Set(elements(chart, tag).map((el) => el.getAttribute("val"))) ].join(",")
@@ -162,6 +173,11 @@ const featurePrint = async (deck: string): Promise<unknown[]> => {
                     rel?.target === null ? rel.el.getAttribute("Target") : titleOf.get(rel?.target ?? "") ?? rel?.target ].join("|")
             })
             out.push({ pictures, runs, links })
+            continue
+        }
+        if (slide.title === "Phase 6") {
+            out.push({ pictures, runs, order: elements(doc, "p:cNvPr").filter((c) => c.parentNode?.parentNode?.parentNode?.nodeName === "p:spTree")
+                .map((c) => maskName(c.getAttribute("name") ?? "")), facts: elements(doc, "p:sp").map(stackFacts) })
             continue
         }
         if (slide.title !== "Phase 3" && slide.title !== "Phase 4") {
@@ -317,7 +333,30 @@ describe("golden 1.2 features", () => {
                 { op: "el.set", slide: "title:Phase 5 Ende", name: "PptcPh-0", hyperlink: "slide:title:Sprache" }
             ] },
             { ops: [ { op: "slide.fill", slide: "title:Phase 5 Ende", section: "Phase 4" } ], fails: "E_SCHEMA" },
-            { ops: [ { op: "el.set", slide: "title:Phase 5", name: "H-Back", hyperlink: "slide:title:Nirgends" } ], fails: "E_ADDR_NOTFOUND" }
+            { ops: [ { op: "el.set", slide: "title:Phase 5", name: "H-Back", hyperlink: "slide:title:Nirgends" } ], fails: "E_ADDR_NOTFOUND" },
+            /*  phase 6: stacking order, fill transparency, shape presets and
+                theme fonts on el.add, then moved and changed by el.set  */
+            { ops: [
+                { op: "slide.add", layout: "Title Only", ref: "p6", slideNumber: false, date: false, placeholders: { title: { text: "Phase 6" } } },
+                { op: "el.add", slide: "$p6", elements: [
+                    { type: "shape", name: "Z-Back", shape: "roundRect", frame: { x: 0.5, y: 1.6, w: 12, h: 5.4 }, fill: "accent1",
+                        transparency: 60, zOrder: "back" },
+                    { type: "shape", name: "Z-Wedge", shape: "wedgeRoundRectCallout", frame: { x: 1, y: 2, w: 3, h: 1.2 }, fill: "bg2",
+                        transparency: 25, text: "Hinweis" },
+                    { type: "shape", name: "Z-Donut", shape: "donut", frame: { x: 4.5, y: 2, w: 1.5, h: 1.5 }, fill: "accent2" },
+                    { type: "shape", name: "Z-Brace", shape: "leftBrace", frame: { x: 6.5, y: 2, w: 0.5, h: 2 } },
+                    { type: "shape", name: "Z-Can", shape: "can", frame: { x: 7.5, y: 2, w: 1.2, h: 1.5 }, fill: "accent3", zOrder: "backward" },
+                    { type: "textbox", name: "Z-Theme", frame: { x: 1, y: 4.5, w: 5, h: 1.5 }, text: [
+                        { runs: [ { text: "Kopf", font: "+mj-lt" }, { text: " Text", font: "+mn-lt" } ] } ] }
+                ] }
+            ] },
+            { ops: [
+                { op: "el.set", slide: "title:Phase 6", name: "Z-Can", zOrder: "front" },
+                { op: "el.set", slide: "title:Phase 6", name: "Z-Donut", zOrder: "back" },
+                { op: "el.set", slide: "title:Phase 6", name: "Z-Wedge", transparency: 80, zOrder: "forward" },
+                { op: "el.set", slide: "title:Phase 6", name: "Z-Theme", fill: "accent4", transparency: 40 }
+            ] },
+            { ops: [ { op: "el.set", slide: "title:Phase 6", name: "Z-Brace", transparency: 50 } ], fails: "E_SCHEMA" }
         ]
 
         const prints: unknown[] = []

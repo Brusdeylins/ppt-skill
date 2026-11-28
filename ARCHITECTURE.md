@@ -40,7 +40,7 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `core/ops/el-set.ts` | `el.set`: every field checked against the element's type; a planned element's spec is patched, an existing element gets a planned edit; existing tables are modelled through the document (rows, merges, header row) so cell and row addresses fail at plan time; a `zOrder` becomes a stacking-order step of the slide (`SlidePlanEntry.zOrder`, in op order with el.add's placements) |
 | `core/ops/replace.ts` | `text.replace` with sequence semantics: the content planned so far is replaced and counted while planning, the slide's existing content is left to the engine with what earlier ops replaced or removed excluded |
 | `core/text-replace.ts` | the plain-text find/replace over runs shared by planner and engine: a match may span runs, the first touched run takes the replacement, emptied runs go |
-| `core/ops/fill-common.ts` | the shared fill payload (placeholders, notes, footer, background, hidden) planned identically for `slide.add` and `slide.fill` |
+| `core/ops/fill-common.ts` | the shared fill payload (placeholders, notes, footer, background, hidden) planned identically for `slide.add` and `slide.fill`; a fill's text supersedes an earlier el.set text of the placeholder, a footer-band field the edits of the band placeholder it replaces or removes (the engine applies a slide's work by kind, so the planner keeps op order) |
 | `core/table-grid.ts` | the HTML-like grid of a table payload with merged cells (positions, column count, plan-time checks) |
 | `core/ops/sections.ts` | sections in the plan: modelled on first use (the deck's sections, entries filed by the engine's rule), then section starts (`section` fill field: splits, "Default Section"), `section.rename`, `section.rm`, and added/copied/moved slides joining their predecessor's section |
 | `core/ops/planner.ts` | registry assembly, rev check, whole-document planning, slide links (`slide:SEL`) resolved against the plan after the whole document |
@@ -59,7 +59,7 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections (the planned list written, or the deck's kept in step with the slide list), content types, app properties |
 | `engine/defects.ts` | the repair triggers of a single part (duplicate or dead relationships, references to missing relationships, duplicate shape ids, notes ownership) -- ONE rule set: the engine detects its input defects with it and repairs exactly these, verify reports them |
 | `engine/verify.ts` | read-only integrity check: every XML part well-formed (strictly: characters XML 1.0 does not allow, raw or as a reference, fail too), the part rules of `defects.ts` on every part plus the package-level rules (slide list, content types, notes 1:1, app properties, orphans); backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
-| `engine/guard.ts` | content self-check and byte guard before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them -- an image swap declares exactly its new image (by content hash) and the old ones that may go, a removed footer-band placeholder the images it showed --, layouts/masters must not change (`E_INTEGRITY`) |
+| `engine/guard.ts` | content self-check and byte guard before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them -- an image swap declares exactly its new image (by content hash) and the old ones that may go -- counted as a multiset, so images moved or exchanged between pictures are checked in any op order --, a removed footer-band placeholder the images it showed; notes may change only where an op set them or a text.replace counted a replacement in them --, layouts/masters must not change (`E_INTEGRITY`) |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries, relationship references, escaping |
 | `engine/parts.ts` | the OPC layer below every engine module: case-insensitive part names, relationships read through the DOM, the relationship-type taxonomy, content types, part removal, asset GC, layout order, and `PartAllocator`: every fresh part name, relationship id, sldId and shape id of an apply |
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |
@@ -93,7 +93,8 @@ generate    PptxGenJS renders every el.add element of the apply into one
 slides      repairs of the slide's other parts (notes, charts, ...), then
             one pass per touched slide: text.replace on the existing
             content, removals, text, picture placeholders, el.set edits,
-            background, footer/slide number/date, notes, transplanted
+            background, footer/slide number/date (an el.set on a band
+            placeholder set anew follows the layout's copy), notes, transplanted
             elements, hyperlinks (slide links to the output part of their
             target), visibility, links to removed slides, repairs
 package     sldIdLst (kept ids, fresh ids for new and copied slides), removed

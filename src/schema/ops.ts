@@ -190,13 +190,17 @@ export const ElSetSchema = z.object({
 }).strict().refine((op) => EL_SET_FIELDS.some((f) => op[f] !== undefined),
     `el.set needs at least one of ${EL_SET_FIELDS.join(", ")}`)
 
+/**  a text.replace string: within one paragraph, so no line break  */
+const ReplaceStringSchema = XmlStringSchema.refine((v) => !/[\r\n]/.test(v),
+    "text.replace works within a paragraph -- no line break (\\n, \\r)")
+
 /**  Op: find and replace plain text across the deck or on one slide --
      shapes, placeholders and table cells, the speaker notes on request;
      fields (slide number, date) never.  */
 export const TextReplaceSchema = z.object({
     op: z.literal("text.replace"),
-    find: XmlStringSchema.min(1),
-    replace: XmlStringSchema,
+    find: ReplaceStringSchema.min(1),
+    replace: ReplaceStringSchema,
     /**  only this slide; the whole deck when omitted  */
     slide: SlideSelectorSchema.optional(),
     /**  match upper/lower case exactly (default false)  */

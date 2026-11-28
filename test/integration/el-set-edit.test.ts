@@ -5,7 +5,8 @@
 **
 **  Integration: el.set changes existing elements in place -- frame (move,
 **  resize, rotate; an inherited placeholder frame is written into the
-**  slide; a group keeps its children's coordinates), fill, border, font
+**  slide; a group keeps its children's coordinates; a horizontal or
+**  vertical line has a frame of its own, zero height or width), fill, border, font
 **  color, alt text and title -- each field checked against the element's
 **  type; elements planned earlier in the document get their spec patched,
 **  the overlap lint sees planned frames, el.set text keeps the first run's
@@ -226,5 +227,33 @@ describe("el.set frames and the overlap lint", () => {
             { op: "el.rm", slide: "1", name: "Probe1" },
             { op: "el.add", slide: "1", elements: [ { type: "textbox", name: "Probe2", frame, text: "x" } ] } ])
         expect(moved.filter((w) => (w as { element?: string }).element === "Probe2")).toEqual([])
+    })
+})
+
+describe("el.set frames of lines", () => {
+    it("moves and resizes a horizontal and a vertical line by its own frame (zero height or width)", async () => {
+        const lines = await freshDeck("el-set-lines.pptx")
+        await apply(lines, [ { op: "slide.add", layout: "DEFAULT" },
+            { op: "el.add", slide: "0", elements: [
+                { type: "connector", name: "H", from: [ 1, 4 ], to: [ 5, 4 ] },
+                { type: "connector", name: "V", from: [ 7, 1 ], to: [ 7, 3 ] } ] } ])
+        const frame = async (name: string): Promise<unknown> =>
+            (await stateOf(lines)).slides[0]?.shapes.find((sh) => sh.name.startsWith(`${name}-`))?.frame
+        expect(await frame("H")).toEqual({ x: 1, y: 4, w: 4, h: 0 })
+
+        /*  a move keeps the extent, a resize may keep it flat  */
+        await apply(lines, [ { op: "el.set", slide: "0", name: "H", frame: { x: 2 } },
+            { op: "el.set", slide: "0", name: "V", frame: { y: 2, h: 3 } } ])
+        expect(await frame("H")).toEqual({ x: 2, y: 4, w: 4, h: 0 })
+        expect(await frame("V")).toEqual({ x: 7, y: 2, w: 0, h: 3 })
+        await apply(lines, [ { op: "el.set", slide: "0", name: "H", frame: { x: 1, y: 5, w: 3, h: 0 } } ])
+        expect(await frame("H")).toEqual({ x: 1, y: 5, w: 3, h: 0 })
+    })
+
+    it("rejects a zero width or height on other elements", async () => {
+        expect(await failure(deck, [ { op: "el.set", slide: "0", name: "Box", frame: { h: 0 } } ])).toBe("E_SCHEMA")
+        expect(await failure(deck, [
+            { op: "el.add", slide: "0", elements: [ { type: "textbox", name: "Flach", frame: { x: 1, y: 5, w: 1, h: 1 }, text: "x" } ] },
+            { op: "el.set", slide: "0", name: "Flach", frame: { w: 0 } } ])).toBe("E_SCHEMA")
     })
 })

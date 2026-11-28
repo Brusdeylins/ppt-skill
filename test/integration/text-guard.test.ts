@@ -11,6 +11,7 @@
 **  edit dropped fails the apply, a foreign image is blocked, and an image
 **  adopted with layout content must be exactly the declared one; a
 **  footer-band placeholder cloned anew or removed may take its image along.
+**  Speaker notes may change only on slides where a replacement counted.
 */
 
 import { beforeAll, describe, expect, it, vi } from "vitest"
@@ -23,11 +24,12 @@ import { digestBytes, verifyContent, type SlideExpect } from "../../src/engine/g
 import { relTargets, relsPartOf } from "../../src/engine/parts.js"
 import { PptcError } from "../../src/infra/errors.js"
 import { NS_A, NS_R, elements, firstElement, parseXml, serializeXml } from "../../src/engine/xml.js"
-import { OPTS, TMP, apply, craftSlide, freshDeck, png, shapeNamed, slideDoc, stateOf } from "../util/elements.js"
+import { OPTS, TMP, apply, craftSlide, failure, freshDeck, png, shapeNamed, slideDoc, stateOf } from "../util/elements.js"
 
 /*  sabotage: the edit functions drop the element of this name afterwards,
+    and a notes replacement that found nothing changes the notes anyway,
     as an engine bug would  */
-const sabotage = vi.hoisted(() => ({ name: null as string | null }))
+const sabotage = vi.hoisted(() => ({ name: null as string | null, notes: false }))
 vi.mock("../../src/engine/inplace/edits.js", async (importOriginal) => {
     const mod = await importOriginal<typeof import("../../src/engine/inplace/edits.js")>()
     const drop = (doc: Document): void => {
@@ -42,6 +44,13 @@ vi.mock("../../src/engine/inplace/edits.js", async (importOriginal) => {
             const done = mod.replaceExisting(...args)
             drop(args[0])
             return done
+        },
+        replaceNotes: (...args: Parameters<typeof mod.replaceNotes>) => {
+            const count = mod.replaceNotes(...args)
+            const t = elements(args[0], "a:t")[0]
+            if (sabotage.notes && count === 0 && t !== undefined)
+                t.textContent = "manipuliert"
+            return count
         },
         applyEdit: async (...args: Parameters<typeof mod.applyEdit>) => {
             const swap = await mod.applyEdit(...args)
@@ -312,5 +321,26 @@ describe("content guard of layout content adopted with the slide number", () => 
         expect((await verifyContent(before, after, [ base ])).lost.map((l) => l.what)).toEqual([ "image" ])
         expect(await verifyContent(before, after, [ { ...base, replaced: [ { from: [ digestBytes(bandImage) ], to: null } ] } ]))
             .toEqual({ blocked: [], lost: [] })
+    })
+})
+
+describe("content guard of speaker notes", () => {
+    it("exempts the notes only of slides where a text.replace replaced in them", async () => {
+        const notes = await freshDeck("text-guard-notes.pptx")
+        await apply(notes, [
+            { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Eins" } }, notes: "Sprechertext" },
+            { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Zwei" } }, notes: "Andere Notiz" } ])
+        /*  the second slide is touched, its notes hold no match  */
+        const ops = [ { op: "slide.fill", slide: "1", placeholders: { title: { text: "Zwei neu" } } },
+            { op: "text.replace", find: "Sprecher", replace: "Redner", notes: true } ]
+        sabotage.notes = true
+        try {
+            expect(await failure(notes, ops)).toBe("E_INTEGRITY")
+        }
+        finally {
+            sabotage.notes = false
+        }
+        await apply(notes, ops)
+        expect((await stateOf(notes)).slides.map((s) => s.notes)).toEqual([ "Rednertext", "Andere Notiz" ])
     })
 })

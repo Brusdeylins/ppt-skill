@@ -107,12 +107,14 @@ export const FrameSchema = z.object({
 }).strict()
 
 /**  A partial frame for `el.set`: the given keys move, resize or rotate
-     the element, the others keep their value (inches, degrees).  */
+     the element, the others keep their value (inches, degrees). `w` or
+     `h` 0 is for a horizontal or vertical line or connector only (el.set
+     checks the element type).  */
 export const FramePatchSchema = z.object({
     x: z.number().min(0).optional(),
     y: z.number().min(0).optional(),
-    w: z.number().positive().optional(),
-    h: z.number().positive().optional(),
+    w: z.number().min(0).optional(),
+    h: z.number().min(0).optional(),
     rotation: z.number().min(-360).max(360).optional()
 }).strict().refine((f) => Object.values(f).some((v) => v !== undefined), "a frame needs at least one of x, y, w, h, rotation")
 

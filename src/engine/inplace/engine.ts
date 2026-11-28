@@ -109,6 +109,8 @@ interface SlideState {
     replaced: { op: number, count: number }[]
     /**  whether a text.replace removed a run that showed an image  */
     runImages: boolean
+    /**  replacements text.replace made in the slide's existing notes  */
+    notesReplaced: number
 }
 
 /**
@@ -366,7 +368,7 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
             sourceRepairs = (await closure(pkg, entry.source.part)).slice(1)
                 .filter((v) => partDefects(v, exists).length > 0).map((v) => v.part)
         states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [],
-            replacedImages: [], replaced: [], runImages: false })
+            replacedImages: [], replaced: [], runImages: false, notesReplaced: 0 })
     }
     return states
 }
@@ -436,10 +438,12 @@ const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> =
 
 /**  what the content guard allows to change on each output slide  */
 const expectations = (states: SlideState[]): SlideExpect[] =>
-    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages, runImages }, i) => ({
+    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages, runImages, notesReplaced }, i) => ({
         source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
-        notes: entry.notes !== null || entry.replaces.some((r) => r.notes),
+        /*  notes change when an op sets them or a text.replace replaced
+            in them (counted by the slide pass)  */
+        notes: entry.notes !== null || notesReplaced > 0,
         assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
             ? "any" : entry.elements.length > 0 ? "grow" : "same",
         grow: {
@@ -499,6 +503,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
         s.replacedImages = [ ...own.swaps, ...own.adopted ]
         s.replaced = own.replaced
         s.runImages = own.runImages
+        s.notesReplaced = own.notesReplaced
 
         /*  a slide listed twice is edited twice: the first pass released  */
         s.released = [ ...new Set([ ...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own.released ]) ]

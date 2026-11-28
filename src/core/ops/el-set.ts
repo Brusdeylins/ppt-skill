@@ -280,6 +280,9 @@ const colored = (text: RichText, color: string): RichText =>
 /**  patch the spec of an element planned earlier in the same document  */
 const patchSpec = (spec: ElementSpec, set: ElementPatch, name: string): void => {
     checkFields(name, spec.type, fieldsOf(set), PLANNED_TYPES)
+    if (set.frame?.w === 0 || set.frame?.h === 0)
+        throw new PptcError("E_SCHEMA", `element '${name}' is a ${spec.type} -- a zero 'w' or 'h' `
+            + "applies to existing lines and connectors only")
     if (spec.type !== "connector" && set.frame !== undefined)
         for (const [ key, value ] of Object.entries(set.frame))
             if (value !== undefined)
@@ -336,10 +339,12 @@ const patchSpec = (spec: ElementSpec, set: ElementPatch, name: string): void => 
 
 /**  the frame patch of an existing element, complete (x, y, w, h) when
      the element inherits its frame -- from its layout placeholder, which
-     the engine then writes into the slide  */
+     the engine then writes into the slide. An element with a transform
+     of its own (even a zero-height line) or one an earlier el.set gave
+     takes the patch as it is.  */
 const completeFrame = (ctx: PlanContext, entry: SlidePlanEntry, shape: ShapeInfo,
     patch: NonNullable<ElementPatch["frame"]>): NonNullable<ElementPatch["frame"]> => {
-    if (plannedFrame(entry, shape.name, shape.frame) !== null)
+    if (shape.frame !== null || entry.edits.some((e) => e.name === shape.name && e.set.frame !== undefined))
         return patch
     const inherited = shape.placeholderIdx === null ? null
         : entryLayout(ctx, entry)?.placeholders.find((p) => p.idx === shape.placeholderIdx)?.frame ?? null
@@ -405,6 +410,11 @@ export const elSet: OpHandler<ElSetOp> = {
                 `'${op.name}' matches ${matches.length} elements`,
                 { candidates: matches.map((sh) => sh.name) })
         const target = matches[0] as ShapeInfo
+        /*  a slide number or date an earlier op turned off is gone  */
+        if ((target.placeholderKind === "slideNumber" && entry.slideNumber === false)
+            || (target.placeholderKind === "date" && entry.date === false))
+            throw new PptcError("E_ADDR_NOTFOUND", `element '${target.name}' was removed by an earlier op `
+                + `(slide.fill ${target.placeholderKind}: false)`)
 
         /*  a picture placeholder filled in this document is a picture  */
         const imageFill = entry.fills.find((f) => f.image !== undefined && f.phName === target.name)
@@ -416,6 +426,10 @@ export const elSet: OpHandler<ElSetOp> = {
         checkFields(target.name, type, fieldsOf(set), EXISTING_TYPES)
         if (set.frame?.rotation !== undefined && [ "table", "chart", "other" ].includes(type))
             throw new PptcError("E_SCHEMA", `element '${target.name}' is a ${type} -- it cannot be rotated`)
+        /*  only a line or connector may be flat (a horizontal or vertical one)  */
+        if ((set.frame?.w === 0 || set.frame?.h === 0) && type !== "connector")
+            throw new PptcError("E_SCHEMA", `element '${target.name}' is a ${type} -- a zero 'w' or 'h' `
+                + "applies to lines and connectors only")
 
         /*  the image of a placeholder filled in this document is the fill's  */
         if (imageFill !== undefined && set.image !== undefined) {
