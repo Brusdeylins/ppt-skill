@@ -115,6 +115,12 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
 const nameMatches = (shapeName: string, address: string): boolean =>
     shapeName === address || shapeName.startsWith(`${address}-`)
 
+/**  the existing shape types el.set can retext  */
+const TEXT_TYPES: ShapeInfo["type"][] = [ "placeholder", "textbox", "shape" ]
+
+/**  preset geometries of lines and connectors  */
+const LINE_GEOMETRY = /^(line|straightConnector\d|bentConnector\d|curvedConnector\d)$/
+
 /**  existing shapes of a kept slide, empty for new (seed) slides  */
 const existingShapes = (ctx: PlanContext, entry: SlidePlanEntry): ShapeInfo[] => {
     if (entry.source.kind !== "self")
@@ -160,7 +166,16 @@ export const elSet: OpHandler<Extract<Op, { op: "el.set" }>> = {
             throw new PptcError("E_ADDR_AMBIGUOUS",
                 `'${op.name}' matches ${matches.length} elements`,
                 { candidates: matches.map((sh) => sh.name) })
-        entry.setTexts.push({ name: (matches[0] as ShapeInfo).name, text: op.text })
+        /*  only shapes with a text body of their own take text: a table,
+            chart, picture, connector or group would be left unchanged (or a
+            group's first child retexted); el.add draws a connector as a line
+            autoshape  */
+        const target = matches[0] as ShapeInfo
+        const type = target.type === "shape" && LINE_GEOMETRY.test(target.shape ?? "") ? "connector" : target.type
+        if (!TEXT_TYPES.includes(type))
+            throw new PptcError("E_SCHEMA",
+                `element '${target.name}' is a ${type} -- only placeholder, textbox and shape text can be set`)
+        entry.setTexts.push({ name: target.name, text: op.text })
     }
 }
 

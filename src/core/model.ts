@@ -170,6 +170,9 @@ export interface ShapeInfo {
     /**  typeface of the first text run when present; pass it as the `font` of
          a slide.fill / el run to preserve it (e.g. a monospace code block)  */
     fontFace?: string
+    /**  language of the first text run (shape or table cell) when set, e.g.
+         "de-DE"; mirrors el.add `lang`  */
+    lang?: string
     /**  media file name under ppt/media for a picture shape, e.g.
          "image11.png", resolved from the blip r:embed relationship; absent
          for non-picture shapes and for placeholders with no image filled  */

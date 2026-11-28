@@ -232,7 +232,8 @@ The deck read model and the **`rev` token** for optimistic locking.
 - `--level text` (default) -- plus all placeholder texts and notes
 - `--level full` -- plus every shape with geometry and styling: type,
   name, `frame`, text, table cells + column widths, autoshape
-  preset/fill/border/font, a picture's media file name (`image`), and --
+  preset/fill/border/font, the text language (`lang`), a picture's media
+  file name (`image`), and --
   for a body with explicit run formatting -- its `paragraphs`/`runs`
   (per-run font, size, bold, italic, color, round-tripping into
   `slide.fill`) -- enough to recreate or edit a styled table, diagram or
@@ -381,11 +382,22 @@ Anatomy:
 - **Fill payloads** (`slide.add`/`slide.fill`): `placeholders` maps a
   key (semantic like `"title"`/`"body"`/`"image"`, or the OOXML idx
   like `"13"`) to `{ "text": ... }`, `{ "image": "path.png" }` or
-  `{ "text": ..., "append": true }`. Plus optional `notes`, `footer`,
+  `{ "text": ..., "append": true }`. An image takes the placeholder
+  frame by its `fit`: `"crop"` (default) covers the frame and cuts the
+  overhang off centered, like PowerPoint; `"contain"` shows the whole image
+  in a centered, shrunk frame; `"stretch"` distorts it to the frame (pixel
+  sizes are read from PNG, JPEG, GIF, WebP, BMP and SVG; an unknown size
+  stretches). Plus optional `notes`, `footer`,
   `background` and `hidden` (`true` hides the slide -- "Hide Slide" --,
   `false` shows it; omitted keeps the current state). Text accepts plain
   strings (`\n` = new paragraph) or rich text (runs with
   bold/italic/color/size, bullet levels).
+- **Text language**: every run pptc writes carries a `lang` (PowerPoint's
+  proofing language). It is the deck language -- the custom property
+  `pptcDeckLang` (`meta.props`), else the deck's own default text language,
+  else `en-US` -- unless a `textbox`/`shape`/`table` element, a paragraph
+  or a run states its own `lang` (e.g. `"de-DE"`). `state --level full`
+  reports each shape's `lang`.
 - **Authoritative field reference:** `pptc schema <op>` prints the
   exact JSON Schema of any op, `pptc schema document` the whole
   document -- generated from the validating code, never stale.
@@ -403,7 +415,7 @@ Recommended agent loop:
 | `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `background`, `hidden` (hide/show) of a slide |
 | `slide.rm` / `slide.move` / `slide.copy` | structure edits |
 | `el.add` | add free elements: `textbox`, `table`, `chart`, `shape`, `image`, `connector` -- all share `frame: {x,y,w,h}` in inches |
-| `el.set` / `el.rm` | retext / remove an element by shape name; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document |
+| `el.set` / `el.rm` | retext / remove an element by shape name; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document; `el.set` text goes to placeholders, textboxes and shapes only (a table, chart, picture, connector or group fails with `E_SCHEMA`) |
 | `img.prompts` | overlay picture placeholders with visible image-prompt boxes (removable via `el.rm`) |
 | `meta.props` | document properties: core fields (title, author, subject, keywords, category, comments) and/or arbitrary `custom` name/value pairs stored in the `.pptx` (read back by `state` -- the deck's self-describing memory) |
 

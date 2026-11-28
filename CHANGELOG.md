@@ -10,6 +10,25 @@
   changed: it now holds the SVG bytes instead of PptxGenJS' "broken image"
   placeholder, as 4.0.1 no longer replaces it in Node. The bundle shrinks
   from 1.93 MB to 1.89 MB.
+- **Picture placeholders crop.** An image filled into a picture
+  placeholder used to be stretched to the frame; it is now cropped to it,
+  centered, as PowerPoint does (`a:srcRect` from the image's pixel size).
+  The new fill field `fit` chooses `crop` (default), `contain` (the whole
+  image in a centered, shrunk frame) or `stretch` (as before). Pixel sizes
+  come from a small own header reader for PNG, JPEG (EXIF rotation
+  honored), GIF, WebP, BMP and SVG; an unknown size stretches.
+- **Text carries its language.** Every run pptc writes -- placeholder
+  fills, `el.set`, footers, notes and `el.add` textboxes, shapes and table
+  cells -- carries `lang`: the custom property `pptcDeckLang` (a tag like
+  `de-DE`, a bare code or a language name), else the deck's default text
+  language, else the first run language on a slide, `en-US` only as the
+  last resort. PptxGenJS wrote `en-US` everywhere, so German decks were
+  spell-checked as English. `textbox`, `shape` and `table` elements,
+  paragraphs and runs take their own `lang`; `state --level full` reports
+  each shape's `lang`.
+- **`el.set` refuses what it cannot retext.** Text for a table, chart,
+  picture, connector or group used to vanish silently (or replace the text
+  of a group's first child); it now fails with `E_SCHEMA` at plan time.
 
 - **New engine: decks are edited in place.** Every apply used to rebuild
   the whole deck through `pptx-automizer`, whose count-based, slide-local

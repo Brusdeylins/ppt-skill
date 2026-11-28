@@ -39,10 +39,15 @@ export const PlaceholderFillSchema = z.object({
     text: RichTextSchema.optional(),
     /**  path of an image file to insert (picture placeholders)  */
     image: z.string().min(1).optional(),
+    /**  how the image takes the placeholder frame: `crop` (default) covers
+         it and cuts the overhang off centered, `contain` shows the whole
+         image in a centered, shrunk frame, `stretch` distorts it to fit  */
+    fit: z.enum(["crop", "contain", "stretch"]).optional(),
     /**  append instead of replacing existing content  */
     append: z.boolean().optional()
 }).strict().refine((f) => f.text !== undefined || f.image !== undefined,
     "a placeholder fill needs 'text' or 'image'")
+    .refine((f) => f.fit === undefined || f.image !== undefined, "'fit' needs an 'image'")
 
 /**  Shared shape of the `fill` payload used by slide.add and slide.fill.  */
 const fillProps = {

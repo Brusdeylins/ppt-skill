@@ -26,6 +26,12 @@ export const FrameSchema = z.object({
     rotation: z.number().min(-360).max(360).optional()
 }).strict()
 
+/**  Text language as a BCP 47 tag ("de-DE", "en-US") -- PowerPoint's
+     proofing and hyphenation language of the text.  */
+export const LangSchema = z
+    .string()
+    .regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "expected a language tag like 'de-DE' or 'en-US'")
+
 /**  Character-level formatting shared by paragraphs and runs.  */
 const fontProps = {
     bold: z.boolean().optional(),
@@ -33,7 +39,9 @@ const fontProps = {
     underline: z.boolean().optional(),
     size: z.number().positive().optional(),
     font: z.string().min(1).optional(),
-    color: ColorSchema.optional()
+    color: ColorSchema.optional(),
+    /**  text language; a paragraph's applies to its runs  */
+    lang: LangSchema.optional()
 }
 
 /**  One formatted text run inside a paragraph.  */
@@ -114,12 +122,16 @@ export const ElementSchema = z.discriminatedUnion("type", [
         fill: ColorSchema.optional(),
         border: ColorSchema.optional(),
         borderPt: z.number().positive().optional(),
+        /**  text language of the element (paragraphs and runs may override)  */
+        lang: LangSchema.optional(),
         name: z.string().optional()
     }).strict(),
     z.object({
         type: z.literal("table"),
         frame: FrameSchema,
         data: TableSchema,
+        /**  text language of every cell  */
+        lang: LangSchema.optional(),
         name: z.string().optional()
     }).strict(),
     z.object({
@@ -138,6 +150,8 @@ export const ElementSchema = z.discriminatedUnion("type", [
         borderPt: z.number().positive().optional(),
         fontColor: ColorSchema.optional(),
         fontSize: z.number().positive().optional(),
+        /**  text language of the shape's text  */
+        lang: LangSchema.optional(),
         name: z.string().optional()
     }).strict(),
     z.object({

@@ -46,7 +46,9 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: removals, text, picture placeholders, background, footer, notes, transplanted elements, hyperlinks, visibility, links to removed slides, repairs |
 | `engine/inplace/repair.ts` | the repairs of the triggers `defects.ts` detects, on any part: duplicate/dead relationships, references to missing relationships (smallest valid removal, named), duplicate shape ids |
 | `engine/inplace/transplant.ts` | `el.add`: one PptxGenJS deck per apply (one generator slide per target slide), shapes moved by object name with their parts |
-| `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`) |
+| `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`), every run with its `lang` |
+| `engine/lang.ts` | the deck language of written text: `pptcDeckLang`, else the deck's default text language, else the first run language, else `en-US` |
+| `engine/image-size.ts` | pixel size from image headers (PNG, JPEG, GIF, WebP, BMP, SVG) and the crop/contain/stretch fit of an image into a frame |
 | `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide |
 | `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections, content types, app properties |
 | `engine/defects.ts` | the repair triggers of a single part (duplicate or dead relationships, references to missing relationships, duplicate shape ids, notes ownership) -- ONE rule set: the engine detects its input defects with it and repairs exactly these, verify reports them |

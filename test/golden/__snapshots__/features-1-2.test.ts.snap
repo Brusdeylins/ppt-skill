@@ -1,0 +1,629 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden 1.2 features > matches on an empty deck from the fixture 1`] = `
+[
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Kasten=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+    ],
+    "ops": [
+      {
+        "op": "meta.props",
+        "set": {
+          "custom": {
+            "pptcDeckLang": "de-DE",
+          },
+        },
+      },
+      {
+        "footer": "Fußzeile",
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "op": "slide.add",
+        "placeholders": {
+          "body": {
+            "text": [
+              {
+                "text": "deutsch",
+              },
+              {
+                "lang": "en-GB",
+                "text": "english",
+              },
+              {
+                "lang": "it-IT",
+                "runs": [
+                  {
+                    "text": "uno",
+                  },
+                  {
+                    "lang": "fr-FR",
+                    "text": "deux",
+                  },
+                ],
+              },
+            ],
+          },
+          "title": {
+            "text": "Sprache",
+          },
+        },
+        "ref": "text",
+      },
+      {
+        "elements": [
+          {
+            "frame": {
+              "h": 0.6,
+              "w": 3,
+              "x": 0.5,
+              "y": 5.5,
+            },
+            "name": "Box",
+            "text": "Kasten",
+            "type": "textbox",
+          },
+          {
+            "frame": {
+              "h": 0.6,
+              "w": 2,
+              "x": 4,
+              "y": 5.5,
+            },
+            "lang": "nl-NL",
+            "name": "Form",
+            "shape": "rect",
+            "text": "Form",
+            "type": "shape",
+          },
+          {
+            "data": {
+              "headers": [
+                "Kopf",
+              ],
+              "rows": [
+                [
+                  "Zelle",
+                ],
+              ],
+            },
+            "frame": {
+              "w": 4,
+              "x": 6.5,
+              "y": 5.5,
+            },
+            "name": "Tab",
+            "type": "table",
+          },
+        ],
+        "op": "el.add",
+        "slide": "$text",
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Kasten|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+    ],
+  },
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Kasten=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+    ],
+    "ops": [
+      {
+        "layout": "PICTURE",
+        "op": "slide.add",
+        "placeholders": {
+          "image": {
+            "image": "<tmp>/landscape.png",
+          },
+        },
+      },
+      {
+        "layout": "PICTURE",
+        "op": "slide.add",
+        "placeholders": {
+          "image": {
+            "fit": "crop",
+            "image": "<tmp>/portrait.png",
+          },
+        },
+      },
+      {
+        "layout": "PICTURE",
+        "op": "slide.add",
+        "placeholders": {
+          "image": {
+            "fit": "contain",
+            "image": "<tmp>/portrait.png",
+          },
+        },
+      },
+      {
+        "layout": "PICTURE",
+        "op": "slide.add",
+        "placeholders": {
+          "image": {
+            "fit": "stretch",
+            "image": "<tmp>/landscape.png",
+          },
+        },
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Kasten|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+    ],
+  },
+  {
+    "error": "E_SCHEMA",
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Kasten=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+    ],
+    "ops": [
+      {
+        "name": "Tab",
+        "op": "el.set",
+        "slide": "0",
+        "text": "x",
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Kasten|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+    ],
+  },
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Neu=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+    ],
+    "ops": [
+      {
+        "name": "Box",
+        "op": "el.set",
+        "slide": "0",
+        "text": "Neu",
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Neu|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+    ],
+  },
+]
+`;

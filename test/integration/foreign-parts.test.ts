@@ -296,7 +296,8 @@ describe("parts of PowerPoint-authored decks", () => {
             zip.file(b, (await text(zip, b))
                 .replace("<p:ph type=\"title\"/>", "<p:ph type=\"title\"/><p:custDataLst><p:tags r:id=\"rId94\"/></p:custDataLst>")
                 .replace("</p:spTree>", "</p:spTree><p:custDataLst><p:tags r:id=\"rId93\"/></p:custDataLst>")
-                .replace("<a:p><a:r><a:t>B</a:t>", "<a:p><a:pPr><a:buBlip><a:blip r:embed=\"rId95\"/></a:buBlip></a:pPr><a:r><a:t>B</a:t>"))
+                .replace(/<a:p><a:r>(<a:rPr[^>]*\/>)?<a:t>B<\/a:t>/,
+                    "<a:p><a:pPr><a:buBlip><a:blip r:embed=\"rId95\"/></a:buBlip></a:pPr><a:r>$1<a:t>B</a:t>"))
         })
         await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
         await apply(deck, [ { op: "slide.fill", slide: "title:A", notes: "n" } ])
@@ -330,7 +331,7 @@ describe("parts of PowerPoint-authored decks", () => {
             const slide = parts[from] as string
             await addRel(zip, slide, "rId97", "slide", path.posix.basename(parts[to] as string))
             const t = [ "A", "B", "C", "D" ][from] as string
-            zip.file(slide, (await text(zip, slide)).replace(`<a:r><a:t>${t}</a:t>`,
+            zip.file(slide, (await text(zip, slide)).replace(new RegExp(`<a:r>(<a:rPr[^>]*/>)?<a:t>${t}</a:t>`),
                 `<a:r><a:rPr lang="de-DE"><a:hlinkClick r:id="rId97" action="ppaction://hlinksldjump"/></a:rPr><a:t>${t}</a:t>`))
         }
         await link(0, 2)

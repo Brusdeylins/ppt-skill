@@ -605,6 +605,11 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                 }
                 if (node.nodeName === "p:sp")
                     Object.assign(shape, shapeStyle(node, info.colors))
+                if (node.nodeName === "p:sp" || shape.type === "table") {
+                    const lang = firstElement(node, "a:rPr")?.getAttribute("lang")
+                    if (lang !== null && lang !== undefined && lang !== "")
+                        shape.lang = lang
+                }
                 if (txBody !== null) {
                     const paras = richParagraphs(txBody, info.colors)
                     if (paras !== undefined)

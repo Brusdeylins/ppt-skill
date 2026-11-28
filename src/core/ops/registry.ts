@@ -26,6 +26,8 @@ export interface PlannedFill {
     text?: RichText
     /**  image file to insert into a picture placeholder  */
     image?: string
+    /**  how the image takes the placeholder frame (default `crop`)  */
+    fit?: "crop" | "contain" | "stretch"
     /**  geometry of the placeholder (for image insertion), inches  */
     frame?: { x: number, y: number, w: number, h: number }
     /**  append to existing content instead of replacing  */

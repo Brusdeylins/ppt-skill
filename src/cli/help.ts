@@ -27,7 +27,8 @@ Options:
                  text (default): plus placeholder texts and notes
                  full: plus every shape with geometry AND styling --
                    type, name, frame, text, table cells + column widths,
-                   autoshape preset/fill/border/font, a picture's media file
+                   autoshape preset/fill/border/font, the text language
+                   (lang), a picture's media file
                    name (image), and -- for a body with explicit run
                    formatting -- its paragraphs/runs (per-run font, size,
                    bold, italic, color), which pass straight back into
@@ -243,7 +244,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "at": 0,                   // optional insert position
                  "placeholders": { "title": { "text": "..." },
                                    "body":  { "text": "A\\nB" },
-                                   "image": { "image": "photo.png" } },
+                                   "image": { "image": "photo.png",
+                                              "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
                  "background": { "color": "1F4E79" },
                  "hidden": true }           // optional: hide/show the slide
@@ -254,7 +256,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   el.add       free elements: textbox | table | chart | shape | image |
                connector -- all positioned via "frame": {x,y,w,h} inches
   el.set       retext an element:  { "op": "el.set", "slide": SEL,
-                 "name": "Box1", "text": "new text" }
+                 "name": "Box1", "text": "new text" } -- placeholders,
+               textboxes and shapes only
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -267,6 +270,11 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
 
 Text values accept plain strings (\\n = new paragraph) or rich text
 (runs with bold/italic/color/size, paragraphs with bullet levels).
+Picture fills crop to the placeholder by default ("fit": "crop");
+"contain" shows the whole image, "stretch" distorts it.
+Text language: every run carries a "lang" -- the deck language
+(custom property pptcDeckLang, else the deck's default text language,
+else en-US) unless a textbox/shape/table, paragraph or run sets "lang".
 Field-level reference: 'pptc schema <op>' is authoritative.
 
 Recommended agent flow: state -> build ops.json -> apply --dry-run

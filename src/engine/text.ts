@@ -21,15 +21,11 @@ const toParagraphs = (text: RichText): Paragraph[] =>
         ? text.split("\n").map((line) => ({ text: line }))
         : text
 
-/**  build the `a:rPr` run properties element when any formatting is set  */
-const buildRunProps = (doc: Document, run: Partial<Run>): Element | null => {
-    const hasProps = run.bold !== undefined || run.italic !== undefined
-        || run.underline !== undefined || run.size !== undefined
-        || run.font !== undefined || run.color !== undefined
-        || run.hyperlink !== undefined
-    if (!hasProps)
-        return null
+/**  build the `a:rPr` run properties element (always: it carries the
+     run's language)  */
+const buildRunProps = (doc: Document, run: Partial<Run>, lang: string): Element => {
     const rPr = doc.createElementNS(NS_A, "a:rPr")
+    rPr.setAttribute("lang", run.lang ?? lang)
     if (run.bold !== undefined)
         rPr.setAttribute("b", run.bold ? "1" : "0")
     if (run.italic !== undefined)
@@ -60,19 +56,18 @@ const buildRunProps = (doc: Document, run: Partial<Run>): Element | null => {
 }
 
 /**  build one `a:r` text run  */
-const buildRun = (doc: Document, run: Run): Element => {
+const buildRun = (doc: Document, run: Run, lang: string): Element => {
     const r = doc.createElementNS(NS_A, "a:r")
-    const rPr = buildRunProps(doc, run)
-    if (rPr !== null)
-        r.appendChild(rPr)
+    r.appendChild(buildRunProps(doc, run, lang))
     const t = doc.createElementNS(NS_A, "a:t")
     t.appendChild(doc.createTextNode(run.text))
     r.appendChild(t)
     return r
 }
 
-/**  build one `a:p` paragraph including paragraph properties  */
-const buildParagraph = (doc: Document, p: Paragraph): Element => {
+/**  build one `a:p` paragraph including paragraph properties; its runs
+     take the paragraph's language, else the given one  */
+const buildParagraph = (doc: Document, p: Paragraph, lang: string): Element => {
     const el = doc.createElementNS(NS_A, "a:p")
     const needsPPr = p.level !== undefined || p.alignment !== undefined || p.bullet === false
     if (needsPPr) {
@@ -95,7 +90,7 @@ const buildParagraph = (doc: Document, p: Paragraph): Element => {
         ...(p.color !== undefined && { color: p.color })
     }]
     for (const run of runs)
-        el.appendChild(buildRun(doc, run))
+        el.appendChild(buildRun(doc, run, p.lang ?? lang))
     return el
 }
 
@@ -105,8 +100,9 @@ const buildParagraph = (doc: Document, p: Paragraph): Element => {
  *  @param shape - the `p:sp` element to write into
  *  @param text - validated rich text payload
  *  @param append - keep existing paragraphs and append instead of replacing
+ *  @param lang - the language of runs that state none (the deck language)
  */
-export const setShapeText = (shape: Element, text: RichText, append = false): void => {
+export const setShapeText = (shape: Element, text: RichText, append: boolean, lang: string): void => {
     const doc = shape.ownerDocument as Document
     const txBody = firstElement(shape, "p:txBody")
     if (txBody === null)
@@ -115,5 +111,5 @@ export const setShapeText = (shape: Element, text: RichText, append = false): vo
         for (const p of elements(txBody, "a:p"))
             txBody.removeChild(p)
     for (const paragraph of toParagraphs(text))
-        txBody.appendChild(buildParagraph(doc, paragraph))
+        txBody.appendChild(buildParagraph(doc, paragraph, lang))
 }

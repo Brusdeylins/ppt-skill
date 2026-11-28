@@ -16274,7 +16274,8 @@ Options:
                  text (default): plus placeholder texts and notes
                  full: plus every shape with geometry AND styling --
                    type, name, frame, text, table cells + column widths,
-                   autoshape preset/fill/border/font, a picture's media file
+                   autoshape preset/fill/border/font, the text language
+                   (lang), a picture's media file
                    name (image), and -- for a body with explicit run
                    formatting -- its paragraphs/runs (per-run font, size,
                    bold, italic, color), which pass straight back into
@@ -16475,7 +16476,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "at": 0,                   // optional insert position
                  "placeholders": { "title": { "text": "..." },
                                    "body":  { "text": "A\\nB" },
-                                   "image": { "image": "photo.png" } },
+                                   "image": { "image": "photo.png",
+                                              "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
                  "background": { "color": "1F4E79" },
                  "hidden": true }           // optional: hide/show the slide
@@ -16486,7 +16488,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   el.add       free elements: textbox | table | chart | shape | image |
                connector -- all positioned via "frame": {x,y,w,h} inches
   el.set       retext an element:  { "op": "el.set", "slide": SEL,
-                 "name": "Box1", "text": "new text" }
+                 "name": "Box1", "text": "new text" } -- placeholders,
+               textboxes and shapes only
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -16499,6 +16502,11 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
 
 Text values accept plain strings (\\n = new paragraph) or rich text
 (runs with bold/italic/color/size, paragraphs with bullet levels).
+Picture fills crop to the placeholder by default ("fit": "crop");
+"contain" shows the whole image, "stretch" distorts it.
+Text language: every run carries a "lang" -- the deck language
+(custom property pptcDeckLang, else the deck's default text language,
+else en-US) unless a textbox/shape/table, paragraph or run sets "lang".
 Field-level reference: 'pptc schema <op>' is authoritative.
 
 Recommended agent flow: state -> build ops.json -> apply --dry-run
@@ -16884,7 +16892,7 @@ var planFill = (ctx, entry, fill) => {
       phName: placeholderShapeName(ctx, entry, ph),
       append: content.append ?? false,
       ...content.text !== void 0 && { text: content.text },
-      ...content.image !== void 0 && { image: content.image },
+      ...content.image !== void 0 && { image: content.image, fit: content.fit ?? "crop" },
       ...ph.frame !== null && { frame: ph.frame }
     });
   }
@@ -17168,6 +17176,8 @@ var elAdd = {
   }
 };
 var nameMatches = (shapeName, address) => shapeName === address || shapeName.startsWith(`${address}-`);
+var TEXT_TYPES = ["placeholder", "textbox", "shape"];
+var LINE_GEOMETRY = /^(line|straightConnector\d|bentConnector\d|curvedConnector\d)$/;
 var existingShapes = (ctx, entry) => {
   if (entry.source.kind !== "self")
     return [];
@@ -17214,7 +17224,14 @@ var elSet = {
         `'${op.name}' matches ${matches.length} elements`,
         { candidates: matches.map((sh) => sh.name) }
       );
-    entry.setTexts.push({ name: matches[0].name, text: op.text });
+    const target = matches[0];
+    const type = target.type === "shape" && LINE_GEOMETRY.test(target.shape ?? "") ? "connector" : target.type;
+    if (!TEXT_TYPES.includes(type))
+      throw new PptcError(
+        "E_SCHEMA",
+        `element '${target.name}' is a ${type} -- only placeholder, textbox and shape text can be set`
+      );
+    entry.setTexts.push({ name: target.name, text: op.text });
   }
 };
 var elRm = {
@@ -37071,13 +37088,16 @@ var FrameSchema = external_exports.object({
   h: external_exports.number().positive().optional(),
   rotation: external_exports.number().min(-360).max(360).optional()
 }).strict();
+var LangSchema = external_exports.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "expected a language tag like 'de-DE' or 'en-US'");
 var fontProps = {
   bold: external_exports.boolean().optional(),
   italic: external_exports.boolean().optional(),
   underline: external_exports.boolean().optional(),
   size: external_exports.number().positive().optional(),
   font: external_exports.string().min(1).optional(),
-  color: ColorSchema.optional()
+  color: ColorSchema.optional(),
+  /**  text language; a paragraph's applies to its runs  */
+  lang: LangSchema.optional()
 };
 var RunSchema = external_exports.object({
   text: external_exports.string(),
@@ -37170,12 +37190,16 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     fill: ColorSchema.optional(),
     border: ColorSchema.optional(),
     borderPt: external_exports.number().positive().optional(),
+    /**  text language of the element (paragraphs and runs may override)  */
+    lang: LangSchema.optional(),
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("table"),
     frame: FrameSchema,
     data: TableSchema,
+    /**  text language of every cell  */
+    lang: LangSchema.optional(),
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37194,6 +37218,8 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     borderPt: external_exports.number().positive().optional(),
     fontColor: ColorSchema.optional(),
     fontSize: external_exports.number().positive().optional(),
+    /**  text language of the shape's text  */
+    lang: LangSchema.optional(),
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37227,12 +37253,16 @@ var PlaceholderFillSchema = external_exports.object({
   text: RichTextSchema.optional(),
   /**  path of an image file to insert (picture placeholders)  */
   image: external_exports.string().min(1).optional(),
+  /**  how the image takes the placeholder frame: `crop` (default) covers
+       it and cuts the overhang off centered, `contain` shows the whole
+       image in a centered, shrunk frame, `stretch` distorts it to fit  */
+  fit: external_exports.enum(["crop", "contain", "stretch"]).optional(),
   /**  append instead of replacing existing content  */
   append: external_exports.boolean().optional()
 }).strict().refine(
   (f) => f.text !== void 0 || f.image !== void 0,
   "a placeholder fill needs 'text' or 'image'"
-);
+).refine((f) => f.fit === void 0 || f.image !== void 0, "'fit' needs an 'image'");
 var fillProps = {
   placeholders: external_exports.record(PlaceholderKeySchema, PlaceholderFillSchema).optional(),
   notes: external_exports.string().optional(),
@@ -38257,6 +38287,11 @@ var readDeckState = async (archive) => {
         };
         if (node2.nodeName === "p:sp")
           Object.assign(shape, shapeStyle(node2, info.colors));
+        if (node2.nodeName === "p:sp" || shape.type === "table") {
+          const lang = firstElement(node2, "a:rPr")?.getAttribute("lang");
+          if (lang !== null && lang !== void 0 && lang !== "")
+            shape.lang = lang;
+        }
         if (txBody !== null) {
           const paras = richParagraphs(txBody, info.colors);
           if (paras !== void 0)
@@ -38522,6 +38557,122 @@ var byteGuard = async (zip, untouched, after) => {
       changed.push(`${name}: part of an untouched slide would change`);
   }
   return changed;
+};
+
+// src/engine/lang.ts
+var DECK_LANG_PROP = "pptcDeckLang";
+var DEFAULT_LANG = "en-US";
+var TAG = /^([A-Za-z]{2,3})(-[A-Za-z0-9]{2,8})*$/;
+var REGIONS = {
+  de: "de-DE",
+  en: "en-US",
+  fr: "fr-FR",
+  es: "es-ES",
+  it: "it-IT",
+  nl: "nl-NL",
+  pt: "pt-PT",
+  pl: "pl-PL",
+  sv: "sv-SE",
+  da: "da-DK",
+  fi: "fi-FI",
+  cs: "cs-CZ"
+};
+var NAMES = {
+  german: "de",
+  deutsch: "de",
+  english: "en",
+  englisch: "en",
+  french: "fr",
+  "fran\xE7ais": "fr",
+  francais: "fr",
+  spanish: "es",
+  "espa\xF1ol": "es",
+  espanol: "es",
+  italian: "it",
+  italiano: "it",
+  dutch: "nl",
+  nederlands: "nl",
+  portuguese: "pt",
+  "portugu\xEAs": "pt",
+  polish: "pl",
+  polski: "pl",
+  swedish: "sv",
+  svenska: "sv",
+  danish: "da",
+  dansk: "da",
+  finnish: "fi",
+  suomi: "fi",
+  czech: "cs",
+  "\u010De\u0161tina": "cs"
+};
+var normalizeLang = (value) => {
+  const v = (value ?? "").trim();
+  const code = NAMES[v.toLowerCase()];
+  if (code !== void 0)
+    return REGIONS[code] ?? code;
+  if (!TAG.test(v))
+    return null;
+  const [lang, ...rest] = v.split("-");
+  const base = lang.toLowerCase();
+  if (rest.length === 0)
+    return REGIONS[base] ?? base;
+  return [base, ...rest.map((s) => s.length === 2 ? s.toUpperCase() : s)].join("-");
+};
+var pickDeckLang = (custom2, presentation, firstRun) => {
+  for (const lang of [normalizeLang(custom2), presentation, firstRun])
+    if (lang !== null && lang !== void 0 && TAG.test(lang))
+      return lang;
+  return DEFAULT_LANG;
+};
+var customProp = async (zip, name) => {
+  const xml = await optText(zip, "docProps/custom.xml");
+  if (xml === null)
+    return null;
+  try {
+    const prop = elements(parseXml(xml), "property").find((p) => p.getAttribute("name") === name);
+    return prop === void 0 ? null : firstElement(prop, "vt:lpwstr")?.textContent ?? null;
+  } catch {
+    return null;
+  }
+};
+var presentationLang = async (zip) => {
+  const xml = await optText(zip, "ppt/presentation.xml");
+  const style = xml === null ? null : firstElement(parseXml(xml), "p:defaultTextStyle");
+  for (const tag2 of ["a:lvl1pPr", "a:defPPr"]) {
+    const pPr = style === null ? null : firstElement(style, tag2);
+    const lang = pPr === null ? null : firstElement(pPr, "a:defRPr")?.getAttribute("lang") ?? null;
+    if (lang !== null && lang !== "")
+      return lang;
+  }
+  return null;
+};
+var firstRunLang = async (zip) => {
+  const xml = await optText(zip, "ppt/presentation.xml");
+  if (xml === null)
+    return null;
+  for (const { part } of slideList(zip, parseXml(xml), await readRels(zip, "ppt/presentation.xml"))) {
+    const slide = part === null ? null : await optText(zip, part);
+    if (slide === null)
+      continue;
+    try {
+      const lang = elements(parseXml(slide), "a:rPr").map((r) => r.getAttribute("lang") ?? "").find((l) => l !== "");
+      if (lang !== void 0)
+        return lang;
+    } catch {
+    }
+  }
+  return null;
+};
+var deckLang = async (zip, customPatch) => {
+  const custom2 = customPatch?.[DECK_LANG_PROP] ?? await customProp(zip, DECK_LANG_PROP);
+  if (normalizeLang(custom2) !== null)
+    return pickDeckLang(custom2, null, null);
+  const presentation = await presentationLang(zip);
+  return pickDeckLang(
+    null,
+    presentation,
+    presentation !== null && TAG.test(presentation) ? null : await firstRunLang(zip)
+  );
 };
 
 // src/engine/post.ts
@@ -39291,6 +39442,135 @@ var repairPart = async (pkg, part) => {
 import { readFileSync as readFileSync5 } from "node:fs";
 import path5 from "node:path";
 
+// src/engine/image-size.ts
+var sized = (w, h) => Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? { w, h } : null;
+var pngSize = (b) => b.length >= 24 && b.toString("latin1", 12, 16) === "IHDR" ? sized(b.readUInt32BE(16), b.readUInt32BE(20)) : null;
+var gifSize = (b) => b.length >= 10 ? sized(b.readUInt16LE(6), b.readUInt16LE(8)) : null;
+var bmpSize = (b) => {
+  if (b.length < 26)
+    return null;
+  if (b.readUInt32LE(14) === 12)
+    return sized(b.readUInt16LE(18), b.readUInt16LE(20));
+  return sized(Math.abs(b.readInt32LE(18)), Math.abs(b.readInt32LE(22)));
+};
+var webpSize = (b) => {
+  if (b.length < 30)
+    return null;
+  const chunk = b.toString("latin1", 12, 16);
+  if (chunk === "VP8 ")
+    return sized(b.readUInt16LE(26) & 16383, b.readUInt16LE(28) & 16383);
+  if (chunk === "VP8L") {
+    const bits = b.readUInt32LE(21);
+    return sized((bits & 16383) + 1, (bits >>> 14 & 16383) + 1);
+  }
+  if (chunk === "VP8X")
+    return sized(b.readUIntLE(24, 3) + 1, b.readUIntLE(27, 3) + 1);
+  return null;
+};
+var exifOrientation = (b, start, end) => {
+  if (b.toString("latin1", start, start + 6) !== "Exif\0\0")
+    return 1;
+  const tiff = start + 6;
+  if (tiff + 8 > end)
+    return 1;
+  const le = b.toString("latin1", tiff, tiff + 2) === "II";
+  const u16 = (o) => le ? b.readUInt16LE(o) : b.readUInt16BE(o);
+  const u32 = (o) => le ? b.readUInt32LE(o) : b.readUInt32BE(o);
+  const ifd = tiff + u32(tiff + 4);
+  if (ifd + 2 > end)
+    return 1;
+  const count = u16(ifd);
+  for (let i = 0; i < count; i++) {
+    const entry = ifd + 2 + i * 12;
+    if (entry + 12 > end)
+      break;
+    if (u16(entry) === 274)
+      return u16(entry + 8);
+  }
+  return 1;
+};
+var jpegSize = (b) => {
+  let orientation = 1;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 255) {
+      i++;
+      continue;
+    }
+    const marker = b[i + 1];
+    if (marker === 255) {
+      i++;
+      continue;
+    }
+    if (marker === 216 || marker === 1 || marker >= 208 && marker <= 215) {
+      i += 2;
+      continue;
+    }
+    const length = b.readUInt16BE(i + 2);
+    if (marker === 225)
+      orientation = exifOrientation(b, i + 4, Math.min(b.length, i + 2 + length));
+    if (marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204) {
+      const h = b.readUInt16BE(i + 5);
+      const w = b.readUInt16BE(i + 7);
+      return orientation >= 5 && orientation <= 8 ? sized(h, w) : sized(w, h);
+    }
+    if (marker === 217 || marker === 218)
+      return null;
+    i += 2 + length;
+  }
+  return null;
+};
+var SVG_UNITS = { "": 1, px: 1, pt: 4 / 3, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+var svgLength = (value) => {
+  const m = /^\s*([0-9]*\.?[0-9]+(?:e[+-]?\d+)?)\s*([a-z]*)\s*$/i.exec(value ?? "");
+  const unit = SVG_UNITS[(m?.[2] ?? "").toLowerCase()];
+  return m === null || unit === void 0 ? null : Number(m[1]) * unit;
+};
+var svgSize = (b) => {
+  const root = /<svg\b([^>]*)>/i.exec(b.toString("utf8", 0, Math.min(b.length, 65536)));
+  if (root === null)
+    return null;
+  const attr = (name) => new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(root[1])?.slice(1).find((v) => v !== void 0);
+  const w = svgLength(attr("width"));
+  const h = svgLength(attr("height"));
+  if (w !== null && h !== null)
+    return sized(w, h);
+  const box = (attr("viewBox") ?? "").trim().split(/[\s,]+/).map(Number);
+  return box.length === 4 ? sized(box[2], box[3]) : null;
+};
+var imageSize = (bytes) => {
+  try {
+    if (bytes.length >= 8 && bytes.readUInt32BE(0) === 2303741511)
+      return pngSize(bytes);
+    if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216)
+      return jpegSize(bytes);
+    if (/^GIF8[79]a/.test(bytes.toString("latin1", 0, 6)))
+      return gifSize(bytes);
+    if (bytes.toString("latin1", 0, 4) === "RIFF" && bytes.toString("latin1", 8, 12) === "WEBP")
+      return webpSize(bytes);
+    if (bytes.toString("latin1", 0, 2) === "BM")
+      return bmpSize(bytes);
+    return svgSize(bytes);
+  } catch {
+    return null;
+  }
+};
+var fitImage = (box, size, fit) => {
+  if (size === null || fit === "stretch" || box.w <= 0 || box.h <= 0)
+    return { box, crop: null };
+  const image = size.w / size.h;
+  const frame = box.w / box.h;
+  if (fit === "contain") {
+    const w = image >= frame ? box.w : Math.round(box.h * image);
+    const h = image >= frame ? Math.round(box.w / image) : box.h;
+    return { box: { x: box.x + Math.round((box.w - w) / 2), y: box.y + Math.round((box.h - h) / 2), w, h }, crop: null };
+  }
+  const side = Math.round((1 - (image > frame ? frame / image : image / frame)) / 2 * 1e5);
+  if (side <= 0)
+    return { box, crop: null };
+  return { box, crop: image > frame ? { l: side, t: 0, r: side, b: 0 } : { l: 0, t: side, r: 0, b: side } };
+};
+
 // src/engine/seed.ts
 var import_jszip5 = __toESM(require_lib3(), 1);
 import { readFileSync as readFileSync4 } from "node:fs";
@@ -39388,11 +39668,9 @@ var buildEmptyDeck = async (template) => {
 // src/engine/text.ts
 var HLINK_ATTR = "pptc-hlink";
 var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
-var buildRunProps = (doc, run) => {
-  const hasProps = run.bold !== void 0 || run.italic !== void 0 || run.underline !== void 0 || run.size !== void 0 || run.font !== void 0 || run.color !== void 0 || run.hyperlink !== void 0;
-  if (!hasProps)
-    return null;
+var buildRunProps = (doc, run, lang) => {
   const rPr = doc.createElementNS(NS_A, "a:rPr");
+  rPr.setAttribute("lang", run.lang ?? lang);
   if (run.bold !== void 0)
     rPr.setAttribute("b", run.bold ? "1" : "0");
   if (run.italic !== void 0)
@@ -39420,17 +39698,15 @@ var buildRunProps = (doc, run) => {
   }
   return rPr;
 };
-var buildRun = (doc, run) => {
+var buildRun = (doc, run, lang) => {
   const r = doc.createElementNS(NS_A, "a:r");
-  const rPr = buildRunProps(doc, run);
-  if (rPr !== null)
-    r.appendChild(rPr);
+  r.appendChild(buildRunProps(doc, run, lang));
   const t = doc.createElementNS(NS_A, "a:t");
   t.appendChild(doc.createTextNode(run.text));
   r.appendChild(t);
   return r;
 };
-var buildParagraph = (doc, p) => {
+var buildParagraph = (doc, p, lang) => {
   const el = doc.createElementNS(NS_A, "a:p");
   const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false;
   if (needsPPr) {
@@ -39453,10 +39729,10 @@ var buildParagraph = (doc, p) => {
     ...p.color !== void 0 && { color: p.color }
   }];
   for (const run of runs)
-    el.appendChild(buildRun(doc, run));
+    el.appendChild(buildRun(doc, run, p.lang ?? lang));
   return el;
 };
-var setShapeText = (shape, text, append = false) => {
+var setShapeText = (shape, text, append, lang) => {
   const doc = shape.ownerDocument;
   const txBody = firstElement(shape, "p:txBody");
   if (txBody === null)
@@ -39465,7 +39741,7 @@ var setShapeText = (shape, text, append = false) => {
     for (const p of elements(txBody, "a:p"))
       txBody.removeChild(p);
   for (const paragraph of toParagraphs(text))
-    txBody.appendChild(buildParagraph(doc, paragraph));
+    txBody.appendChild(buildParagraph(doc, paragraph, lang));
 };
 
 // src/engine/inplace/slides.ts
@@ -39504,7 +39780,7 @@ var setBackground = (slide, color) => {
   bg.appendChild(bgPr);
   cSld.insertBefore(bg, cSld.firstChild);
 };
-var setFooter = (slide, layout, text, nextId) => {
+var setFooter = (slide, layout, text, nextId, lang) => {
   const spTree = firstElement(slide, "p:spTree");
   if (spTree === null)
     return;
@@ -39522,6 +39798,9 @@ var setFooter = (slide, layout, text, nextId) => {
       txBody.removeChild(p2);
     const p = slide.createElementNS(NS_A, "a:p");
     const r = slide.createElementNS(NS_A, "a:r");
+    const rPr = slide.createElementNS(NS_A, "a:rPr");
+    rPr.setAttribute("lang", lang);
+    r.appendChild(rPr);
     const t = slide.createElementNS(NS_A, "a:t");
     t.appendChild(slide.createTextNode(text));
     r.appendChild(t);
@@ -39530,7 +39809,20 @@ var setFooter = (slide, layout, text, nextId) => {
   }
   spTree.appendChild(clone2);
 };
-var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
+var xfrmBox = (xfrm) => {
+  const off = xfrm === null ? null : firstElement(xfrm, "a:off");
+  const ext = xfrm === null ? null : firstElement(xfrm, "a:ext");
+  if (off === null || ext === null)
+    return null;
+  const box = {
+    x: Number(off.getAttribute("x")),
+    y: Number(off.getAttribute("y")),
+    w: Number(ext.getAttribute("cx")),
+    h: Number(ext.getAttribute("cy"))
+  };
+  return Object.values(box).every(Number.isFinite) ? box : null;
+};
+var fillPicturePlaceholder = (slide, rid, phIdx, frame, size, fit) => {
   const sp = elements(slide, "p:sp").find((s) => {
     const ph2 = firstElement(s, "p:ph");
     return ph2 !== null && ph2.getAttribute("type") === "pic" && Number(ph2.getAttribute("idx") ?? "0") === phIdx;
@@ -39540,6 +39832,8 @@ var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
   const cNvPr = firstElement(sp, "p:cNvPr");
   const ph = firstElement(sp, "p:ph");
   const xfrm = frame === void 0 ? firstElement(sp, "a:xfrm") : null;
+  const box = frame !== void 0 ? { x: inchToEmu(frame.x), y: inchToEmu(frame.y), w: inchToEmu(frame.w), h: inchToEmu(frame.h) } : xfrmBox(xfrm);
+  const fitted = box === null ? null : fitImage(box, size, fit);
   const pic = slide.createElementNS(NS_P, "p:pic");
   const nvPicPr = slide.createElementNS(NS_P, "p:nvPicPr");
   const newCNvPr = slide.createElementNS(NS_P, "p:cNvPr");
@@ -39558,20 +39852,27 @@ var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
   const blipFill = slide.createElementNS(NS_P, "p:blipFill");
   const blip = slide.createElementNS(NS_A, "a:blip");
   blip.setAttributeNS(NS_R, "r:embed", rid);
+  blipFill.appendChild(blip);
+  if (fitted !== null && fitted.crop !== null) {
+    const srcRect = slide.createElementNS(NS_A, "a:srcRect");
+    for (const [side, value] of Object.entries(fitted.crop))
+      if (value !== 0)
+        srcRect.setAttribute(side, String(value));
+    blipFill.appendChild(srcRect);
+  }
   const stretch = slide.createElementNS(NS_A, "a:stretch");
   stretch.appendChild(slide.createElementNS(NS_A, "a:fillRect"));
-  blipFill.appendChild(blip);
   blipFill.appendChild(stretch);
   pic.appendChild(blipFill);
   const spPr = slide.createElementNS(NS_P, "p:spPr");
-  if (frame !== void 0) {
+  if (fitted !== null && (frame !== void 0 || fitted.box !== box)) {
     const xf = slide.createElementNS(NS_A, "a:xfrm");
     const off = slide.createElementNS(NS_A, "a:off");
-    off.setAttribute("x", String(inchToEmu(frame.x)));
-    off.setAttribute("y", String(inchToEmu(frame.y)));
+    off.setAttribute("x", String(fitted.box.x));
+    off.setAttribute("y", String(fitted.box.y));
     const ext = slide.createElementNS(NS_A, "a:ext");
-    ext.setAttribute("cx", String(inchToEmu(frame.w)));
-    ext.setAttribute("cy", String(inchToEmu(frame.h)));
+    ext.setAttribute("cx", String(fitted.box.w));
+    ext.setAttribute("cy", String(fitted.box.h));
     xf.appendChild(off);
     xf.appendChild(ext);
     spPr.appendChild(xf);
@@ -39581,9 +39882,9 @@ var fillPicturePlaceholder = (slide, rid, phIdx, frame) => {
   sp.parentNode?.replaceChild(pic, sp);
   return true;
 };
-var setNotes = async (pkg, slidePart, slideRels, text, notesMaster) => {
+var setNotes = async (pkg, slidePart, slideRels, text, notesMaster, lang) => {
   const notesPart = pkg.alloc.part("ppt/notesSlides", "notesSlide", ".xml");
-  const paras = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("");
+  const paras = text.split("\n").map((line) => `<a:p><a:r><a:rPr lang="${xmlEscape(lang, true)}"/><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("");
   pkg.write(
     notesPart,
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -39705,27 +40006,28 @@ var editSlide = async (pkg, work) => {
   for (const shape of doomed)
     removeShape(shape);
   for (const { fill, shape } of fills)
-    setShapeText(shape, fill.text, fill.append);
+    setShapeText(shape, fill.text, fill.append, work.lang);
   for (const { text, shape } of texts)
-    setShapeText(shape, text);
+    setShapeText(shape, text, false, work.lang);
   for (const fill of entry.fills.filter((f) => f.image !== void 0)) {
     const file2 = fill.image;
     const ext = path5.extname(file2).slice(1).toLowerCase() || "png";
     const media = pkg.alloc.part("ppt/media", "image", `.${ext}`);
-    pkg.write(media, readFileSync5(file2));
+    const bytes = readFileSync5(file2);
+    pkg.write(media, bytes);
     await pkg.typePart(media, "", media);
     const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path5.posix.basename(media)}`);
-    if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame))
+    if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame, imageSize(bytes), fill.fit ?? "crop"))
       throw missing(`empty picture placeholder idx ${fill.phIdx}`);
   }
   if (entry.background !== null)
     setBackground(slide, entry.background);
   if (entry.footer !== null) {
     const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null;
-    setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide));
+    setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide), work.lang);
   }
   if (entry.notes !== null)
-    await setNotes(pkg, part, rels, entry.notes, work.notesMaster);
+    await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang);
   else if (work.sharedNotes)
     await unshareNotes(pkg, part, rels);
   if (work.generated !== null)
@@ -45085,7 +45387,7 @@ var chartType = (gen, type) => {
   const entry = map2[type];
   return { type: gen.ChartType[entry[0]], extra: entry[1] };
 };
-var genTextRuns = (text) => {
+var genTextRuns = (text, lang) => {
   if (typeof text === "string")
     return text;
   const out = [];
@@ -45104,6 +45406,7 @@ var genTextRuns = (text) => {
         text: r.text,
         options: {
           breakLine: i === runs.length - 1,
+          lang: r.lang ?? p.lang ?? lang,
           ...r.bold !== void 0 && { bold: r.bold },
           ...r.italic !== void 0 && { italic: r.italic },
           ...r.underline !== void 0 && { underline: { style: "sng" } },
@@ -45120,12 +45423,13 @@ var genTextRuns = (text) => {
   }
   return out;
 };
-var genTableRows = (data) => {
+var genTableRows = (data, lang) => {
   const rows = [];
   if (data.headers !== void 0)
     rows.push(data.headers.map((h) => ({
       text: h,
       options: {
+        lang,
         bold: true,
         color: data.style?.headerFg ?? "FFFFFF",
         fill: { color: data.style?.headerBg ?? "333333" }
@@ -45134,13 +45438,13 @@ var genTableRows = (data) => {
   data.rows.forEach((row, i) => {
     rows.push(row.map((cell) => ({
       text: String(cell),
-      options: data.style?.altRowBg !== void 0 && i % 2 === 1 ? { fill: { color: data.style.altRowBg } } : {}
+      options: data.style?.altRowBg !== void 0 && i % 2 === 1 ? { lang, fill: { color: data.style.altRowBg } } : { lang }
     })));
   });
   return rows;
 };
 var DEFAULT_COLORS = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
-var addElement = (slide, gen, el) => {
+var addElement = (slide, gen, el, lang) => {
   if (el.type === "connector") {
     const x = Math.min(el.from[0], el.to[0]);
     const y = Math.min(el.from[1], el.to[1]);
@@ -45168,8 +45472,9 @@ var addElement = (slide, gen, el) => {
   };
   switch (el.type) {
     case "textbox":
-      slide.addText(genTextRuns(el.text), {
+      slide.addText(genTextRuns(el.text, el.lang ?? lang), {
         ...frame,
+        lang: el.lang ?? lang,
         valign: "top",
         ...el.fill !== void 0 && { fill: { color: el.fill } },
         ...el.border !== void 0 && { line: { color: el.border, width: el.borderPt ?? 1 } }
@@ -45194,7 +45499,7 @@ var addElement = (slide, gen, el) => {
           heights.push(rh);
         opts.rowH = heights;
       }
-      slide.addTable(genTableRows(el.data), opts);
+      slide.addTable(genTableRows(el.data, el.lang ?? lang), opts);
       break;
     }
     case "chart": {
@@ -45224,6 +45529,7 @@ var addElement = (slide, gen, el) => {
     case "shape":
       slide.addText(el.text ?? "", {
         ...frame,
+        lang: el.lang ?? lang,
         shape: gen.ShapeType[el.shape],
         align: "center",
         ...el.fill !== void 0 && { fill: { color: el.fill } },
@@ -45263,7 +45569,7 @@ var named = (slide, objectName) => ({
     slide.addImage({ ...opts, objectName });
   }
 });
-var generateElements = async (entries) => {
+var generateElements = async (entries, lang) => {
   const withElements = entries.filter((e) => e.elements.length > 0);
   if (withElements.length === 0)
     return null;
@@ -45273,7 +45579,7 @@ var generateElements = async (entries) => {
     const slide = gen.addSlide();
     const names = entry.elements.map((planned) => {
       const name = `${planned.name !== null ? `${planned.name}-` : ""}${randomUUID()}`;
-      addElement(named(slide, name), gen, planned.spec);
+      addElement(named(slide, name), gen, planned.spec, lang);
       return name;
     });
     placed.set(entry, { part: `ppt/slides/slide${k + 1}.xml`, names });
@@ -45571,7 +45877,8 @@ var untouchedParts = (pkg, states) => {
   return untouched;
 };
 var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
-  const generated = await generateElements(plan.entries);
+  const lang = await deckLang(pkg.zip, plan.customProps);
+  const generated = await generateElements(plan.entries, lang);
   for (const [i, s] of states.entries()) {
     if (!s.touched)
       continue;
@@ -45587,7 +45894,8 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
       removed,
       notesMaster: deck.notesMaster ?? "",
       generated,
-      sharedNotes: s.sharedNotes
+      sharedNotes: s.sharedNotes,
+      lang
     });
     actions.push(...own2.actions);
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];

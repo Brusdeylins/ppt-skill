@@ -458,7 +458,7 @@ describe("input defects beyond repair and repair granularity", () => {
         const deck = await craftDeck("notes-jump-reuse", async (zip, [ a ]) => {
             const notes = await notesPartOf(zip, a as string)
             const rid = /<Relationship [^>]*Id="([^"]+)"[^>]*\/slide"/.exec(await text(zip, relsOf(notes)))?.[1] as string
-            zip.file(notes, (await text(zip, notes)).replace("<a:r><a:t>notes A",
+            zip.file(notes, (await text(zip, notes)).replace(/<a:r>(<a:rPr[^>]*\/>)?<a:t>notes A/,
                 `<a:r><a:rPr><a:hlinkClick r:id="${rid}" action="ppaction://hlinksldjump"/></a:rPr><a:t>notes A`))
         })
         const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])

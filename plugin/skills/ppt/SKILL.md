@@ -310,7 +310,9 @@ with `E_TEMPLATE`; then drop `--template`.
     properties -- one `meta.props` op with a `custom` map, applied with the
     first write. Store image style, info-graphic style, deck language, title
     and topic under the keys `pptcImageStyle`, `pptcInfoStyle`, `pptcDeckLang`,
-    `pptcTitle`, `pptcTopic`. Because they live in the `.pptx`, the deck is
+    `pptcTitle`, `pptcTopic`; store the deck language as a language tag
+    (`de-DE`, `en-US`) -- pptc writes it as the proofing language of all
+    text. Because they live in the `.pptx`, the deck is
     self-describing: hand it to anyone and their `ppt` run reads the styles
     straight back from `state` (`customProps`) -- no side file. UPDATE the
     relevant key whenever a value changes. (Template-specific notes that are
@@ -496,7 +498,9 @@ with `E_TEMPLATE`; then drop `--template`.
     -   <if condition="the user PROVIDES an image for this placeholder (a file path or an upload)">
         INSERT it directly, do NOT write a prompt: `slide.fill` the picture
         placeholder with `image: { image: "<path>" }` (or, on a blank layout,
-        `el.add` an image at the placeholder frame). This is image INSERTION,
+        `el.add` an image at the placeholder frame). The fill crops the image
+        to the frame, centered; add `"fit": "contain"` when the whole image
+        must stay visible (logos, diagrams, screenshots). This is image INSERTION,
         not generation -- it is allowed (see Non-Goals). Remove any stale
         `PptcPromptBox-<idx>` for that placeholder in the SAME ops document.</if>
     -   <elseif condition="the placeholder is empty, or it holds no image and its prompt box is still present">

@@ -75,9 +75,10 @@ export interface Generated {
  *  addressing it by its name prefix.
  *
  *  @param entries - the plan entries of the apply
+ *  @param lang - the language of text that states none (the deck language)
  *  @returns the generated elements, null when no entry has any
  */
-export const generateElements = async (entries: SlidePlanEntry[]): Promise<Generated | null> => {
+export const generateElements = async (entries: SlidePlanEntry[], lang: string): Promise<Generated | null> => {
     const withElements = entries.filter((e) => e.elements.length > 0)
     if (withElements.length === 0)
         return null
@@ -87,7 +88,7 @@ export const generateElements = async (entries: SlidePlanEntry[]): Promise<Gener
         const slide = gen.addSlide()
         const names = entry.elements.map((planned) => {
             const name = `${planned.name !== null ? `${planned.name}-` : ""}${randomUUID()}`
-            addElement(named(slide, name), gen, planned.spec)
+            addElement(named(slide, name), gen, planned.spec, lang)
             return name
         })
         placed.set(entry, { part: `ppt/slides/slide${k + 1}.xml`, names })

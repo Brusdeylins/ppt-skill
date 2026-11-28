@@ -23,6 +23,7 @@ import type { LintWarning } from "../../core/lint.js"
 import { atomicWrite } from "../../infra/fs.js"
 import { notesOwner, partDefects, type Finding, type PartView } from "../defects.js"
 import { byteGuard, digestBytes, verifyContent, type SlideExpect } from "../guard.js"
+import { deckLang } from "../lang.js"
 import { finishPackage } from "../post.js"
 import { ASSET_PART, REL, RELS, findPart, layoutOrder, relTarget, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
@@ -430,7 +431,8 @@ const untouchedParts = (pkg: Package, states: SlideState[]): Map<string, JSZip.J
      every repair is reported (W_REPAIRED) with what it removed  */
 const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: SlideState[], removed: Set<string>,
     warnings: LintWarning[]): Promise<void> => {
-    const generated = await generateElements(plan.entries)
+    const lang = await deckLang(pkg.zip, plan.customProps)
+    const generated = await generateElements(plan.entries, lang)
     for (const [ i, s ] of states.entries()) {
         if (!s.touched)
             continue
@@ -441,7 +443,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
             s.partReleased.push(...repair.released)
         }
         const own: Repair = await editSlide(pkg, {
-            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes
+            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes, lang
         })
         actions.push(...own.actions)
 

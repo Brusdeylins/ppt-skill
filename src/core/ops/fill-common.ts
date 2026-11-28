@@ -177,7 +177,7 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
             phName: placeholderShapeName(ctx, entry, ph),
             append: content.append ?? false,
             ...(content.text !== undefined && { text: content.text }),
-            ...(content.image !== undefined && { image: content.image }),
+            ...(content.image !== undefined && { image: content.image, fit: content.fit ?? "crop" }),
             ...(ph.frame !== null && { frame: ph.frame })
         })
     }

@@ -18,6 +18,7 @@ import { inchToEmu, type Frame } from "../../core/model.js"
 import type { SlidePlanEntry } from "../../core/ops/registry.js"
 import { notesOwner } from "../defects.js"
 import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.js"
+import { fitImage, imageSize, type Box, type ImageFit, type ImageSize } from "../image-size.js"
 import { slideFromLayout } from "../seed.js"
 import { HLINK_ATTR, setShapeText } from "../text.js"
 import { NS_A, NS_P, NS_R, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
@@ -77,7 +78,7 @@ const setBackground = (slide: Document, color: string): void => {
 }
 
 /**  clone the footer placeholder from the slide's layout and set its text  */
-const setFooter = (slide: Document, layout: Document | null, text: string, nextId: () => number): void => {
+const setFooter = (slide: Document, layout: Document | null, text: string, nextId: () => number, lang: string): void => {
     const spTree = firstElement(slide, "p:spTree")
     if (spTree === null)
         return
@@ -96,6 +97,9 @@ const setFooter = (slide: Document, layout: Document | null, text: string, nextI
             txBody.removeChild(p)
         const p = slide.createElementNS(NS_A, "a:p")
         const r = slide.createElementNS(NS_A, "a:r")
+        const rPr = slide.createElementNS(NS_A, "a:rPr")
+        rPr.setAttribute("lang", lang)
+        r.appendChild(rPr)
         const t = slide.createElementNS(NS_A, "a:t")
         t.appendChild(slide.createTextNode(text))
         r.appendChild(t)
@@ -105,8 +109,33 @@ const setFooter = (slide: Document, layout: Document | null, text: string, nextI
     spTree.appendChild(clone)
 }
 
-/**  replace an empty picture placeholder with a picture shape  */
-const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, frame: Frame | undefined): boolean => {
+/**  the frame of a shape's own `a:xfrm` in EMU, null when it has none  */
+const xfrmBox = (xfrm: Element | null): Box | null => {
+    const off = xfrm === null ? null : firstElement(xfrm, "a:off")
+    const ext = xfrm === null ? null : firstElement(xfrm, "a:ext")
+    if (off === null || ext === null)
+        return null
+    const box = { x: Number(off.getAttribute("x")), y: Number(off.getAttribute("y")),
+        w: Number(ext.getAttribute("cx")), h: Number(ext.getAttribute("cy")) }
+    return Object.values(box).every(Number.isFinite) ? box : null
+}
+
+/**
+ *  Replace an empty picture placeholder with a picture shape. The image
+ *  takes the placeholder frame by its fit: cropped centered (`a:srcRect`,
+ *  as PowerPoint does), contained in a centered, shrunk frame, or
+ *  stretched; an unknown image size or frame stretches.
+ *
+ *  @param slide - the slide DOM
+ *  @param rid - the image relationship id
+ *  @param phIdx - the picture placeholder's idx
+ *  @param frame - the layout's placeholder frame in inches, if known
+ *  @param size - the image's pixel size, null when unknown
+ *  @param fit - how the image takes the frame
+ *  @returns false when the slide has no such empty placeholder
+ */
+const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, frame: Frame | undefined,
+    size: ImageSize | null, fit: ImageFit): boolean => {
     const sp = elements(slide, "p:sp").find((s) => {
         const ph = firstElement(s, "p:ph")
         return ph !== null && ph.getAttribute("type") === "pic" && Number(ph.getAttribute("idx") ?? "0") === phIdx
@@ -116,6 +145,10 @@ const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, fra
     const cNvPr = firstElement(sp, "p:cNvPr")
     const ph = firstElement(sp, "p:ph") as Element
     const xfrm = frame === undefined ? firstElement(sp, "a:xfrm") : null
+    const box = frame !== undefined
+        ? { x: inchToEmu(frame.x), y: inchToEmu(frame.y), w: inchToEmu(frame.w), h: inchToEmu(frame.h) }
+        : xfrmBox(xfrm)
+    const fitted = box === null ? null : fitImage(box, size, fit)
 
     const pic = slide.createElementNS(NS_P, "p:pic")
     const nvPicPr = slide.createElementNS(NS_P, "p:nvPicPr")
@@ -136,21 +169,29 @@ const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, fra
     const blipFill = slide.createElementNS(NS_P, "p:blipFill")
     const blip = slide.createElementNS(NS_A, "a:blip")
     blip.setAttributeNS(NS_R, "r:embed", rid)
+    blipFill.appendChild(blip)
+    if (fitted !== null && fitted.crop !== null) {
+        const srcRect = slide.createElementNS(NS_A, "a:srcRect")
+        for (const [ side, value ] of Object.entries(fitted.crop))
+            if (value !== 0)
+                srcRect.setAttribute(side, String(value))
+        blipFill.appendChild(srcRect)
+    }
     const stretch = slide.createElementNS(NS_A, "a:stretch")
     stretch.appendChild(slide.createElementNS(NS_A, "a:fillRect"))
-    blipFill.appendChild(blip)
     blipFill.appendChild(stretch)
     pic.appendChild(blipFill)
 
+    /*  the slide's own frame is kept as it is unless the fit shrinks it  */
     const spPr = slide.createElementNS(NS_P, "p:spPr")
-    if (frame !== undefined) {
+    if (fitted !== null && (frame !== undefined || fitted.box !== box)) {
         const xf = slide.createElementNS(NS_A, "a:xfrm")
         const off = slide.createElementNS(NS_A, "a:off")
-        off.setAttribute("x", String(inchToEmu(frame.x)))
-        off.setAttribute("y", String(inchToEmu(frame.y)))
+        off.setAttribute("x", String(fitted.box.x))
+        off.setAttribute("y", String(fitted.box.y))
         const ext = slide.createElementNS(NS_A, "a:ext")
-        ext.setAttribute("cx", String(inchToEmu(frame.w)))
-        ext.setAttribute("cy", String(inchToEmu(frame.h)))
+        ext.setAttribute("cx", String(fitted.box.w))
+        ext.setAttribute("cy", String(fitted.box.h))
         xf.appendChild(off)
         xf.appendChild(ext)
         spPr.appendChild(xf)
@@ -165,9 +206,11 @@ const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, fra
 
 /**  write speaker notes into a fresh notesSlide part and point the slide at
      it (the previous notes part is collected by the package sweep)  */
-const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, text: string, notesMaster: string): Promise<void> => {
+const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, text: string, notesMaster: string,
+    lang: string): Promise<void> => {
     const notesPart = pkg.alloc.part("ppt/notesSlides", "notesSlide", ".xml")
-    const paras = text.split("\n").map((line) => `<a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("")
+    const paras = text.split("\n").map((line) =>
+        `<a:p><a:r><a:rPr lang="${xmlEscape(lang, true)}"/><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("")
     pkg.write(notesPart,
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
         + "<p:notes xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
@@ -289,6 +332,8 @@ export interface SlideWork {
     notesMaster: string
     /**  generated elements of this apply, null when there are none  */
     generated: Generated | null
+    /**  the language of text that states none (the deck language)  */
+    lang: string
 }
 
 /**
@@ -347,19 +392,20 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
     for (const shape of doomed)
         removeShape(shape)
     for (const { fill, shape } of fills)
-        setShapeText(shape, fill.text as NonNullable<typeof fill.text>, fill.append)
+        setShapeText(shape, fill.text as NonNullable<typeof fill.text>, fill.append, work.lang)
     for (const { text, shape } of texts)
-        setShapeText(shape, text)
+        setShapeText(shape, text, false, work.lang)
 
     /*  pictures into picture placeholders  */
     for (const fill of entry.fills.filter((f) => f.image !== undefined)) {
         const file = fill.image as string
         const ext = path.extname(file).slice(1).toLowerCase() || "png"
         const media = pkg.alloc.part("ppt/media", "image", `.${ext}`)
-        pkg.write(media, readFileSync(file))
+        const bytes = readFileSync(file)
+        pkg.write(media, bytes)
         await pkg.typePart(media, "", media)
         const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path.posix.basename(media)}`)
-        if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame))
+        if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame, imageSize(bytes), fill.fit ?? "crop"))
             throw missing(`empty picture placeholder idx ${fill.phIdx}`)
     }
 
@@ -368,10 +414,10 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
         setBackground(slide, entry.background)
     if (entry.footer !== null) {
         const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null
-        setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide))
+        setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide), work.lang)
     }
     if (entry.notes !== null)
-        await setNotes(pkg, part, rels, entry.notes, work.notesMaster)
+        await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang)
     else if (work.sharedNotes)
         await unshareNotes(pkg, part, rels)
 

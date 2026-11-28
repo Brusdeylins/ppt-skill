@@ -48,8 +48,9 @@ const chartType = (gen: GenRoot, type: ChartData["type"]): { type: unknown, extr
     return { type: gen.ChartType[entry[0]], extra: entry[1] }
 }
 
-/**  convert rich text to the PptxGenJS text-run array form  */
-const genTextRuns = (text: RichText): unknown => {
+/**  convert rich text to the PptxGenJS text-run array form; every run
+     carries its language (run, else paragraph, else the element's)  */
+const genTextRuns = (text: RichText, lang: string): unknown => {
     if (typeof text === "string")
         return text
     const out: Record<string, unknown>[] = []
@@ -61,6 +62,7 @@ const genTextRuns = (text: RichText): unknown => {
                 text: r.text,
                 options: {
                     breakLine: i === runs.length - 1,
+                    lang: r.lang ?? p.lang ?? lang,
                     ...(r.bold !== undefined && { bold: r.bold }),
                     ...(r.italic !== undefined && { italic: r.italic }),
                     ...(r.underline !== undefined && { underline: { style: "sng" } }),
@@ -78,13 +80,15 @@ const genTextRuns = (text: RichText): unknown => {
     return out
 }
 
-/**  build PptxGenJS table rows including header styling  */
-const genTableRows = (data: TableData): unknown[][] => {
+/**  build PptxGenJS table rows including header styling; PptxGenJS does
+     not pass a table's language on to its cells, so every cell carries it  */
+const genTableRows = (data: TableData, lang: string): unknown[][] => {
     const rows: unknown[][] = []
     if (data.headers !== undefined)
         rows.push(data.headers.map((h) => ({
             text: h,
             options: {
+                lang,
                 bold: true,
                 color: data.style?.headerFg ?? "FFFFFF",
                 fill: { color: data.style?.headerBg ?? "333333" }
@@ -94,8 +98,8 @@ const genTableRows = (data: TableData): unknown[][] => {
         rows.push(row.map((cell) => ({
             text: String(cell),
             options: data.style?.altRowBg !== undefined && i % 2 === 1
-                ? { fill: { color: data.style.altRowBg } }
-                : {}
+                ? { lang, fill: { color: data.style.altRowBg } }
+                : { lang }
         })))
     })
     return rows
@@ -110,8 +114,10 @@ const DEFAULT_COLORS = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F7964
  *  @param slide - PptxGenJS generator slide
  *  @param gen - PptxGenJS root object (enums)
  *  @param el - validated element payload
+ *  @param lang - the language of text that states none (the deck language);
+ *                always passed, as PptxGenJS writes `en-US` otherwise
  */
-export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec): void => {
+export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang: string): void => {
     if (el.type === "connector") {
         const x = Math.min(el.from[0], el.to[0])
         const y = Math.min(el.from[1], el.to[1])
@@ -137,8 +143,9 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec): void
     }
     switch (el.type) {
         case "textbox":
-            slide.addText(genTextRuns(el.text), {
+            slide.addText(genTextRuns(el.text, el.lang ?? lang), {
                 ...frame,
+                lang: el.lang ?? lang,
                 valign: "top",
                 ...(el.fill !== undefined && { fill: { color: el.fill } }),
                 ...(el.border !== undefined && { line: { color: el.border, width: el.borderPt ?? 1 } })
@@ -164,7 +171,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec): void
                     heights.push(rh as number)
                 opts.rowH = heights
             }
-            slide.addTable(genTableRows(el.data), opts)
+            slide.addTable(genTableRows(el.data, el.lang ?? lang), opts)
             break
         }
         case "chart": {
@@ -195,6 +202,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec): void
         case "shape":
             slide.addText(el.text ?? "", {
                 ...frame,
+                lang: el.lang ?? lang,
                 shape: gen.ShapeType[el.shape],
                 align: "center",
                 ...(el.fill !== undefined && { fill: { color: el.fill } }),
