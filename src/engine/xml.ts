@@ -25,10 +25,18 @@ export const NS_REL = "http://schemas.openxmlformats.org/package/2006/relationsh
  *  dropped -- xmldom would reject the declaration behind it.
  *
  *  @param xml - XML source text
+ *  @param strict - whether recoverable errors fail as well (verify)
  *  @returns parsed document
  */
-export const parseXml = (xml: string): Document =>
-    new DOMParser().parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml")
+export const parseXml = (xml: string, strict = false): Document =>
+    new DOMParser({
+        onError: (level, msg): void => {
+            /*  lenient: recoverable errors are tolerated silently (no stderr
+                noise), only fatal ones fail; strict: every error fails  */
+            if (strict || level === "fatalError")
+                throw new Error(msg)
+        }
+    }).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml")
 
 /**
  *  Decode the bytes of an XML part: UTF-8 (with or without byte-order
@@ -49,6 +57,16 @@ export const decodeXml = (bytes: Uint8Array): string => {
 }
 
 /**
+ *  An XML text about to be written as UTF-8, with a UTF-16 encoding
+ *  declaration of its decoded source corrected.
+ *
+ *  @param xml - XML text
+ *  @returns the text declaring UTF-8 where it declared UTF-16
+ */
+export const utf8Declared = (xml: string): string =>
+    xml.replace(/^(<\?xml[^>]*encoding=["'])UTF-16(?:LE|BE)?(["'])/i, "$1UTF-8$2")
+
+/**
  *  Serialize a DOM document back to its XML string. The text is written as
  *  UTF-8, so a UTF-16 declaration of a decoded part is corrected.
  *
@@ -56,7 +74,7 @@ export const decodeXml = (bytes: Uint8Array): string => {
  *  @returns XML text
  */
 export const serializeXml = (doc: Document): string =>
-    new XMLSerializer().serializeToString(doc).replace(/^(<\?xml[^>]*encoding=["'])UTF-16(["'])/i, "$1UTF-8$2")
+    utf8Declared(new XMLSerializer().serializeToString(doc))
 
 /**
  *  Escape text for an XML text node, or for a double-quoted attribute value.

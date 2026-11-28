@@ -81,7 +81,7 @@ describe("repair triggers in the input deck", () => {
             await addShape(zip, a as string, pic(90, "Bild", "rIdDup"))
         })
         const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
-        expect(repaired(res).join(" ")).toContain("duplicate relationship ids")
+        expect(repaired(res).join(" ")).toContain("duplicate relationship id")
         await expectIntact(deck)
         const state = await readDeckState(await DeckArchive.open(deck))
         expect(state.slides[0]?.shapes.some((s) => s.name === "Bild")).toBe(true)
@@ -108,7 +108,7 @@ describe("repair triggers in the input deck", () => {
         })
         expect((await readDeckState(await DeckArchive.open(deck))).slides.length).toBe(3)
         const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
-        expect(repaired(res).join(" ")).toContain("references missing relationship ids rIdMissing")
+        expect(repaired(res).join(" ")).toContain("references missing relationship id rIdMissing")
         await expectIntact(deck)
         expect((await readDeckState(await DeckArchive.open(deck))).slides[0]?.title).toBe("A")
     })
@@ -157,7 +157,7 @@ describe("repair triggers in the input deck", () => {
             await addShape(zip, a as string, pic(2, "Doppelt", "rIdPic"))
         })
         const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
-        expect(repaired(res).join(" ")).toContain("duplicate cNvPr ids")
+        expect(repaired(res).join(" ")).toContain("duplicate cNvPr id")
         await expectIntact(deck)
     })
 
@@ -678,5 +678,98 @@ describe("repairs keep what they may not remove", () => {
         expect(repaired(res)).toEqual([])
         expect((await bytesIn(deck, slide)).equals(before)).toBe(true)
         expect((await JSZip.loadAsync(readFileSync(deck))).file("ppt/media/my image.png")).not.toBeNull()
+    })
+})
+
+/**  a slide with a chart whose XML references a relationship `craft` breaks  */
+const chartDeck = async (name: string, rels: string): Promise<string> =>
+    await craftDeck(name, async (zip, [ a ]) => {
+        zip.file("ppt/charts/chart91.xml", `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="${REL}">`
+            + "<c:chart><c:plotArea><c:layout/></c:plotArea></c:chart><c:externalData r:id=\"rIdWb\"/></c:chartSpace>")
+        if (rels !== "")
+            zip.file("ppt/charts/_rels/chart91.xml.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`)
+        zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("</Types>",
+            "<Override PartName=\"/ppt/charts/chart91.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/></Types>"))
+        await addRel(zip, a as string, "rIdChart", "chart", "../charts/chart91.xml")
+        await addShape(zip, a as string, "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"95\" name=\"Diagramm\"/><p:cNvGraphicFramePr/><p:nvPr/>"
+            + "</p:nvGraphicFramePr><p:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"1\" cy=\"1\"/></p:xfrm><a:graphic>"
+            + "<a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/chart\">"
+            + "<c:chart xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" r:id=\"rIdChart\"/></a:graphicData></a:graphic></p:graphicFrame>")
+    })
+
+describe("repairs inside charts and package metadata", () => {
+    it("repairs a chart without its workbook relationship, also in a copy", async () => {
+        const deck = await chartDeck("chart-no-wb-rel", "")
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res).join(" ")).toContain("ppt/charts/chart91.xml")
+        await expectIntact(deck)
+        const copy = await chartDeck("chart-no-wb-rel-copy", "")
+        await apply(copy, [ { op: "slide.copy", slide: "index:0" } ])
+        await expectIntact(copy)
+    })
+
+    it("repairs a chart whose workbook is missing", async () => {
+        const deck = await chartDeck("chart-dead-wb",
+            `<Relationship Id="rIdWb" Type="${REL}/package" Target="../embeddings/none.xlsx"/>`)
+        await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        await expectIntact(deck)
+        expect((await bytesIn(deck, "ppt/charts/chart91.xml")).toString()).not.toContain("externalData")
+    })
+
+    it("writes UTF-16 app properties back as declared UTF-8", async () => {
+        const deck = await craftDeck("app-utf16", async (zip) => {
+            const xml = (await text(zip, "docProps/app.xml")).replace(/encoding="UTF-8"/, "encoding=\"UTF-16\"")
+            zip.file("docProps/app.xml", Buffer.concat([ Buffer.from([ 0xFF, 0xFE ]), Buffer.from(xml, "utf16le") ]))
+        })
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT" } ])
+        await expectIntact(deck)
+        const app = (await bytesIn(deck, "docProps/app.xml")).toString("utf8")
+        expect(app).toContain("encoding=\"UTF-8\"")
+        expect(app).toContain("<Slides>4</Slides>")
+    })
+
+    it("keeps the custom-show titles after the slide titles", async () => {
+        const deck = await craftDeck("custom-show-titles", async (zip) => {
+            const pres = await text(zip, "ppt/presentation.xml")
+            const rid = /<p:sldId [^>]*r:id="([^"]+)"/.exec(pres)?.[1] as string
+            zip.file("ppt/presentation.xml", pres.replace(/(<p:notesSz[^>]*\/>)/,
+                `$1<p:custShowLst><p:custShow name="Kurz" id="0"><p:sldLst><p:sld r:id="${rid}"/></p:sldLst></p:custShow></p:custShowLst>`))
+            const app = await text(zip, "docProps/app.xml")
+            const hp = /<HeadingPairs><vt:vector size="(\d+)"[^>]*>([\s\S]*?)<\/vt:vector><\/HeadingPairs>/.exec(app) as RegExpExecArray
+            const tp = /<TitlesOfParts><vt:vector size="(\d+)"[^>]*>([\s\S]*?)<\/vt:vector><\/TitlesOfParts>/.exec(app) as RegExpExecArray
+            zip.file("docProps/app.xml", app
+                .replace(hp[0], `<HeadingPairs><vt:vector size="${Number(hp[1]) + 2}" baseType="variant">${hp[2] as string}`
+                    + "<vt:variant><vt:lpstr>Zielgruppenorientierte Präsentationen</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs>")
+                .replace(tp[0], `<TitlesOfParts><vt:vector size="${Number(tp[1]) + 1}" baseType="lpstr">${tp[2] as string}<vt:lpstr>Kurz</vt:lpstr></vt:vector></TitlesOfParts>`))
+        })
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "D" } } } ])
+        await expectIntact(deck)
+        const titles = [ ...(await bytesIn(deck, "docProps/app.xml")).toString().matchAll(/<vt:lpstr>([^<]*)<\/vt:lpstr>/g) ].map((m) => m[1])
+        expect(titles.slice(-5)).toEqual([ "A", "B", "C", "D", "Kurz" ])
+    })
+
+    it("leaves an untouched slide with malformed relationships alone", async () => {
+        let slide = ""
+        const deck = await craftDeck("malformed-rels", async (zip, [ , b ]) => {
+            slide = b as string
+            zip.file(relsOf(slide), (await text(zip, relsOf(slide))).replace("</Relationships>", "<Relationship></Relationships>"))
+        })
+        const before = await bytesIn(deck, relsOf(slide))
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:0", placeholders: { title: { text: "A2" } } } ])
+        expect(res.warnings.map((w) => w.code)).toContain("W_INPUT_DEFECT")
+        expect((await bytesIn(deck, relsOf(slide))).equals(before)).toBe(true)
+    })
+
+    it("writes a percent-escaped target of a copy escaped", async () => {
+        const deck = await craftDeck("iri-copy", async (zip, [ a ]) => {
+            zip.file("ppt/media/my image.png", png("iri"))
+            await addRel(zip, a as string, "rIdIri", "image", "../media/my%20image.png")
+            await addShape(zip, a as string, pic(90, "Leer", "rIdIri"))
+        })
+        await apply(deck, [ { op: "slide.copy", slide: "index:0" } ])
+        await expectIntact(deck)
+        const parts = (await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.part)
+        const copyRels = (await bytesIn(deck, relsOf(parts[1] as string))).toString()
+        expect(copyRels).toContain("my%20image.png")
     })
 })

@@ -13,7 +13,7 @@
 
 import type { Document, Element } from "@xmldom/xmldom"
 import { PartAllocator, RELS, relIs } from "../parts.js"
-import { NS_A, elements, firstElement, inFallback, relRefs, serializeXml } from "../xml.js"
+import { NS_A, elements, firstElement, inFallback, relRefs } from "../xml.js"
 import type { Package } from "./package.js"
 
 /**  the elements a shape tree is made of: the smallest unit a dead
@@ -199,13 +199,14 @@ const uniquifyShapeIds = (slide: Document): boolean => {
  */
 export const repairRels = (pkg: Package, part: string, doc: Document | null, rels: Document,
     unused: Set<string> = new Set(), forced: Set<string> = new Set()): string[] => {
-    const xml = doc === null ? "" : serializeXml(doc)
+    const root = doc?.documentElement ?? null
+    const referenced = new Set(root === null ? [] : relRefs(root).map((ref) => ref.attr.value))
     const seen = new Set<string>()
     const dropped: string[] = []
     for (const rel of pkg.targets(part, rels)) {
         const { el, id, target } = rel
         const dead = target !== null && !pkg.has(target)
-        const stale = (forced.has(id) || (unused.has(id) && !relIs(rel, RELS.implicit))) && !xml.includes(`"${id}"`)
+        const stale = (forced.has(id) || (unused.has(id) && !relIs(rel, RELS.implicit))) && !referenced.has(id)
         if (seen.has(id) || dead || stale) {
             el.parentNode?.removeChild(el)
             dropped.push(id)

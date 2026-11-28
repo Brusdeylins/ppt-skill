@@ -14,7 +14,7 @@
 
 import JSZip from "jszip"
 import { readFileSync } from "node:fs"
-import { DOMParser, type Document, type Element } from "@xmldom/xmldom"
+import type { Document, Element } from "@xmldom/xmldom"
 import { finding, notesOwner, partDefects, type Finding } from "./defects.js"
 import { ASSET_PART, bytesOf, findPart, partText, relTargets, relsOwner, slideList, type Rel } from "./parts.js"
 import { decodeXml, elements, parseXml } from "./xml.js"
@@ -53,11 +53,7 @@ const parseDeck = async (zip: JSZip, findings: Finding[]): Promise<Deck> => {
     for (const n of names)
         if (n.endsWith(".xml") || n.endsWith(".rels"))
             try {
-                const parser = new DOMParser({
-                    onError: (_level, msg): void => { throw new Error(msg) }
-                })
-                const text = decodeXml(await (zip.file(n) as JSZip.JSZipObject).async("uint8array"))
-                docs.set(n, parser.parseFromString(text, "application/xml"))
+                docs.set(n, parseXml(decodeXml(await (zip.file(n) as JSZip.JSZipObject).async("uint8array")), true))
             }
             catch (err) {
                 findings.push(finding("malformed", n, `malformed XML (${String(err).slice(0, 80)})`))
@@ -116,19 +112,19 @@ const slideListRules = (deck: Deck): Finding[] => {
     const ids = new Set<string>()
     for (const { id, rid, part } of sldIds) {
         if (part === null || !deck.names.has(part))
-            findings.push(finding("sldid-unresolved", "presentation.xml", `sldId ${rid} does not resolve to a slide part`))
+            findings.push(finding("sldid-unresolved", "ppt/presentation.xml", `sldId ${rid} does not resolve to a slide part`))
         else if (slides.includes(part))
-            findings.push(finding("sldid-twice", "presentation.xml", `sldId ${rid} lists slide ${part} a second time`))
+            findings.push(finding("sldid-twice", "ppt/presentation.xml", `sldId ${rid} lists slide ${part} a second time`))
         else
             slides.push(part)
         if (ids.has(id))
-            findings.push(finding("sldid-dup", "presentation.xml", `sldId id ${id} is used twice`))
+            findings.push(finding("sldid-dup", "ppt/presentation.xml", `sldId id ${id} is used twice`))
         ids.add(id)
     }
     const listed = new Set(sldIds.map((s) => s.rid))
     for (const r of presRels)
         if (r.kind === "slide" && !listed.has(r.id))
-            findings.push(finding("slide-rel-dangling", "presentation.xml.rels", `dangling slide relationship ${r.id} (no sldId references it)`))
+            findings.push(finding("slide-rel-dangling", "ppt/_rels/presentation.xml.rels", `dangling slide relationship ${r.id} (no sldId references it)`))
     for (const n of slideNames(deck))
         if (!slides.includes(n))
             findings.push(finding("slide-unlisted", n, "slide part not in the slide list"))
@@ -140,12 +136,12 @@ const slideListRules = (deck: Deck): Finding[] => {
         !seq.includes(a) || !seq.includes(b) || seq.indexOf(a) < seq.indexOf(b)
     for (const lst of [ "p:notesMasterIdLst", "p:handoutMasterIdLst" ])
         if (!before(lst, "p:sldIdLst"))
-            findings.push(finding("pres-order", "presentation.xml", `${lst.slice(2)} appears after sldIdLst (schema order violated)`))
+            findings.push(finding("pres-order", "ppt/presentation.xml", `${lst.slice(2)} appears after sldIdLst (schema order violated)`))
     if (!before("p:sldSz", "p:notesSz"))
-        findings.push(finding("pres-order", "presentation.xml", "sldSz appears after notesSz (schema order violated)"))
+        findings.push(finding("pres-order", "ppt/presentation.xml", "sldSz appears after notesSz (schema order violated)"))
     for (const ref of elements(pres, "p14:sldId"))
         if (!ids.has(ref.getAttribute("id") ?? ""))
-            findings.push(finding("section-ref", "presentation.xml", `section references removed slide id ${ref.getAttribute("id") ?? ""}`))
+            findings.push(finding("section-ref", "ppt/presentation.xml", `section references removed slide id ${ref.getAttribute("id") ?? ""}`))
     return findings
 }
 

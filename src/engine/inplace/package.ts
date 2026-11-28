@@ -226,7 +226,7 @@ export class Package {
             if (next === undefined && from === this && relIs(rel, RELS.shared))
                 next = target
             next ??= await this.clonePart(from, target, done)
-            el.setAttribute("Target", path.posix.relative(path.posix.dirname(copy), next))
+            el.setAttribute("Target", encodeURI(path.posix.relative(path.posix.dirname(copy), next)))
         }
     }
 

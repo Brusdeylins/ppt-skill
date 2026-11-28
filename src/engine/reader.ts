@@ -551,7 +551,14 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
         const doc = parseXml(slideXmlText)
 
         /*  layout of this slide  */
-        const slideRels = relTargets(part, await archive.xml(relsPartOf(part)), archive.zip)
+        /*  missing or malformed relationships read as none (verify reports them)  */
+        let slideRels: ReturnType<typeof relTargets>
+        try {
+            slideRels = relTargets(part, await archive.xml(relsPartOf(part)), archive.zip)
+        }
+        catch {
+            slideRels = []
+        }
         const slideRelMap = relMap(slideRels)
         const layoutPart = slideRels.find((r) => r.kind === "slideLayout")?.target ?? null
         let layoutName = ""

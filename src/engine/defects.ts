@@ -58,7 +58,7 @@ export const shapeIdDefects = (view: PartView): Finding[] => {
         return []
     const ids = elements(view.doc, "p:cNvPr").filter((el) => !inFallback(el)).map((el) => el.getAttribute("id") ?? "")
     const dup = [ ...new Set(ids.filter((id, i) => ids.indexOf(id) !== i)) ]
-    return dup.length > 0 ? [ finding("shape-ids", view.part, `duplicate cNvPr ids ${dup.join(",")}`) ] : []
+    return dup.map((id) => finding("shape-ids", view.part, `duplicate cNvPr id ${id}`))
 }
 
 /**
@@ -72,8 +72,8 @@ export const relsDefects = (view: PartView, exists: (part: string) => boolean): 
     const findings: Finding[] = []
     const ids = view.rels.map((r) => r.id)
     const dup = [ ...new Set(ids.filter((id, i) => ids.indexOf(id) !== i)) ]
-    if (dup.length > 0)
-        findings.push(finding("rels-dup", view.part, `duplicate relationship ids ${dup.join(",")}`))
+    for (const id of dup)
+        findings.push(finding("rels-dup", view.part, `duplicate relationship id ${id}`))
     for (const r of view.rels)
         if (r.target !== null && !exists(r.target))
             findings.push(finding("rels-dead", view.part, `dead relationship target ${r.target}`))
@@ -95,7 +95,7 @@ export const refDefects = (view: PartView): Finding[] => {
     const ids = new Set(view.rels.map((r) => r.id))
     const dangling = [ ...new Set(relRefs(root)
         .map((ref) => ref.attr.value).filter((id) => id !== "" && !ids.has(id))) ]
-    return dangling.length > 0 ? [ finding("refs", view.part, `references missing relationship ids ${dangling.join(",")}`) ] : []
+    return dangling.map((id) => finding("refs", view.part, `references missing relationship id ${id}`))
 }
 
 /**

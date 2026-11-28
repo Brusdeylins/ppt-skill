@@ -15964,7 +15964,7 @@ var require_dom_parser = __commonJS({
     function normalizeLineEndings(input2) {
       return input2.replace(/\r[\n\u0085]/g, "\n").replace(/[\r\u0085\u2028\u2029]/g, "\n");
     }
-    function DOMParser3(options) {
+    function DOMParser2(options) {
       options = options || {};
       if (options.locator === void 0) {
         options.locator = true;
@@ -15981,7 +15981,7 @@ var require_dom_parser = __commonJS({
       this.locator = !!options.locator;
       this.xmlns = this.assign(/* @__PURE__ */ Object.create(null), options.xmlns);
     }
-    DOMParser3.prototype.parseFromString = function(source, mimeType) {
+    DOMParser2.prototype.parseFromString = function(source, mimeType) {
       if (!isValidMimeType(mimeType)) {
         throw new TypeError('DOMParser.parseFromString: the provided mimeType "' + mimeType + '" is not valid.');
       }
@@ -16205,7 +16205,7 @@ var require_dom_parser = __commonJS({
       throw "onWarningStopParsing";
     }
     exports.__DOMHandler = DOMHandler;
-    exports.DOMParser = DOMParser3;
+    exports.DOMParser = DOMParser2;
     exports.normalizeLineEndings = normalizeLineEndings;
     exports.onErrorStopParsing = onErrorStopParsing;
     exports.onWarningStopParsing = onWarningStopParsing;
@@ -43020,7 +43020,12 @@ var NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main";
 var NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main";
 var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 var NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
-var parseXml = (xml) => new import_xmldom.DOMParser().parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
+var parseXml = (xml, strict = false) => new import_xmldom.DOMParser({
+  onError: (level, msg) => {
+    if (strict || level === "fatalError")
+      throw new Error(msg);
+  }
+}).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
 var decodeXml = (bytes) => {
   const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (buf[0] === 255 && buf[1] === 254)
@@ -43031,7 +43036,8 @@ var decodeXml = (bytes) => {
     return buf.toString("utf16le");
   return buf.toString("utf8").replace(/^\uFEFF/, "");
 };
-var serializeXml = (doc) => new import_xmldom.XMLSerializer().serializeToString(doc).replace(/^(<\?xml[^>]*encoding=["'])UTF-16(["'])/i, "$1UTF-8$2");
+var utf8Declared = (xml) => xml.replace(/^(<\?xml[^>]*encoding=["'])UTF-16(?:LE|BE)?(["'])/i, "$1UTF-8$2");
+var serializeXml = (doc) => utf8Declared(new import_xmldom.XMLSerializer().serializeToString(doc));
 var xmlEscape = (s, attr = false) => {
   const text = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return attr ? text.replace(/"/g, "&quot;") : text;
@@ -43132,6 +43138,13 @@ var relMap = (rels) => {
 var readRels = async (zip, owner) => {
   const relsPart = findPart(zip, relsPartOf(owner));
   return relsPart === null ? [] : relTargets(owner, parseXml(await partText(zip, relsPart)), zip);
+};
+var tryRels = async (zip, owner) => {
+  try {
+    return await readRels(zip, owner);
+  } catch {
+    return null;
+  }
 };
 var appendRel = (rels, id, type, target, external = false) => {
   const rel = rels.createElementNS(NS_REL, "Relationship");
@@ -43336,7 +43349,10 @@ var gcAssets = async (zip) => {
   const live = /* @__PURE__ */ new Set();
   const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(relsOwner(f))).map(relsOwner);
   while (queue.length > 0) {
-    for (const { target } of await readRels(zip, queue.pop()))
+    const rels = await tryRels(zip, queue.pop());
+    if (rels === null)
+      return;
+    for (const { target } of rels)
       if (target !== null && isAsset(target) && !live.has(target)) {
         live.add(target);
         queue.push(target);
@@ -43814,7 +43830,12 @@ var readDeckState = async (archive) => {
       await archive.text(`ppt/slides/_rels/${partBase}.rels`) ?? ""
     );
     const doc = parseXml(slideXmlText);
-    const slideRels = relTargets(part, await archive.xml(relsPartOf(part)), archive.zip);
+    let slideRels;
+    try {
+      slideRels = relTargets(part, await archive.xml(relsPartOf(part)), archive.zip);
+    } catch {
+      slideRels = [];
+    }
     const slideRelMap = relMap(slideRels);
     const layoutPart = slideRels.find((r) => r.kind === "slideLayout")?.target ?? null;
     let layoutName = "";
@@ -43915,14 +43936,14 @@ var shapeIdDefects = (view) => {
     return [];
   const ids = elements(view.doc, "p:cNvPr").filter((el) => !inFallback(el)).map((el) => el.getAttribute("id") ?? "");
   const dup = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
-  return dup.length > 0 ? [finding("shape-ids", view.part, `duplicate cNvPr ids ${dup.join(",")}`)] : [];
+  return dup.map((id) => finding("shape-ids", view.part, `duplicate cNvPr id ${id}`));
 };
 var relsDefects = (view, exists) => {
   const findings = [];
   const ids = view.rels.map((r) => r.id);
   const dup = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
-  if (dup.length > 0)
-    findings.push(finding("rels-dup", view.part, `duplicate relationship ids ${dup.join(",")}`));
+  for (const id of dup)
+    findings.push(finding("rels-dup", view.part, `duplicate relationship id ${id}`));
   for (const r of view.rels)
     if (r.target !== null && !exists(r.target))
       findings.push(finding("rels-dead", view.part, `dead relationship target ${r.target}`));
@@ -43934,7 +43955,7 @@ var refDefects = (view) => {
     return [];
   const ids = new Set(view.rels.map((r) => r.id));
   const dangling = [...new Set(relRefs(root).map((ref) => ref.attr.value).filter((id) => id !== "" && !ids.has(id)))];
-  return dangling.length > 0 ? [finding("refs", view.part, `references missing relationship ids ${dangling.join(",")}`)] : [];
+  return dangling.map((id) => finding("refs", view.part, `references missing relationship id ${id}`));
 };
 var partDefects = (view, exists) => [...relsDefects(view, exists), ...refDefects(view), ...shapeIdDefects(view)];
 var notesOwner = (notes) => {
@@ -43978,7 +43999,7 @@ var computeDigest = async (zip, part) => {
     return "missing";
   let data = bytes;
   if (/\.(xml|rels)$/.test(part)) {
-    let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "");
+    let xml = decodeXml(bytes).replace(/^(<\?xml[^>]*\?>)?\s*/, "");
     try {
       const doc = parseXml(xml);
       for (const tag2 of ["a:hlinkClick", "a:hlinkHover"])
@@ -43992,7 +44013,7 @@ var computeDigest = async (zip, part) => {
   }
   return createHash2("sha1").update(data).digest("hex").slice(0, 12);
 };
-var relatedDigests = async (zip, part, xml, depth, skip = []) => {
+var relatedDigests = async (zip, part, xml, depth, skip = [], repaired = []) => {
   const out = [];
   const seen = new Set(skip);
   for (const rel of await readRels(zip, part)) {
@@ -44008,9 +44029,13 @@ var relatedDigests = async (zip, part, xml, depth, skip = []) => {
     }
     if (zip.file(target) === null)
       continue;
+    if (repaired.includes(target)) {
+      out.push(`${kind}:repaired`);
+      continue;
+    }
     let hash2 = await digest(zip, target);
     if (depth > 0)
-      hash2 += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`;
+      hash2 += `[${(await relatedDigests(zip, target, null, depth - 1, [], repaired)).join(",")}]`;
     out.push(`${kind}:${hash2}`);
   }
   return out.sort();
@@ -44020,9 +44045,9 @@ var notesText = async (zip, slidePart) => {
   const xml = notes === null ? null : await canonText(zip, notes);
   return xml === null ? null : [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("\n");
 };
-var slidePrint = async (zip, slidePart, skip = []) => {
+var slidePrint = async (zip, slidePart, skip = [], repaired = []) => {
   const xml = await canonText(zip, slidePart) ?? "";
-  return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip) };
+  return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip, repaired) };
 };
 var slideParts = async (zip) => {
   const pres = await canonText(zip, "ppt/presentation.xml");
@@ -44049,8 +44074,8 @@ var verifyContent = async (before, after, expects, repaired = /* @__PURE__ */ ne
     const outPart = outParts[i];
     if (exp.source === null || outPart === void 0)
       continue;
-    const was = await slidePrint(before, exp.source, exp.released);
-    const now = await slidePrint(after, outPart);
+    const was = await slidePrint(before, exp.source, exp.released, exp.repaired?.before);
+    const now = await slidePrint(after, outPart, [], exp.repaired?.after);
     if (!exp.notes && was.notes !== now.notes) {
       if (now.notes === null || now.notes === "")
         lost.push({ slide: i, what: "speaker notes" });
@@ -44188,7 +44213,7 @@ var syncAppProperties = async (zip, slides) => {
   const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(xml);
   const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(xml);
   if (hp === null || tp === null) {
-    zip.file(part, xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`));
+    zip.file(part, utf8Declared(xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`)));
     return;
   }
   const hpBody = hp[1] ?? "";
@@ -44196,14 +44221,18 @@ var syncAppProperties = async (zip, slides) => {
   const titles = [];
   for (const slidePart of slides)
     titles.push(slideTitle(parseXml(await partText(zip, slidePart))));
+  const shows = elements(parseXml(await partText(zip, "ppt/presentation.xml")), "p:custShow").length;
   const counts = [...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].map((m) => Number(m[1]));
-  const leading = counts.slice(0, -1).reduce((a, b) => a + b, 0);
+  const at = shows > 0 && counts.length >= 2 && counts[counts.length - 1] === shows ? counts.length - 2 : counts.length - 1;
+  const leading = counts.slice(0, at).reduce((a, b) => a + b, 0);
+  const old = counts[at] ?? 0;
   let seen = 0;
-  const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) => ++seen === counts.length ? `<vt:i4>${n}</vt:i4>` : m);
-  const kept = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)].map((m) => m[1]).slice(0, leading);
-  const lpstr = [...kept, ...titles.map((t) => xmlEscape(t))].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
-  xml = xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`).replace(hp[0], () => `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], () => `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
-  zip.file(part, xml);
+  const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) => seen++ === at ? `<vt:i4>${n}</vt:i4>` : m);
+  const entries = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)].map((m) => m[1]);
+  const kept = [...entries.slice(0, leading), ...titles.map((t) => xmlEscape(t)), ...entries.slice(leading + old)];
+  const lpstr = kept.map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
+  xml = xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`).replace(hp[0], () => `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], () => `<TitlesOfParts><vt:vector size="${kept.length}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
+  zip.file(part, utf8Declared(xml));
 };
 var setProps = async (zip, props) => {
   const part = findPart(zip, "docProps/core.xml");
@@ -44280,11 +44309,16 @@ var setCustomProps = async (zip, patch) => {
 };
 var sweepSlideRefs = async (zip, slides) => {
   const notes = /* @__PURE__ */ new Set();
-  for (const slide of slides)
-    for (const r of await readRels(zip, slide))
+  let known = true;
+  for (const slide of slides) {
+    const rels = await tryRels(zip, slide);
+    known &&= rels !== null;
+    for (const r of rels ?? [])
       if (r.kind === "notesSlide" && r.target !== null)
         notes.add(r.target);
-  await removeParts(zip, Object.keys(zip.files).filter((f) => /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)));
+  }
+  if (known)
+    await removeParts(zip, Object.keys(zip.files).filter((f) => /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)));
   const presRelsPart = "ppt/_rels/presentation.xml.rels";
   const presRels = parseXml(await partText(zip, presRelsPart));
   const pres = parseXml(await partText(zip, "ppt/presentation.xml"));
@@ -44324,7 +44358,6 @@ var finishPackage = async (zip, slides, props, customProps) => {
 
 // src/engine/verify.ts
 var import_jszip3 = __toESM(require_lib3(), 1);
-var import_xmldom2 = __toESM(require_lib4(), 1);
 import { readFileSync as readFileSync3 } from "node:fs";
 var childNames = (el) => {
   const names = [];
@@ -44340,13 +44373,7 @@ var parseDeck = async (zip, findings) => {
   for (const n of names)
     if (n.endsWith(".xml") || n.endsWith(".rels"))
       try {
-        const parser = new import_xmldom2.DOMParser({
-          onError: (_level, msg) => {
-            throw new Error(msg);
-          }
-        });
-        const text = decodeXml(await zip.file(n).async("uint8array"));
-        docs.set(n, parser.parseFromString(text, "application/xml"));
+        docs.set(n, parseXml(decodeXml(await zip.file(n).async("uint8array")), true));
       } catch (err) {
         findings.push(finding("malformed", n, `malformed XML (${String(err).slice(0, 80)})`));
       }
@@ -44395,19 +44422,19 @@ var slideListRules = (deck) => {
   const ids = /* @__PURE__ */ new Set();
   for (const { id, rid, part } of sldIds) {
     if (part === null || !deck.names.has(part))
-      findings.push(finding("sldid-unresolved", "presentation.xml", `sldId ${rid} does not resolve to a slide part`));
+      findings.push(finding("sldid-unresolved", "ppt/presentation.xml", `sldId ${rid} does not resolve to a slide part`));
     else if (slides.includes(part))
-      findings.push(finding("sldid-twice", "presentation.xml", `sldId ${rid} lists slide ${part} a second time`));
+      findings.push(finding("sldid-twice", "ppt/presentation.xml", `sldId ${rid} lists slide ${part} a second time`));
     else
       slides.push(part);
     if (ids.has(id))
-      findings.push(finding("sldid-dup", "presentation.xml", `sldId id ${id} is used twice`));
+      findings.push(finding("sldid-dup", "ppt/presentation.xml", `sldId id ${id} is used twice`));
     ids.add(id);
   }
   const listed = new Set(sldIds.map((s) => s.rid));
   for (const r of presRels)
     if (r.kind === "slide" && !listed.has(r.id))
-      findings.push(finding("slide-rel-dangling", "presentation.xml.rels", `dangling slide relationship ${r.id} (no sldId references it)`));
+      findings.push(finding("slide-rel-dangling", "ppt/_rels/presentation.xml.rels", `dangling slide relationship ${r.id} (no sldId references it)`));
   for (const n of slideNames(deck))
     if (!slides.includes(n))
       findings.push(finding("slide-unlisted", n, "slide part not in the slide list"));
@@ -44415,12 +44442,12 @@ var slideListRules = (deck) => {
   const before = (a, b) => !seq.includes(a) || !seq.includes(b) || seq.indexOf(a) < seq.indexOf(b);
   for (const lst of ["p:notesMasterIdLst", "p:handoutMasterIdLst"])
     if (!before(lst, "p:sldIdLst"))
-      findings.push(finding("pres-order", "presentation.xml", `${lst.slice(2)} appears after sldIdLst (schema order violated)`));
+      findings.push(finding("pres-order", "ppt/presentation.xml", `${lst.slice(2)} appears after sldIdLst (schema order violated)`));
   if (!before("p:sldSz", "p:notesSz"))
-    findings.push(finding("pres-order", "presentation.xml", "sldSz appears after notesSz (schema order violated)"));
+    findings.push(finding("pres-order", "ppt/presentation.xml", "sldSz appears after notesSz (schema order violated)"));
   for (const ref of elements(pres, "p14:sldId"))
     if (!ids.has(ref.getAttribute("id") ?? ""))
-      findings.push(finding("section-ref", "presentation.xml", `section references removed slide id ${ref.getAttribute("id") ?? ""}`));
+      findings.push(finding("section-ref", "ppt/presentation.xml", `section references removed slide id ${ref.getAttribute("id") ?? ""}`));
   return findings;
 };
 var appRules = async (deck) => {
@@ -44679,7 +44706,7 @@ var Package = class _Package {
       if (next === void 0 && from === this && relIs(rel, RELS.shared))
         next = target;
       next ??= await this.clonePart(from, target, done);
-      el.setAttribute("Target", path4.posix.relative(path4.posix.dirname(copy), next));
+      el.setAttribute("Target", encodeURI(path4.posix.relative(path4.posix.dirname(copy), next)));
     }
   }
   /**
@@ -44838,13 +44865,14 @@ var uniquifyShapeIds = (slide) => {
   return changed;
 };
 var repairRels = (pkg, part, doc, rels, unused = /* @__PURE__ */ new Set(), forced = /* @__PURE__ */ new Set()) => {
-  const xml = doc === null ? "" : serializeXml(doc);
+  const root = doc?.documentElement ?? null;
+  const referenced = new Set(root === null ? [] : relRefs(root).map((ref) => ref.attr.value));
   const seen = /* @__PURE__ */ new Set();
   const dropped = [];
   for (const rel of pkg.targets(part, rels)) {
     const { el, id, target } = rel;
     const dead = target !== null && !pkg.has(target);
-    const stale = (forced.has(id) || unused.has(id) && !relIs(rel, RELS.implicit)) && !xml.includes(`"${id}"`);
+    const stale = (forced.has(id) || unused.has(id) && !relIs(rel, RELS.implicit)) && !referenced.has(id);
     if (seen.has(id) || dead || stale) {
       el.parentNode?.removeChild(el);
       dropped.push(id);
@@ -45614,7 +45642,13 @@ var viewOf = async (pkg, part) => {
     } catch {
       doc = null;
     }
-  return { part, doc, rels: pkg.targets(part, await pkg.rels(part)) };
+  let rels = [];
+  try {
+    rels = pkg.targets(part, await pkg.rels(part));
+  } catch {
+    doc = null;
+  }
+  return { part, doc, rels };
 };
 var closure = async (pkg, slide) => {
   const views = [];
@@ -45667,7 +45701,7 @@ var readDeck = async (pkg, warnings) => {
       input2.push({ el: s.el, id: s.id, part: s.part });
     else {
       s.el.parentNode?.removeChild(s.el);
-      for (const t of targets.filter((t2) => t2.id === s.el.getAttribute("r:id")))
+      for (const t of targets.filter((t2) => t2.kind === "slide" && t2.id === s.el.getAttribute("r:id")))
         t.el.parentNode?.removeChild(t.el);
       dropped = true;
       warnings.push(repairedWarning(
@@ -45757,7 +45791,10 @@ var classifySlides = async (pkg, plan, parts, removed) => {
     const show = slide.doc?.documentElement?.getAttribute("show") ?? "";
     const links = views.some((v) => v.rels.some((r) => r.kind === "slide" && r.target !== null && removed.has(r.target)));
     const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden || defects.length > 0 || links;
-    states.push({ entry, part, closure: views, touched, sharedNotes, repairs, defects, released: [] });
+    let sourceRepairs = repairs;
+    if (entry.virtualId <= 0 && entry.source.kind === "self" && repairs.length > 0)
+      sourceRepairs = (await closure(pkg, entry.source.part)).slice(1).filter((v) => partDefects(v, exists).length > 0).map((v) => v.part);
+    states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [] });
   }
   return states;
 };
@@ -45802,7 +45839,7 @@ var removeSlides = async (pkg, removed) => {
     }
   }
 };
-var expectations = (states) => states.map(({ entry, touched, released }, i) => ({
+var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs }, i) => ({
   source: entry.source.kind === "self" && touched ? entry.source.part : null,
   label: `#${i} '${entry.title ?? ""}'`,
   notes: entry.notes !== null,
@@ -45813,7 +45850,8 @@ var expectations = (states) => states.map(({ entry, touched, released }, i) => (
     charts: entry.elements.filter((e) => e.spec.type === "chart").length
   },
   textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== void 0 && !f.append),
-  released
+  released,
+  repaired: { before: sourceRepairs, after: repairs }
 }));
 var untouchedParts = (pkg, states) => {
   const written = new Set(states.filter((s) => s.touched).flatMap((s) => [s.part, ...s.repairs]));
@@ -45842,7 +45880,7 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
       sharedNotes: s.sharedNotes
     });
     actions.push(...own2.actions);
-    s.released = own2.released;
+    s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
     if (s.sharedNotes)
       actions.push("gave the slide its own notes part");
     if (s.defects.length > 0)
@@ -45864,7 +45902,7 @@ var newDefects = async (after, before, warnings) => {
   const added = [];
   for (const f of found) {
     const left = inherited.get(key(f)) ?? 0;
-    if (left > 0) {
+    if (left > 0 && findPart(before, f.part) !== null) {
       inherited.set(key(f), left - 1);
       kept.push(f);
     } else

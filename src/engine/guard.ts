@@ -18,7 +18,7 @@
 import JSZip from "jszip"
 import { createHash } from "node:crypto"
 import { RELS, bytesOf, optText, readRels, relIs, slideList } from "./parts.js"
-import { elements, parseXml, serializeXml } from "./xml.js"
+import { decodeXml, elements, parseXml, serializeXml } from "./xml.js"
 
 /**  what the plan allows to change on one output slide  */
 export interface SlideExpect {
@@ -41,6 +41,10 @@ export interface SlideExpect {
     /**  relationship ids of the source slide whose content a named repair
          removed (W_REPAIRED) -- left out of its fingerprint  */
     released?: string[]
+    /**  parts of the slide's content a repair changed (W_REPAIRED): in the
+         input (`before`, source names) and the output (`after`) -- they
+         count by kind only  */
+    repaired?: { before: string[], after: string[] }
 }
 
 /**  a part's text in canonical form (parsed and re-serialized), so that
@@ -88,7 +92,7 @@ const computeDigest = async (zip: JSZip, part: string): Promise<string> => {
         return "missing"
     let data: Buffer | string = bytes
     if (/\.(xml|rels)$/.test(part)) {
-        let xml = bytes.toString("utf8").replace(/^\uFEFF?(<\?xml[^>]*\?>)?\s*/, "")
+        let xml = decodeXml(bytes).replace(/^(<\?xml[^>]*\?>)?\s*/, "")
         try {
             const doc = parseXml(xml)
 
@@ -114,7 +118,7 @@ const computeDigest = async (zip: JSZip, part: string): Promise<string> => {
 /**  type-tagged hashes of the parts a part relates to (charts one level
      deeper, so a swapped workbook or chart style is caught as well)  */
 const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number,
-    skip: string[] = []): Promise<string[]> => {
+    skip: string[] = [], repaired: string[] = []): Promise<string[]> => {
     const out: string[] = []
     const seen = new Set<string>(skip)
     for (const rel of await readRels(zip, part)) {
@@ -133,12 +137,17 @@ const relatedDigests = async (zip: JSZip, part: string, xml: string | null, dept
             continue
         }
 
-        /*  a dead target carries no content that could be lost  */
+        /*  a dead target carries no content that could be lost; a repaired
+            one counts by its kind  */
         if (zip.file(target) === null)
             continue
+        if (repaired.includes(target)) {
+            out.push(`${kind}:repaired`)
+            continue
+        }
         let hash = await digest(zip, target)
         if (depth > 0)
-            hash += `[${(await relatedDigests(zip, target, null, depth - 1)).join(",")}]`
+            hash += `[${(await relatedDigests(zip, target, null, depth - 1, [], repaired)).join(",")}]`
         out.push(`${kind}:${hash}`)
     }
     return out.sort()
@@ -153,9 +162,10 @@ const notesText = async (zip: JSZip, slidePart: string): Promise<string | null> 
 }
 
 /**  fingerprint of one slide: notes text and related-part hashes  */
-const slidePrint = async (zip: JSZip, slidePart: string, skip: string[] = []): Promise<{ notes: string | null, assets: string[] }> => {
+const slidePrint = async (zip: JSZip, slidePart: string, skip: string[] = [],
+    repaired: string[] = []): Promise<{ notes: string | null, assets: string[] }> => {
     const xml = await canonText(zip, slidePart) ?? ""
-    return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip) }
+    return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip, repaired) }
 }
 
 /**  slide part paths in presentation order  */
@@ -211,8 +221,8 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
         const outPart = outParts[i]
         if (exp.source === null || outPart === undefined)
             continue
-        const was = await slidePrint(before, exp.source, exp.released)
-        const now = await slidePrint(after, outPart)
+        const was = await slidePrint(before, exp.source, exp.released, exp.repaired?.before)
+        const now = await slidePrint(after, outPart, [], exp.repaired?.after)
         if (!exp.notes && was.notes !== now.notes) {
             if (now.notes === null || now.notes === "")
                 lost.push({ slide: i, what: "speaker notes" })

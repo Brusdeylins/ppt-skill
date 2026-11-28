@@ -167,6 +167,23 @@ export const readRels = async (zip: JSZip, owner: string): Promise<Rel[]> => {
 }
 
 /**
+ *  Read the relationships of a part from an archive, tolerating a
+ *  malformed rels part.
+ *
+ *  @param zip - the archive
+ *  @param owner - the owning part
+ *  @returns its relationships, null when its rels part is malformed
+ */
+export const tryRels = async (zip: JSZip, owner: string): Promise<Rel[] | null> => {
+    try {
+        return await readRels(zip, owner)
+    }
+    catch {
+        return null
+    }
+}
+
+/**
  *  Append a relationship to a rels document.
  *
  *  @param rels - the rels DOM
@@ -454,7 +471,11 @@ export const gcAssets = async (zip: JSZip): Promise<void> => {
     const queue = Object.keys(zip.files).filter((f) => f.endsWith(".rels") && !isAsset(relsOwner(f)))
         .map(relsOwner)
     while (queue.length > 0) {
-        for (const { target } of await readRels(zip, queue.pop() as string))
+        /*  an unreadable rels part may reach any asset: collect nothing  */
+        const rels = await tryRels(zip, queue.pop() as string)
+        if (rels === null)
+            return
+        for (const { target } of rels)
             if (target !== null && isAsset(target) && !live.has(target)) {
                 live.add(target)
                 queue.push(target)

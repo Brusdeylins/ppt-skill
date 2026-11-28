@@ -12,8 +12,8 @@
 
 import type JSZip from "jszip"
 import type { Document, Element } from "@xmldom/xmldom"
-import { appendRel, cleanContentTypes, findPart, gcAssets, optText, partText, readRels, removeParts } from "./parts.js"
-import { elements, firstElement, parseXml, serializeXml, xmlEscape } from "./xml.js"
+import { appendRel, cleanContentTypes, findPart, gcAssets, optText, partText, readRels, removeParts, tryRels } from "./parts.js"
+import { elements, firstElement, parseXml, serializeXml, utf8Declared, xmlEscape } from "./xml.js"
 
 /**  sync user-created sections with the slide list. Sections are
      contiguous runs of the slide order, so the slides that kept their
@@ -91,10 +91,10 @@ const slideTitle = (slide: Document): string => {
 
 /**  keep docProps/app.xml in sync with the real slides: a deck declaring
      fewer slides than it has makes PowerPoint demand a repair on open.
-     The leading TitlesOfParts entries (fonts, theme, OLE servers) and every
-     HeadingPairs group except the last (the slide-title group) are kept; the
-     slide count, the slide-title HeadingPairs count and the title list are
-     rewritten from the actual slides.  */
+     Every HeadingPairs group but the slide-title group (the last one, or
+     the one before a trailing custom-show group) and its TitlesOfParts
+     entries are kept; the slide count, the slide-title count and titles are
+     rewritten from the actual slides (element content only, edited as text)  */
 const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> => {
     const part = findPart(zip, "docProps/app.xml")
     if (part === null)
@@ -104,7 +104,7 @@ const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> =>
     const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(xml)
     const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(xml)
     if (hp === null || tp === null) {
-        zip.file(part, xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`))
+        zip.file(part, utf8Declared(xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`)))
         return
     }
     const hpBody = hp[1] ?? ""
@@ -112,24 +112,26 @@ const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> =>
     const titles: string[] = []
     for (const slidePart of slides)
         titles.push(slideTitle(parseXml(await partText(zip, slidePart))))
-    /*  the last HeadingPairs group is the slide titles; everything before it
-        (fonts/theme/OLE) sums to the count of leading TitlesOfParts entries  */
-    const counts = [...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g)].map((m) => Number(m[1]))
-    const leading = counts.slice(0, -1).reduce((a, b) => a + b, 0)
+    /*  the slide-title group: the last one, unless custom shows follow it  */
+    const shows = elements(parseXml(await partText(zip, "ppt/presentation.xml")), "p:custShow").length
+    const counts = [ ...hpBody.matchAll(/<vt:i4>(\d+)<\/vt:i4>/g) ].map((m) => Number(m[1]))
+    const at = shows > 0 && counts.length >= 2 && counts[counts.length - 1] === shows ? counts.length - 2 : counts.length - 1
+    const leading = counts.slice(0, at).reduce((a, b) => a + b, 0)
+    const old = counts[at] ?? 0
     let seen = 0
     const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) =>
-        ++seen === counts.length ? `<vt:i4>${n}</vt:i4>` : m)
-    const kept = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)]
-        .map((m) => m[1] as string).slice(0, leading)
-    const lpstr = [ ...kept, ...titles.map((t) => xmlEscape(t)) ].map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("")
+        seen++ === at ? `<vt:i4>${n}</vt:i4>` : m)
+    const entries = [ ...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g) ].map((m) => m[1] as string)
+    const kept = [ ...entries.slice(0, leading), ...titles.map((t) => xmlEscape(t)), ...entries.slice(leading + old) ]
+    const lpstr = kept.map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("")
 
     /*  replacer functions: a title like "US$'000" must not read as a
         replacement pattern  */
     xml = xml
         .replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`)
         .replace(hp[0], () => `<HeadingPairs>${newHp}</HeadingPairs>`)
-        .replace(tp[0], () => `<TitlesOfParts><vt:vector size="${leading + n}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`)
-    zip.file(part, xml)
+        .replace(tp[0], () => `<TitlesOfParts><vt:vector size="${kept.length}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`)
+    zip.file(part, utf8Declared(xml))
 }
 
 /**  update document core properties  */
@@ -226,13 +228,19 @@ const setCustomProps = async (zip: JSZip, patch: Record<string, string>): Promis
      whose target vanished or that no sldId uses, and custom-show entries
      whose relationship is gone  */
 const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
+    /*  a slide with unreadable relationships may own any notes part  */
     const notes = new Set<string>()
-    for (const slide of slides)
-        for (const r of await readRels(zip, slide))
+    let known = true
+    for (const slide of slides) {
+        const rels = await tryRels(zip, slide)
+        known &&= rels !== null
+        for (const r of rels ?? [])
             if (r.kind === "notesSlide" && r.target !== null)
                 notes.add(r.target)
-    await removeParts(zip, Object.keys(zip.files).filter((f) =>
-        /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)))
+    }
+    if (known)
+        await removeParts(zip, Object.keys(zip.files).filter((f) =>
+            /^ppt\/notesSlides\/[^/]+\.xml$/.test(f) && !notes.has(f)))
 
     const presRelsPart = "ppt/_rels/presentation.xml.rels"
     const presRels = parseXml(await partText(zip, presRelsPart))

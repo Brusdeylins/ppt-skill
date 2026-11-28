@@ -24,7 +24,7 @@ import { atomicWrite } from "../../infra/fs.js"
 import { notesOwner, partDefects, type Finding, type PartView } from "../defects.js"
 import { byteGuard, digestBytes, verifyContent, type SlideExpect } from "../guard.js"
 import { finishPackage } from "../post.js"
-import { ASSET_PART, REL, RELS, layoutOrder, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
+import { ASSET_PART, REL, RELS, findPart, layoutOrder, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
 import { findDefects } from "../verify.js"
 import { NS_P, NS_R, elements, firstElement } from "../xml.js"
@@ -88,6 +88,8 @@ interface SlideState {
     sharedNotes: boolean
     /**  parts of its content other than the slide carrying repair triggers  */
     repairs: string[]
+    /**  the same parts in the input (for a copy: those of its source)  */
+    sourceRepairs: string[]
     /**  the repair triggers its content carries  */
     defects: Finding[]
     /**  relationship ids whose content a named repair removed (W_REPAIRED)  */
@@ -133,7 +135,14 @@ const viewOf = async (pkg: Package, part: string): Promise<PartView> => {
         catch {
             doc = null
         }
-    return { part, doc, rels: pkg.targets(part, await pkg.rels(part)) }
+    let rels: PartView["rels"] = []
+    try {
+        rels = pkg.targets(part, await pkg.rels(part))
+    }
+    catch {
+        doc = null
+    }
+    return { part, doc, rels }
 }
 
 /**  the parts that make up a slide's own content: the slide and everything
@@ -212,7 +221,7 @@ const readDeck = async (pkg: Package, warnings: LintWarning[]): Promise<Deck & {
             input.push({ el: s.el, id: s.id, part: s.part })
         else {
             s.el.parentNode?.removeChild(s.el)
-            for (const t of targets.filter((t) => t.id === s.el.getAttribute("r:id")))
+            for (const t of targets.filter((t) => t.kind === "slide" && t.id === s.el.getAttribute("r:id")))
                 t.el.parentNode?.removeChild(t.el)
             dropped = true
             warnings.push(repairedWarning(DECK_WIDE,
@@ -320,7 +329,11 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
         const links = views.some((v) => v.rels.some((r) => r.kind === "slide" && r.target !== null && removed.has(r.target)))
         const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden
             || defects.length > 0 || links
-        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, defects, released: [] })
+        let sourceRepairs = repairs
+        if (entry.virtualId <= 0 && entry.source.kind === "self" && repairs.length > 0)
+            sourceRepairs = (await closure(pkg, entry.source.part)).slice(1)
+                .filter((v) => partDefects(v, exists).length > 0).map((v) => v.part)
+        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [] })
     }
     return states
 }
@@ -376,7 +389,7 @@ const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> =
 
 /**  what the content guard allows to change on each output slide  */
 const expectations = (states: SlideState[]): SlideExpect[] =>
-    states.map(({ entry, touched, released }, i) => ({
+    states.map(({ entry, touched, released, repairs, sourceRepairs }, i) => ({
         source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
         notes: entry.notes !== null,
@@ -388,7 +401,8 @@ const expectations = (states: SlideState[]): SlideExpect[] =>
             charts: entry.elements.filter((e) => e.spec.type === "chart").length
         },
         textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append),
-        released
+        released,
+        repaired: { before: sourceRepairs, after: repairs }
     }))
 
 /**  the parts of untouched slides with their input entry, for the byte
@@ -420,7 +434,9 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
             part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes
         })
         actions.push(...own.actions)
-        s.released = own.released
+
+        /*  a slide listed twice is edited twice: the first pass released  */
+        s.released = [ ...new Set([ ...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own.released ]) ]
         if (s.sharedNotes)
             actions.push("gave the slide its own notes part")
         if (s.defects.length > 0)
@@ -445,7 +461,9 @@ const newDefects = async (after: JSZip, before: JSZip, warnings: LintWarning[]):
     const added: Finding[] = []
     for (const f of found) {
         const left = inherited.get(key(f)) ?? 0
-        if (left > 0) {
+
+        /*  a part the input did not have inherits nothing  */
+        if (left > 0 && findPart(before, f.part) !== null) {
             inherited.set(key(f), left - 1)
             kept.push(f)
         }
