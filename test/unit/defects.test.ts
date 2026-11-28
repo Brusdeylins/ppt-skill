@@ -34,7 +34,7 @@ describe("repair-trigger rules", () => {
 
     it("reports references to missing relationships, not empty ones", () => {
         const xml = `<p:sld ${NS}><a:hlinkClick r:id=""/><a:blip r:embed="rId1"/><a:blip r:embed="rId2"/></p:sld>`
-        expect(refDefects(view("s.xml", xml, `<Relationship Id="rId1" Type="${T}/image" Target="i.png"/>`)))
+        expect(refDefects(view("s.xml", xml, `<Relationship Id="rId1" Type="${T}/image" Target="i.png"/>`)).map((f) => f.text))
             .toEqual([ "s.xml: references missing relationship ids rId2" ])
     })
 
@@ -42,9 +42,9 @@ describe("repair-trigger rules", () => {
         const found = relsDefects(view("ppt/slides/slide1.xml", null,
             `<Relationship Id="a" Type="${T}/image" Target="../media/gone.png"></Relationship>`
             + `<Relationship Id="a" Type="${T}/image" Target="../media/ok.png"/>`), (p) => p === "ppt/media/ok.png")
-        expect(found).toEqual([
-            "ppt/slides/slide1.xml: duplicate relationship ids a",
-            "ppt/slides/slide1.xml: dead relationship target ppt/media/gone.png"
+        expect(found.map((f) => [ f.rule, f.text ])).toEqual([
+            [ "rels-dup", "ppt/slides/slide1.xml: duplicate relationship ids a" ],
+            [ "rels-dead", "ppt/slides/slide1.xml: dead relationship target ppt/media/gone.png" ]
         ])
     })
 

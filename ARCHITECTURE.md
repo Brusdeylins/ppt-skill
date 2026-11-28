@@ -126,11 +126,15 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   target slide by its `<name>-<uuid>` object name, with the parts it
   references copied under fresh names. `pptxgenjs` is pinned (3.12.0, the
   version 1.0.x bundled) so generated XML stays stable.
-- **Repairs only where pptc writes.** BOM stripping, absolute-to-relative
-  targets and repair-trigger fixes happen on touched parts only; a slide
-  whose input carries repair triggers counts as touched, is repaired and
-  reported (`W_REPAIRED`). Package-wide parts (presentation, content types,
-  app properties) are kept consistent on every apply.
+- **Repairs where pptc writes, and on package parts.** BOM stripping,
+  absolute-to-relative targets and repair-trigger fixes happen on touched
+  slides only; a slide whose input carries repair triggers counts as
+  touched, is repaired and reported (`W_REPAIRED`). Parts outside every
+  slide's content (presentation, masters, layouts, themes, package rels,
+  document properties, custom XML) are repaired on every apply before the
+  engine writes, and kept consistent (content types, app properties).
+  Fresh part names never reuse a name a relationship already points at,
+  dead or alive.
 - **One rule set for defects.** `engine/defects.ts` defines the repair
   triggers of a part once; the engine detects input defects with it,
   `inplace/repair.ts` repairs exactly these, `verify.ts` reports them. A
@@ -145,12 +149,17 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   relationship id resolves to its first relationship everywhere. Only
   `docProps/app.xml` is edited as text (element content, no attributes).
   Part names are resolved case-insensitively by every accessor
-  (`findPart`), as OPC demands.
+  (`findPart`), as OPC demands, and percent-escaped targets resolve to
+  their part. XML parts are decoded as UTF-8 or UTF-16 by their byte-order
+  mark. Findings carry their rule and part (`defects.ts` `Finding`), so the
+  baseline below recognizes an inherited trigger whatever its wording.
 - **Only the engine's own triggers block a write.** The output is verified
   against every known repair trigger; a finding the input deck already
-  carried and pptc cannot repair (a slide listed twice, ...) stays as it
-  was and is reported (`W_INPUT_DEFECT`) -- only findings the apply would
-  add fail with `E_INTEGRITY`.
+  carried and pptc cannot repair (a slide listed twice, malformed custom
+  XML, ...) stays as it was and is reported (`W_INPUT_DEFECT`) -- only
+  findings the apply would add (by rule and part, counted) fail with
+  `E_INTEGRITY`. A repair returns the relationships only the content it
+  removed used; the content guard leaves exactly those out.
 - **stdout is shielded during the engine pass.** A library may log via
   `console.log`; the engine diverts console output to stderr so the
   one-JSON-envelope contract on stdout holds.

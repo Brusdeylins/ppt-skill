@@ -20,6 +20,7 @@ import { buildEmptyDeck } from "../../src/engine/seed.js"
 import { DeckArchive, readDeckState } from "../../src/engine/reader.js"
 import { executeOps, type ExecuteOptions, type ExecuteResult } from "../../src/commands/apply.js"
 import { expectIntact } from "../util/integrity.js"
+import { verifyFile } from "../../src/engine/verify.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = path.join(here, "..", "fixtures", "neutral-template.pptx")
@@ -569,5 +570,113 @@ describe("input defects beyond repair and repair granularity", () => {
         expect(titles).toEqual([ "A", "A", "C" ])
         await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
         expect((await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.title)).toEqual(titles)
+    })
+})
+
+describe("repairs keep what they may not remove", () => {
+    it("drops animations with a dead sound without blocking the deck", async () => {
+        const deck = await craftDeck("timing-sound", async (zip, [ a ]) => {
+            zip.file("ppt/media/a.wav", Buffer.from("RIFF"))
+            zip.file("[Content_Types].xml", (await text(zip, "[Content_Types].xml")).replace("<Default ", "<Default Extension=\"wav\" ContentType=\"audio/wav\"/><Default "))
+            await addRel(zip, a as string, "rIdSnd", "audio", "../media/a.wav")
+            const snd = (rid: string): string => `<p:par><p:cTn id="1"><p:stCondLst><p:cond delay="0"><p:tgtEl><p:sndTgt r:embed="${rid}" name="a.wav"/></p:tgtEl></p:cond></p:stCondLst></p:cTn></p:par>`
+            zip.file(a as string, (await text(zip, a as string)).replace("</p:cSld>", `</p:cSld><p:timing><p:tnLst>${snd("rIdSnd")}${snd("rIdGoneSnd")}</p:tnLst></p:timing>`))
+        })
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res).join(" ")).toContain("the animations")
+        await expectIntact(deck)
+    })
+
+    it("never names a new part like a dead relationship target", async () => {
+        let slide = ""
+        const deck = await craftDeck("dead-target-name", async (zip, [ a ]) => {
+            slide = a as string
+            await addRel(zip, slide, "rIdJump", "slide", "slide4.xml")
+            await addShape(zip, slide, "<p:sp><p:nvSpPr><p:cNvPr id=\"70\" name=\"Sprung\"><a:hlinkClick r:id=\"rIdJump\" action=\"ppaction://hlinksldjump\"/></p:cNvPr>"
+                + "<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/></p:sp>")
+        })
+        const res = await apply(deck, [ { op: "slide.add", layout: "CONTENT" } ])
+        expect(repaired(res).join(" ")).toContain("dead relationship target")
+        await expectIntact(deck)
+        const parts = (await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.part)
+        expect(parts).not.toContain("ppt/slides/slide4.xml")
+        expect((await bytesIn(deck, relsOf(slide))).toString()).not.toContain("rIdJump")
+    })
+
+    it("tolerates malformed custom XML and reads UTF-16 custom XML", async () => {
+        const deck = await craftDeck("custom-xml", async (zip) => {
+            zip.file("customXml/item1.xml", "<a><b></a>")
+            zip.file("customXml/item2.xml", Buffer.concat([ Buffer.from([ 0xFF, 0xFE ]),
+                Buffer.from("<?xml version=\"1.0\" encoding=\"UTF-16\"?><root/>", "utf16le") ]))
+        })
+        const before = await verifyFile(deck)
+        expect(before.join(" ")).toContain("customXml/item1.xml: malformed XML")
+        expect(before.join(" ")).not.toContain("item2")
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(res.warnings.map((w) => w.code)).toContain("W_INPUT_DEFECT")
+        expect(await verifyFile(deck)).toEqual(before)
+    })
+
+    it("keeps the slide count of app properties without title list", async () => {
+        const deck = await craftDeck("app-no-titles", async (zip) => {
+            zip.file("docProps/app.xml", (await text(zip, "docProps/app.xml"))
+                .replace(/<HeadingPairs>[\s\S]*?<\/HeadingPairs>/, "").replace(/<TitlesOfParts>[\s\S]*?<\/TitlesOfParts>/, ""))
+        })
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT" } ])
+        await expectIntact(deck)
+        expect((await bytesIn(deck, "docProps/app.xml")).toString()).toContain("<Slides>4</Slides>")
+    })
+
+    it("turns a dead picture fill of a theme style list into a plain fill", async () => {
+        let theme = ""
+        const deck = await craftDeck("theme-fill", async (zip) => {
+            theme = Object.keys(zip.files).find((f) => /^ppt\/theme\/theme\d+\.xml$/.test(f)) as string
+            const xml = await text(zip, theme)
+            const lst = /<a:fillStyleLst>([\s\S]*?)<\/a:fillStyleLst>/.exec(xml)?.[0] as string
+            zip.file(theme, xml.replace(lst, lst.replace(/<a:solidFill>[\s\S]*?<\/a:solidFill>/, `<a:blipFill><a:blip xmlns:r="${REL}" r:embed="rIdGone"/></a:blipFill>`)))
+        })
+        const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        expect(repaired(res).join(" ")).toContain("a picture fill style")
+        await expectIntact(deck)
+        const lst = /<a:fillStyleLst>([\s\S]*?)<\/a:fillStyleLst>/.exec((await bytesIn(deck, theme)).toString())?.[1] as string
+        expect([ ...lst.matchAll(/<a:(solidFill|gradFill|blipFill|pattFill|noFill)\b/g) ].length).toBe(3)
+    })
+
+    it("edits a slide listed twice", async () => {
+        const deck = await craftDeck("listed-twice-edit", async (zip, [ a ]) => {
+            await addRel(zip, "ppt/presentation.xml", "rIdTwice", "slide", `slides/${path.posix.basename(a as string)}`)
+            zip.file("ppt/presentation.xml", (await text(zip, "ppt/presentation.xml"))
+                .replace("</p:sldIdLst>", "<p:sldId id=\"900\" r:id=\"rIdTwice\"/></p:sldIdLst>"))
+        })
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:0", placeholders: { title: { text: "A2" } } } ])
+        expect(warned(res, "W_INPUT_DEFECT").join(" ")).toContain("a second time")
+        expect((await readDeckState(await DeckArchive.open(deck))).slides.map((s) => s.title)).toEqual([ "A2", "B", "C", "A2" ])
+    })
+
+    it("drops a slide id pointing at an external relationship", async () => {
+        const deck = await craftDeck("sldid-external", async (zip) => {
+            zip.file("ppt/_rels/presentation.xml.rels", (await text(zip, "ppt/_rels/presentation.xml.rels")).replace("</Relationships>",
+                `<Relationship Id="rIdExt" Type="${REL}/slide" Target="https://example.com/x.xml" TargetMode="External"/></Relationships>`))
+            zip.file("ppt/presentation.xml", (await text(zip, "ppt/presentation.xml"))
+                .replace("</p:sldIdLst>", "<p:sldId id=\"901\" r:id=\"rIdExt\"/></p:sldIdLst>"))
+        })
+        const res = await apply(deck, [ { op: "meta.props", set: { title: "x" } } ])
+        expect(repaired(res).join(" ")).toContain("without a slide part")
+        await expectIntact(deck)
+    })
+
+    it("resolves a percent-encoded target", async () => {
+        let slide = ""
+        const deck = await craftDeck("iri-target", async (zip, [ a ]) => {
+            slide = a as string
+            zip.file("ppt/media/my image.png", png("iri"))
+            await addRel(zip, slide, "rIdIri", "image", "../media/my%20image.png")
+            await addShape(zip, slide, pic(90, "Leer", "rIdIri"))
+        })
+        const before = await bytesIn(deck, slide)
+        const res = await apply(deck, [ { op: "slide.fill", slide: "index:1", placeholders: { title: { text: "B2" } } } ])
+        expect(repaired(res)).toEqual([])
+        expect((await bytesIn(deck, slide)).equals(before)).toBe(true)
+        expect((await JSZip.loadAsync(readFileSync(deck))).file("ppt/media/my image.png")).not.toBeNull()
     })
 })

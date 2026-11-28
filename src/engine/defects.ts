@@ -6,13 +6,35 @@
 **  engine/defects: the PowerPoint repair triggers of a single part as one
 **  rule set. engine/verify reports them on a written deck; the in-place
 **  engine detects them on its input and repairs exactly these
-**  (engine/inplace/slides.ts) -- one detector, so detection, repair and
+**  (engine/inplace/repair.ts) -- one detector, so detection, repair and
 **  verification cannot drift apart.
 */
 
 import type { Document } from "@xmldom/xmldom"
 import type { Rel } from "./parts.js"
 import { elements, inFallback, relRefs } from "./xml.js"
+
+/**  one repair trigger: its rule and part identify it (a finding the input
+     deck already carried is recognized by both), the text explains it  */
+export interface Finding {
+    /**  the rule, e.g. "rels-dead"  */
+    rule: string
+    /**  the part it concerns  */
+    part: string
+    /**  the human-readable finding  */
+    text: string
+}
+
+/**
+ *  A finding.
+ *
+ *  @param rule - the rule
+ *  @param part - the part
+ *  @param detail - what is wrong, after the part name
+ *  @returns the finding, its text `<part>: <detail>`
+ */
+export const finding = (rule: string, part: string, detail: string): Finding =>
+    ({ rule, part, text: `${part}: ${detail}` })
 
 /**  a part as the rules see it  */
 export interface PartView {
@@ -31,12 +53,12 @@ export interface PartView {
  *  @param view - the part
  *  @returns findings, empty when clean
  */
-export const shapeIdDefects = (view: PartView): string[] => {
+export const shapeIdDefects = (view: PartView): Finding[] => {
     if (view.doc === null || view.doc.documentElement?.nodeName !== "p:sld")
         return []
     const ids = elements(view.doc, "p:cNvPr").filter((el) => !inFallback(el)).map((el) => el.getAttribute("id") ?? "")
     const dup = [ ...new Set(ids.filter((id, i) => ids.indexOf(id) !== i)) ]
-    return dup.length > 0 ? [ `${view.part}: duplicate cNvPr ids ${dup.join(",")}` ] : []
+    return dup.length > 0 ? [ finding("shape-ids", view.part, `duplicate cNvPr ids ${dup.join(",")}`) ] : []
 }
 
 /**
@@ -46,15 +68,15 @@ export const shapeIdDefects = (view: PartView): string[] => {
  *  @param exists - whether a part exists
  *  @returns findings, empty when clean
  */
-export const relsDefects = (view: PartView, exists: (part: string) => boolean): string[] => {
-    const findings: string[] = []
+export const relsDefects = (view: PartView, exists: (part: string) => boolean): Finding[] => {
+    const findings: Finding[] = []
     const ids = view.rels.map((r) => r.id)
     const dup = [ ...new Set(ids.filter((id, i) => ids.indexOf(id) !== i)) ]
     if (dup.length > 0)
-        findings.push(`${view.part}: duplicate relationship ids ${dup.join(",")}`)
+        findings.push(finding("rels-dup", view.part, `duplicate relationship ids ${dup.join(",")}`))
     for (const r of view.rels)
         if (r.target !== null && !exists(r.target))
-            findings.push(`${view.part}: dead relationship target ${r.target}`)
+            findings.push(finding("rels-dead", view.part, `dead relationship target ${r.target}`))
     return findings
 }
 
@@ -66,14 +88,14 @@ export const relsDefects = (view: PartView, exists: (part: string) => boolean): 
  *  @param view - the part
  *  @returns findings, empty when clean
  */
-export const refDefects = (view: PartView): string[] => {
+export const refDefects = (view: PartView): Finding[] => {
     const root = view.doc?.documentElement ?? null
     if (root === null)
         return []
     const ids = new Set(view.rels.map((r) => r.id))
     const dangling = [ ...new Set(relRefs(root)
         .map((ref) => ref.attr.value).filter((id) => id !== "" && !ids.has(id))) ]
-    return dangling.length > 0 ? [ `${view.part}: references missing relationship ids ${dangling.join(",")}` ] : []
+    return dangling.length > 0 ? [ finding("refs", view.part, `references missing relationship ids ${dangling.join(",")}`) ] : []
 }
 
 /**
@@ -83,7 +105,7 @@ export const refDefects = (view: PartView): string[] => {
  *  @param exists - whether a part exists
  *  @returns findings, empty when clean
  */
-export const partDefects = (view: PartView, exists: (part: string) => boolean): string[] =>
+export const partDefects = (view: PartView, exists: (part: string) => boolean): Finding[] =>
     [ ...relsDefects(view, exists), ...refDefects(view), ...shapeIdDefects(view) ]
 
 /**

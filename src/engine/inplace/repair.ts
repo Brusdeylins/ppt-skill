@@ -13,7 +13,7 @@
 
 import type { Document, Element } from "@xmldom/xmldom"
 import { PartAllocator, RELS, relIs } from "../parts.js"
-import { elements, firstElement, inFallback, relRefs, serializeXml } from "../xml.js"
+import { NS_A, elements, firstElement, inFallback, relRefs, serializeXml } from "../xml.js"
 import type { Package } from "./package.js"
 
 /**  the elements a shape tree is made of: the smallest unit a dead
@@ -58,8 +58,10 @@ export const removeShape = (shape: Element): void => {
     doomed.parentNode?.removeChild(doomed)
 }
 
-/**  what a dead reference takes down: the first rule that applies decides  */
-const SCOPES: ((el: Element) => { doomed: Element, what: string } | null)[] = [
+/**  what a dead reference takes down -- the first rule that applies
+     decides; `with` replaces the doomed element where the schema needs one  */
+type Scope = { doomed: Element, what: string, with?: (doc: Document) => Element }
+const SCOPES: ((el: Element) => Scope | null)[] = [
     /*  a link or tag goes alone  */
     (el) => LINKS.includes(el.nodeName) ? { doomed: el, what: "a link" } : null,
 
@@ -79,27 +81,54 @@ const SCOPES: ((el: Element) => { doomed: Element, what: string } | null)[] = [
     (el) => { const b = closest(el, [ "a:buBlip" ]); return b === null ? null : { doomed: b, what: "a picture bullet" } },
 
     /*  a picture fill of a background, shape, group, cell or text goes;
-        the layout's background or the default fill shows again  */
+        the layout's background or the default fill shows again -- in a
+        theme's fill style list (which needs its three entries) or a table
+        style it becomes a plain fill  */
     (el) => {
         const fill = el.nodeName === "a:blip" && (el.parentNode as Element | null)?.nodeName === "a:blipFill" ? el.parentNode as Element : null
         if (fill === null)
             return null
         const holder = fill.parentNode as Element | null
-        return holder?.nodeName === "p:bgPr" ? { doomed: holder.parentNode as Element, what: "a background picture" }
-            : { doomed: fill, what: "a picture fill" }
+        if (holder?.nodeName === "p:bgPr")
+            return { doomed: holder.parentNode as Element, what: "a background picture" }
+        if (holder?.nodeName === "a:fillStyleLst" || holder?.nodeName === "a:bgFillStyleLst")
+            return { doomed: fill, what: "a picture fill style", with: (doc) => {
+                const solid = doc.createElementNS(NS_A, "a:solidFill")
+                const clr = doc.createElementNS(NS_A, "a:schemeClr")
+                clr.setAttribute("val", "phClr")
+                solid.appendChild(clr)
+                return solid
+            } }
+        if (holder?.nodeName === "a:fill")
+            return { doomed: fill, what: "a picture fill", with: (doc) => doc.createElementNS(NS_A, "a:noFill") }
+        return { doomed: fill, what: "a picture fill" }
     }
 ]
 
+/**  what a repair did: the removals it names, and the relationships only
+     removed content used (legitimately gone content for the guard)  */
+export interface Repair {
+    /**  what was repaired, human-readable  */
+    actions: string[]
+    /**  relationship ids no element references any more  */
+    released: string[]
+}
+
 /**  drop what references a relationship the part does not have (rules
      above; a dead attribute next to a valid reference goes alone; anything
-     else takes down its smallest shape, or outside shapes itself)
-     @returns what was dropped  */
-const dropDangling = (doc: Document, rels: Document): string[] => {
+     else takes down its smallest shape, or outside shapes itself)  */
+const dropDangling = (doc: Document, rels: Document): Repair => {
     const root = doc.documentElement
     if (root === null)
-        return []
+        return { actions: [], released: [] }
     const ids = new Set(elements(rels, "Relationship").map((r) => r.getAttribute("Id") ?? ""))
     const dropped: string[] = []
+    const candidates = new Set<string>()
+    const take = (doomed: Element): void => {
+        for (const ref of relRefs(doomed))
+            if (ids.has(ref.attr.value))
+                candidates.add(ref.attr.value)
+    }
     for (const { el, attr } of relRefs(root).filter((ref) => ref.attr.value !== "" && !ids.has(ref.attr.value))) {
         if (!attached(el, root))
             continue
@@ -111,31 +140,34 @@ const dropDangling = (doc: Document, rels: Document): string[] => {
         }
         const scope = REQUIRED.includes(el.nodeName) ? null : SCOPES.map((rule) => rule(el)).find((s) => s !== null) ?? null
         if (scope !== null) {
-            scope.doomed.parentNode?.removeChild(scope.doomed)
+            take(scope.doomed)
+            if (scope.with !== undefined)
+                scope.doomed.parentNode?.replaceChild(scope.with(doc), scope.doomed)
+            else
+                scope.doomed.parentNode?.removeChild(scope.doomed)
             dropped.push(scope.what)
             continue
         }
         const shape = closest(el, SHAPES)
         if (shape !== null) {
             dropped.push(`the shape '${firstElement(shape, "p:cNvPr")?.getAttribute("name") ?? ""}'`)
+            take(shape)
             removeShape(shape)
         }
         else {
             dropped.push(`<${el.nodeName}>`)
+            take(el)
             el.parentNode?.removeChild(el)
         }
     }
-    return dropped
+    const still = new Set(relRefs(root).map((ref) => ref.attr.value))
+    return { actions: dropped, released: [ ...candidates ].filter((id) => !still.has(id)) }
 }
 
-/**
- *  Make cNvPr shape ids unique within a slide (duplicates trigger repair);
- *  an `mc:Fallback` repeats the ids of its choice by design.
- *
- *  @param slide - the slide document
- *  @returns whether an id changed
- */
-export const uniquifyShapeIds = (slide: Document): boolean => {
+/**  make cNvPr shape ids unique within a slide (duplicates trigger repair);
+     an `mc:Fallback` repeats the ids of its choice by design
+     @returns whether an id changed  */
+const uniquifyShapeIds = (slide: Document): boolean => {
     const nextId = PartAllocator.shapeIds(slide)
     const seen = new Set<string>()
     let changed = false
@@ -184,18 +216,23 @@ export const repairRels = (pkg: Package, part: string, doc: Document | null, rel
 }
 
 /**
- *  Drop the references to missing relationships of a part and renumber
- *  duplicate shape ids of a slide.
+ *  Drop the references to missing relationships of a part, then the
+ *  relationships only the dropped content used, and renumber duplicate
+ *  shape ids of a slide.
  *
- *  @param doc - the part's DOM (edited in place)
- *  @param rels - its relationships
- *  @returns what was repaired, empty when nothing
+ *  @param pkg - the deck package
+ *  @param part - the part
+ *  @param doc - its DOM (edited in place)
+ *  @param rels - its relationships (edited in place)
+ *  @returns what was repaired
  */
-export const repairContent = (doc: Document, rels: Document): string[] => {
-    const repaired = dropDangling(doc, rels).map((what) => `removed ${what}`)
+export const repairContent = (pkg: Package, part: string, doc: Document, rels: Document): Repair => {
+    const dropped = dropDangling(doc, rels)
+    repairRels(pkg, part, doc, rels, new Set(), new Set(dropped.released))
+    const actions = dropped.actions.map((what) => `removed ${what}`)
     if (doc.documentElement?.nodeName === "p:sld" && uniquifyShapeIds(doc))
-        repaired.push("renumbered duplicate shape ids")
-    return repaired
+        actions.push("renumbered duplicate shape ids")
+    return { actions, released: dropped.released }
 }
 
 /**
@@ -206,16 +243,19 @@ export const repairContent = (doc: Document, rels: Document): string[] => {
  *  @param pkg - the deck package
  *  @param part - the part to repair (a slide's notes or chart, a layout, a
  *                master, the presentation, "" for the package rels, ...)
- *  @returns what was repaired, empty when nothing
+ *  @returns what was repaired
  */
-export const repairPart = async (pkg: Package, part: string): Promise<string[]> => {
+export const repairPart = async (pkg: Package, part: string): Promise<Repair> => {
     const rels = await pkg.rels(part)
     const doc = /\.xml$/.test(part) ? await pkg.xml(part) : null
     const dropped = repairRels(pkg, part, doc, rels)
-    const repaired = doc === null ? [] : repairContent(doc, rels)
-    if (dropped.length > 0)
+    const repaired = doc === null ? { actions: [], released: [] } : repairContent(pkg, part, doc, rels)
+    if (dropped.length > 0 || repaired.released.length > 0)
         pkg.writeRels(part, rels)
-    if (doc !== null && repaired.length > 0)
+    if (doc !== null && repaired.actions.length > 0)
         pkg.write(part, doc)
-    return [ ...dropped.length > 0 ? [ `dropped relationships ${dropped.join(",")}` ] : [], ...repaired ]
+    return {
+        actions: [ ...dropped.length > 0 ? [ `dropped relationships ${dropped.join(",")}` ] : [], ...repaired.actions ],
+        released: repaired.released
+    }
 }

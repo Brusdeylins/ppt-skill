@@ -31,13 +31,32 @@ export const parseXml = (xml: string): Document =>
     new DOMParser().parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml")
 
 /**
- *  Serialize a DOM document back to its XML string.
+ *  Decode the bytes of an XML part: UTF-8 (with or without byte-order
+ *  mark) or UTF-16 (little or big endian, as some tools write custom XML).
+ *
+ *  @param bytes - the raw part content
+ *  @returns the XML text without byte-order mark
+ */
+export const decodeXml = (bytes: Uint8Array): string => {
+    const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    if (buf[0] === 0xFF && buf[1] === 0xFE)
+        return buf.subarray(2).toString("utf16le")
+    if (buf[0] === 0xFE && buf[1] === 0xFF)
+        return Buffer.from(buf.subarray(2)).swap16().toString("utf16le")
+    if (buf[0] === 0x3C && buf[1] === 0x00)
+        return buf.toString("utf16le")
+    return buf.toString("utf8").replace(/^\uFEFF/, "")
+}
+
+/**
+ *  Serialize a DOM document back to its XML string. The text is written as
+ *  UTF-8, so a UTF-16 declaration of a decoded part is corrected.
  *
  *  @param doc - DOM document
  *  @returns XML text
  */
 export const serializeXml = (doc: Document): string =>
-    new XMLSerializer().serializeToString(doc)
+    new XMLSerializer().serializeToString(doc).replace(/^(<\?xml[^>]*encoding=["'])UTF-16(["'])/i, "$1UTF-8$2")
 
 /**
  *  Escape text for an XML text node, or for a double-quoted attribute value.

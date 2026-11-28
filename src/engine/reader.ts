@@ -17,7 +17,7 @@ import { contentHash, requireFile } from "../infra/fs.js"
 import { estimateCapacity } from "../core/describe/capacity.js"
 import { regionWithin, coverageFraction } from "../core/describe/position.js"
 import { elements, firstElement, drawingText, parseXml } from "./xml.js"
-import { findPart, normalizeRelTargets, relMap, relTargets, relsPartOf } from "./parts.js"
+import { normalizeRelTargets, optText, relMap, relTargets, relsPartOf, slideList } from "./parts.js"
 import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
     DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
@@ -67,8 +67,7 @@ export class DeckArchive {
      *  @returns content, or null when the part does not exist
      */
     async text(part: string): Promise<string | null> {
-        const name = findPart(this.zip, part)
-        return name === null ? null : await (this.zip.file(name) as JSZip.JSZipObject).async("string")
+        return await optText(this.zip, part)
     }
 
     /**
@@ -537,19 +536,14 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
     const layoutIndexByName = new Map(info.layouts.map((l) => [l.name, l.index]))
     const pres = await archive.xml("ppt/presentation.xml")
     const presRels = await archive.xml("ppt/_rels/presentation.xml.rels")
-    const presTargets = relMap(relTargets("ppt/presentation.xml", presRels, archive.zip))
 
-    /*  a sldId without its slide part is no slide (an apply repairs it)  */
+    /*  a sldId without its slide part is no slide (an apply removes it)  */
     const slides: SlideInfo[] = []
     const hashParts: string[] = []
-    const sldIds = elements(pres, "p:sldId").filter((el) => {
-        const target = presTargets.get(el.getAttribute("r:id") ?? "")?.target ?? null
-        return target !== null && findPart(archive.zip, target) !== null
-    })
-    for (let index = 0; index < sldIds.length; index++) {
-        const sldId = sldIds[index] as Element
-        const id = Number(sldId.getAttribute("id"))
-        const part = presTargets.get(sldId.getAttribute("r:id") ?? "")?.target as string
+    const listed = slideList(archive.zip, pres, relTargets("ppt/presentation.xml", presRels, archive.zip))
+        .flatMap((s) => s.part === null ? [] : [ { id: s.id, part: s.part } ])
+    for (let index = 0; index < listed.length; index++) {
+        const { id, part } = listed[index] as { id: number, part: string }
         const partBase = path.posix.basename(part)
         const slideXmlText = await archive.text(part) ?? ""
         hashParts.push(`${id}:${slideXmlText}`,

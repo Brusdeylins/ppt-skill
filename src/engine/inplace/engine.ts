@@ -21,15 +21,15 @@ import { PptcError, toPptcError } from "../../infra/errors.js"
 import type { MutationPlan, SlidePlanEntry } from "../../core/ops/registry.js"
 import type { LintWarning } from "../../core/lint.js"
 import { atomicWrite } from "../../infra/fs.js"
-import { notesOwner, partDefects, type PartView } from "../defects.js"
+import { notesOwner, partDefects, type Finding, type PartView } from "../defects.js"
 import { byteGuard, digestBytes, verifyContent, type SlideExpect } from "../guard.js"
 import { finishPackage } from "../post.js"
-import { ASSET_PART, REL, RELS, layoutOrder, readRels, relIs, relMap, relsOwner, relsPartOf } from "../parts.js"
+import { ASSET_PART, REL, RELS, layoutOrder, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
-import { verifyZip } from "../verify.js"
+import { findDefects } from "../verify.js"
 import { NS_P, NS_R, elements, firstElement } from "../xml.js"
 import { Package } from "./package.js"
-import { repairPart } from "./repair.js"
+import { repairPart, type Repair } from "./repair.js"
 import { createSlide, dropLinksToRemoved, editSlide } from "./slides.js"
 import { generateElements } from "./transplant.js"
 
@@ -45,7 +45,7 @@ export interface SessionResult {
     /**  plan-order positions of the entries that carried a ref  */
     refIndexes: Record<string, number>
     /**  repairs of PowerPoint repair triggers the input deck carried
-         (W_REPAIRED)  */
+         (W_REPAIRED), and triggers left as they were (W_INPUT_DEFECT)  */
     warnings: LintWarning[]
 }
 
@@ -58,6 +58,9 @@ interface InputSlide {
     /**  its slide part  */
     part: string
 }
+
+/**  the slide address of a warning about the deck as a whole  */
+const DECK_WIDE: LintWarning["slide"] = { id: null, index: -1, title: null }
 
 /**  the input deck's slide list  */
 interface Deck {
@@ -86,10 +89,9 @@ interface SlideState {
     /**  parts of its content other than the slide carrying repair triggers  */
     repairs: string[]
     /**  the repair triggers its content carries  */
-    defects: string[]
-    /**  whether a repair removed a whole shape (named in W_REPAIRED), so its
-         content may legitimately be gone  */
-    shapeRemoved: boolean
+    defects: Finding[]
+    /**  relationship ids whose content a named repair removed (W_REPAIRED)  */
+    released: string[]
 }
 
 /**
@@ -120,12 +122,19 @@ const hasEdits = (e: SlidePlanEntry): boolean =>
     e.fills.length > 0 || e.setTexts.length > 0 || e.removeNames.length > 0 || e.elements.length > 0
         || e.notes !== null || e.footer !== null || e.background !== null
 
-/**  a part with its DOM and relationships, as engine/defects reads it  */
-const viewOf = async (pkg: Package, part: string): Promise<PartView> => ({
-    part,
-    doc:  /\.xml$/.test(part) && pkg.has(part) ? await pkg.xml(part) : null,
-    rels: pkg.targets(part, await pkg.rels(part))
-})
+/**  a part with its DOM and relationships, as engine/defects reads it; a
+     malformed part has no DOM (verify reports it)  */
+const viewOf = async (pkg: Package, part: string): Promise<PartView> => {
+    let doc: Document | null = null
+    if (/\.xml$/.test(part) && pkg.has(part))
+        try {
+            doc = await pkg.xml(part)
+        }
+        catch {
+            doc = null
+        }
+    return { part, doc, rels: pkg.targets(part, await pkg.rels(part)) }
+}
 
 /**  the parts that make up a slide's own content: the slide and everything
      reachable from it except layouts, masters, other slides and themes
@@ -176,28 +185,73 @@ const repairPackage = async (pkg: Package, warnings: LintWarning[], repaired: Se
     const owners = new Set(Object.keys(pkg.zip.files).filter((f) => !f.endsWith("/"))
         .map((f) => f.endsWith(".rels") ? relsOwner(f) : f).filter((f) => f === "" || /\.xml$/.test(f)))
     for (const part of [ ...owners ].filter(isPackagePart)) {
-        const defects = partDefects(await viewOf(pkg, part), (p) => pkg.has(p))
-        const actions = defects.length > 0 ? await repairPart(pkg, part) : []
+        const view = await viewOf(pkg, part)
+        if (view.doc === null && /\.xml$/.test(part))
+            continue
+        const defects = partDefects(view, (p) => pkg.has(p))
+        const { actions } = defects.length > 0 ? await repairPart(pkg, part) : { actions: [] }
         if (actions.length > 0) {
             repaired.add(part)
-            warnings.push(repairedWarning({ id: null, index: -1, title: null },
-                `the input deck carried PowerPoint repair triggers in ${part === "" ? "_rels/.rels" : part} (${defects.join("; ")}); `
-                + `pptc ${actions.join(", ")}`))
+            warnings.push(repairedWarning(DECK_WIDE,
+                `the input deck carried PowerPoint repair triggers in ${part === "" ? "_rels/.rels" : part} `
+                + `(${defects.map((d) => d.text).join("; ")}); pptc ${actions.join(", ")}`))
         }
     }
 }
 
-/**  the input slide list of the (repaired) package  */
-const readDeck = async (pkg: Package): Promise<Deck> => {
+/**  the input slide list of the (repaired) package; a sldId resolving to
+     no slide part is dropped (the reader shows no slide for it)  */
+const readDeck = async (pkg: Package, warnings: LintWarning[]): Promise<Deck & { dropped: boolean }> => {
     const pres = await pkg.xml("ppt/presentation.xml")
     const presRels = await pkg.rels("ppt/presentation.xml")
     const targets = pkg.targets("ppt/presentation.xml", presRels)
-    const ridTarget = relMap(targets)
-    const input = elements(pres, "p:sldId").map((el) => ({
-        el, id: Number(el.getAttribute("id")), part: ridTarget.get(el.getAttribute("r:id") ?? "")?.target ?? ""
-    }))
+    const input: InputSlide[] = []
+    let dropped = false
+    for (const s of slideList(pkg.zip, pres, targets))
+        if (s.part !== null)
+            input.push({ el: s.el, id: s.id, part: s.part })
+        else {
+            s.el.parentNode?.removeChild(s.el)
+            for (const t of targets.filter((t) => t.id === s.el.getAttribute("r:id")))
+                t.el.parentNode?.removeChild(t.el)
+            dropped = true
+            warnings.push(repairedWarning(DECK_WIDE,
+                `the input deck listed slide id ${s.id} without a slide part; pptc removed it from the slide list`))
+        }
     const notesMaster = targets.find((t) => t.kind === "notesMaster")?.target ?? null
-    return { pres, presRels, input, notesMaster }
+    return { pres, presRels, input, notesMaster, dropped }
+}
+
+/**  duplicate slide ids get fresh ones (the plan matches by part)
+     @returns whether an id changed  */
+const renumberSlideIds = (pkg: Package, deck: Deck, warnings: LintWarning[]): boolean => {
+    const ids = new Set<number>()
+    let renumbered = false
+    for (const s of deck.input) {
+        if (ids.has(s.id)) {
+            s.el.setAttribute("id", String(pkg.alloc.slideId()))
+            renumbered = true
+        }
+        ids.add(s.id)
+    }
+    if (renumbered)
+        warnings.push(repairedWarning(DECK_WIDE,
+            "the input deck carried PowerPoint repair triggers in ppt/presentation.xml (duplicate slide ids); pptc gave the duplicates fresh ids"))
+    return renumbered
+}
+
+/**  the slide parts that go: those of removed entries (a part another,
+     kept entry lists stays), plus slide parts outside the slide list
+     (garbage PowerPoint complains about)  */
+const removedSlides = (pkg: Package, deck: Deck, matched: (InputSlide | null)[], warnings: LintWarning[]): Set<string> => {
+    const keptParts = new Set(matched.flatMap((s) => s === null ? [] : [ s.part ]))
+    const removed = new Set(deck.input.filter((s) => !keptParts.has(s.part)).map((s) => s.part))
+    for (const orphan of Object.keys(pkg.zip.files).filter((f) =>
+        /^ppt\/slides\/[^/]+\.xml$/.test(f) && !deck.input.some((s) => s.part === f))) {
+        removed.add(orphan)
+        warnings.push(repairedWarning(DECK_WIDE, `the input deck carried a slide part outside its slide list; pptc removed ${orphan}`))
+    }
+    return removed
 }
 
 /**  the input slide each plan entry keeps, null for new and copied
@@ -249,7 +303,7 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
         const part = parts[i] as string
         const views = await closure(pkg, part)
         const slide = views[0] as PartView
-        const defects: string[] = []
+        const defects: Finding[] = []
         const repairs: string[] = []
         for (const view of views) {
             const found = partDefects(view, exists)
@@ -261,12 +315,12 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
         const notesView = views.find((v) => v.part === notes)
         const sharedNotes = notesView !== undefined && notesOwner(notesView) !== part
         if (sharedNotes)
-            defects.push(`notes part ${notes ?? ""} belongs to another slide or none`)
+            defects.push({ rule: "notes-owner", part, text: `${part}: its notes part ${notes ?? ""} belongs to another slide or none` })
         const show = slide.doc?.documentElement?.getAttribute("show") ?? ""
         const links = views.some((v) => v.rels.some((r) => r.kind === "slide" && r.target !== null && removed.has(r.target)))
         const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden
             || defects.length > 0 || links
-        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, defects, shapeRemoved: false })
+        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, defects, released: [] })
     }
     return states
 }
@@ -322,19 +376,87 @@ const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> =
 
 /**  what the content guard allows to change on each output slide  */
 const expectations = (states: SlideState[]): SlideExpect[] =>
-    states.map(({ entry, touched, shapeRemoved }, i) => ({
+    states.map(({ entry, touched, released }, i) => ({
         source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
         notes: entry.notes !== null,
-        assets: shapeRemoved || entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
+        assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
             ? "any" : entry.elements.length > 0 ? "grow" : "same",
         grow: {
             images: entry.elements.flatMap((e) => e.spec.type === "image" ? [ digestBytes(readFileSync(e.spec.path)) ] : []),
             fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
             charts: entry.elements.filter((e) => e.spec.type === "chart").length
         },
-        textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append)
+        textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append),
+        released
     }))
+
+/**  the parts of untouched slides with their input entry, for the byte
+     guard -- except parts a touched slide writes (a slide listed twice, a
+     part shared with a repaired slide)  */
+const untouchedParts = (pkg: Package, states: SlideState[]): Map<string, JSZip.JSZipObject | null> => {
+    const written = new Set(states.filter((s) => s.touched).flatMap((s) => [ s.part, ...s.repairs ]))
+    const untouched = new Map<string, JSZip.JSZipObject | null>()
+    for (const s of states.filter((s) => !s.touched))
+        for (const { part } of s.closure)
+            for (const p of pkg.has(relsPartOf(part)) ? [ part, relsPartOf(part) ] : [ part ])
+                if (!written.has(p) && !written.has(relsOwner(p)))
+                    untouched.set(p, pkg.zip.file(p))
+    return untouched
+}
+
+/**  one pass per touched slide, after the repairs of its other parts;
+     every repair is reported (W_REPAIRED) with what it removed  */
+const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: SlideState[], removed: Set<string>,
+    warnings: LintWarning[]): Promise<void> => {
+    const generated = await generateElements(plan.entries)
+    for (const [ i, s ] of states.entries()) {
+        if (!s.touched)
+            continue
+        const actions: string[] = []
+        for (const owner of s.repairs)
+            actions.push(...(await repairPart(pkg, owner)).actions.map((a) => `${a} in ${owner}`))
+        const own: Repair = await editSlide(pkg, {
+            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes
+        })
+        actions.push(...own.actions)
+        s.released = own.released
+        if (s.sharedNotes)
+            actions.push("gave the slide its own notes part")
+        if (s.defects.length > 0)
+            warnings.push(repairedWarning({ id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index: i, title: s.entry.title },
+                `the input deck carried PowerPoint repair triggers on this slide${s.entry.virtualId > 0 ? "" : " (or the slide it was copied from)"} `
+                + `(${s.defects.map((d) => d.text).join("; ")}); pptc ${actions.length > 0 ? actions.join(", ") : "repaired them"}`))
+    }
+}
+
+/**  the repair triggers of the output that the apply adds: a trigger the
+     input already carried (same rule and part, as often) and pptc cannot
+     repair stays as it was and is reported (W_INPUT_DEFECT)  */
+const newDefects = async (after: JSZip, before: JSZip, warnings: LintWarning[]): Promise<string[]> => {
+    const found = await findDefects(after, before)
+    if (found.length === 0)
+        return []
+    const key = (f: Finding): string => `${f.rule}|${f.part}`
+    const inherited = new Map<string, number>()
+    for (const f of await findDefects(before))
+        inherited.set(key(f), (inherited.get(key(f)) ?? 0) + 1)
+    const kept: Finding[] = []
+    const added: Finding[] = []
+    for (const f of found) {
+        const left = inherited.get(key(f)) ?? 0
+        if (left > 0) {
+            inherited.set(key(f), left - 1)
+            kept.push(f)
+        }
+        else
+            added.push(f)
+    }
+    if (kept.length > 0)
+        warnings.push({ code: "W_INPUT_DEFECT", slide: DECK_WIDE,
+            message: `the input deck carries PowerPoint repair triggers pptc cannot repair; they stay as they were: ${kept.map((f) => f.text).join("; ")}` })
+    return added.map((f) => f.text)
+}
 
 /**  the passes of an apply: package repairs, slide structure, edits,
      slide list, package-wide steps, self-checks, write  */
@@ -347,85 +469,28 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
     const warnings: LintWarning[] = []
     const repaired = new Set<string>()
     await repairPackage(pkg, warnings, repaired)
-    const deck = await readDeck(pkg)
-
-    /*  duplicate slide ids get fresh ones (the plan matches by part)  */
-    const ids = new Set<number>()
-    let renumbered = false
-    for (const s of deck.input) {
-        if (ids.has(s.id)) {
-            s.el.setAttribute("id", String(pkg.alloc.slideId()))
-            renumbered = true
-        }
-        ids.add(s.id)
-    }
-    if (renumbered)
-        warnings.push(repairedWarning({ id: null, index: -1, title: null },
-            "the input deck carried PowerPoint repair triggers in ppt/presentation.xml (duplicate slide ids); pptc gave the duplicates fresh ids"))
-
-    /*  removed slides (a part another, kept entry lists stays), plus slide
-        parts outside the slide list (garbage PowerPoint complains about)  */
+    const deck = await readDeck(pkg, warnings)
+    const renumbered = renumberSlideIds(pkg, deck, warnings)
     const matched = matchInput(plan, deck)
-    const keptParts = new Set(matched.flatMap((s) => s === null ? [] : [ s.part ]))
-    const removed = new Set(deck.input.filter((s) => !keptParts.has(s.part)).map((s) => s.part))
-    for (const orphan of Object.keys(pkg.zip.files).filter((f) =>
-        /^ppt\/slides\/[^/]+\.xml$/.test(f) && !deck.input.some((s) => s.part === f))) {
-        removed.add(orphan)
-        warnings.push(repairedWarning({ id: null, index: -1, title: null },
-            `the input deck carried a slide part outside its slide list; pptc removed ${orphan}`))
-    }
+    const removed = removedSlides(pkg, deck, matched, warnings)
 
+    /*  structure, classification, edits, slide list, package-wide steps  */
     const parts = await buildSlides(pkg, plan, matched)
     const states = await classifySlides(pkg, plan, parts, removed)
-    const untouched = new Map<string, JSZip.JSZipObject | null>()
-    for (const s of states.filter((s) => !s.touched))
-        for (const { part } of s.closure)
-            for (const p of pkg.has(relsPartOf(part)) ? [ part, relsPartOf(part) ] : [ part ])
-                untouched.set(p, pkg.zip.file(p))
-
-    /*  one pass per touched slide, after the repairs of its other parts  */
-    const generated = await generateElements(plan.entries)
-    for (const [ i, s ] of states.entries()) {
-        if (!s.touched)
-            continue
-        const actions: string[] = []
-        for (const owner of s.repairs)
-            actions.push(...(await repairPart(pkg, owner)).map((a) => `${a} in ${owner}`))
-        actions.push(...await editSlide(pkg, {
-            part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes
-        }))
-        if (s.sharedNotes)
-            actions.push("gave the slide its own notes part")
-        s.shapeRemoved = actions.some((a) => a.startsWith("removed the shape"))
-        if (s.defects.length > 0)
-            warnings.push(repairedWarning({ id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index: i, title: s.entry.title },
-                `the input deck carried PowerPoint repair triggers on this slide${s.entry.virtualId > 0 ? "" : " (or the slide it was copied from)"} `
-                + `(${s.defects.join("; ")}); pptc ${actions.length > 0 ? actions.join(", ") : "repaired them"}`))
-    }
-    writeSlideList(pkg, deck, states, matched, removed, renumbered)
+    const untouched = untouchedParts(pkg, states)
+    await editSlides(pkg, plan, deck, states, removed, warnings)
+    writeSlideList(pkg, deck, states, matched, removed, renumbered || deck.dropped)
     await removeSlides(pkg, removed)
     await finishPackage(pkg.zip, parts, plan.props, plan.customProps)
     const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
 
-    /*  self-checks before writing: repair triggers, the content of every
-        touched slide (canonical), every part of every untouched slide  */
+    /*  self-checks before writing: repair triggers the apply adds, the
+        content of every touched slide, every part of every untouched slide  */
     const after = await JSZip.loadAsync(finalBytes)
     const expects = expectations(states)
     const content = await verifyContent(archive.zip, after, expects, repaired)
-
-    /*  repair triggers the input already carried and pptc cannot repair
-        stay as they were (W_INPUT_DEFECT); only new ones block the write  */
-    let triggers = await verifyZip(after, archive.zip)
-    if (triggers.length > 0) {
-        const inherited = new Set(await verifyZip(archive.zip))
-        const kept = triggers.filter((f) => inherited.has(f))
-        triggers = triggers.filter((f) => !inherited.has(f))
-        if (kept.length > 0)
-            warnings.push({ code: "W_INPUT_DEFECT", slide: { id: null, index: -1, title: null },
-                message: `the input deck carries PowerPoint repair triggers pptc cannot repair; they stay as they were: ${kept.join("; ")}` })
-    }
     const findings = [
-        ...triggers,
+        ...await newDefects(after, archive.zip, warnings),
         ...content.blocked,
         ...content.lost.map((l) => `slide ${(expects[l.slide] as SlideExpect).label}: ${l.what} would be lost although no op removed it`),
         ...await byteGuard(pkg.zip, untouched, after)

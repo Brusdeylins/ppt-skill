@@ -44,8 +44,12 @@
   back-reference get one, dead relationships of any package part (e.g. a
   removed thumbnail) are dropped. A dead reference takes down only the
   smallest element that keeps the XML valid -- a picture bullet, a group
-  or cell fill, the SVG extension of a picture, a transition sound -- and
-  `W_REPAIRED` names what was removed.
+  or cell fill, the SVG extension of a picture, a transition sound, the
+  animations -- and `W_REPAIRED` names what was removed. A fresh part
+  never takes the name a dead relationship points at, so no dead link
+  silently comes back to life. Malformed or UTF-16 custom XML, a slide id
+  without slide part and app properties without title list no longer
+  stop an apply.
 - **`verify` checks more.** References to missing relationships in any
   part (1.0.x created such slides from layouts with picture fills), a
   notes part that names another slide, a slide listed twice and slide
@@ -53,8 +57,9 @@
   `mc:Fallback` (equations, OLE objects) are no trigger. Part names are
   resolved case-insensitively, as OPC demands: a picture whose target or
   a content type whose part name differs in letter case is no longer
-  taken for dead and removed. A duplicate relationship id resolves to its
-  first relationship in `state` and `apply` alike.
+  taken for dead and removed; neither is a percent-escaped target
+  (`my%20image.png`). A duplicate relationship id resolves to its first
+  relationship in `state` and `apply` alike.
 - **Single-quoted XML attributes are read correctly.** Relationships,
   content types and the slide list are read through the DOM: a deck
   re-saved with `attr='value'` no longer gets clashing relationship ids,

@@ -14,7 +14,7 @@ import type JSZip from "jszip"
 import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../infra/errors.js"
-import { NS_REL, elements, parseXml, serializeXml } from "./xml.js"
+import { NS_REL, decodeXml, elements, parseXml, serializeXml } from "./xml.js"
 
 /**  OfficeDocument relationship type base URI  */
 export const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -36,14 +36,9 @@ export const RELS = {
     unprinted: [ "slideLayout", "notesSlide", "hyperlink", "slide" ]
 } as const
 
-/**
- *  The kind of a relationship type: the last segment of its URI
- *  (`.../relationships/slide` is "slide").
- *
- *  @param type - full relationship type URI
- *  @returns the kind
- */
-export const relKind = (type: string): string =>
+/**  the kind of a relationship type: the last segment of its URI
+     (`.../relationships/slide` is "slide")  */
+const relKind = (type: string): string =>
     type.slice(type.lastIndexOf("/") + 1)
 
 /**
@@ -60,15 +55,9 @@ export const relIs = (rel: Pick<Rel, "kind">, kinds: readonly string[]): boolean
 export const EMPTY_RELS = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
     + `<Relationships xmlns="${NS_REL}"/>`
 
-/**
- *  Resolve a relationship target to a part name. Absolute targets
- *  (`/ppt/media/image1.png`) are valid OPC and kept on untouched parts.
- *
- *  @param base - folder of the part owning the relationship
- *  @param target - the relationship's Target attribute
- *  @returns the part name inside the archive
- */
-export const resolveTarget = (base: string, target: string): string =>
+/**  resolve a relationship target to a part name; absolute targets
+     (`/ppt/media/image1.png`) are valid OPC and kept on untouched parts  */
+const resolveTarget = (base: string, target: string): string =>
     target.startsWith("/") ? target.slice(1) : path.posix.normalize(path.posix.join(base, target))
 
 /**
@@ -89,11 +78,6 @@ export const relsPartOf = (part: string): string =>
 export const relsOwner = (relsPart: string): string =>
     relsPart === "_rels/.rels" ? "" : relsPart.replace(/(^|\/)_rels\/([^/]+)\.rels$/, "$1$2")
 
-/**  lower-case part names per archive, rebuilt whenever the number of
-     entries changes (the engine never adds a name that differs from an
-     existing one in case only)  */
-const caseIndex = new WeakMap<JSZip, { size: number, names: Map<string, string> }>()
-
 /**
  *  The actual name of a part, looked up case-insensitively as OPC demands
  *  (`../media/photo1.png` names `ppt/media/Photo1.PNG`).
@@ -105,14 +89,19 @@ const caseIndex = new WeakMap<JSZip, { size: number, names: Map<string, string> 
 export const findPart = (zip: JSZip, name: string): string | null => {
     if (zip.file(name) !== null)
         return name
-    const keys = Object.keys(zip.files)
-    let index = caseIndex.get(zip)
-    if (index === undefined || index.size !== keys.length) {
-        index = { size: keys.length, names: new Map(keys.filter((f) => !f.endsWith("/")).map((f) => [ f.toLowerCase(), f ])) }
-        caseIndex.set(zip, index)
+    const lower = name.toLowerCase()
+    return Object.keys(zip.files).find((f) => !f.endsWith("/") && f.toLowerCase() === lower) ?? null
+}
+
+/**  a target with percent-escapes resolved (`my%20image.png`), unchanged
+     when it carries none or invalid ones  */
+const unescapeIri = (target: string): string => {
+    try {
+        return decodeURIComponent(target)
     }
-    const found = index.names.get(name.toLowerCase()) ?? null
-    return found !== null && zip.file(found) !== null ? found : null
+    catch {
+        return target
+    }
 }
 
 /**  one relationship of a part  */
@@ -144,7 +133,7 @@ export const relTargets = (owner: string, rels: Document, zip?: JSZip): Rel[] =>
         if (el.getAttribute("TargetMode") !== "External") {
             target = resolveTarget(path.posix.dirname(owner), el.getAttribute("Target") ?? "")
             if (zip !== undefined)
-                target = findPart(zip, target) ?? target
+                target = findPart(zip, target) ?? findPart(zip, unescapeIri(target)) ?? target
         }
         const type = el.getAttribute("Type") ?? ""
         return { el, id: el.getAttribute("Id") ?? "", type, kind: relKind(type), target }
@@ -245,14 +234,23 @@ export class PartAllocator {
      */
     static async create(zip: JSZip, sldIds: number[]): Promise<PartAllocator> {
         let rid = 9000
+        const names = new Set(Object.keys(zip.files).map((f) => f.toLowerCase()))
         for (const relsPart of Object.keys(zip.files).filter((f) => f.endsWith(".rels"))) {
-            const text = await zip.file(relsPart)?.async("string") ?? ""
-
-            /*  any quoting: a re-saved deck may single-quote its attributes  */
+            const text = await partText(zip, relsPart)
             for (const m of text.matchAll(/["']rIdPptc(\d+)["']/g))
                 rid = Math.max(rid, Number(m[1]))
+
+            /*  a dead relationship's target is reserved too: a fresh part
+                under its name would silently bring the relationship back  */
+            try {
+                for (const r of relTargets(relsOwner(relsPart), parseXml(text)))
+                    if (r.target !== null)
+                        names.add(r.target.toLowerCase())
+            }
+            catch {
+                /*  malformed rels are reported by verify  */
+            }
         }
-        const names = new Set(Object.keys(zip.files).map((f) => f.toLowerCase()))
         return new PartAllocator(names, rid + 1, Math.max(255, ...sldIds), new Set(sldIds))
     }
 
@@ -339,8 +337,18 @@ export const partText = async (zip: JSZip, part: string): Promise<string> => {
     const f = zip.file(findPart(zip, part) ?? part)
     if (f === null)
         throw new PptcError("E_ENGINE", `the deck is missing part ${part}`)
-    return (await f.async("string")).replace(/^\uFEFF/, "")
+    return decodeXml(await f.async("uint8array"))
 }
+
+/**
+ *  Read an archive part as a string, when it exists.
+ *
+ *  @param zip - the archive
+ *  @param part - part path inside the archive (any case)
+ *  @returns the decoded content, null when there is no such part
+ */
+export const optText = async (zip: JSZip, part: string): Promise<string | null> =>
+    findPart(zip, part) === null ? null : await partText(zip, part)
 
 /**
  *  Drop content-type overrides that are duplicates or whose part vanished.
@@ -422,7 +430,7 @@ export const removeParts = async (zip: JSZip, parts: string[]): Promise<void> =>
     const doomed = new Set(parts.map((p) => `/${p.toLowerCase()}`))
     for (const part of parts) {
         zip.remove(part)
-        zip.remove(relsPartOf(part))
+        zip.remove(findPart(zip, relsPartOf(part)) ?? relsPartOf(part))
     }
     const ct = parseXml(await partText(zip, "[Content_Types].xml"))
     for (const o of elements(ct, "Override"))
@@ -480,4 +488,33 @@ export const layoutOrder = async (zip: JSZip): Promise<string[]> => {
         }
     }
     return order
+}
+
+/**  one entry of a deck's slide list  */
+export interface SlideEntry {
+    /**  its p:sldId element  */
+    el: Element
+    /**  its slide id  */
+    id: number
+    /**  its slide part, null when it resolves to no slide part  */
+    part: string | null
+}
+
+/**
+ *  The slide list of a deck in order -- the one reading the reader, the
+ *  engine, the content guard and verify share.
+ *
+ *  @param zip - the archive (to tell existing slide parts)
+ *  @param pres - the presentation DOM
+ *  @param presRels - the presentation's relationships
+ *  @returns the sldId entries in order
+ */
+export const slideList = (zip: JSZip, pres: Document, presRels: Rel[]): SlideEntry[] => {
+    const rels = relMap(presRels)
+    return elements(pres, "p:sldId").map((el) => {
+        const rel = rels.get(el.getAttribute("r:id") ?? "")
+        const part = rel !== undefined && rel.kind === "slide" && rel.target !== null && findPart(zip, rel.target) !== null
+            ? rel.target : null
+        return { el, id: Number(el.getAttribute("id")), part }
+    })
 }

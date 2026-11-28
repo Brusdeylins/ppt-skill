@@ -12,7 +12,7 @@
 
 import type JSZip from "jszip"
 import type { Document, Element } from "@xmldom/xmldom"
-import { appendRel, cleanContentTypes, gcAssets, partText, readRels, removeParts } from "./parts.js"
+import { appendRel, cleanContentTypes, findPart, gcAssets, optText, partText, readRels, removeParts } from "./parts.js"
 import { elements, firstElement, parseXml, serializeXml, xmlEscape } from "./xml.js"
 
 /**  sync user-created sections with the slide list. Sections are
@@ -21,7 +21,7 @@ import { elements, firstElement, parseXml, serializeXml, xmlEscape } from "./xml
      keep their section; removed slides drop out; new, copied and moved
      slides join the section of their predecessor (the first section when
      they lead the deck) -- as PowerPoint files them  */
-export const syncSectionRefs = async (zip: JSZip): Promise<void> => {
+const syncSectionRefs = async (zip: JSZip): Promise<void> => {
     const part = "ppt/presentation.xml"
     const xml = await partText(zip, part)
     if (!xml.includes("<p14:sectionLst"))
@@ -95,19 +95,20 @@ const slideTitle = (slide: Document): string => {
      HeadingPairs group except the last (the slide-title group) are kept; the
      slide count, the slide-title HeadingPairs count and the title list are
      rewritten from the actual slides.  */
-export const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> => {
-    const part = "docProps/app.xml"
-    const f = zip.file(part)
-    if (f === null)
+const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> => {
+    const part = findPart(zip, "docProps/app.xml")
+    if (part === null)
         return
-    let xml = await f.async("string")
+    let xml = await partText(zip, part)
+    const n = slides.length
     const hp = /<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/.exec(xml)
     const tp = /<TitlesOfParts>([\s\S]*?)<\/TitlesOfParts>/.exec(xml)
-    if (hp === null || tp === null)
+    if (hp === null || tp === null) {
+        zip.file(part, xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`))
         return
+    }
     const hpBody = hp[1] ?? ""
     const tpBody = tp[1] ?? ""
-    const n = slides.length
     const titles: string[] = []
     for (const slidePart of slides)
         titles.push(slideTitle(parseXml(await partText(zip, slidePart))))
@@ -132,11 +133,11 @@ export const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<v
 }
 
 /**  update document core properties  */
-export const setProps = async (zip: JSZip, props: Record<string, string>): Promise<void> => {
-    const part = "docProps/core.xml"
-    const text = await zip.file(part)?.async("string")
-    if (text === undefined)
+const setProps = async (zip: JSZip, props: Record<string, string>): Promise<void> => {
+    const part = findPart(zip, "docProps/core.xml")
+    if (part === null)
         return
+    const text = await partText(zip, part)
     const doc = parseXml(text)
     const tags: Record<string, [string, string]> = {
         title: ["dc:title", "http://purl.org/dc/elements/1.1/"],
@@ -175,11 +176,11 @@ const CUSTOM_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
      the content-type override and the package relationship exist. Existing
      custom properties not named in the patch are preserved; PowerPoint keeps
      these across edit/save, so they make the deck self-describing.  */
-export const setCustomProps = async (zip: JSZip, patch: Record<string, string>): Promise<void> => {
+const setCustomProps = async (zip: JSZip, patch: Record<string, string>): Promise<void> => {
     /*  merge: existing properties first, then the patch overrides/adds  */
     const props = new Map<string, string>()
-    const existing = await zip.file(CUSTOM_PROPS_PART)?.async("string")
-    if (existing !== undefined)
+    const existing = await optText(zip, CUSTOM_PROPS_PART)
+    if (existing !== null)
         for (const p of elements(parseXml(existing), "property")) {
             const vt = firstElement(p, "vt:lpwstr")
             props.set(p.getAttribute("name") ?? "", vt?.textContent ?? "")

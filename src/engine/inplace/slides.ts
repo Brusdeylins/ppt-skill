@@ -22,7 +22,7 @@ import { slideFromLayout } from "../seed.js"
 import { HLINK_ATTR, setShapeText } from "../text.js"
 import { NS_A, NS_P, NS_R, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
 import type { Package } from "./package.js"
-import { removeShape, repairContent, repairRels } from "./repair.js"
+import { removeShape, repairContent, repairRels, type Repair } from "./repair.js"
 import type { Generated } from "./transplant.js"
 
 /**  is the shape the placeholder with the given idx  */
@@ -283,7 +283,7 @@ export interface SlideWork {
     entry: SlidePlanEntry
     /**  input slide parts removed by this apply  */
     removed: Set<string>
-    /**  whether the slide's notes part is shared with an earlier slide  */
+    /**  whether the slide's notes part belongs to another slide or none  */
     sharedNotes: boolean
     /**  the deck's notes master part  */
     notesMaster: string
@@ -296,10 +296,10 @@ export interface SlideWork {
  *
  *  @param pkg - the deck package
  *  @param work - the slide and its plan entry
- *  @returns what was repaired on the slide (input defects), empty when nothing
+ *  @returns what was repaired on the slide (input defects)
  *  @throws PptcError E_ADDR_NOTFOUND when an addressed shape is missing
  */
-export const editSlide = async (pkg: Package, work: SlideWork): Promise<string[]> => {
+export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> => {
     const { part, entry } = work
     const slide = await pkg.xml(part)
     const rels = await pkg.rels(part)
@@ -382,7 +382,7 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<string[]
     setSlideVisibility(slide, entry.hidden)
     dropLinksToRemoved(pkg, part, slide, rels, work.removed)
     repairRels(pkg, part, slide, rels, unused, forced)
-    const repaired = repairContent(slide, rels)
+    const repaired = repairContent(pkg, part, slide, rels)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
     return repaired

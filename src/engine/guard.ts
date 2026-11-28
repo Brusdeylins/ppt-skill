@@ -17,7 +17,7 @@
 
 import JSZip from "jszip"
 import { createHash } from "node:crypto"
-import { RELS, bytesOf, readRels, relIs, relMap } from "./parts.js"
+import { RELS, bytesOf, optText, readRels, relIs, slideList } from "./parts.js"
 import { elements, parseXml, serializeXml } from "./xml.js"
 
 /**  what the plan allows to change on one output slide  */
@@ -38,16 +38,19 @@ export interface SlideExpect {
     /**  whether an op replaces text on the slide (which may drop an inline
          picture, e.g. a picture bullet, legitimately)  */
     textReplaced?: boolean
+    /**  relationship ids of the source slide whose content a named repair
+         removed (W_REPAIRED) -- left out of its fingerprint  */
+    released?: string[]
 }
 
 /**  a part's text in canonical form (parsed and re-serialized), so that
      attribute quoting and entity spellings never matter to a regex  */
 const canonText = async (zip: JSZip, part: string): Promise<string | null> => {
-    const text = await zip.file(part)?.async("string")
-    if (text === undefined)
+    const text = await optText(zip, part)
+    if (text === null)
         return null
     try {
-        return serializeXml(parseXml(text.replace(/^\uFEFF/, "")))
+        return serializeXml(parseXml(text))
     }
     catch {
         return text
@@ -110,9 +113,10 @@ const computeDigest = async (zip: JSZip, part: string): Promise<string> => {
 
 /**  type-tagged hashes of the parts a part relates to (charts one level
      deeper, so a swapped workbook or chart style is caught as well)  */
-const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number): Promise<string[]> => {
+const relatedDigests = async (zip: JSZip, part: string, xml: string | null, depth: number,
+    skip: string[] = []): Promise<string[]> => {
     const out: string[] = []
-    const seen = new Set<string>()
+    const seen = new Set<string>(skip)
     for (const rel of await readRels(zip, part)) {
         const { el, id, kind, target } = rel
 
@@ -149,16 +153,16 @@ const notesText = async (zip: JSZip, slidePart: string): Promise<string | null> 
 }
 
 /**  fingerprint of one slide: notes text and related-part hashes  */
-const slidePrint = async (zip: JSZip, slidePart: string): Promise<{ notes: string | null, assets: string[] }> => {
+const slidePrint = async (zip: JSZip, slidePart: string, skip: string[] = []): Promise<{ notes: string | null, assets: string[] }> => {
     const xml = await canonText(zip, slidePart) ?? ""
-    return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1) }
+    return { notes: await notesText(zip, slidePart), assets: await relatedDigests(zip, slidePart, xml, 1, skip) }
 }
 
 /**  slide part paths in presentation order  */
 const slideParts = async (zip: JSZip): Promise<string[]> => {
-    const rels = relMap(await readRels(zip, "ppt/presentation.xml"))
     const pres = await canonText(zip, "ppt/presentation.xml")
-    return pres === null ? [] : elements(parseXml(pres), "p:sldId").map((s) => rels.get(s.getAttribute("r:id") ?? "")?.target ?? "")
+    return pres === null ? []
+        : slideList(zip, parseXml(pres), await readRels(zip, "ppt/presentation.xml")).map((s) => s.part ?? "")
 }
 
 /**  remove the entries of `b` from `a` (multiset difference)  */
@@ -192,7 +196,8 @@ export interface ContentCheck {
  *  @param before - the input deck
  *  @param after - the output deck
  *  @param expects - one expectation per output slide, in output order
- *  @param repaired - layouts and masters the engine repaired (W_REPAIRED),
+ *  @param repaired - package parts the engine repaired (W_REPAIRED), among
+ *                    them layouts, masters and themes
  *                    exempt from the layout check
  *  @returns blocking findings and mere losses; both empty when nothing
  *           changed that the plan kept
@@ -206,7 +211,7 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
         const outPart = outParts[i]
         if (exp.source === null || outPart === undefined)
             continue
-        const was = await slidePrint(before, exp.source)
+        const was = await slidePrint(before, exp.source, exp.released)
         const now = await slidePrint(after, outPart)
         if (!exp.notes && was.notes !== now.notes) {
             if (now.notes === null || now.notes === "")
