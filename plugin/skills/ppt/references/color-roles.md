@@ -24,6 +24,10 @@ Usage rules
     only for graphics/diagrams (info-graphics may use 2-3 of them).
 -   Always write colors as `#RRGGBB` hex codes into the prompt, e.g.
     `deep blue (#1F4E79)` -- name the hue AND give the code.
+-   In ops (element fills, borders, fonts, table and chart colors, runs,
+    backgrounds) give the slot NAME instead (`"accent1"`, `"lt1"`): pptc
+    writes it as a theme reference, so the element follows the template.
+    Hex codes belong into image prompts, which cannot reference a theme.
 -   Primary slot default is `accent1`. If a template uses a different
     slot as its brand color, the template sidecar (or the user) may
     override the primary slot; everything else stays the same.

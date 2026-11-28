@@ -77,9 +77,11 @@ Execution Rules
   the font (sizes come from the template, see content-rules.md). A
   W_REPAIRED warning on a successful apply means the deck carried
   PowerPoint repair triggers on that slide and pptc repaired them -- tell
-  the user which slide and what was removed, do not hide it. A
-  W_INPUT_DEFECT warning means the deck carries repair triggers pptc
-  cannot repair; they stay as they were -- tell the user.
+  the user which slide and what the message says was removed, do not hide
+  it. A W_INPUT_DEFECT warning means the deck already carried repair
+  triggers pptc cannot repair; they stay as they were -- tell the user,
+  quoting the message, that they predate this edit (PowerPoint may still
+  offer a repair) and were not caused by it.
 - **The user edits between turns.** Treat every deck as changed: begin
   EVERY write with a fresh `state` (rev + structure) and pass that rev to
   `apply --rev`. On exit 6 (E_REV_CONFLICT): re-read `state`, re-check your
@@ -117,25 +119,27 @@ tpl describe <tpl>    # LLM-readable description (uses <tpl>.md sidecar)
 tpl inspect <tpl>     # precise JSON: colors, layouts, placeholders, capacity
 tpl validate <tpl>    # check template against pptc's expectations (exit 7 on fail)
 new <deck> --template <tpl>
-state <deck> [--slide SEL] [--level summary|text|full]   # slides + rev; full = shape geometry
-                      #   + rotation, altText/title, table cells/colWidths/merges, autoshape
-                      #   styling, textDirection/valign/margin, arrows, styled paragraphs/runs
+state <deck> [--slide SEL] [--level summary|text|full]   # slides + rev; text: + section;
+                      #   full = shape geometry + rotation, altText/title, hyperlink (URL or
+                      #   slide:id:N), lang, table cells/colWidths/merges, autoshape styling,
+                      #   textDirection/valign/margin, arrows, styled paragraphs/runs
                       #   (round-trip; colors as RRGGBB)
 apply <deck> --ops @<ops.json> --rev <rev> [--dry-run] [--strict] [--template <tpl>]
 verify <deck> [--strict]   # PowerPoint repair-trigger check (exit 8 on --strict)
-schema                # ops JSON schema
+schema [op]           # JSON schema of one op, or of the whole ops document
 text|note|footer|rm|move <deck> --slide SEL ...   # quick edits, no ops doc
 footer <deck> ["text"] [--number] [--date]        # footer (+ slide number/date) on every slide
 ```
 
 Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 `slide.rm`, `slide.move`, `slide.copy`, `el.add`, `el.rm`, `el.set`,
-`img.prompts`, `meta.props`, `text.replace`. Slides are addressed by
-`id:<sldId>`, `title:<exact>`, `$ref` (doc-local), or `index:N` (escape
-hatch only). The fill payload of `slide.add`/`slide.fill` takes
-`placeholders`, `notes`, `footer`, `slideNumber` and `date` (`true` shows
-the layout's slide-number / date field, `false` removes it), `background`
-and `hidden`.
+`img.prompts`, `meta.props`, `text.replace`, `section.rename`,
+`section.rm`. Slides are addressed by `id:<sldId>`, `title:<exact>`,
+`$ref` (doc-local), or `index:N` (escape hatch only). The fill payload of
+`slide.add`/`slide.fill` takes `placeholders` (a picture fill takes `fit`:
+`crop` -- the default --, `contain`, `stretch`), `notes`, `footer`,
+`slideNumber` and `date` (`true` shows the layout's slide-number / date
+field, `false` removes it), `background`, `hidden` and `section`.
 
 Text and colors (every op that writes text or color): rich text paragraphs
 take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
@@ -144,16 +148,17 @@ take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
 `size`, `font`, `color`, `highlight`, `hyperlink`, `lang`. A color is hex
 or a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`, `dk1`,
 `lt1`, `dk2`, `lt2`) -- prefer the slot over the hex it resolves to, so
-the element follows the template. There is NO shrink-to-fit.
+the element follows the template. Without `lang` text gets the deck
+language (`pptcDeckLang`). There is NO shrink-to-fit.
 
 `el.add` element fields (authoritative: `schema el.add`):
 
 ```text
-textbox   frame, text, fill, border, borderPt, lang,
+textbox   frame, text, fill, border, borderPt, lang, hyperlink,
           valign top|middle|bottom, margin 0.1|[l,t,r,b] (in),
           textDirection horizontal|rotate90|rotate270|stacked
 shape     shape (preset), text (rich), fill, border, borderPt, fontColor,
-          fontSize, lang, valign, margin, textDirection
+          fontSize, lang, valign, margin, textDirection, hyperlink
 table     frame, data {headers, rows, style}, colWidths [in], colAlign
           [left|center|right], textDirection, lang; a cell = value or
           {text, bold, fill, color, align, valign, colspan, rowspan,
@@ -182,6 +187,8 @@ frame        {x, y, w, h, rotation}: given keys change (any element; no
 fill, fontColor              placeholder, textbox, shape
 border, borderPt             + picture, connector
 altText, title               any element ("" removes)
+hyperlink    placeholder, textbox, shape, picture: click target, URL or
+             slide link ("" removes)
 image        picture / filled picture placeholder -- ONLY on the user's
              explicit request; frame, crop and animations stay
 cells        table: [{row, col, text}] (0-based, header row 0)
@@ -195,6 +202,21 @@ notes?}` replaces plain text in shapes, placeholders and table cells (notes
 only with `notes: true`, fields never), across formatted runs, and sees
 every earlier op of the document; report `result.replacements` (count and
 slides per op) to the user -- zero matches is no error, say so.
+
+Sections: `section: "Name"` in a fill starts a PowerPoint section at that
+slide; it runs to the next section start, so a slide inside a section
+splits it. In a deck without sections the slides before it form "Default
+Section" -- start the first section on slide 1 instead. `section.rename
+{from, to}` renames one, `section.rm {name}` removes one (its slides join
+the previous section). Names are unique; added, copied and moved slides
+join the section of the slide before them.
+
+Slide links: `hyperlink: "slide:$ref"` (or `slide:title:<exact>`,
+`slide:id:N`) jumps to that slide -- on a run, or on a textbox, shape or
+image as the click target of the whole element (`el.add`, `el.set`). The
+target may be added later in the same ops document and stays the target
+when it moves; a missing one fails with `E_ADDR_NOTFOUND`; removing it
+later drops the link.
 
 Unsupported combinations (a label position the chart type does not take,
 axes on a pie, a ragged table grid) fail with `E_SCHEMA` -- fix the field
@@ -221,9 +243,9 @@ with `E_TEMPLATE`; then drop `--template`.
         slide structure (ids, titles, layouts, picture placeholders); use
         `state <deck> --slide SEL --level full` when you need a
         slide's shapes and overlays -- `full` also returns table geometry +
-        cells + column widths and autoshape preset/fill/border/font, so you
-        can recreate or edit an existing table or native diagram faithfully
-        WITHOUT reading raw XML. The deck's OWN setup memory now travels
+        cells + column widths, autoshape preset/fill/border/font and links,
+        so you can recreate or edit an existing table or native diagram
+        faithfully WITHOUT reading raw XML. The deck's OWN setup memory now travels
         INSIDE the file: the `state` you read carries `customProps` (image
         style, info-graphic style, deck language, title, topic) -- read the
         styles from there, so a deck handed over by someone else is fully
@@ -499,17 +521,20 @@ with `E_TEMPLATE`; then drop `--template`.
     -   **Apply the content rules just read**: action titles (unique, one
         message per slide), 6x6 within the STEP 2 capacities, the notes
         policy (presented: 40-70 words per slide; self-study: none),
-        placeholders first / `el.add` only on the blank-role layout, the
-        agenda updated in the SAME ops document when chapters change, and
-        the footer pattern + AI-image note on every slide -- set via the
+        placeholders first / `el.add` only on the blank-role layout, alt
+        text on images and charts, one section per chapter and the agenda
+        linking to the chapters (both updated in the SAME ops document when
+        chapters change), and the footer pattern + AI-image note on every
+        slide -- set via the
         `footer` field, in <deck-lang/>, with <deck-title/> and the
         current year; slide number and date via `slideNumber`/`date`
         where the template's footer pattern shows them.
     -   **Edit in place.** On an existing deck change what is there with
-        `el.set` (text, frame, style, table cells/rows, alt text) instead
-        of removing and re-adding it; use `text.replace` for wording that
-        repeats across slides (a renamed product, a year) -- scoped as the
-        user asked.
+        `el.set` (text, frame, style, table cells/rows, alt text, link)
+        instead of removing and re-adding it; use `text.replace` for wording
+        that repeats across slides (a renamed product, a year) -- scoped as
+        the user asked. Replace an image (`el.set` `image`) only on the
+        user's explicit request.
     -   **Quantitative data → a native chart, not a drawn SVG.** Trends,
         magnitude comparisons or parts of a whole go into an `el.add` chart
         (bar/column/line/pie/doughnut/area -- data-bound and editable in
@@ -553,7 +578,8 @@ with `E_TEMPLATE`; then drop `--template`.
     After the apply succeeds, run `verify <deck>` as an explicit integrity
     check.
     <if condition="verify reports any `result.findings`">tell the user the deck
-    would prompt a repair, and do not present it as finished.</if>
+    would prompt a repair, and do not present it as finished -- findings the
+    apply reported as W_INPUT_DEFECT predate this edit: say so.</if>
 
     </step>
 
@@ -664,7 +690,9 @@ with `E_TEMPLATE`; then drop `--template`.
     open items. **Final integrity check:** run `verify <deck>` once more on
     the finished deck; it must report `result.ok: true` (no findings) before
     you call the deck done -- a deck that would prompt a PowerPoint repair is
-    never a finished deliverable. Then report with this output:
+    never a finished deliverable (findings it carried before your edits,
+    reported as W_INPUT_DEFECT, go into the open items). Then report with
+    this output:
 
     <template>
     ────────────────────────────────────────

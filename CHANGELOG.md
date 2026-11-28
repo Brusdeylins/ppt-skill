@@ -24,36 +24,34 @@
   language, else the first run language on a slide, `en-US` only as the
   last resort. PptxGenJS wrote `en-US` everywhere, so German decks were
   spell-checked as English. `textbox`, `shape` and `table` elements,
-  paragraphs and runs take their own `lang`; `state --level full` reports
-  each shape's `lang`.
-- **`el.set` refuses what it cannot retext.** Text for a table, chart,
-  picture, connector or group used to vanish silently (or replace the text
-  of a group's first child); it now fails with `E_SCHEMA` at plan time.
+  paragraphs and runs take their own `lang`.
 - **Connector arrows.** `connector` elements take `startArrow`/`endArrow`
   (`none`, `arrow`, `triangle`, `stealth`, `diamond`, `oval`) at their
   `from`/`to` end, also for lines drawn right to left; `dash` gains
-  `dashDot` and `longDash`. `state --level full` reports the arrows.
-- **Table columns.** `table` elements take `colWidths` (inches, as `state`
-  reports them -- scaled to `frame.w` when that is given) and `colAlign`
-  (`left`/`center`/`right` per column); a list whose length differs from
-  the table's columns fails with `E_SCHEMA`.
+  `dashDot` and `longDash`.
+- **Table columns and cells.** `table` elements take `colWidths` (inches,
+  as `state` reports them -- scaled to `frame.w` when that is given) and
+  `colAlign` (`left`/`center`/`right` per column). A cell is a plain value
+  or a styled cell `{text, bold, fill, color, align, valign, colspan,
+  rowspan, textDirection}` with rich text; cells covered by a span are
+  left out of their rows, as in HTML. A grid that does not add up and
+  per-column lists of the wrong length fail with `E_SCHEMA`.
 - **Text direction.** `textDirection: horizontal|rotate90|rotate270|stacked`
   on textboxes, shapes, tables and table cells (`vert`, `vert270`,
-  `wordArtVert`); `state --level full` reports it with the same names. The
-  capacity of a layout placeholder whose text runs vertically swaps width
-  and height, and the overlap lint takes the axis-aligned box a rotated
-  element covers.
+  `wordArtVert`). The capacity of a layout placeholder whose text runs
+  vertically swaps width and height, and the overlap lint takes the
+  axis-aligned box a rotated element covers.
 - **Theme colors.** Every color field -- `el.add` fills, borders, fonts,
-  lines, table and chart colors, rich-text runs, slide backgrounds --
-  accepts a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`,
-  `dk1`, `lt1`, `dk2`, `lt2`) besides hex and writes it as `a:schemeClr`,
-  so the element follows the template's color scheme. PptxGenJS knows only
-  some slots and writes chart series colors as RGB, so theme colors pass it
-  as unused hex tokens that are turned into `a:schemeClr` on its output.
-  `state` keeps resolving colors to RRGGBB.
-- **Image fit and link.** `el.add` images take `fit: crop|contain|stretch`
+  lines, table and chart colors, rich-text runs, slide backgrounds,
+  `el.set` -- accepts a theme slot (`accent1`-`accent6`, `tx1`, `tx2`,
+  `bg1`, `bg2`, `dk1`, `lt1`, `dk2`, `lt2`) besides hex and writes it as
+  `a:schemeClr`, so the element follows the template's color scheme.
+  PptxGenJS knows only some slots and writes chart series colors as RGB,
+  so theme colors pass it as unused hex tokens that are turned into
+  `a:schemeClr` on its output. `state` keeps resolving colors to RRGGBB.
+- **Image fit.** `el.add` images take `fit: crop|contain|stretch`
   (default `stretch`, as before) with the same centered crop and contain
-  frame as picture placeholders, and a `hyperlink` URL.
+  frame as picture placeholders.
 - **Chart labels and axes.** Charts take `labels` (`value`, `percent`,
   `format`, `position`), `axes.x`/`axes.y` (`title`, `min`, `max`,
   `format`), `legend` as a position (`top`/`bottom`/`left`/`right`),
@@ -62,51 +60,46 @@
   pie, ...) fail with `E_SCHEMA`. Scatter and bubble charts were written
   without any series; their series now share one x column (required to be
   the same for every series).
-- **Table cells.** A table cell is a plain value or a styled cell
-  `{text, bold, fill, color, align, valign, colspan, rowspan,
-  textDirection}` with rich text; cells covered by a span are left out of
-  their rows, as in HTML, and a grid that does not add up fails with
-  `E_SCHEMA`. `state --level full` reports `merges` and
-  `cellTextDirections`; the covered cells read as `""` in `table`.
 - **Text layout.** Textboxes and shapes take `valign` and `margin`;
   paragraphs `spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple) and
   `bullet: "number"`; runs `strike`, `superscript`, `subscript` and
-  `highlight` -- in `el.add` as well as in `slide.fill` and `el.set`, and
-  read back in `paragraphs`. Shape text takes rich text. A paragraph of
-  several runs in an `el.add` textbox got one paragraph property set per
-  run from PptxGenJS (invalid after the first run, and a bulleted run
-  started a new paragraph); it now keeps one.
+  `highlight` -- in `el.add` as well as in `slide.fill` and `el.set`. Shape
+  text takes rich text. A paragraph of several runs in an `el.add` textbox
+  got one paragraph property set per run from PptxGenJS (invalid after the
+  first run, and a bulleted run started a new paragraph); it now keeps one.
+  There is deliberately no shrink-to-fit: overflowing text stays a
+  `W_TEXT_OVERFLOW` to shorten or split.
 - **`el.set` changes elements in place.** Besides `text`, `el.set` takes
   `frame` (`x`, `y`, `w`, `h`, `rotation` -- the given keys move, resize
   or rotate; a placeholder that inherits its frame gets the layout's frame
   written into the slide, a group keeps its children's coordinates, a
-  table's columns and rows scale), `fill`, `border`, `borderPt` and
-  `fontColor`, each checked against the element's type (`E_SCHEMA`
-  otherwise). It also changes elements planned earlier in the same
-  document, and the placeholders of slides added in it; the overlap lint
-  sees the planned frames and lints a moved element. New text that sets
-  no format keeps the first paragraph's and run's format (alignment,
-  bullets, font, size, color, language) instead of falling back to the
-  layout's.
+  table's columns and rows scale), `fill`, `border`, `borderPt`,
+  `fontColor`, `altText`, `title`, `hyperlink`, `image` and, for tables,
+  `cells` (`[{row, col, text}]`, 0-based grid position, header row 0),
+  `addRows` (`{at, rows}`, in the format of the row above) and
+  `removeRows` (indices) -- each checked against the element's type at
+  plan time (`E_SCHEMA` otherwise; text for a table, chart, picture,
+  connector or group used to vanish silently or replace the text of a
+  group's first child). A table keeps its style and cell formatting and
+  its frame's height follows the rows; covered cells of a merge, rows of a
+  vertical merge and positions inside one fail, also after earlier row
+  changes in the same document. `el.set` also changes elements planned
+  earlier in the same document and the placeholders of slides added in
+  it; the overlap lint sees the planned frames and lints a moved element.
+  New text that sets no format keeps the first paragraph's and run's
+  format (alignment, bullets, font, size, color, language) instead of
+  falling back to the layout's.
 - **Alt text.** Every `el.add` element takes `altText` and `title`, and
   `el.set` sets or (with `""`) removes them on any element
-  (`cNvPr@descr`/`@title`); `state --level full` reports them, with a
-  shape's `rotation` and a text body's `valign` and `margin`. PptxGenJS
-  described every `el.add` picture by its local file path, which leaked
-  into the deck; the description is now the given alt text or none.
+  (`cNvPr@descr`/`@title`). PptxGenJS described every `el.add` picture by
+  its local file path, which leaked into the deck; the description is now
+  the given alt text or none.
 - **Image replace.** `el.set` `image` puts another image into a picture
   or a filled picture placeholder: a new media part, the frame, the
   animations and a crop (re-cut centered to the new aspect) stay, an SVG
   shows through PowerPoint's SVG extension. The content guard learned the
   swap: the new image (by content hash) must come, the old one may go --
   any other change of the slide's images still fails the apply.
-- **Table cells and rows in place.** `el.set` on a table takes `cells`
-  (`[{row, col, text}]`, 0-based grid position, header row 0), `addRows`
-  (`{at, rows}`, in the format of the row above) and `removeRows`
-  (indices); the table style and the cell formatting stay, the frame's
-  height follows the rows. Covered cells of a merge, rows of a vertical
-  merge and positions inside one fail with `E_SCHEMA` at plan time, also
-  after earlier row changes in the same document.
 - **Text replace.** The new op `text.replace {find, replace, slide,
   matchCase, wholeWord, notes}` replaces plain text in the shapes,
   placeholders and table cells of the deck or one slide, in the notes on
@@ -126,6 +119,46 @@
   get relationships of their own for what the layout content references
   (a footer's link pointed at whatever relationship of the slide had the
   layout's id).
+- **Sections.** The fill field `section` on `slide.add`/`slide.fill`
+  starts a PowerPoint section at the slide (created if missing): it runs up
+  to the next section start, so a slide inside a section splits it, and a
+  section left without slides goes. In a deck without sections the slides
+  before it form "Default Section", as in PowerPoint. The new ops
+  `section.rename {from, to}` and `section.rm {name}` rename a section and
+  remove one -- its slides join the previous section, the next one when it
+  was the first. Names are unique (`E_SCHEMA` for a name in use,
+  `E_ADDR_NOTFOUND` for an unknown one). The plan models the sections once
+  an op touches them, so section ops compose with the adds, copies and
+  moves of the same document (which join their predecessor's section, as
+  before); kept sections keep their id, and the `rev` covers the sections.
+- **Slide links.** `hyperlink` takes a URL or a slide link `slide:SEL`
+  (`slide:$ref`, `slide:id:256`, `slide:title:Agenda`, `slide:index:2`) on
+  runs, and on textboxes, shapes and pictures as the click target of the
+  whole element (`el.add`; `el.set` also on placeholders, `""` removes it)
+  -- an agenda that jumps to its chapters, a back button. A slide link is a
+  slide relationship with `ppaction://hlinksldjump`; its target is resolved
+  after the whole document, so slides added later in it count and moved
+  slides stay the target, and a target that does not exist then fails
+  with `E_ADDR_NOTFOUND`. Links to slides a later apply removes are
+  dropped as before; copies keep their links. PptxGenJS never writes a
+  slide link (its own would point at a generator slide).
+- **`state` reads back what can be written.** `--level full` reports
+  `altText`, `title`, `rotation`, `lang`, `valign`, `margin`,
+  `textDirection`, connector arrows, table `merges` and
+  `cellTextDirections` (covered cells read as `""`), the click target of
+  runs and elements (`hyperlink`: the URL or `slide:id:N`) and the new
+  run and paragraph formats in `paragraphs`; `--level text` and `full`
+  report each slide's `section` and the deck's `sections` in order.
+- **Skill.** The `ppt` skill documents every 1.1 and 1.2 op and field
+  (`el.set` in place, `text.replace` and its `replacements`, sections,
+  slide links, `fit`, `lang`, theme colors, slide number and date, the
+  `el.add` options, alt text), how to report `W_REPAIRED` and
+  `W_INPUT_DEFECT`, the `E_INTEGRITY` recovery, and its content rules: no
+  shrink-to-fit, images replaced only on the user's explicit request, alt
+  text on images and charts, a section per chapter and an agenda that
+  links to its chapters.
+
+## 1.1.0
 
 - **New engine: decks are edited in place.** Every apply used to rebuild
   the whole deck through `pptx-automizer`, whose count-based, slide-local

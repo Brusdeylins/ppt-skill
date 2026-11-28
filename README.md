@@ -237,12 +237,13 @@ The deck read model and the **`rev` token** for optimistic locking.
   cells (`merges`: row, col, rowspan, colspan; covered cells read as `""`)
   and vertical cell text (`cellTextDirections`), autoshape
   preset/fill/border/font, the `textDirection`, `valign` and `margin` of a
-  text body, the `rotation`, `altText` and `title` of a shape, connector
+  text body, the `rotation`, `altText` and `title` of a shape, its click
+  target (`hyperlink`: URL or `slide:id:N`), connector
   `startArrow`/`endArrow`, the text language (`lang`), a picture's media
-  file name (`image`), and --
-  for a body with explicit run formatting -- its `paragraphs`/`runs`
-  (per-run font, size, bold, italic, strike, superscript/subscript, color,
-  highlight; per paragraph bullet and spacing -- round-tripping into
+  file name (`image`), and -- for a body with explicit run formatting or
+  links -- its `paragraphs`/`runs` (per-run font, size, bold, italic,
+  strike, superscript/subscript, color, highlight, hyperlink; per
+  paragraph bullet and spacing -- round-tripping into
   `slide.fill`) -- enough to recreate or edit a styled table, diagram or
   code block without touching the raw XML. Colors read as RRGGBB, theme
   colors resolved against the deck's theme
@@ -414,9 +415,9 @@ Anatomy:
   `1.5`); a run takes `bold`, `italic`, `underline`, `strike`,
   `superscript`, `subscript`, `size`, `font`, `color`, `highlight`,
   `hyperlink` (see *Links*) and `lang` (paragraph-level character fields
-  apply to a paragraph without runs). The same vocabulary works in `slide.fill`,
-  `el.set` and `el.add`. There is no shrink-to-fit: text that overflows is
-  shortened or split (`W_TEXT_OVERFLOW`).
+  apply to a paragraph without runs). The same vocabulary works in
+  `slide.fill`, `el.set` and `el.add`. There is no shrink-to-fit: text that
+  overflows is shortened or split (`W_TEXT_OVERFLOW`).
 - **Links**: `hyperlink` -- on a run, and on a `textbox`, `shape` or
   `image` as the click target of the whole element (`el.add`, `el.set`)
   -- takes a URL or a slide link `slide:SEL`: `slide:$ref`,

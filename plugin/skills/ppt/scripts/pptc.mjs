@@ -16271,23 +16271,27 @@ Options:
   --level        summary: ids, indices, titles, layout indices, and
                    'hidden: true' on hidden slides ("Hide Slide"; reported
                    on every level, '[hidden]' under --plain)
-                 text (default): plus placeholder texts and notes
+                 text (default): plus placeholder texts and notes, and
+                   each slide's 'section' (with the deck's 'sections' in
+                   order) when the deck has sections
                  full: plus every shape with geometry AND styling --
                    type, name, frame, text, table cells + column widths
                    (colWidths) + merged cells (merges) + vertical cell
                    text (cellTextDirections), autoshape preset/fill/
                    border/font, textDirection, valign and margin of a
-                   text body, rotation, altText and title, connector
+                   text body, rotation, altText and title, the click
+                   target (hyperlink: URL or slide:id:N), connector
                    startArrow/endArrow, the text language (lang), a
                    picture's media file name (image), and -- for a body
-                   with explicit run
-                   formatting -- its paragraphs/runs (per-run font, size,
-                   bold, italic, strike, super-/subscript, color,
-                   highlight; per paragraph bullet, spacing), which pass
-                   straight back into slide.fill. Colors read as RRGGBB,
-                   theme colors resolved. This is the COMPLETE structure: enough to
-                   recreate or edit a styled table, diagram or code block, so
-                   there is never a need to unzip the .pptx and read raw XML.
+                   with explicit run formatting or links -- its
+                   paragraphs/runs (per-run font, size, bold, italic,
+                   strike, super-/subscript, color, highlight, hyperlink;
+                   per paragraph bullet, spacing), which pass straight
+                   back into slide.fill. Colors read as RRGGBB, theme
+                   colors resolved. This is the COMPLETE structure: enough
+                   to recreate or edit a styled table, diagram or code
+                   block, so there is never a need to unzip the .pptx and
+                   read raw XML.
   --plain        readable text instead of the JSON envelope
 
 Example:

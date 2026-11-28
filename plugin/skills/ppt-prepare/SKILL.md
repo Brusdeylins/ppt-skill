@@ -304,7 +304,9 @@ Protocols
     chapter stop rendering as a table). Pad every column to a uniform
     width so the pipes line up vertically. List the structural slides
     (title, agenda, chapter dividers, closing) in one leading table of the
-    same shape.
+    same shape. (`ppt` turns each chapter into a PowerPoint section named
+    after it and links the agenda entries to the chapter dividers -- keep
+    chapter titles short enough to serve as section names.)
     <for items="chapters"><expand name="chapter-plan"/></for>
 
     <define name="chapter-plan">

@@ -51,7 +51,9 @@ Language and footer
     independent of the conversation language. ALL
     deck-facing text -- titles, bullets, notes, footer, AI note -- is
     written/translated into the deck language. Image prompts stay
-    English.
+    English. pptc marks every run it writes with the deck language
+    (`pptcDeckLang`, a tag like `de-DE`) for spell-checking; set `lang`
+    only on text in another language (a quote, a product name).
 -   **Footer on every slide**: the template's footer pattern (see
     template sidecar) with the actual deck title and the CURRENT year;
     slide number and date (`slideNumber`/`date`, `pptc footer --number
@@ -119,7 +121,12 @@ Elements (tables, charts, free shapes)
     headers.
 -   **Alt text.** Every image and chart carries an `altText` in the deck
     language that says what it shows (screen readers, accessibility
-    checks); decorative shapes need none.
+    checks); decorative shapes need none. Missing alt text on an existing
+    element is set with `el.set` `altText`, never by re-adding it.
+-   **Images are replaced only on request.** `el.set` `image` swaps the
+    picture in place (frame, crop and animations stay) and the old image
+    is gone from the deck -- do it only when the user explicitly asks for
+    that image to change, never as a side effect of another edit.
 -   **Never cover existing text fields** (placeholders incl. the
     footer/slide-number area, textboxes, tables, charts) with a new
     element -- prompt boxes and the AI-note textbox (where no footer
@@ -206,9 +213,21 @@ Speaker notes
 Structural slides
 -----------------
 
--   **Agenda** derives from the chapter titles, one bullet each. When
-    chapters are added/renamed/removed, update the agenda slide in the
-    same ops document (`slide.fill` on the agenda slide).
+-   **Agenda** derives from the chapter titles, one bullet each; each
+    bullet links to its chapter divider (run `hyperlink: "slide:$ref"`, or
+    `slide:title:<chapter title>` on an existing deck). When chapters are
+    added/renamed/removed, update the agenda slide -- entries and links --
+    in the same ops document (`slide.fill` on the agenda slide).
+-   **Sections follow the chapters.** Each chapter divider starts a
+    PowerPoint section (`section` fill field) named after the chapter
+    (short form, deck language); the title and agenda slides get a leading
+    section of their own (e.g. "Intro"), started on slide 1 so no "Default
+    Section" appears. Renamed or removed chapters update their section in
+    the same ops document (`section.rename`, `section.rm`).
+-   **Back to the agenda** (click-through decks: self-study, kiosk, long
+    workshops): a small shape on chapter dividers, placed clear of text
+    and footer, with `hyperlink: "slide:title:<agenda title>"` -- not on
+    presented decks unless the user asks.
 -   **Chapter divider** carries the chapter title AND a one-line chapter
     **conclusion** as a subtitle (an advance organizer: what the chapter
     concludes), synthesized from the chapter's slides and their takeaways.
@@ -229,7 +248,9 @@ Final checklist (report unanswered items to the user)
 - [ ] No placeholder over capacity (`--dry-run --strict` passes)
 - [ ] Speaker notes on every content slide (presented deck) / no notes
       (self-study deck)
-- [ ] Agenda matches the actual chapters
+- [ ] Agenda matches the actual chapters, and its entries jump to them
+- [ ] One section per chapter, named like it (no stray "Default Section")
+- [ ] Every image and chart carries alt text in the deck language
 - [ ] Image prompts use template hex codes and the deck-wide styles
 - [ ] All slide titles unique
 - [ ] All deck text in the deck language (no conversation-language leaks)
