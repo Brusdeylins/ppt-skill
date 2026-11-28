@@ -186,6 +186,10 @@ export interface ShapeInfo {
          top-left corner, header row 0) with their spans; the covered cells
          read as "" in `table`. Mirrors el.add cell `colspan`/`rowspan`.  */
     merges?: { row: number, col: number, rowspan: number, colspan: number }[]
+    /**  true when the table's first row is a header row (PowerPoint's
+         Header Row option, `firstRow`; el.add sets it for `headers`):
+         el.set `addRows` cannot insert above it  */
+    headerRow?: boolean
     /**  table cells whose text does not run horizontally (grid row/col);
          mirrors el.add cell `textDirection`  */
     cellTextDirections?: { row: number, col: number, textDirection: TextDirectionInfo }[]
@@ -209,6 +213,9 @@ export interface ShapeInfo {
     /**  solid fill color RRGGBB (theme colors resolved) when present; mirrors
          el.add `fill`  */
     fill?: string
+    /**  transparency of the solid fill in percent when it has one (its
+         color's `a:alpha`); mirrors el.add / el.set `transparency`  */
+    transparency?: number
     /**  outline color RRGGBB (theme colors resolved) when present; mirrors
          el.add `border`  */
     border?: string

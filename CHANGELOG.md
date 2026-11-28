@@ -44,11 +44,22 @@
 - **Theme colors.** Every color field -- `el.add` fills, borders, fonts,
   lines, table and chart colors, rich-text runs, slide backgrounds,
   `el.set` -- accepts a theme slot (`accent1`-`accent6`, `tx1`, `tx2`,
-  `bg1`, `bg2`, `dk1`, `lt1`, `dk2`, `lt2`) besides hex and writes it as
+  `bg1`, `bg2`, `dk1`, `lt1`, `dk2`, `lt2`, `hlink`, `folHlink`) besides hex and writes it as
   `a:schemeClr`, so the element follows the template's color scheme.
   PptxGenJS knows only some slots and writes chart series colors as RGB,
-  so theme colors pass it as unused hex tokens that are turned into
+  so theme colors pass it as unused hex tokens (one per slot, all distinct
+  from the token of text without a color) that are turned into
   `a:schemeClr` on its output. `state` keeps resolving colors to RRGGBB.
+  The skill steers text to `tx1`/`tx2` and fills to `bg1`/`bg2` (they
+  follow the master's color map), `dk1`/`lt1`/`dk2`/`lt2` only for
+  contrast on images.
+- **Fill transparency.** A solid fill takes `transparency` in percent (0
+  opaque - 100 invisible), written as its color's `a:alpha`: on `el.add`
+  textboxes, shapes and table cells next to `fill` (without one:
+  `E_SCHEMA`), and on `el.set` with a new fill or on the element's own
+  solid fill (one without needs `fill`: `E_SCHEMA` at plan time); a new
+  `fill` keeps the element's transparency. `state --level full` reports
+  it.
 - **Image fit.** `el.add` images take `fit: crop|contain|stretch`
   (default `stretch`, as before) with the same centered crop and contain
   frame as picture placeholders.
@@ -60,11 +71,29 @@
   pie, ...) fail with `E_SCHEMA`. Scatter and bubble charts were written
   without any series; their series now share one x column (required to be
   the same for every series).
+- **Shape presets.** `shape` elements take 28 more preset geometries --
+  `round1Rect`, `round2SameRect`, `snip1Rect`, `parallelogram`,
+  `trapezoid`, `octagon`, `plus`, `donut`, `pie`, `blockArc`, `can`,
+  `frame`, `leftRightArrow`, `upDownArrow`, `notchedRightArrow`,
+  `curvedRightArrow`, `circularArrow`, `homePlate`, the callouts
+  `wedgeRectCallout`, `wedgeRoundRectCallout`, `wedgeEllipseCallout`, the
+  brackets and braces `leftBracket`, `rightBracket`, `leftBrace`,
+  `rightBrace`, and `flowChartDocument`, `flowChartPredefinedProcess`,
+  `flowChartConnector` -- each written as its `a:prstGeom` and read back
+  by `state` as `shape`.
+- **Stacking order.** Every `el.add` element takes `zOrder`: `front` (the
+  default, as before), `back` (behind every shape), `forward`/`backward`
+  (placed in front, then one shape up/down); `el.set` `zOrder` moves an
+  existing or planned element of any type. The moves follow the op order
+  and come after the document's new elements are in place; `state --level
+  full` lists the shapes back to front. An element sent to the back
+  covers nothing, so the overlap lint leaves it out.
 - **Text layout.** Textboxes and shapes take `valign` and `margin`;
   paragraphs `spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple) and
   `bullet: "number"`; runs `strike`, `superscript`, `subscript` and
   `highlight` -- in `el.add` as well as in `slide.fill` and `el.set`. Shape
-  text takes rich text. A paragraph of several runs in an `el.add` textbox
+  text takes rich text. A run's `font` also takes the theme fonts `+mj-lt`
+  (heading) and `+mn-lt` (body), so text follows the template's fonts. A paragraph of several runs in an `el.add` textbox
   got one paragraph property set per run from PptxGenJS (invalid after the
   first run, and a bulleted run started a new paragraph); it now keeps one.
   There is deliberately no shrink-to-fit: overflowing text stays a
@@ -73,10 +102,11 @@
   `frame` (`x`, `y`, `w`, `h`, `rotation` -- the given keys move, resize
   or rotate; a placeholder that inherits its frame gets the layout's frame
   written into the slide, a group keeps its children's coordinates, a
-  table's columns and rows scale), `fill`, `border`, `borderPt`,
-  `fontColor`, `altText`, `title`, `hyperlink`, `image` and, for tables,
+  table's columns and rows scale), `fill`, `transparency`, `border`, `borderPt`,
+  `fontColor`, `altText`, `title`, `hyperlink`, `image`, `zOrder` and, for tables,
   `cells` (`[{row, col, text}]`, 0-based grid position, header row 0),
-  `addRows` (`{at, rows}`, in the format of the neighbouring body row) and
+  `addRows` (`{at, rows}`, in the format of the neighbouring body row;
+  never above a header row) and
   `removeRows` (indices) -- each checked against the element's type at
   plan time (`E_SCHEMA` otherwise; text for a table, chart, picture,
   connector or group used to vanish silently or replace the text of a
@@ -145,15 +175,16 @@
   slide link (its own would point at a generator slide).
 - **`state` reads back what can be written.** `--level full` reports
   `altText`, `title`, `rotation`, `lang`, `valign`, `margin`,
-  `textDirection`, connector arrows, table `merges` and
-  `cellTextDirections` (covered cells read as `""`), the click target of
+  `textDirection`, connector arrows, fill `transparency`, table `merges`,
+  `cellTextDirections` (covered cells read as `""`) and `headerRow`, the click target of
   runs and elements (`hyperlink`: the URL or `slide:id:N`) and the new
   run and paragraph formats in `paragraphs`; `--level text` and `full`
   report each slide's `section` and the deck's `sections` in order.
 - **Skill.** The `ppt` skill documents every 1.1 and 1.2 op and field
   (`el.set` in place, `text.replace` and its `replacements`, sections,
-  slide links, `fit`, `lang`, theme colors, slide number and date, the
-  `el.add` options, alt text), how to report `W_REPAIRED` and
+  slide links, `fit`, `lang`, theme colors and fonts, fill transparency,
+  the stacking order, the shape presets, slide number and date, the
+  `el.add` options, alt text -- also with a replaced image), how to report `W_REPAIRED` and
   `W_INPUT_DEFECT`, the `E_INTEGRITY` recovery, and its content rules: no
   shrink-to-fit, images replaced only on the user's explicit request, alt
   text on images and charts, a section per chapter and an agenda that
@@ -186,6 +217,11 @@
   color black, so textboxes, shapes and table cells ignored the template's
   text color. Such text now has no color of its own and takes the
   template's; table headers keep their white on the default dark fill.
+  On a fill -- of a textbox, shape, table cell, a `headerBg` without
+  `headerFg`, an `altRowBg` row -- it takes the theme's `dk1` or `lt1`,
+  whichever contrasts more with the fill (a theme fill resolved through
+  the first master's theme and color map), so a light fill on a dark
+  template is no white on white.
 - **Fix: `el.set` text with formatting dropped the kept format.** A
   paragraph or run that set any field of its own was written from scratch;
   the given fields are now merged onto the kept first paragraph's and
@@ -194,13 +230,36 @@
   cells got no bullet from the text writer (`slide.fill`, `el.set`), and
   `el.set` removed the bullets of a bulleted textbox. Where no list style
   brings one, `bullet: true` now writes a bullet character with a hanging
-  indent (as PptxGenJS does), and a kept bullet stays.
+  indent (as PptxGenJS does), and a kept bullet stays. In a placeholder
+  the inherited list style decides by level -- the slide's own, the
+  layout placeholder's, the master placeholder's, the master text style
+  --, so a subtitle, caption or section-header placeholder whose level has
+  `buNone` gets a bullet character too. `el.set` text with another `level`
+  than the kept paragraph drops the kept indent (a kept bullet takes the
+  new level's hanging indent), so the level takes effect.
 - **Fix: replaced text kept the old shrink scale.** PowerPoint's computed
   `fontScale`/`lnSpcReduction` of the old text stayed with the new one;
   replaced text drops both (`normAutofit` stays).
 - **Fix: `text.replace` skipped charts and SmartArt silently.** It still
   leaves their text as it is, but now reports a targeted slide whose chart
-  or SmartArt holds a match (`W_REPLACE_SKIPPED`, naming the part).
+  text (titles, series names, categories -- not the cached numbers) or
+  SmartArt holds a match (`W_REPLACE_SKIPPED`, naming the part).
+- **Fix: percent-stacked area charts were drawn as standard areas.**
+  PptxGenJS 4.0.1 writes an area chart's grouping only for `stacked`;
+  `area` and `areaStacked` with `stacked: "percent"` now get
+  `c:grouping percentStacked`.
+- **Fix: a slide-number or date placeholder with a picture failed.** When
+  the layout's placeholder content holds an image, showing it again
+  (`true` on a slide that has it) or removing it (`false`) failed with a
+  false `E_INTEGRITY`; the content guard now lets the removed
+  placeholder's images go -- and only those.
+- **Fix: `addRows` at 0 went above the header row of an existing table.**
+  It cloned the header row, where a planned table rejects the position.
+  Tables `el.add` creates with `headers` now carry PowerPoint's header-row
+  flag (`firstRow`), and `addRows` at 0 on a table with a header row fails
+  with `E_SCHEMA` in both cases; removing row 0 removes the flag.
+- **Fix: the overflow lint ignored line breaks.** A `\v` line break now
+  counts as a line of its own for `W_TEXT_OVERFLOW`.
 - **Fix: cloned slide-number and date fields kept the layout's language.**
   They now take the deck language like every text pptc writes.
 

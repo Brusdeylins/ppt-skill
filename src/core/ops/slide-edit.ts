@@ -52,14 +52,22 @@ export const slideCopy: OpHandler<Extract<Op, { op: "slide.copy" }>> = {
     name: "slide.copy",
     plan(ctx, op): void {
         const source = resolveEntry(ctx, op.slide)
+        /*  deep-copy planned elements: a later el.set on the copy must
+            not patch the original's planned spec through aliasing  */
+        const elements = source.elements.map((e) => ({ name: e.name, spec: structuredClone(e.spec) }))
         const copy: SlidePlanEntry = {
             ...source,
             virtualId: ctx.nextVirtualId--,
             fills: structuredClone(source.fills),
-            /*  deep-copy planned elements: a later el.set on the copy must
-                not patch the original's planned spec through aliasing  */
-            elements: source.elements.map((e) => ({ name: e.name, spec: structuredClone(e.spec) })),
+            elements,
             edits: structuredClone(source.edits),
+            /*  stacking-order changes follow the copied elements  */
+            zOrder: source.zOrder.flatMap((z) => {
+                if (typeof z.target === "string")
+                    return [ { ...z } ]
+                const copied = elements[source.elements.indexOf(z.target)]
+                return copied === undefined ? [] : [ { ...z, target: copied } ]
+            }),
             removeNames: [...source.removeNames],
             replaces: structuredClone(source.replaces),
             replaced: structuredClone(source.replaced)

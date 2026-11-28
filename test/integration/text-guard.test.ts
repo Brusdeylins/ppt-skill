@@ -9,7 +9,8 @@
 **  cell fill. Text that replaces a whole body may take a picture bullet
 **  along. Tampered outputs show the guard at work: a picture or chart an
 **  edit dropped fails the apply, a foreign image is blocked, and an image
-**  adopted with layout content must be exactly the declared one.
+**  adopted with layout content must be exactly the declared one; a
+**  footer-band placeholder cloned anew or removed may take its image along.
 */
 
 import { beforeAll, describe, expect, it, vi } from "vitest"
@@ -223,36 +224,43 @@ describe("content guard after text edits", () => {
     })
 })
 
+/**  a deck with one slide whose layout's slide-number placeholder has a
+     picture fill; returns the slide part and the picture bytes  */
+const bandDeck = async (own: string): Promise<{ part: string, bandImage: Buffer }> => {
+    await apply(own, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Band" } }, slideNumber: false } ])
+
+    /*  the layout's slide number placeholder gets a picture fill  */
+    const part = (await stateOf(own)).slides[0]?.part ?? ""
+    const zip = await JSZip.loadAsync(readFileSync(own))
+    const slideRels = parseXml(await (zip.file(relsPartOf(part)) as JSZip.JSZipObject).async("string"))
+    const layout = relTargets(part, slideRels).find((r) => r.kind === "slideLayout")?.target ?? ""
+    const bandImage = Buffer.concat([ png(30, 30), Buffer.from("band") ])
+    zip.file("ppt/media/text-guard-band.png", bandImage)
+    const layoutRels = await (zip.file(relsPartOf(layout)) as JSZip.JSZipObject).async("string")
+    zip.file(relsPartOf(layout), layoutRels.replace("</Relationships>", "<Relationship Id=\"rIdBand\" "
+        + "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" "
+        + "Target=\"../media/text-guard-band.png\"/></Relationships>"))
+    const doc = parseXml(await (zip.file(layout) as JSZip.JSZipObject).async("string"))
+    const sp = elements(doc, "p:sp").find((s) => firstElement(s, "p:ph")?.getAttribute("type") === "sldNum") as Element
+    const spPr = firstElement(sp, "p:spPr") as Element
+    const blipFill = doc.createElementNS(NS_A, "a:blipFill")
+    const blip = doc.createElementNS(NS_A, "a:blip")
+    blip.setAttributeNS(NS_R, "r:embed", "rIdBand")
+    blipFill.appendChild(blip)
+    blipFill.appendChild(doc.createElementNS(NS_A, "a:stretch")).appendChild(doc.createElementNS(NS_A, "a:fillRect"))
+    spPr.insertBefore(blipFill, elements(spPr, "a:ln")[0] ?? elements(spPr, "a:extLst")[0] ?? null)
+    zip.file(layout, serializeXml(doc))
+    const types = await (zip.file("[Content_Types].xml") as JSZip.JSZipObject).async("string")
+    if (!types.includes("Extension=\"png\""))
+        zip.file("[Content_Types].xml", types.replace("<Default ", "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
+    writeFileSync(own, await zip.generateAsync({ type: "nodebuffer" }))
+    return { part, bandImage }
+}
+
 describe("content guard of layout content adopted with the slide number", () => {
     it("accepts exactly the adopted image", async () => {
         const own = await freshDeck("text-guard-band.pptx")
-        await apply(own, [ { op: "slide.add", layout: "CONTENT", placeholders: { title: { text: "Band" } }, slideNumber: false } ])
-
-        /*  the layout's slide number placeholder gets a picture fill  */
-        const part = (await stateOf(own)).slides[0]?.part ?? ""
-        const zip = await JSZip.loadAsync(readFileSync(own))
-        const slideRels = parseXml(await (zip.file(relsPartOf(part)) as JSZip.JSZipObject).async("string"))
-        const layout = relTargets(part, slideRels).find((r) => r.kind === "slideLayout")?.target ?? ""
-        const bandImage = Buffer.concat([ png(30, 30), Buffer.from("band") ])
-        zip.file("ppt/media/text-guard-band.png", bandImage)
-        const layoutRels = await (zip.file(relsPartOf(layout)) as JSZip.JSZipObject).async("string")
-        zip.file(relsPartOf(layout), layoutRels.replace("</Relationships>", "<Relationship Id=\"rIdBand\" "
-            + "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" "
-            + "Target=\"../media/text-guard-band.png\"/></Relationships>"))
-        const doc = parseXml(await (zip.file(layout) as JSZip.JSZipObject).async("string"))
-        const sp = elements(doc, "p:sp").find((s) => firstElement(s, "p:ph")?.getAttribute("type") === "sldNum") as Element
-        const spPr = firstElement(sp, "p:spPr") as Element
-        const blipFill = doc.createElementNS(NS_A, "a:blipFill")
-        const blip = doc.createElementNS(NS_A, "a:blip")
-        blip.setAttributeNS(NS_R, "r:embed", "rIdBand")
-        blipFill.appendChild(blip)
-        blipFill.appendChild(doc.createElementNS(NS_A, "a:stretch")).appendChild(doc.createElementNS(NS_A, "a:fillRect"))
-        spPr.insertBefore(blipFill, elements(spPr, "a:ln")[0] ?? elements(spPr, "a:extLst")[0] ?? null)
-        zip.file(layout, serializeXml(doc))
-        const types = await (zip.file("[Content_Types].xml") as JSZip.JSZipObject).async("string")
-        if (!types.includes("Extension=\"png\""))
-            zip.file("[Content_Types].xml", types.replace("<Default ", "<Default Extension=\"png\" ContentType=\"image/png\"/><Default "))
-        writeFileSync(own, await zip.generateAsync({ type: "nodebuffer" }))
+        const { part, bandImage } = await bandDeck(own)
 
         const before = await JSZip.loadAsync(readFileSync(own))
         const out = path.join(TMP, "text-guard-band-out.pptx")
@@ -264,5 +272,45 @@ describe("content guard of layout content adopted with the slide number", () => 
         expect((await verifyContent(before, after, [ base ])).blocked.length).toBeGreaterThan(0)
         const wrong = await verifyContent(before, after, [ { ...base, replaced: [ { from: [], to: digestBytes(Buffer.from("other")) } ] } ])
         expect(wrong.blocked.join(" ")).toContain("is missing")
+    })
+
+    it("shows the slide number again and removes it with its image (no false E_INTEGRITY)", async () => {
+        const own = await freshDeck("text-guard-band-again.pptx")
+        const { bandImage } = await bandDeck(own)
+        const images = async (): Promise<string[]> => {
+            const zip = await JSZip.loadAsync(readFileSync(own))
+            const slide = (await stateOf(own)).slides[0]?.part ?? ""
+            const rels = parseXml(await (zip.file(relsPartOf(slide)) as JSZip.JSZipObject).async("string"))
+            const out: string[] = []
+            for (const rel of relTargets(slide, rels).filter((r) => r.kind === "image"))
+                out.push(digestBytes(await (zip.file(rel.target as string) as JSZip.JSZipObject).async("nodebuffer")))
+            return out
+        }
+        const band = digestBytes(bandImage)
+        await apply(own, [ { op: "slide.fill", slide: "0", slideNumber: true } ])
+        expect(await images()).toEqual([ band ])
+
+        /*  again: the placeholder is cloned anew, its image stays  */
+        await apply(own, [ { op: "slide.fill", slide: "0", slideNumber: true } ])
+        expect(await images()).toEqual([ band ])
+
+        /*  removed: its image goes with it  */
+        await apply(own, [ { op: "slide.fill", slide: "0", slideNumber: false } ])
+        expect(await images()).toEqual([])
+        expect((await stateOf(own)).slides[0]?.shapes.some((sh) => sh.name.startsWith("Slide Number"))).toBe(false)
+    })
+
+    it("still blocks a lost image the band op did not remove", async () => {
+        const own = await freshDeck("text-guard-band-strict.pptx")
+        const { part, bandImage } = await bandDeck(own)
+        await apply(own, [ { op: "slide.fill", slide: "0", slideNumber: true } ])
+        const before = await JSZip.loadAsync(readFileSync(own))
+        const out = path.join(TMP, "text-guard-band-strict-out.pptx")
+        await executeOps(own, { ops: [ { op: "slide.fill", slide: "0", slideNumber: false } ] } as never, { ...OPTS, outFile: out })
+        const after = await JSZip.loadAsync(readFileSync(out))
+        const base: SlideExpect = { source: part, label: "#0", notes: false, assets: "same" }
+        expect((await verifyContent(before, after, [ base ])).lost.map((l) => l.what)).toEqual([ "image" ])
+        expect(await verifyContent(before, after, [ { ...base, replaced: [ { from: [ digestBytes(bandImage) ], to: null } ] } ]))
+            .toEqual({ blocked: [], lost: [] })
     })
 })

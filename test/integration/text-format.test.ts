@@ -115,6 +115,34 @@ describe("bullets outside list styles", () => {
     })
 })
 
+describe("bullets in placeholders whose list style shows none", () => {
+    it("writes a bullet character where the inherited level has buNone (a subtitle)", async () => {
+        const deck = await freshDeck("format-bullet-ph.pptx")
+        await apply(deck, [ { op: "slide.add", layout: "TITLE_SLIDE", placeholders: {
+            title: { text: "Titel" }, subtitle: { text: [ { text: "Punkt", bullet: true }, { text: "ohne" } ] } } },
+        { op: "slide.add", layout: "CONTENT", placeholders: { body: { text: [ { text: "Liste", bullet: true } ] } } } ])
+        const sub = shapeNamed(await slideDoc(deck, 0), "PptcPh-1")
+        expect(bullets(sub)).toEqual([ "a:buChar:342900:-342900", "-::" ])
+
+        /*  el.set on the subtitle too; a body with list-style bullets stays without  */
+        await apply(deck, [ { op: "el.set", slide: "0", name: "PptcPh-1", text: [ { text: "neu", bullet: true, level: 1 } ] } ])
+        expect(bullets(shapeNamed(await slideDoc(deck, 0), "PptcPh-1"))).toEqual([ "a:buChar:685800:-342900" ])
+        expect(bullets(shapeNamed(await slideDoc(deck, 1), "PptcPh-1"))).toEqual([ "-::" ])
+    })
+})
+
+describe("el.set with another level than the kept paragraph", () => {
+    it("drops the kept indent, so the level takes effect", async () => {
+        const deck = await freshDeck("format-level.pptx")
+        await apply(deck, [ { op: "slide.add", layout: "DEFAULT" }, { op: "el.add", slide: "0", elements: [
+            { type: "textbox", name: "Box", frame: { x: 1, y: 1, w: 5, h: 2 }, text: [ { text: "orig", bullet: true } ] } ] } ])
+        await apply(deck, [ { op: "el.set", slide: "0", name: "Box", text: [ { text: "gleich", level: 0 }, { text: "tiefer", level: 1 },
+            { text: "liste", level: 2, bullet: true } ] } ])
+        expect(bullets(shapeNamed(await slideDoc(deck, 0), "Box"))).toEqual([ "a:buChar:342900:-342900",
+            "a:buChar:685800:-342900", "a:buChar:1028700:-342900" ])
+    })
+})
+
 describe("replaced text and the shrink-on-overflow scale", () => {
     it("drops fontScale and lnSpcReduction, keeps normAutofit", async () => {
         const deck = await freshDeck("format-autofit.pptx")

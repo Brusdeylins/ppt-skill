@@ -27,10 +27,12 @@ Options:
                  text (default): plus placeholder texts and notes, and
                    each slide's 'section' (with the deck's 'sections' in
                    order) when the deck has sections
-                 full: plus every shape with geometry AND styling --
+                 full: plus every shape, back to front (the stacking
+                   order), with geometry AND styling --
                    type, name, frame, text, table cells + column widths
                    (colWidths) + merged cells (merges) + vertical cell
-                   text (cellTextDirections), autoshape preset/fill/
+                   text (cellTextDirections) + header row (headerRow),
+                   autoshape preset/fill (with its transparency)/
                    border/font, textDirection, valign and margin of a
                    text body, rotation, altText and title, the click
                    target (hyperlink: URL or slide:id:N), connector
@@ -274,15 +276,29 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   el.add       free elements: textbox | table | chart | shape | image |
                connector -- all positioned via "frame": {x,y,w,h} inches
                { "op": "el.add", "slide": SEL, "elements": [ ... ] }
-               textbox/shape: "text", "fill", "border", "borderPt",
+               textbox/shape: "text", "fill", "transparency" (of the
+                 fill, 0-100 %), "border", "borderPt",
                  "valign": top|middle|bottom, "margin": 0.1 | [l,t,r,b],
                  "textDirection": horizontal|rotate90|rotate270|stacked
                  (shape also "shape", "fontColor", "fontSize")
+               shape presets: rect roundRect round1Rect round2SameRect
+                 snip1Rect ellipse diamond triangle parallelogram
+                 trapezoid pentagon hexagon octagon plus donut pie
+                 blockArc can frame star5 cloud heart line rightArrow
+                 leftArrow upArrow downArrow leftRightArrow upDownArrow
+                 notchedRightArrow curvedRightArrow circularArrow
+                 homePlate chevron wedgeRectCallout wedgeRoundRectCallout
+                 wedgeEllipseCallout leftBracket rightBracket leftBrace
+                 rightBrace flowChartProcess flowChartDecision
+                 flowChartTerminator flowChartDocument
+                 flowChartPredefinedProcess flowChartConnector
                table: "data": { "headers", "rows", "style" }, "colWidths":
                  [1,2.5], "colAlign": ["left","right"], "textDirection";
-                 a cell is a value or { "text", "bold", "fill", "color",
-                 "align", "valign", "colspan", "rowspan", "textDirection" }
-                 -- cells covered by a span are left out (as in HTML)
+                 a cell is a value or { "text", "bold", "fill",
+                 "transparency", "color", "align", "valign", "colspan",
+                 "rowspan", "textDirection" }
+                 -- cells covered by a span are left out (as in HTML);
+                 "headers" make the first row the header row
                chart: "data": { "type", "categories", "series", "title",
                  "colors", "legend": true|top|bottom|left|right,
                  "labels": { "value", "percent", "format", "position" },
@@ -295,7 +311,10 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "dash": solid|dash|dot|dashDot|longDash,
                  "startArrow"/"endArrow": none|arrow|triangle|stealth|
                  diamond|oval
-               every element also takes "altText" and "title"
+               every element also takes "altText", "title" and
+                 "zOrder": front (default) | back | forward | backward
+                 (placed in front, then moved; "back" covers nothing,
+                 so no W_ELEMENT_OVERLAP)
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -305,6 +324,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "frame": { "x", "y", "w", "h", "rotation" } (given keys
                    change; not rotation on table/chart),
                  "fill", "fontColor" (placeholder/textbox/shape),
+                 "transparency" (placeholder/textbox/shape: 0-100 % of
+                   the new fill, else of the element's own solid fill;
+                   a new fill keeps it),
                  "border", "borderPt" (also picture/connector),
                  "altText", "title" (any element; "" removes),
                  "hyperlink" (placeholder/textbox/shape/picture: URL or
@@ -314,7 +336,10 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                    fit the frame -- only on explicit request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
                    header row 0), "addRows": { "at", "rows" } (format of
-                   the neighbouring body row), "removeRows": [ 2 ]
+                   the neighbouring body row; never above a header row),
+                   "removeRows": [ 2 ],
+                 "zOrder": front|back|forward|backward (any element; in
+                   op order, after the document's new elements)
                -- also on elements planned earlier in the document (a
                   planned connector takes no hyperlink, a planned image
                   no border)
@@ -330,7 +355,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   text.replace find/replace plain text in shapes, placeholders and table
                cells of the deck (or of "slide"), notes only on request,
                fields, charts and SmartArt never (W_REPLACE_SKIPPED when
-               a targeted slide's chart or SmartArt holds the text); a
+               a targeted slide's chart text -- titles, series names,
+               categories -- or SmartArt holds the text); a
                match may span runs (the first keeps its format); sees
                every earlier op of the document
                { "op": "text.replace", "find": "2025", "replace": "2026",
@@ -351,19 +377,25 @@ section of the slide before them. 'state' shows "section" per slide.
 Text values accept plain strings (\\n = new paragraph, \\v = line break
 inside the paragraph; state reads one back as \\v) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
-"number"|false (true: the placeholder's own bullet, elsewhere a bullet
-character with hanging indent), "spaceBefore"/"spaceAfter" (pt),
+"number"|false (true: the placeholder's own bullet where its level
+shows one, elsewhere a bullet character with hanging indent),
+"spaceBefore"/"spaceAfter" (pt),
 "lineSpacing" (1.5) }, runs { "text", "bold", "italic", "underline",
 "strike", "superscript", "subscript", "size", "font", "color",
-"highlight", "hyperlink", "lang" }.
+"highlight", "hyperlink", "lang" }; "font" also takes the theme fonts
+"+mj-lt" (heading) and "+mn-lt" (body).
 Links: "hyperlink" takes a URL or a slide link "slide:SEL" -- slide:$ref,
 slide:id:256, slide:title:Agenda, slide:index:2 -- resolved after the
 whole document (slides added later count, moved ones follow; a target
 missing then fails with E_ADDR_NOTFOUND). A later removal of the target
 drops the link; copies keep it; 'state --level full' reads slide:id:N.
 Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
-bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
-Text without "color" takes the template's (el.add table headers: white).
+bg2, dk1, lt1, dk2, lt2, hlink, folHlink (follows the template; 'state'
+shows RRGGBB). Text tx1/tx2, fills and backgrounds bg1/bg2 (they follow
+the master's color map); dk1/lt1/dk2/lt2 are absolute (contrast on
+images). Text without "color" takes the template's -- on an el.add fill
+(textbox, shape, cell, header, alternating row) dk1 or lt1, whichever
+contrasts more (el.add table headers: white on the default gray).
 Control characters but tab, line feed and carriage return (and \\v
 outside text) fail with E_SCHEMA naming the field.
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).

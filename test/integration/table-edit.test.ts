@@ -8,7 +8,8 @@
 **  neighbouring body row, `removeRows` takes rows out; the table style and the cell
 **  formatting stay, the frame's height follows the rows, merged cells are
 **  respected (a covered cell, a row of a vertical merge or a position
-**  inside one fail at plan time), and state reads the result.
+**  inside one fail at plan time), no row goes above a header row (as on a
+**  planned table), and state reads the result.
 */
 
 import { beforeAll, describe, expect, it } from "vitest"
@@ -79,6 +80,33 @@ describe("el.set table cells and rows", () => {
         const rows = await rowsOf()
         expect(rows.map((r) => elements(r, "a:t").map((t) => t.textContent).join(","))).toEqual([ "A,B", "x,y", "1,2", "3,4" ])
         expect(format(rows[1] as Element)).toBe(body)
+    })
+
+    it("rejects rows above the header row of an existing table, as of a planned one", async () => {
+        const own = await freshDeck("table-edit-at0.pptx")
+        await apply(own, [
+            { op: "slide.add", layout: "Title Only", ref: "s", placeholders: { title: { text: "Kopf" } } },
+            { op: "el.add", slide: "$s", elements: [
+                { type: "table", name: "Head", frame: { x: 0.5, y: 1.5, w: 6 }, data: { headers: [ "A", "B" ], rows: [ [ "1", "2" ] ] } },
+                { type: "table", name: "Body", frame: { x: 0.5, y: 4, w: 6 }, data: { rows: [ [ "1", "2" ] ] } } ] }
+        ])
+        const shapes = (await stateOf(own)).slides[0]?.shapes ?? []
+        expect(shapes.find((sh) => sh.name.startsWith("Head-"))?.headerRow).toBe(true)
+        expect(shapes.find((sh) => sh.name.startsWith("Body-"))?.headerRow).toBeUndefined()
+        const at0 = { addRows: { at: 0, rows: [ [ "x", "y" ] ] } }
+        const before = readFileSync(own)
+        expect(await failure(own, [ { op: "el.set", slide: "0", name: "Head", ...at0 } ])).toBe("E_SCHEMA")
+        expect(await failure(own, [ { op: "el.add", slide: "0", elements: [ { type: "table", name: "Plan", frame: { x: 7, y: 1.5, w: 3 },
+            data: { headers: [ "A", "B" ], rows: [ [ "1", "2" ] ] } } ] }, { op: "el.set", slide: "0", name: "Plan", ...at0 } ])).toBe("E_SCHEMA")
+        expect(readFileSync(own).equals(before)).toBe(true)
+
+        /*  a table without a header row, or one whose header row went, takes rows at 0  */
+        await apply(own, [ { op: "el.set", slide: "0", name: "Body", ...at0 },
+            { op: "el.set", slide: "0", name: "Head", removeRows: [ 0 ] }, { op: "el.set", slide: "0", name: "Head", ...at0 } ])
+        const after = (await stateOf(own)).slides[0]?.shapes ?? []
+        expect(after.find((sh) => sh.name.startsWith("Body-"))?.table).toEqual([ [ "x", "y" ], [ "1", "2" ] ])
+        const head = after.find((sh) => sh.name.startsWith("Head-"))
+        expect([ head?.table, head?.headerRow ]).toEqual([ [ [ "x", "y" ], [ "1", "2" ] ], undefined ])
     })
 
     it("removes rows and shrinks the frame; the sequence of a document sees every step", async () => {

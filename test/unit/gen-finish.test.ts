@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from "vitest"
 import { GenColors, finishGenerated } from "../../src/engine/elements.js"
+import { SCHEME_COLORS } from "../../src/schema/payloads.js"
 import { elements, parseXml, serializeXml } from "../../src/engine/xml.js"
 
 const A = "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
@@ -23,6 +24,18 @@ describe("theme color tokens", () => {
         expect(colors.gen("accent1")).toBe(accent)
         expect(colors.gen("dk2")).not.toBe(accent)
         expect([ ...colors.tokens.values() ]).toEqual([ "accent1", "dk2" ])
+    })
+
+    it("gives every theme slot (hlink and folHlink too) a token distinct from the inherit token", () => {
+        const colors = new GenColors([])
+        const tokens = SCHEME_COLORS.map((slot) => colors.gen(slot))
+        expect(new Set([ ...tokens, colors.inherit ]).size).toBe(SCHEME_COLORS.length + 1)
+        expect(SCHEME_COLORS).toEqual(expect.arrayContaining([ "hlink", "folHlink" ]))
+        /*  a literal collision moves the whole range, still distinct  */
+        const moved = new GenColors([ { type: "textbox", frame: { x: 0, y: 0 }, text: "x", fill: colors.inherit } ])
+        const all = [ ...SCHEME_COLORS.map((slot) => moved.gen(slot)), moved.inherit ]
+        expect(new Set(all).size).toBe(SCHEME_COLORS.length + 1)
+        expect(all).not.toContain(colors.inherit)
     })
 
     it("avoids tokens an element uses literally", () => {

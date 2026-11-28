@@ -59,6 +59,15 @@ describe("text.replace and chart or SmartArt text", () => {
         expect(await skipped(deck, [ { op: "text.replace", find: "fehlt", replace: "x" } ])).toEqual([])
         expect(await skipped(deck, [ { op: "text.replace", find: "ALT", replace: "x", matchCase: true } ])).toEqual([])
 
+        /*  a number of the chart's value cache is no chart text  */
+        await applyResult(deck, [ { op: "slide.fill", slide: "0", placeholders: { title: { text: "Wert 1234" } } },
+            { op: "el.add", slide: "0", elements: [ { type: "chart", name: "Numbers", frame: { x: 6, y: 2, w: 3, h: 3 },
+                data: { type: "column", categories: [ "Q1", "1999" ], series: [ { name: "s", values: [ 1234, 7 ] } ] } } ] } ])
+        expect(await skipped(deck, [ { op: "text.replace", find: "1234", replace: "5678", slide: "0" } ])).toEqual([])
+        expect((await stateOf(deck)).slides[0]?.title).toBe("Wert 5678")
+        /*  a category (string cache) still counts  */
+        expect((await skipped(deck, [ { op: "text.replace", find: "1999", replace: "2000", slide: "0" } ])).length).toBe(1)
+
         /*  a chart an earlier op removes is no longer shown  */
         expect(await skipped(deck, [ { op: "el.rm", slide: "0", name: "Chart" },
             { op: "text.replace", find: "alt", replace: "neu", slide: "0" } ])).toEqual([])

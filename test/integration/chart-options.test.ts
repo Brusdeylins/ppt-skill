@@ -54,6 +54,21 @@ describe("chart options", () => {
         expect(attrs(elements(doc, "c:valAx")[0] as Element, "c:numFmt", "formatCode")).toEqual([ "0%" ])
     })
 
+    it("gives area charts their grouping: stacked, percent-stacked (area and areaStacked)", async () => {
+        const area = { type: "area", categories: [ "a", "b" ], series: [ { name: "s", values: [ 1, 2 ] }, { name: "t", values: [ 3, 4 ] } ] }
+        const grouping = (doc: Element): (string | null)[] =>
+            elements(doc, "c:areaChart").map((a) => firstElement(a, "c:grouping")?.getAttribute("val") ?? null)
+        const first = (doc: Element): string | undefined =>
+            (elements(doc, "c:areaChart")[0]?.firstChild as Element | null)?.nodeName
+        const percent = await chart("AreaPct", { ...area, stacked: "percent" })
+        expect(grouping(percent)).toEqual([ "percentStacked" ])
+        expect(first(percent)).toBe("c:grouping")
+        expect(attrs(elements(percent, "c:valAx")[0] as Element, "c:numFmt", "formatCode")).toEqual([ "0%" ])
+        expect(grouping(await chart("AreaStackedPct", { ...area, type: "areaStacked", stacked: "percent" }))).toEqual([ "percentStacked" ])
+        expect(grouping(await chart("AreaStacked", { ...area, type: "areaStacked" }))).toEqual([ "stacked" ])
+        expect(grouping(await chart("AreaPlain", area))).toEqual([ null ])
+    })
+
     it("shows pie percentages, doughnut holes and smooth lines", async () => {
         const pie = await chart("Pie", { type: "doughnut", categories: [ "a", "b" ], series: [ { name: "s", values: [ 1, 3 ] } ],
             labels: { percent: true }, holeSize: 65, legend: "right" })

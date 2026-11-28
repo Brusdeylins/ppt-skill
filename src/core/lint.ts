@@ -149,7 +149,8 @@ export const lintPlaceholderText = (
 ): LintWarning | null => {
     if (ph.capacity === null)
         return null
-    const used = estimateUsedLines(richTextToPlain(text), ph.capacity)
+    /*  a vertical tab is a line break inside the paragraph: a line of its own  */
+    const used = estimateUsedLines(richTextToPlain(text).flatMap((line) => line.split("\v")), ph.capacity)
     if (used <= ph.capacity.lines)
         return null
     return {

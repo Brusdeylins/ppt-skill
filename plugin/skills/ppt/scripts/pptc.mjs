@@ -16274,10 +16274,12 @@ Options:
                  text (default): plus placeholder texts and notes, and
                    each slide's 'section' (with the deck's 'sections' in
                    order) when the deck has sections
-                 full: plus every shape with geometry AND styling --
+                 full: plus every shape, back to front (the stacking
+                   order), with geometry AND styling --
                    type, name, frame, text, table cells + column widths
                    (colWidths) + merged cells (merges) + vertical cell
-                   text (cellTextDirections), autoshape preset/fill/
+                   text (cellTextDirections) + header row (headerRow),
+                   autoshape preset/fill (with its transparency)/
                    border/font, textDirection, valign and margin of a
                    text body, rotation, altText and title, the click
                    target (hyperlink: URL or slide:id:N), connector
@@ -16506,15 +16508,29 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   el.add       free elements: textbox | table | chart | shape | image |
                connector -- all positioned via "frame": {x,y,w,h} inches
                { "op": "el.add", "slide": SEL, "elements": [ ... ] }
-               textbox/shape: "text", "fill", "border", "borderPt",
+               textbox/shape: "text", "fill", "transparency" (of the
+                 fill, 0-100 %), "border", "borderPt",
                  "valign": top|middle|bottom, "margin": 0.1 | [l,t,r,b],
                  "textDirection": horizontal|rotate90|rotate270|stacked
                  (shape also "shape", "fontColor", "fontSize")
+               shape presets: rect roundRect round1Rect round2SameRect
+                 snip1Rect ellipse diamond triangle parallelogram
+                 trapezoid pentagon hexagon octagon plus donut pie
+                 blockArc can frame star5 cloud heart line rightArrow
+                 leftArrow upArrow downArrow leftRightArrow upDownArrow
+                 notchedRightArrow curvedRightArrow circularArrow
+                 homePlate chevron wedgeRectCallout wedgeRoundRectCallout
+                 wedgeEllipseCallout leftBracket rightBracket leftBrace
+                 rightBrace flowChartProcess flowChartDecision
+                 flowChartTerminator flowChartDocument
+                 flowChartPredefinedProcess flowChartConnector
                table: "data": { "headers", "rows", "style" }, "colWidths":
                  [1,2.5], "colAlign": ["left","right"], "textDirection";
-                 a cell is a value or { "text", "bold", "fill", "color",
-                 "align", "valign", "colspan", "rowspan", "textDirection" }
-                 -- cells covered by a span are left out (as in HTML)
+                 a cell is a value or { "text", "bold", "fill",
+                 "transparency", "color", "align", "valign", "colspan",
+                 "rowspan", "textDirection" }
+                 -- cells covered by a span are left out (as in HTML);
+                 "headers" make the first row the header row
                chart: "data": { "type", "categories", "series", "title",
                  "colors", "legend": true|top|bottom|left|right,
                  "labels": { "value", "percent", "format", "position" },
@@ -16527,7 +16543,10 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "dash": solid|dash|dot|dashDot|longDash,
                  "startArrow"/"endArrow": none|arrow|triangle|stealth|
                  diamond|oval
-               every element also takes "altText" and "title"
+               every element also takes "altText", "title" and
+                 "zOrder": front (default) | back | forward | backward
+                 (placed in front, then moved; "back" covers nothing,
+                 so no W_ELEMENT_OVERLAP)
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -16537,6 +16556,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "frame": { "x", "y", "w", "h", "rotation" } (given keys
                    change; not rotation on table/chart),
                  "fill", "fontColor" (placeholder/textbox/shape),
+                 "transparency" (placeholder/textbox/shape: 0-100 % of
+                   the new fill, else of the element's own solid fill;
+                   a new fill keeps it),
                  "border", "borderPt" (also picture/connector),
                  "altText", "title" (any element; "" removes),
                  "hyperlink" (placeholder/textbox/shape/picture: URL or
@@ -16546,7 +16568,10 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                    fit the frame -- only on explicit request),
                  table: "cells": [{ "row", "col", "text" }] (0-based,
                    header row 0), "addRows": { "at", "rows" } (format of
-                   the neighbouring body row), "removeRows": [ 2 ]
+                   the neighbouring body row; never above a header row),
+                   "removeRows": [ 2 ],
+                 "zOrder": front|back|forward|backward (any element; in
+                   op order, after the document's new elements)
                -- also on elements planned earlier in the document (a
                   planned connector takes no hyperlink, a planned image
                   no border)
@@ -16562,7 +16587,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   text.replace find/replace plain text in shapes, placeholders and table
                cells of the deck (or of "slide"), notes only on request,
                fields, charts and SmartArt never (W_REPLACE_SKIPPED when
-               a targeted slide's chart or SmartArt holds the text); a
+               a targeted slide's chart text -- titles, series names,
+               categories -- or SmartArt holds the text); a
                match may span runs (the first keeps its format); sees
                every earlier op of the document
                { "op": "text.replace", "find": "2025", "replace": "2026",
@@ -16583,19 +16609,25 @@ section of the slide before them. 'state' shows "section" per slide.
 Text values accept plain strings (\\n = new paragraph, \\v = line break
 inside the paragraph; state reads one back as \\v) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
-"number"|false (true: the placeholder's own bullet, elsewhere a bullet
-character with hanging indent), "spaceBefore"/"spaceAfter" (pt),
+"number"|false (true: the placeholder's own bullet where its level
+shows one, elsewhere a bullet character with hanging indent),
+"spaceBefore"/"spaceAfter" (pt),
 "lineSpacing" (1.5) }, runs { "text", "bold", "italic", "underline",
 "strike", "superscript", "subscript", "size", "font", "color",
-"highlight", "hyperlink", "lang" }.
+"highlight", "hyperlink", "lang" }; "font" also takes the theme fonts
+"+mj-lt" (heading) and "+mn-lt" (body).
 Links: "hyperlink" takes a URL or a slide link "slide:SEL" -- slide:$ref,
 slide:id:256, slide:title:Agenda, slide:index:2 -- resolved after the
 whole document (slides added later count, moved ones follow; a target
 missing then fails with E_ADDR_NOTFOUND). A later removal of the target
 drops the link; copies keep it; 'state --level full' reads slide:id:N.
 Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
-bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
-Text without "color" takes the template's (el.add table headers: white).
+bg2, dk1, lt1, dk2, lt2, hlink, folHlink (follows the template; 'state'
+shows RRGGBB). Text tx1/tx2, fills and backgrounds bg1/bg2 (they follow
+the master's color map); dk1/lt1/dk2/lt2 are absolute (contrast on
+images). Text without "color" takes the template's -- on an el.add fill
+(textbox, shape, cell, header, alternating row) dk1 or lt1, whichever
+contrasts more (el.add table headers: white on the default gray).
 Control characters but tab, line feed and carriage return (and \\v
 outside text) fail with E_SCHEMA naming the field.
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
@@ -16691,6 +16723,7 @@ var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
   date: null,
   elements: [],
   edits: [],
+  zOrder: [],
   removeNames: [],
   replaces: [],
   replaced: [],
@@ -16855,7 +16888,7 @@ var richTextSizes = (text) => {
 var lintPlaceholderText = (text, ph, slide) => {
   if (ph.capacity === null)
     return null;
-  const used = estimateUsedLines(richTextToPlain(text), ph.capacity);
+  const used = estimateUsedLines(richTextToPlain(text).flatMap((line) => line.split("\v")), ph.capacity);
   if (used <= ph.capacity.lines)
     return null;
   return {
@@ -17206,14 +17239,20 @@ var slideCopy = {
   name: "slide.copy",
   plan(ctx, op) {
     const source = resolveEntry(ctx, op.slide);
+    const elements2 = source.elements.map((e) => ({ name: e.name, spec: structuredClone(e.spec) }));
     const copy = {
       ...source,
       virtualId: ctx.nextVirtualId--,
       fills: structuredClone(source.fills),
-      /*  deep-copy planned elements: a later el.set on the copy must
-          not patch the original's planned spec through aliasing  */
-      elements: source.elements.map((e) => ({ name: e.name, spec: structuredClone(e.spec) })),
+      elements: elements2,
       edits: structuredClone(source.edits),
+      /*  stacking-order changes follow the copied elements  */
+      zOrder: source.zOrder.flatMap((z2) => {
+        if (typeof z2.target === "string")
+          return [{ ...z2 }];
+        const copied = elements2[source.elements.indexOf(z2.target)];
+        return copied === void 0 ? [] : [{ ...z2, target: copied }];
+      }),
       removeNames: [...source.removeNames],
       replaces: structuredClone(source.replaces),
       replaced: structuredClone(source.replaced)
@@ -17477,7 +17516,7 @@ var elAdd = {
         checkTable(spec, name);
       if (!name.startsWith(PROMPT_BOX_PREFIX)) {
         const slideAddr = slideAddrOf(ctx, entry);
-        if (frame !== null) {
+        if (frame !== null && spec.zOrder !== "back") {
           const overlap = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr);
           if (overlap !== null)
             ctx.plan.warnings.push(overlap);
@@ -17486,7 +17525,9 @@ var elAdd = {
         if (tooSmall !== null)
           ctx.plan.warnings.push(tooSmall);
       }
-      entry.elements.push({ name: spec.name ?? null, spec });
+      const planned = { name: spec.name ?? null, spec };
+      entry.elements.push(planned);
+      entry.zOrder.push({ target: planned, zOrder: spec.zOrder ?? "front", add: true });
     }
   }
 };
@@ -17551,7 +17592,9 @@ var imgPrompts = {
         border: PROMPT_BORDER,
         borderPt: 1
       };
-      entry.elements.push({ name: `${PROMPT_BOX_PREFIX}-${pic.idx}`, spec });
+      const planned = { name: `${PROMPT_BOX_PREFIX}-${pic.idx}`, spec };
+      entry.elements.push(planned);
+      entry.zOrder.push({ target: planned, zOrder: "front", add: true });
     }
   }
 };
@@ -17581,6 +17624,7 @@ var EXISTING_TYPES = {
   text: ["placeholder", "textbox", "shape"],
   frame: ALL,
   fill: ["placeholder", "textbox", "shape"],
+  transparency: ["placeholder", "textbox", "shape"],
   border: ["placeholder", "textbox", "shape", "picture", "connector"],
   borderPt: ["placeholder", "textbox", "shape", "picture", "connector"],
   fontColor: ["placeholder", "textbox", "shape"],
@@ -17590,12 +17634,14 @@ var EXISTING_TYPES = {
   image: ["picture"],
   cells: ["table"],
   addRows: ["table"],
-  removeRows: ["table"]
+  removeRows: ["table"],
+  zOrder: ALL
 };
 var PLANNED_TYPES = {
   text: ["textbox", "shape"],
   frame: ["textbox", "shape", "table", "chart", "image"],
   fill: ["textbox", "shape"],
+  transparency: ["textbox", "shape"],
   border: ["textbox", "shape", "connector"],
   borderPt: ["textbox", "shape", "connector"],
   fontColor: ["textbox", "shape"],
@@ -17605,7 +17651,8 @@ var PLANNED_TYPES = {
   image: ["image"],
   cells: ["table"],
   addRows: ["table"],
-  removeRows: ["table"]
+  removeRows: ["table"],
+  zOrder: ["textbox", "shape", "table", "chart", "image", "connector"]
 };
 var LINE_GEOMETRY = /^(line|straightConnector\d|bentConnector\d|curvedConnector\d)$/;
 var fieldsOf = (patch) => Object.keys(patch).filter((k) => patch[k] !== void 0);
@@ -17631,6 +17678,8 @@ var applyTableEdit = (model, set2, name) => {
     }
     if (rows.length >= model.origin.length)
       fail("a table keeps at least one row");
+    if (rows.includes(0))
+      model.header = false;
     for (const row of rows) {
       model.origin.splice(row, 1);
       model.merges = model.merges.filter((m) => m.row !== row).map((m) => m.row > row ? { ...m, row: m.row - 1 } : m);
@@ -17640,6 +17689,8 @@ var applyTableEdit = (model, set2, name) => {
     const at = set2.addRows.at ?? model.origin.length;
     if (at > model.origin.length)
       fail(`row position ${at} is out of range (0-${model.origin.length})`);
+    if (at === 0 && model.header)
+      fail("row 0 is the header row -- insert at 1 or later");
     const merge2 = spansInto(model.merges, at);
     if (merge2 !== null)
       fail(`row position ${at} lies inside the merged cell at row ${merge2.row}, column ${merge2.col}`);
@@ -17667,7 +17718,8 @@ var tableModel = (shape, edits) => {
     origin: rows.map((_, i) => i),
     cols: shape.colWidths?.length ?? rows[0]?.length ?? 0,
     merges: (shape.merges ?? []).map((m) => ({ ...m })),
-    overwritten: /* @__PURE__ */ new Set()
+    overwritten: /* @__PURE__ */ new Set(),
+    header: shape.headerRow === true
   };
   for (const edit of edits)
     if (edit.name === shape.name)
@@ -17768,6 +17820,11 @@ var patchSpec = (spec, set2, name) => {
         spec.text = set2.text;
       if (set2.fill !== void 0)
         spec.fill = set2.fill;
+      if (set2.transparency !== void 0) {
+        if (spec.fill === void 0)
+          throw new PptcError("E_SCHEMA", `element '${name}' has no fill -- give 'fill' with 'transparency'`);
+        spec.transparency = set2.transparency;
+      }
       if (set2.border !== void 0)
         spec.border = set2.border;
       if (set2.borderPt !== void 0)
@@ -17829,8 +17886,10 @@ var elSet = {
     const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name));
     if (planned !== void 0) {
       patchSpec(planned.spec, set2, op.name);
+      if (set2.zOrder !== void 0)
+        entry.zOrder.push({ target: planned, zOrder: set2.zOrder, add: false });
       const frame = specFrame(planned.spec);
-      if (set2.frame !== void 0 && !prompt && frame !== null) {
+      if (set2.frame !== void 0 && !prompt && frame !== null && set2.zOrder !== "back") {
         const overlap = lintElementOverlap(op.name, frame, overlapObstacles(ctx, entry, planned.name), slideAddr);
         if (overlap !== null)
           ctx.plan.warnings.push(overlap);
@@ -17871,16 +17930,22 @@ var elSet = {
       const before = plannedFrame(entry, target.name, target.frame);
       const f = { ...before, ...Object.fromEntries(Object.entries(set2.frame).filter(([, v]) => v !== void 0)) };
       const frame = rotatedBox(f);
-      if (!prompt && frame !== null) {
+      if (!prompt && frame !== null && set2.zOrder !== "back") {
         const overlap = lintElementOverlap(target.name, frame, overlapObstacles(ctx, entry, target.name), slideAddr);
         if (overlap !== null)
           ctx.plan.warnings.push(overlap);
       }
     }
+    if (set2.transparency !== void 0 && set2.fill === void 0 && target.fill === void 0 && !entry.edits.some((e) => e.name === target.name && e.set.fill !== void 0))
+      throw new PptcError("E_SCHEMA", `element '${target.name}' has no solid fill of its own -- give 'fill' with 'transparency'`);
     if (type === "table")
       applyTableEdit(tableModel(target, entry.edits), set2, target.name);
     if (set2.text !== void 0 && (target.placeholderKind === "title" || target.placeholderIdx === 0))
       entry.title = richTextToPlain(set2.text).join(" ");
+    if (set2.zOrder !== void 0) {
+      entry.zOrder.push({ target: target.name, zOrder: set2.zOrder, add: false });
+      delete set2.zOrder;
+    }
     if (fieldsOf(set2).length > 0)
       entry.edits.push({ name: target.name, set: set2 });
   }
@@ -37862,7 +37927,9 @@ var SCHEME_COLORS = [
   "dk1",
   "lt1",
   "dk2",
-  "lt2"
+  "lt2",
+  "hlink",
+  "folHlink"
 ];
 var isSchemeColor = (color) => SCHEME_COLORS.includes(color);
 var xmlIllegalAt = (s, lineBreaks) => {
@@ -37963,17 +38030,22 @@ var ParagraphSchema = external_exports.object({
 ).refine(oneBaseline, "a paragraph is either 'superscript' or 'subscript' (not both)");
 var RichTextSchema = external_exports.union([TextStringSchema, external_exports.array(ParagraphSchema).min(1)]);
 var CellAlignSchema = external_exports.enum(["left", "center", "right"]);
+var TransparencySchema = external_exports.number().min(0).max(100);
+var fillForTransparency = (e) => e.transparency === void 0 || e.fill !== void 0;
+var TRANSPARENCY_NEEDS_FILL = { message: "'transparency' needs a 'fill'", path: ["transparency"] };
 var TableCellSchema = external_exports.object({
   text: RichTextSchema,
   bold: external_exports.boolean().optional(),
   fill: ColorSchema.optional(),
+  /**  transparency of `fill` in percent (0-100)  */
+  transparency: TransparencySchema.optional(),
   color: ColorSchema.optional(),
   align: CellAlignSchema.optional(),
   valign: ValignSchema.optional(),
   colspan: external_exports.number().int().min(1).optional(),
   rowspan: external_exports.number().int().min(1).optional(),
   textDirection: TextDirectionSchema.optional()
-}).strict();
+}).strict().refine(fillForTransparency, TRANSPARENCY_NEEDS_FILL);
 var CellSchema = external_exports.union([TextStringSchema, external_exports.number(), external_exports.boolean(), TableCellSchema]);
 var TableSchema = external_exports.object({
   headers: external_exports.array(external_exports.union([TextStringSchema, TableCellSchema])).optional(),
@@ -38029,9 +38101,9 @@ var LABEL_POSITIONS = {
   line: ["center", "left", "right", "above", "below"],
   pie: ["center", "insideEnd", "outsideEnd", "bestFit"]
 };
-var labelFamily = (type, stacked) => {
+var labelFamily = (type, stacked2) => {
   if (["bar", "column"].includes(type))
-    return stacked ? "stacked" : "clustered";
+    return stacked2 ? "stacked" : "clustered";
   if (["barStacked", "columnStacked"].includes(type))
     return "stacked";
   if (["line", "lineMarkers", "scatter", "bubble"].includes(type))
@@ -38108,25 +38180,57 @@ var ChartSchema = external_exports.object({
     issue2(["holeSize"], "a hole size needs a doughnut chart");
 });
 var ShapeTypeSchema = external_exports.enum([
+  /*  basic shapes  */
   "rect",
   "roundRect",
+  "round1Rect",
+  "round2SameRect",
+  "snip1Rect",
   "ellipse",
   "diamond",
   "triangle",
+  "parallelogram",
+  "trapezoid",
+  "pentagon",
+  "hexagon",
+  "octagon",
+  "plus",
+  "donut",
+  "pie",
+  "blockArc",
+  "can",
+  "frame",
+  "star5",
+  "cloud",
+  "heart",
+  "line",
+  /*  arrows and process steps  */
   "rightArrow",
   "leftArrow",
   "upArrow",
   "downArrow",
-  "pentagon",
-  "hexagon",
+  "leftRightArrow",
+  "upDownArrow",
+  "notchedRightArrow",
+  "curvedRightArrow",
+  "circularArrow",
+  "homePlate",
   "chevron",
-  "star5",
-  "cloud",
-  "heart",
+  /*  callouts, brackets and braces  */
+  "wedgeRectCallout",
+  "wedgeRoundRectCallout",
+  "wedgeEllipseCallout",
+  "leftBracket",
+  "rightBracket",
+  "leftBrace",
+  "rightBrace",
+  /*  flowchart  */
   "flowChartProcess",
   "flowChartDecision",
   "flowChartTerminator",
-  "line"
+  "flowChartDocument",
+  "flowChartPredefinedProcess",
+  "flowChartConnector"
 ]);
 var ArrowSchema = external_exports.enum(["none", "arrow", "triangle", "stealth", "diamond", "oval"]);
 var boxTextProps = {
@@ -38138,12 +38242,18 @@ var describedProps = {
   altText: XmlStringSchema.optional(),
   title: XmlStringSchema.optional()
 };
+var ZOrderSchema = external_exports.enum(["front", "back", "forward", "backward"]);
+var orderedProps = {
+  zOrder: ZOrderSchema.optional()
+};
 var ElementSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
     type: external_exports.literal("textbox"),
     frame: FrameSchema,
     text: RichTextSchema,
     fill: ColorSchema.optional(),
+    /**  transparency of `fill` in percent (0-100)  */
+    transparency: TransparencySchema.optional(),
     border: ColorSchema.optional(),
     borderPt: external_exports.number().positive().optional(),
     ...boxTextProps,
@@ -38152,8 +38262,9 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  click target of the whole box (URL or slide link)  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
+    ...orderedProps,
     name: XmlStringSchema.optional()
-  }).strict(),
+  }).strict().refine(fillForTransparency, TRANSPARENCY_NEEDS_FILL),
   external_exports.object({
     type: external_exports.literal("table"),
     frame: FrameSchema,
@@ -38168,6 +38279,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  text language of every cell  */
     lang: LangSchema.optional(),
     ...describedProps,
+    ...orderedProps,
     name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
@@ -38175,6 +38287,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     frame: FrameSchema,
     data: ChartSchema,
     ...describedProps,
+    ...orderedProps,
     name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
@@ -38183,6 +38296,8 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     shape: ShapeTypeSchema,
     text: RichTextSchema.optional(),
     fill: ColorSchema.optional(),
+    /**  transparency of `fill` in percent (0-100)  */
+    transparency: TransparencySchema.optional(),
     border: ColorSchema.optional(),
     borderPt: external_exports.number().positive().optional(),
     fontColor: ColorSchema.optional(),
@@ -38194,8 +38309,9 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
          back button  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
+    ...orderedProps,
     name: XmlStringSchema.optional()
-  }).strict(),
+  }).strict().refine(fillForTransparency, TRANSPARENCY_NEEDS_FILL),
   external_exports.object({
     type: external_exports.literal("image"),
     frame: FrameSchema,
@@ -38207,6 +38323,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  click target of the picture (URL or slide link)  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
+    ...orderedProps,
     name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
@@ -38220,6 +38337,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     startArrow: ArrowSchema.optional(),
     endArrow: ArrowSchema.optional(),
     ...describedProps,
+    ...orderedProps,
     name: XmlStringSchema.optional()
   }).strict()
 ]);
@@ -38312,6 +38430,7 @@ var EL_SET_FIELDS = [
   "text",
   "frame",
   "fill",
+  "transparency",
   "border",
   "borderPt",
   "fontColor",
@@ -38321,7 +38440,8 @@ var EL_SET_FIELDS = [
   "image",
   "cells",
   "addRows",
-  "removeRows"
+  "removeRows",
+  "zOrder"
 ];
 var ElSetSchema = external_exports.object({
   op: external_exports.literal("el.set"),
@@ -38332,8 +38452,12 @@ var ElSetSchema = external_exports.object({
   text: RichTextSchema.optional(),
   /**  move, resize or rotate: the given keys change, the others stay  */
   frame: FramePatchSchema.optional(),
-  /**  solid fill (placeholders, textboxes, shapes)  */
+  /**  solid fill (placeholders, textboxes, shapes); keeps the element's
+       transparency  */
   fill: ColorSchema.optional(),
+  /**  transparency of the solid fill in percent (0 opaque - 100
+       invisible): of the new `fill`, else of the element's own  */
+  transparency: TransparencySchema.optional(),
   /**  outline color and width in pt (also pictures and connectors)  */
   border: ColorSchema.optional(),
   borderPt: external_exports.number().positive().optional(),
@@ -38365,7 +38489,10 @@ var ElSetSchema = external_exports.object({
     rows: external_exports.array(external_exports.array(RowCellSchema).min(1)).min(1)
   }).strict().optional(),
   /**  table: remove rows by 0-based index (before addRows and cells)  */
-  removeRows: external_exports.array(external_exports.number().int().min(0)).min(1).optional()
+  removeRows: external_exports.array(external_exports.number().int().min(0)).min(1).optional(),
+  /**  stacking order of any element: `front`/`back` to the top/bottom,
+       `forward`/`backward` one element up/down (op order counts)  */
+  zOrder: ZOrderSchema.optional()
 }).strict().refine(
   (op) => EL_SET_FIELDS.some((f) => op[f] !== void 0),
   `el.set needs at least one of ${EL_SET_FIELDS.join(", ")}`
@@ -39274,9 +39401,11 @@ var tableLayout = (frame) => {
         directions.push({ row, col, textDirection });
     });
   });
+  const firstRow = firstElement(frame, "a:tblPr")?.getAttribute("firstRow");
   return {
     ...merges.length > 0 && { merges },
-    ...directions.length > 0 && { cellTextDirections: directions }
+    ...directions.length > 0 && { cellTextDirections: directions },
+    ...(firstRow === "1" || firstRow === "true") && { headerRow: true }
   };
 };
 var ARROW_OF = {
@@ -39326,9 +39455,13 @@ var shapeStyle = (sp, colors) => {
   const prst = firstElement(sp, "a:prstGeom")?.getAttribute("prst");
   if (prst !== null && prst !== void 0)
     out.shape = prst;
-  const fill = colorOf(directChild(spPr, ["a:solidFill"]), colors);
+  const solid = directChild(spPr, ["a:solidFill"]);
+  const fill = colorOf(solid, colors);
   if (fill !== void 0)
     out.fill = fill;
+  const alpha = Number(solid === null ? NaN : firstElement(solid, "a:alpha")?.getAttribute("val") ?? NaN);
+  if (Number.isFinite(alpha) && alpha < 1e5)
+    out.transparency = Math.round((1e5 - alpha) / 10) / 100;
   const ln = directChild(spPr, ["a:ln"]);
   const border = colorOf(directChild(ln, ["a:solidFill"]), colors);
   if (border !== void 0)
@@ -39788,14 +39921,15 @@ var verifyContent = async (before, after, expects, repaired = /* @__PURE__ */ ne
     const gone = minus(was.assets, now.assets);
     const added = minus(now.assets, was.assets);
     for (const swap of exp.replaced ?? []) {
-      const k = added.indexOf(`image:${swap.to}[]`);
-      if (k < 0 && swap.from.includes(swap.to))
+      const k = swap.to === null ? -1 : added.indexOf(`image:${swap.to}[]`);
+      if (k < 0 && swap.to !== null && swap.from.includes(swap.to))
         continue;
-      if (k < 0) {
+      if (k < 0 && swap.to !== null) {
         blocked.push(`slide ${exp.label}: the image an op put in place (${swap.to}) is missing`);
         continue;
       }
-      added.splice(k, 1);
+      if (k >= 0)
+        added.splice(k, 1);
       for (const from of swap.from) {
         const g = gone.indexOf(`image:${from}[]`);
         if (g >= 0)
@@ -41227,7 +41361,40 @@ var paragraphRun = (p) => ({
   ...p.color !== void 0 && { color: p.color },
   ...p.highlight !== void 0 && { highlight: p.highlight }
 });
-var applyBullet = (doc, pPr, bullet, styleBullets) => {
+var levelProps = (style, lvl) => style === null ? null : children(style, [`a:lvl${lvl + 1}pPr`])[0] ?? null;
+var ownListStyle = (shape) => {
+  const txBody = shape === null ? null : children(shape, ["p:txBody"])[0] ?? null;
+  return txBody === null ? null : children(txBody, ["a:lstStyle"])[0] ?? null;
+};
+var placeholdersOf = (doc) => {
+  const tree = doc === null ? null : firstElement(doc, "p:spTree");
+  return (tree === null ? [] : children(tree, ["p:sp"])).flatMap((sp) => {
+    const ph = firstElement(sp, "p:ph");
+    return ph === null ? [] : [{ sp, ph }];
+  });
+};
+var placeholderListStyle = (shape, layout, master) => {
+  const ph = firstElement(shape, "p:ph");
+  const type = ph?.getAttribute("type") ?? "obj";
+  const idx = ph?.getAttribute("idx") ?? "0";
+  const typeOf = (el) => el.getAttribute("type") ?? "obj";
+  const inLayout = placeholdersOf(layout);
+  const layoutSp = (inLayout.find((p) => (p.ph.getAttribute("idx") ?? "0") === idx && typeOf(p.ph) === type) ?? inLayout.find((p) => (p.ph.getAttribute("idx") ?? "0") === idx) ?? inLayout.find((p) => typeOf(p.ph) === type))?.sp ?? null;
+  const kind = ["title", "ctrTitle"].includes(type) ? "title" : ["dt", "ftr", "sldNum", "hdr"].includes(type) ? type : "body";
+  const masterSp = placeholdersOf(master).find((p) => typeOf(p.ph) === kind)?.sp ?? null;
+  const txStyles = master === null ? null : firstElement(master, "p:txStyles");
+  const textStyle = txStyles === null ? null : children(txStyles, [
+    kind === "title" ? "p:titleStyle" : kind === "body" ? "p:bodyStyle" : "p:otherStyle"
+  ])[0] ?? null;
+  const chain = [ownListStyle(shape), ownListStyle(layoutSp), ownListStyle(masterSp), textStyle];
+  return (lvl) => {
+    const levels = chain.map((style) => levelProps(style, lvl)).filter((l) => l !== null);
+    const bullet = levels.map((l) => children(l, BULLETS)[0]).find((b) => b !== void 0);
+    const indent = levels.find((l) => l.hasAttribute("indent"))?.getAttribute("indent") ?? "0";
+    return { bullet: bullet !== void 0 && bullet.nodeName !== "a:buNone", hanging: Number(indent) < 0 };
+  };
+};
+var applyBullet = (doc, pPr, bullet, style) => {
   if (bullet === false) {
     place(pPr, doc.createElementNS(NS_A, "a:buNone"), PPR_ORDER, BULLETS);
     return;
@@ -41240,12 +41407,14 @@ var applyBullet = (doc, pPr, bullet, styleBullets) => {
   }
   for (const old of children(pPr, ["a:buNone", "a:buAutoNum"]))
     pPr.removeChild(old);
-  if (styleBullets || children(pPr, ["a:buChar", "a:buBlip"]).length > 0)
+  if (style.bullet)
     return;
-  if (Number(pPr.getAttribute("indent") ?? "0") >= 0) {
+  if (pPr.hasAttribute("indent") ? Number(pPr.getAttribute("indent")) >= 0 : !style.hanging) {
     pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)));
     pPr.setAttribute("indent", String(-BULLET_INDENT));
   }
+  if (children(pPr, ["a:buChar", "a:buBlip"]).length > 0)
+    return;
   if (children(pPr, ["a:buSzTx", "a:buSzPct", "a:buSzPts"]).length === 0) {
     const size = doc.createElementNS(NS_A, "a:buSzPct");
     size.setAttribute("val", "100000");
@@ -41255,13 +41424,22 @@ var applyBullet = (doc, pPr, bullet, styleBullets) => {
   char.setAttribute("char", "\u2022");
   place(pPr, char, PPR_ORDER, []);
 };
-var buildParagraph = (doc, p, lang, kept, styleBullets) => {
+var buildParagraph = (doc, p, lang, kept, styleAt) => {
   const el = doc.createElementNS(NS_A, "a:p");
-  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false || p.bullet === "number" || p.bullet === true && !styleBullets || p.lineSpacing !== void 0 || p.spaceBefore !== void 0 || p.spaceAfter !== void 0;
+  const keptLevel = Number(kept?.pPr?.getAttribute("lvl") ?? "0");
+  const style = styleAt(p.level ?? keptLevel);
+  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false || p.bullet === "number" || p.bullet === true && !style.bullet || p.lineSpacing !== void 0 || p.spaceBefore !== void 0 || p.spaceAfter !== void 0;
   const pPr = kept?.pPr !== null && kept?.pPr !== void 0 ? doc.importNode(kept.pPr, true) : needsPPr ? doc.createElementNS(NS_A, "a:pPr") : null;
   if (pPr !== null) {
+    const relevel = p.level !== void 0 && kept?.pPr !== null && kept?.pPr !== void 0 && p.level !== keptLevel;
+    if (relevel) {
+      pPr.removeAttribute("marL");
+      pPr.removeAttribute("indent");
+    }
     if (p.level !== void 0)
       pPr.setAttribute("lvl", String(p.level));
+    if (relevel && p.bullet === void 0 && children(pPr, ["a:buChar", "a:buBlip"]).length > 0)
+      applyBullet(doc, pPr, true, style);
     if (p.alignment !== void 0)
       pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment]);
     if (p.lineSpacing !== void 0)
@@ -41271,7 +41449,7 @@ var buildParagraph = (doc, p, lang, kept, styleBullets) => {
     if (p.spaceAfter !== void 0)
       place(pPr, spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100), PPR_ORDER, ["a:spcAft"]);
     if (p.bullet !== void 0)
-      applyBullet(doc, pPr, p.bullet, styleBullets);
+      applyBullet(doc, pPr, p.bullet, style);
     el.appendChild(pPr);
   }
   const runs = p.runs ?? [paragraphRun(p)];
@@ -41282,6 +41460,7 @@ var buildParagraph = (doc, p, lang, kept, styleBullets) => {
 };
 var setBodyText = (txBody, text, append, lang, keep = false, styleBullets = false) => {
   const doc = txBody.ownerDocument;
+  const styleAt = typeof styleBullets === "function" ? styleBullets : () => ({ bullet: styleBullets, hanging: false });
   const first = children(txBody, ["a:p"])[0];
   const kept = !keep || first === void 0 ? null : {
     pPr: children(first, ["a:pPr"])[0] ?? null,
@@ -41296,12 +41475,12 @@ var setBodyText = (txBody, text, append, lang, keep = false, styleBullets = fals
     }
   }
   for (const paragraph of toParagraphs(text))
-    txBody.appendChild(buildParagraph(doc, paragraph, lang, kept, styleBullets));
+    txBody.appendChild(buildParagraph(doc, paragraph, lang, kept, styleAt));
 };
-var setShapeText = (shape, text, append, lang, keep = false) => {
+var setShapeText = (shape, text, append, lang, keep = false, listStyle = null) => {
   const txBody = firstElement(shape, "p:txBody");
   if (txBody !== null)
-    setBodyText(txBody, text, append, lang, keep, firstElement(shape, "p:ph") !== null);
+    setBodyText(txBody, text, append, lang, keep, firstElement(shape, "p:ph") === null ? false : listStyle ?? true);
 };
 var replaceInBody = (txBody, spec) => {
   let count = 0;
@@ -41366,6 +41545,18 @@ var setSolidFill = (props, color, followers) => {
   const fill = props.ownerDocument.createElementNS(NS_A, "a:solidFill");
   fill.appendChild(colorElement(props.ownerDocument, color));
   insertOrdered(props, fill, followers);
+};
+var COLORS = ["a:scrgbClr", "a:srgbClr", "a:hslClr", "a:sysClr", "a:schemeClr", "a:prstClr"];
+var setAlpha = (color, transparency) => {
+  if (color === null)
+    return;
+  for (const old of children2(color, ["a:alpha"]))
+    color.removeChild(old);
+  if (transparency <= 0)
+    return;
+  const alpha = color.ownerDocument.createElementNS(NS_A, "a:alpha");
+  alpha.setAttribute("val", String(Math.round((100 - transparency) * 1e3)));
+  color.appendChild(alpha);
 };
 var shapeProps = (shape) => children2(shape, ["p:spPr", "p:grpSpPr"])[0] ?? null;
 var transformOf = (shape) => shape.nodeName === "p:graphicFrame" ? children2(shape, ["p:xfrm"])[0] ?? null : children2(shapeProps(shape), ["a:xfrm"])[0] ?? null;
@@ -41485,6 +41676,8 @@ var editTable = (shape, set2, lang) => {
     const tr = rowsOf(tbl)[row];
     if (tr !== void 0)
       tbl.removeChild(tr);
+    if (row === 0)
+      children2(tbl, ["a:tblPr"])[0]?.removeAttribute("firstRow");
   }
   if (set2.addRows !== void 0) {
     const rows = rowsOf(tbl);
@@ -41576,10 +41769,10 @@ var replaceImage = async (pkg, slidePart, rels, shape, file2) => {
   }
   return { from, to: digestBytes(bytes) };
 };
-var applyEdit = async (pkg, slidePart, rels, shape, edit, lang) => {
+var applyEdit = async (pkg, slidePart, rels, shape, edit, lang, listStyle = null) => {
   const { set: set2 } = edit;
   if (set2.text !== void 0)
-    setShapeText(shape, set2.text, false, lang, true);
+    setShapeText(shape, set2.text, false, lang, true, listStyle);
   if (set2.fontColor !== void 0)
     for (const rPr of runProps(shape))
       setSolidFill(rPr, set2.fontColor, [
@@ -41602,10 +41795,14 @@ var applyEdit = async (pkg, slidePart, rels, shape, edit, lang) => {
   if (set2.frame !== void 0)
     setFrame(shape, set2.frame);
   const swap = set2.image === void 0 ? null : await replaceImage(pkg, slidePart, rels, shape, set2.image);
-  if (set2.fill !== void 0) {
+  if (set2.fill !== void 0 || set2.transparency !== void 0) {
     const props = shapeProps(shape);
-    if (props !== null)
+    const color = () => props === null ? null : children2(children2(props, ["a:solidFill"])[0] ?? null, COLORS)[0] ?? null;
+    const alpha = children2(color(), ["a:alpha"])[0]?.getAttribute("val") ?? null;
+    if (props !== null && set2.fill !== void 0)
       setSolidFill(props, set2.fill, ["a:ln", "a:effectLst", "a:effectDag", "a:scene3d", "a:sp3d", "a:extLst"]);
+    const transparency = set2.transparency ?? (alpha === null ? 0 : (1e5 - Number(alpha)) / 1e3);
+    setAlpha(color(), transparency);
   }
   if (set2.border !== void 0)
     setSolidFill(outlineOf(shape), set2.border, [
@@ -41677,6 +41874,41 @@ var isPlaceholder = (idx) => (shape) => {
 var isTopLevel = (shape) => shape.parentNode?.nodeName === "p:spTree";
 var shapeOf = (cNvPr) => cNvPr.parentNode?.parentNode;
 var findShape = (slide, name, pick2) => elements(slide, "p:cNvPr").map(shapeOf).find((shape) => firstElement(shape, "p:cNvPr")?.getAttribute("name") === name && pick2(shape)) ?? null;
+var stacked = (spTree) => {
+  const out = [];
+  for (let n = spTree.firstChild; n !== null; n = n.nextSibling)
+    if (n.nodeType === 1 && !["p:nvGrpSpPr", "p:grpSpPr", "p:extLst"].includes(n.nodeName))
+      out.push(n);
+  return out;
+};
+var moveShape = (shape, zOrder) => {
+  const spTree = shape.parentNode;
+  if (spTree === null)
+    return;
+  const order = stacked(spTree);
+  const at = order.indexOf(shape);
+  let before;
+  switch (zOrder) {
+    case "front":
+      before = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null;
+      break;
+    case "back":
+      before = order[0] ?? null;
+      break;
+    case "forward":
+      if (at < 0 || at === order.length - 1)
+        return;
+      before = order[at + 1].nextSibling;
+      break;
+    case "backward":
+      if (at <= 0)
+        return;
+      before = order[at - 1];
+      break;
+  }
+  if (before !== shape)
+    spTree.insertBefore(shape, before);
+};
 var setSlideVisibility = (slide, hidden) => {
   const root = slide.documentElement;
   if (root === null)
@@ -41729,17 +41961,18 @@ var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, conten
   const refs = [];
   const spTree = firstElement(slide, "p:spTree");
   if (spTree === null)
-    return { images: [], refs };
+    return { images: [], removed: [], refs };
   for (const sp of elements(slide, "p:sp"))
     if (firstElement(sp, "p:ph")?.getAttribute("type") === type) {
       refs.push(...relRefs(sp).map((ref) => ref.attr.value));
       sp.parentNode?.removeChild(sp);
     }
+  const removed = pkg.targets(part, rels).filter((t) => t.kind === "image" && t.target !== null && refs.includes(t.id)).map((t) => t.target);
   if (content === false || layoutPart === null || !pkg.has(layoutPart))
-    return { images: [], refs };
+    return { images: [], removed, refs };
   const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type);
   if (source === void 0)
-    return { images: [], refs };
+    return { images: [], removed, refs };
   const clone2 = slide.importNode(source, true);
   firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()));
   const txBody = firstElement(clone2, "p:txBody");
@@ -41750,7 +41983,7 @@ var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, conten
       props.setAttribute("lang", lang);
   const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone2);
   spTree.insertBefore(clone2, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
-  return { images, refs };
+  return { images, removed, refs };
 };
 var xfrmBox = (xfrm) => {
   const off = xfrm === null ? null : firstElement(xfrm, "a:off");
@@ -42017,8 +42250,13 @@ var editSlide = async (pkg, work) => {
     }
   for (const shape of doomed)
     removeShape(shape);
+  const layoutPart = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null;
+  const layoutDoc = layoutPart !== null && pkg.has(layoutPart) ? await pkg.xml(layoutPart) : null;
+  const masterPart = layoutPart === null || layoutDoc === null ? null : pkg.targets(layoutPart, await pkg.rels(layoutPart)).find((t) => t.kind === "slideMaster")?.target ?? null;
+  const masterDoc = masterPart !== null && pkg.has(masterPart) ? await pkg.xml(masterPart) : null;
+  const listStyle = (shape) => placeholderListStyle(shape, layoutDoc, masterDoc);
   for (const { fill, shape } of fills)
-    setShapeText(shape, fill.text, fill.append, work.lang);
+    setShapeText(shape, fill.text, fill.append, work.lang, false, listStyle(shape));
   for (const fill of entry.fills.filter((f) => f.image !== void 0)) {
     const file2 = fill.image;
     const ext = path6.extname(file2).slice(1).toLowerCase() || "png";
@@ -42035,8 +42273,8 @@ var editSlide = async (pkg, work) => {
     const shape = need(findShape(slide, edit.name, isTopLevel), `element '${edit.name}'`);
     for (const ref of relRefs(shape))
       unused.add(ref.attr.value);
-    const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang);
-    const again = swap === null ? void 0 : swaps.find((s) => swap.from.includes(s.to));
+    const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape));
+    const again = swap === null ? void 0 : swaps.find((s) => s.to !== null && swap.from.includes(s.to));
     if (swap !== null && again !== void 0) {
       again.from.push(...swap.from.filter((f) => f !== again.to));
       again.to = swap.to;
@@ -42045,12 +42283,11 @@ var editSlide = async (pkg, work) => {
   }
   if (entry.background !== null)
     setBackground(slide, entry.background);
-  const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null;
-  const adoptedParts = [];
+  const bands = [];
   for (const [type, content] of [["ftr", entry.footer], ["sldNum", entry.slideNumber], ["dt", entry.date]])
     if (content !== null) {
-      const band = await setBandPlaceholder(pkg, part, slide, rels, layout, type, content, work.lang);
-      adoptedParts.push(...band.images);
+      const band = await setBandPlaceholder(pkg, part, slide, rels, layoutPart, type, content, work.lang);
+      bands.push(band);
       for (const id of band.refs)
         unused.add(id);
     }
@@ -42066,8 +42303,15 @@ var editSlide = async (pkg, work) => {
       pkg.write(copy, notes);
     }
   }
-  if (work.generated !== null)
-    await work.generated.transplant(pkg, entry, slide, rels, part);
+  const placed = work.generated === null ? /* @__PURE__ */ new Map() : await work.generated.transplant(pkg, entry, slide, rels, part);
+  for (const z2 of entry.zOrder) {
+    const shape = typeof z2.target === "string" ? findShape(slide, z2.target, isTopLevel) : placed.get(z2.target) ?? null;
+    if (shape === null)
+      continue;
+    if (z2.add)
+      moveShape(shape, "front");
+    moveShape(shape, z2.zOrder);
+  }
   wireHyperlinks(pkg, part, slide, rels, work.links);
   setSlideVisibility(slide, entry.hidden);
   dropLinksToRemoved(pkg, part, slide, rels, work.removed);
@@ -42077,11 +42321,21 @@ var editSlide = async (pkg, work) => {
     repaired.actions.unshift(`dropped relationships ${dropped.join(",")}`);
   pkg.write(part, slide);
   pkg.writeRels(part, rels);
-  const adopted = [];
-  for (const image of adoptedParts) {
+  const digestOf = async (image) => {
     const file2 = pkg.zip.file(image);
-    if (file2 !== null)
-      adopted.push(digestBytes(await file2.async("nodebuffer")));
+    return file2 === null ? [] : [digestBytes(await file2.async("nodebuffer"))];
+  };
+  const adopted = [];
+  for (const band of bands) {
+    const from = [];
+    for (const image of band.removed)
+      from.push(...await digestOf(image));
+    const to = [];
+    for (const image of band.images)
+      to.push(...await digestOf(image));
+    if (to.length === 0 && from.length > 0)
+      adopted.push({ from, to: null });
+    to.forEach((hash2, i) => adopted.push({ from: i === 0 ? from : [], to: hash2 }));
   }
   return { ...repaired, swaps, adopted, replaced, runImages };
 };
@@ -47418,6 +47672,25 @@ var TEXT_DIRECTION_VERT = {
   stacked: "wordArtVert"
 };
 var GenColors = class _GenColors {
+  /**
+   *  Choose the token range for a set of element specs.
+   *
+   *  @param specs - every element of the apply (their hex colors and
+   *                 texts must not collide with a token)
+   *  @param palette - the deck's theme slots as RRGGBB (`readPalette`),
+   *                   for the text color on a fill
+   */
+  constructor(specs, palette = {}) {
+    this.palette = palette;
+    const used = new Set([...JSON.stringify(specs).matchAll(/[0-9A-Fa-f]{6}/g)].map((m) => m[0].toUpperCase()));
+    const size = SCHEME_COLORS.length + 1;
+    let base = 790496;
+    while ([...Array(size).keys()].some((i) => used.has(_GenColors.hex(base + i))))
+      base += 32;
+    this.base = base;
+    this.inherit = _GenColors.hex(base + SCHEME_COLORS.length);
+  }
+  palette;
   /**  token (RRGGBB) to theme slot  */
   tokens = /* @__PURE__ */ new Map();
   /**  token (RRGGBB) of text without a color of its own: PptxGenJS
@@ -47427,20 +47700,6 @@ var GenColors = class _GenColors {
   inherit;
   byName = /* @__PURE__ */ new Map();
   base;
-  /**
-   *  Choose the token range for a set of element specs.
-   *
-   *  @param specs - every element of the apply (their hex colors and
-   *                 texts must not collide with a token)
-   */
-  constructor(specs) {
-    const used = new Set([...JSON.stringify(specs).matchAll(/[0-9A-Fa-f]{6}/g)].map((m) => m[0].toUpperCase()));
-    let base = 790496;
-    while ([...Array(16).keys()].some((i) => used.has(_GenColors.hex(base + i))))
-      base += 16;
-    this.base = base;
-    this.inherit = _GenColors.hex(base + 15);
-  }
   /**  RRGGBB of a number  */
   static hex(n) {
     return n.toString(16).toUpperCase().padStart(6, "0");
@@ -47462,6 +47721,61 @@ var GenColors = class _GenColors {
     }
     return token;
   }
+  /**
+   *  The color of text without one of its own on a fill: the theme's
+   *  dark or light slot (`dk1`, `lt1` -- absolute, not mapped), whichever
+   *  contrasts more with the fill (a theme fill resolved by the palette).
+   *
+   *  @param fill - a validated fill color (RRGGBB or theme slot)
+   *  @returns the color to hand to PptxGenJS (a token)
+   */
+  onFill(fill) {
+    const hex3 = (isSchemeColor(fill) ? this.palette[fill] : fill) ?? null;
+    const dark = this.palette.dk1 ?? "000000";
+    const light = this.palette.lt1 ?? "FFFFFF";
+    if (hex3 === null)
+      return this.gen("dk1");
+    return this.gen(contrast(hex3, dark) >= contrast(hex3, light) ? "dk1" : "lt1");
+  }
+};
+var luminance = (hex3) => {
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(hex3.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+var contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+var readPalette = async (zip) => {
+  const presRels = relMap(await readRels(zip, "ppt/presentation.xml"));
+  const pres = findPart(zip, "ppt/presentation.xml") === null ? null : parseXml(await partText(zip, "ppt/presentation.xml"));
+  const master = (pres === null ? [] : elements(pres, "p:sldMasterId")).map((m) => presRels.get(m.getAttribute("r:id") ?? "")?.target ?? null).find((part) => part !== null && findPart(zip, part) !== null) ?? null;
+  if (master === null)
+    return {};
+  const theme = (await readRels(zip, master)).find((r) => r.kind === "theme")?.target ?? null;
+  if (theme === null || findPart(zip, theme) === null)
+    return {};
+  const out = {};
+  const scheme = firstElement(parseXml(await partText(zip, theme)), "a:clrScheme");
+  for (let n = scheme?.firstChild ?? null; n !== null; n = n.nextSibling) {
+    if (n.nodeType !== 1)
+      continue;
+    const slot = n.nodeName.replace(/^a:/, "");
+    const val = firstElement(n, "a:srgbClr")?.getAttribute("val") ?? firstElement(n, "a:sysClr")?.getAttribute("lastClr");
+    if (SCHEME_COLORS.includes(slot) && val !== null && val !== void 0 && /^[0-9A-Fa-f]{6}$/.test(val))
+      out[slot] = val.toUpperCase();
+  }
+  const clrMap = firstElement(parseXml(await partText(zip, master)), "p:clrMap");
+  for (const [slot, fallback] of [["tx1", "dk1"], ["bg1", "lt1"], ["tx2", "dk2"], ["bg2", "lt2"]]) {
+    const mapped = clrMap?.getAttribute(slot) ?? fallback;
+    const val = out[mapped];
+    if (val !== void 0)
+      out[slot] = val;
+  }
+  return out;
 };
 var finishGenerated = (doc, tokens, inherit = null) => {
   let changed = false;
@@ -47573,12 +47887,22 @@ var genTableRows = (el, lang, colors) => {
   return rows.map((row, r) => row.map((cell, k) => {
     const styled = typeof cell === "object" ? cell : null;
     const options = { lang };
+    let fill = null;
     if (r < header) {
       options.bold = true;
-      options.color = colors.gen(data.style?.headerFg ?? "FFFFFF");
-      options.fill = { color: colors.gen(data.style?.headerBg ?? "333333") };
+      const headerBg = data.style?.headerBg;
+      options.color = colors.gen(data.style?.headerFg ?? (headerBg === void 0 ? "FFFFFF" : colors.onFill(headerBg)));
+      fill = data.style?.headerBg ?? "333333";
     } else if (data.style?.altRowBg !== void 0 && (r - header) % 2 === 1)
-      options.fill = { color: colors.gen(data.style.altRowBg) };
+      fill = data.style.altRowBg;
+    if (styled?.fill !== void 0)
+      fill = styled.fill;
+    if (fill !== null)
+      options.fill = { color: colors.gen(fill), ...styled?.transparency !== void 0 && styled.fill !== void 0 && { transparency: styled.transparency } };
+    if (r >= header && fill !== null)
+      options.color = colors.onFill(fill);
+    else if (r < header && styled?.fill !== void 0 && data.style?.headerFg === void 0)
+      options.color = colors.onFill(styled.fill);
     const col = typeof grid === "string" ? k : grid.cells[r]?.[k]?.col ?? k;
     const align = styled?.align ?? el.colAlign?.[col];
     if (align !== void 0)
@@ -47588,8 +47912,6 @@ var genTableRows = (el, lang, colors) => {
         options.bold = styled.bold;
       if (styled.color !== void 0)
         options.color = colors.gen(styled.color);
-      if (styled.fill !== void 0)
-        options.fill = { color: colors.gen(styled.fill) };
       if (styled.valign !== void 0)
         options.valign = styled.valign;
       if (styled.colspan !== void 0 && styled.colspan > 1)
@@ -47655,6 +47977,22 @@ var chartOptions = (c) => {
   return out;
 };
 var finishChart = (doc, chart) => {
+  if (chart.type === "area" || chart.type === "areaStacked") {
+    const grouping = chart.stacked === "percent" ? "percentStacked" : chart.type === "areaStacked" ? "stacked" : null;
+    let changed = false;
+    for (const area of grouping === null ? [] : elements(doc, "c:areaChart")) {
+      let el = firstElement(area, "c:grouping");
+      if (el === null) {
+        el = doc.createElementNS(area.namespaceURI, "c:grouping");
+        area.insertBefore(el, area.firstChild);
+      }
+      if (el.getAttribute("val") !== grouping) {
+        el.setAttribute("val", grouping);
+        changed = true;
+      }
+    }
+    return changed;
+  }
   if (chart.type !== "scatter" && chart.type !== "bubble")
     return false;
   const numFmt = elements(doc, "c:valAx").map((ax) => firstElement(ax, "c:numFmt"))[0] ?? null;
@@ -47682,6 +48020,8 @@ var finishShape = (shape, el) => {
       cNvPr?.removeAttribute(attr);
   if ((el.type === "textbox" || el.type === "shape") && el.hyperlink !== void 0)
     setClickLink(shape, el.hyperlink);
+  if (el.type === "table" && el.data.headers !== void 0)
+    firstElement(shape, "a:tblPr")?.setAttribute("firstRow", "1");
   if (el.type !== "image" || el.fit !== "crop")
     return;
   const box = imageBox(el);
@@ -47732,10 +48072,14 @@ var addElement = (slide, gen, el, lang, colors) => {
       slide.addText(genTextRuns(el.text, el.lang ?? lang, colors), {
         ...frame,
         lang: el.lang ?? lang,
-        color: colors.inherit,
+        /*  text on a fill contrasts with it, else it inherits  */
+        color: el.fill !== void 0 ? colors.onFill(el.fill) : colors.inherit,
         valign: "top",
         ...boxTextOptions(el),
-        ...el.fill !== void 0 && { fill: { color: colors.gen(el.fill) } },
+        ...el.fill !== void 0 && { fill: {
+          color: colors.gen(el.fill),
+          ...el.transparency !== void 0 && { transparency: el.transparency }
+        } },
         ...el.border !== void 0 && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } }
       });
       break;
@@ -47799,9 +48143,12 @@ var addElement = (slide, gen, el, lang, colors) => {
         shape: gen.ShapeType[el.shape],
         align: "center",
         ...boxTextOptions(el),
-        ...el.fill !== void 0 && { fill: { color: colors.gen(el.fill) } },
+        ...el.fill !== void 0 && { fill: {
+          color: colors.gen(el.fill),
+          ...el.transparency !== void 0 && { transparency: el.transparency }
+        } },
         ...el.border !== void 0 && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } },
-        color: el.fontColor !== void 0 ? colors.gen(el.fontColor) : colors.inherit,
+        color: el.fontColor !== void 0 ? colors.gen(el.fontColor) : el.fill !== void 0 ? colors.onFill(el.fill) : colors.inherit,
         ...el.fontSize !== void 0 && { fontSize: el.fontSize }
       });
       break;
@@ -47874,12 +48221,12 @@ var finishSource = async (source, entries, placed, colors) => {
       source.write(part, doc);
   }
 };
-var generateElements = async (entries, lang) => {
+var generateElements = async (entries, lang, palette = {}) => {
   const withElements = entries.filter((e) => e.elements.length > 0);
   if (withElements.length === 0)
     return null;
   const gen = new PptxGenJS2();
-  const colors = new GenColors(withElements.flatMap((e) => e.elements.map((planned) => planned.spec)));
+  const colors = new GenColors(withElements.flatMap((e) => e.elements.map((planned) => planned.spec)), palette);
   const placed = /* @__PURE__ */ new Map();
   for (const [k, entry] of withElements.entries()) {
     const slide = gen.addSlide();
@@ -47896,8 +48243,9 @@ var generateElements = async (entries, lang) => {
     async transplant(pkg, entry, slide, rels, part) {
       const info = placed.get(entry);
       const spTree = firstElement(slide, "p:spTree");
+      const shapes = /* @__PURE__ */ new Map();
       if (info === void 0 || spTree === null)
-        return;
+        return shapes;
       const genSlide = await source.xml(info.part);
       const genRels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [t.id, t]));
       const nextId = PartAllocator.shapeIds(slide);
@@ -47927,9 +48275,12 @@ var generateElements = async (entries, lang) => {
             el.setAttributeNS(NS_R, attr.name, id);
         }
         firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()));
-        finishShape(shape, entry.elements[info.names.indexOf(name)]?.spec);
+        const planned = entry.elements[info.names.indexOf(name)];
+        finishShape(shape, planned.spec);
         spTree.insertBefore(shape, anchor2);
+        shapes.set(planned, shape);
       }
+      return shapes;
     }
   };
 };
@@ -47956,7 +48307,7 @@ var withStdoutShield = async (fn) => {
     console.warn = original.warn;
   }
 };
-var hasEdits = (e) => e.fills.length > 0 || e.edits.length > 0 || e.removeNames.length > 0 || e.elements.length > 0 || e.notes !== null || e.footer !== null || e.background !== null || e.slideNumber !== null || e.date !== null;
+var hasEdits = (e) => e.fills.length > 0 || e.edits.length > 0 || e.zOrder.length > 0 || e.removeNames.length > 0 || e.elements.length > 0 || e.notes !== null || e.footer !== null || e.background !== null || e.slideNumber !== null || e.date !== null;
 var replacesMatch = (e, slide, notes) => {
   const text = (doc) => doc === null ? "" : elements(doc, "a:t").map((t) => t.textContent ?? "").join("");
   const slideText = e.replaces.length > 0 ? text(slide) : "";
@@ -48228,7 +48579,7 @@ var untouchedParts = (pkg, states) => {
 };
 var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
   const lang = await deckLang(pkg.zip, plan.customProps);
-  const generated = await generateElements(plan.entries, lang);
+  const generated = plan.entries.some((e) => e.elements.length > 0) ? await generateElements(plan.entries, lang, await readPalette(pkg.zip)) : null;
   const links = new Map([...plan.links].map(([link, entry]) => [link, states[plan.entries.indexOf(entry)].part]));
   for (const [i, s] of states.entries()) {
     if (!s.touched)
@@ -48250,7 +48601,7 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
       links
     });
     actions.push(...own2.actions);
-    s.replacedImages = [...own2.swaps, ...own2.adopted.map((to) => ({ from: [], to }))];
+    s.replacedImages = [...own2.swaps, ...own2.adopted];
     s.replaced = own2.replaced;
     s.runImages = own2.runImages;
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
@@ -48267,6 +48618,12 @@ var UNREPLACED_PARTS = [
   [/^ppt\/charts\/chart[^/]*\.xml$/, "chart"],
   [/^ppt\/diagrams\/(data|drawing)[^/]*\.xml$/, "SmartArt"]
 ];
+var inStringCache = (v) => {
+  for (let n = v.parentNode; n !== null; n = n.parentNode)
+    if (n.nodeName === "c:strCache" || n.nodeName === "c:multiLvlStrCache")
+      return true;
+  return false;
+};
 var replaceSkipped = (states, warnings) => {
   states.forEach((s, index) => {
     if (s.entry.replaces.length === 0)
@@ -48287,7 +48644,7 @@ var replaceSkipped = (states, warnings) => {
         const frame = frameOf.get(view.part);
         if (kind === void 0 || view.doc === null || frame !== void 0 && replace.skip.includes(frame))
           continue;
-        const texts = [...elements(view.doc, "a:t"), ...elements(view.doc, "c:v")].map((t) => t.textContent ?? "");
+        const texts = [...elements(view.doc, "a:t"), ...elements(view.doc, "c:v").filter(inStringCache)].map((t) => t.textContent ?? "");
         if (texts.some((t) => replacePlain(t, replace).count > 0))
           found.set(kind, [...found.get(kind) ?? [], view.part]);
       }

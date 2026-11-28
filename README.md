@@ -232,11 +232,13 @@ The deck read model and the **`rev` token** for optimistic locking.
 - `--level text` (default) -- plus all placeholder texts and notes, and
   each slide's `section` (with the deck's `sections` in order) when the
   deck has sections
-- `--level full` -- plus every shape with geometry and styling: type,
+- `--level full` -- plus every shape, listed back to front (the stacking
+  order), with geometry and styling: type,
   name, `frame`, text, table cells + column widths (`colWidths`), merged
-  cells (`merges`: row, col, rowspan, colspan; covered cells read as `""`)
-  and vertical cell text (`cellTextDirections`), autoshape
-  preset/fill/border/font, the `textDirection`, `valign` and `margin` of a
+  cells (`merges`: row, col, rowspan, colspan; covered cells read as `""`),
+  vertical cell text (`cellTextDirections`) and a header row
+  (`headerRow: true`), autoshape
+  preset/fill (with its `transparency`)/border/font, the `textDirection`, `valign` and `margin` of a
   text body, the `rotation`, `altText` and `title` of a shape, its click
   target (`hyperlink`: URL or `slide:id:N`), connector
   `startArrow`/`endArrow`, the text language (`lang`), a picture's media
@@ -408,8 +410,9 @@ Anatomy:
   `background` and `hidden` (`true` hides the slide -- "Hide Slide" --,
   `false` shows it; omitted keeps the current state), `slideNumber` and
   `date` (`true` clones the layout's slide-number / date placeholder with
-  its field -- nothing when the layout has none --, `false` removes it;
-  omitted keeps it as it is), `section` (starts a PowerPoint section at
+  its field and layout content, a picture included -- nothing when the
+  layout has none --, `false` removes it with that content; omitted keeps
+  it as it is), `section` (starts a PowerPoint section at
   the slide -- see [Sections](#sections)). Text accepts plain
   strings (`\n` = new paragraph, `\v` -- a vertical tab -- a line break
   inside the paragraph, as PowerPoint writes it) or rich text (runs with
@@ -417,18 +420,23 @@ Anatomy:
 - **Rich text**: a paragraph is `{ "text": ... }` or `{ "runs": [...] }`
   with `level`, `alignment`, `bullet` (`true`, `"number"` for 1. 2. 3.,
   `false`; in placeholders `true` keeps the placeholder's own bullet
-  style, in textboxes, shapes and table cells it writes a bullet `•` with
-  a hanging indent), `spaceBefore`/`spaceAfter` (pt) and `lineSpacing`
+  style where its level shows one, else -- a subtitle, a caption, a
+  textbox, shape or table cell -- it writes a bullet `•` with a hanging
+  indent), `spaceBefore`/`spaceAfter` (pt) and `lineSpacing`
   (a multiple, `1.5`); a run takes `bold`, `italic`, `underline`, `strike`,
   `superscript`, `subscript`, `size`, `font`, `color`, `highlight`,
   `hyperlink` (see *Links*) and `lang` (paragraph-level character fields
-  apply to a paragraph without runs). The same vocabulary works in
+  apply to a paragraph without runs). `font` takes a typeface name or a
+  theme font: `+mj-lt` (the theme's heading font), `+mn-lt` (its body
+  font) -- the text then follows the template's fonts. The same vocabulary works in
   `slide.fill`, `el.set` and `el.add`. A `\v` in a text is a line break
   inside its paragraph (`a:br`); `state` reads a line break back as `\v`.
   Characters a PowerPoint file cannot store (control characters but tab,
   line feed and carriage return; `\v` outside text) fail with `E_SCHEMA`
   naming the field. Text without a `color` takes the template's color
-  (`el.add` included). There is no shrink-to-fit: text that overflows is
+  (`el.add` included) -- on an `el.add` fill (textbox, shape, table cell,
+  header or alternating row) the theme's `dk1` or `lt1`, whichever
+  contrasts more with the fill. There is no shrink-to-fit: text that overflows is
   shortened or split (`W_TEXT_OVERFLOW`); replaced text drops the shrink
   scale PowerPoint had computed for the old one.
 - **Links**: `hyperlink` -- on a run, and on a `textbox`, `shape` or
@@ -444,9 +452,14 @@ Anatomy:
   reads links back as the URL or `slide:id:N`.
 - **Colors**: every color field takes a hex value (`"1F4E79"`, `"#1F4E79"`)
   or a theme slot -- `accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`,
-  `dk1`, `lt1`, `dk2`, `lt2` -- written as a theme reference
+  `dk1`, `lt1`, `dk2`, `lt2`, `hlink`, `folHlink` -- written as a theme reference
   (`a:schemeClr`, no tint/shade), so the element follows the template's
-  color scheme. `state` reports colors as RRGGBB (theme colors resolved).
+  color scheme. Text takes `tx1`/`tx2`, fills and backgrounds `bg1`/`bg2`
+  (they follow the master's color map, so they stay readable on dark
+  templates); `dk1`/`lt1`/`dk2`/`lt2` are absolute -- for contrast on
+  images. A `fill` takes a `transparency` in percent (`0` opaque - `100`
+  invisible; `el.add` textbox, shape and table cell, `el.set`). `state`
+  reports colors as RRGGBB (theme colors resolved).
 - **Text language**: every run pptc writes carries a `lang` (PowerPoint's
   proofing language). It is the deck language -- the custom property
   `pptcDeckLang` (`meta.props`), else the deck's own default text language,
@@ -470,7 +483,7 @@ Recommended agent loop:
 | `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `slideNumber`, `date`, `background`, `hidden` (hide/show), `section` of a slide |
 | `slide.rm` / `slide.move` / `slide.copy` | structure edits |
 | `el.add` | add free elements: `textbox`, `table`, `chart`, `shape`, `image`, `connector` -- all share `frame: {x,y,w,h}` in inches (see below) |
-| `el.set` / `el.rm` | change / remove an element by shape name in place; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document and the placeholders of slides added in it (`PptcPh-<idx>`); `el.set` takes text, frame, style, alt text, image and table cells/rows -- see below |
+| `el.set` / `el.rm` | change / remove an element by shape name in place; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document and the placeholders of slides added in it (`PptcPh-<idx>`); `el.set` takes text, frame, style, alt text, image, table cells/rows and the stacking order -- see below |
 | `text.replace` | find and replace plain text in the whole deck or on one `slide` -- see below |
 | `section.rename` / `section.rm` | rename a section (`from`, `to`) / remove one (`name`; its slides join the previous section) -- see below |
 | `img.prompts` | overlay picture placeholders with visible image-prompt boxes (removable via `el.rm`) |
@@ -482,17 +495,32 @@ Run `pptc schema <op>` for the authoritative JSON Schema with all fields, or
 ### `el.add` elements
 
 Every element has a `type`, an optional `name` (addresses it in later
-`el.set`/`el.rm`), optional `altText` and `title` (accessibility) and --
-except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
+`el.set`/`el.rm`), optional `altText` and `title` (accessibility), an
+optional `zOrder` (`front` -- the default: on top of the slide's shapes
+--, `back`: behind all of them, `forward`/`backward`: placed in front,
+then one shape up/down) and -- except connectors -- a
+`frame: {x, y, w, h, rotation}` in inches.
 
-- **`textbox`**: `text` (rich text), `fill`, `border`, `borderPt`, `lang`,
+- **`textbox`**: `text` (rich text), `fill`, `transparency`, `border`, `borderPt`, `lang`,
   and the text box layout shared with `shape`: `valign`
   (`top`/`middle`/`bottom`), `margin` (inner margin in inches: one value
   or `[left, top, right, bottom]`), `textDirection` (`horizontal`,
   `rotate90`, `rotate270`, `stacked`); `hyperlink` (URL or slide link:
   the click target of the whole box).
-- **`shape`**: `shape` (preset: `rect`, `roundRect`, `ellipse`, arrows,
-  flowchart shapes, ...), `text` (rich text), `fill`, `border`,
+- **`shape`**: `shape` -- a preset geometry: basic `rect`, `roundRect`,
+  `round1Rect`, `round2SameRect`, `snip1Rect`, `ellipse`, `diamond`,
+  `triangle`, `parallelogram`, `trapezoid`, `pentagon`, `hexagon`,
+  `octagon`, `plus`, `donut`, `pie`, `blockArc`, `can`, `frame`, `star5`,
+  `cloud`, `heart`, `line`; arrows and steps `rightArrow`, `leftArrow`,
+  `upArrow`, `downArrow`, `leftRightArrow`, `upDownArrow`,
+  `notchedRightArrow`, `curvedRightArrow`, `circularArrow`, `homePlate`,
+  `chevron`; callouts and brackets `wedgeRectCallout`,
+  `wedgeRoundRectCallout`, `wedgeEllipseCallout`, `leftBracket`,
+  `rightBracket`, `leftBrace`, `rightBrace`; flowchart
+  `flowChartProcess`, `flowChartDecision`, `flowChartTerminator`,
+  `flowChartDocument`, `flowChartPredefinedProcess`,
+  `flowChartConnector` (`state` reads it back as `shape`) --, `text`
+  (rich text), `fill`, `transparency`, `border`,
   `borderPt`, `fontColor`, `fontSize`, `lang`, `valign`, `margin`,
   `textDirection`, `hyperlink` (e.g. a back button to `slide:title:Agenda`).
 - **`table`**: `data: {headers, rows, style}` (`style`: `headerBg`,
@@ -501,11 +529,14 @@ except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
   scaled to `frame.w` when that is given), `colAlign`
   (`left`/`center`/`right` per column), `textDirection` (all cells),
   `lang`. A cell (also a header cell) is a plain value or `{text, bold,
-  fill, color, align, valign, colspan, rowspan, textDirection}` with rich
+  fill, transparency, color, align, valign, colspan, rowspan, textDirection}` with rich
   `text`; a cell covered by a `colspan`/`rowspan` is left out of its row,
   as in HTML. The header row is bold, white on dark gray (`333333`) unless
-  `headerFg`/`headerBg` say otherwise; body text without a `color` takes
-  the template's. Rows that do not fill the grid, and `colWidths`/`colAlign`
+  `headerFg`/`headerBg` say otherwise (a `headerBg` without `headerFg`:
+  `dk1` or `lt1` by contrast), and is the table's header row (PowerPoint's
+  *Header Row*, `state` `headerRow`); body text without a `color` takes
+  the template's, on a cell fill or `altRowBg` `dk1` or `lt1` by contrast.
+  Rows that do not fill the grid, and `colWidths`/`colAlign`
   of the wrong length, fail with `E_SCHEMA`.
 - **`chart`**: `data: {type, categories, series, title, colors, legend,
   fontSize, labels, axes, stacked, smooth, holeSize}`. `type` is `bar`,
@@ -522,7 +553,7 @@ except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
   take none. `axes: {x, y}` with `title`, `min`, `max`, `format` (number
   format like `"0%"`); `x` is the category axis (titles only), the x value
   axis on scatter/bubble; pie/doughnut have no axes. `stacked: "percent"`
-  stacks bar/column/area series to 100%, `smooth` smooths line charts,
+  stacks bar/column/area series (`area` and `areaStacked`) to 100%, `smooth` smooths line charts,
   `holeSize` (10-90) sizes a doughnut's hole. Unsupported combinations fail
   with `E_SCHEMA`.
 - **`image`**: `path`, `fit` (`stretch` -- the default --, `crop`:
@@ -534,8 +565,10 @@ except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
   `from`/`to` end.
 
 The overlap lint (`W_ELEMENT_OVERLAP`) takes the box a rotated element
-covers; the capacity of a placeholder with vertical text (rotated by 90 or
-270 degrees in the layout) swaps its width and height.
+covers, and leaves out an element sent to the back (`zOrder: "back"`),
+which lies behind every shape; the capacity of a placeholder with vertical text (rotated by 90 or
+270 degrees in the layout) swaps its width and height, and a `\v` line
+break counts as a line.
 
 ### `el.set` fields
 
@@ -546,15 +579,17 @@ field; each is checked against the element's type (`E_SCHEMA` otherwise):
 |---|---|---|
 | `text` | placeholder, textbox, shape | new rich text in the first paragraph's and run's format (alignment, bullets, font, size, color, language): a paragraph or run that sets fields of its own changes only those |
 | `frame` | every element (rotation: not table/chart) | `{x, y, w, h, rotation}` -- the given keys move, resize or rotate it, the others stay; a placeholder that inherits its frame gets the layout's frame written into the slide; a group keeps its children's coordinates (they scale with it); a table's columns and rows scale to the new size |
-| `fill` | placeholder, textbox, shape | solid fill |
+| `fill` | placeholder, textbox, shape | solid fill; keeps the element's transparency |
+| `transparency` | placeholder, textbox, shape | transparency of the solid fill in percent (`0` opaque - `100` invisible): of the new `fill`, else of the element's own (one without a solid fill of its own needs `fill`: `E_SCHEMA`) |
 | `border`, `borderPt` | placeholder, textbox, shape, picture, connector | outline color and width in pt |
 | `fontColor` | placeholder, textbox, shape | color of every run |
 | `altText`, `title` | every element | alt text (`cNvPr@descr`) and title; `""` removes them |
 | `hyperlink` | placeholder, textbox, shape, picture | click target of the whole element: a URL or a slide link (`slide:SEL`); `""` removes it |
 | `image` | picture, filled picture placeholder | another image in place: the frame and animations stay, the image is cropped centered to fit the frame (like a picture placeholder fill; an image of unknown size stretches); an SVG shows through PowerPoint's SVG extension |
 | `cells` | table | `[{row, col, text}]` -- 0-based grid position, header row 0; a cell covered by a merge fails |
-| `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the neighbouring body row (the row above; at 1, below the header row 0, the first body row; the first row at 0); one value per column |
-| `removeRows` | table | `[indices]` -- rows taken out; a row of a vertical merge fails |
+| `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the neighbouring body row (the row above; at 1, below the header row 0, the first body row; the first row at 0 -- not above a header row: `E_SCHEMA`); one value per column |
+| `removeRows` | table | `[indices]` -- rows taken out; a row of a vertical merge fails; removing row 0 of a table with a header row leaves it without one |
+| `zOrder` | every element | stacking order: `front`/`back` to the top/bottom of the slide's shapes, `forward`/`backward` one shape up/down; the moves follow the op order, after the elements the document adds are placed |
 
 Table fields apply in the order `removeRows`, `addRows`, `cells`, each seeing
 the result of the one before; the table style and the cell formatting
@@ -563,7 +598,8 @@ picture placeholder filled earlier in the same document is changed in its
 plan instead (the `el.add` vocabulary: a planned connector takes `border`/
 `borderPt` as its `color`/`widthPt` but no `hyperlink`, a planned image no
 `border`/`borderPt`, a planned textbox `fontColor` on its runs). Every `el.add` element also takes `altText` and `title`; a picture
-is never described by its file path. Replacing an image destroys the old
+is never described by its file path. Replacing an image keeps the old alt
+text: give `altText` together with `image`. Replacing an image destroys the old
 one in the deck -- the skill does it only on the user's explicit request.
 
 ### `text.replace`
@@ -573,7 +609,8 @@ one in the deck -- the skill does it only on the user's explicit request.
 text in every shape, placeholder and table cell of the deck -- or of
 `slide` only --, in the speaker notes with `notes: true`, never in fields
 (slide number, date) and never in charts or SmartArt: a targeted slide
-whose chart or SmartArt holds the text raises `W_REPLACE_SKIPPED`. A match
+whose chart (its titles, series names and categories -- not its numbers)
+or SmartArt holds the text raises `W_REPLACE_SKIPPED`. A match
 may span runs (text split by formatting):
 the first touched run takes the replacement and keeps its format. The op
 sees the deck after every earlier op of the document (text set or

@@ -33,6 +33,7 @@ import { Package } from "./package.js"
 import { repairPart } from "./repair.js"
 import { createSlide, dropLinksToRemoved, editSlide } from "./slides.js"
 import { generateElements } from "./transplant.js"
+import { readPalette } from "../elements.js"
 import { mayMatch, replacePlain } from "../../core/text-replace.js"
 
 /**  is a part outside every slide's own content (presentation, masters,
@@ -103,7 +104,7 @@ interface SlideState {
     partReleased: string[]
     /**  images the slide pass put in place of others or adopted from the
          layout (content guard)  */
-    replacedImages: { from: string[], to: string }[]
+    replacedImages: { from: string[], to: string | null }[]
     /**  replacements of each text.replace op in its existing content  */
     replaced: { op: number, count: number }[]
     /**  whether a text.replace removed a run that showed an image  */
@@ -135,7 +136,7 @@ const withStdoutShield = async <T>(fn: () => Promise<T>): Promise<T> => {
 
 /**  does the plan change the content of the slide (not only its position)  */
 const hasEdits = (e: SlidePlanEntry): boolean =>
-    e.fills.length > 0 || e.edits.length > 0 || e.removeNames.length > 0 || e.elements.length > 0
+    e.fills.length > 0 || e.edits.length > 0 || e.zOrder.length > 0 || e.removeNames.length > 0 || e.elements.length > 0
         || e.notes !== null || e.footer !== null || e.background !== null || e.slideNumber !== null
         || e.date !== null
 
@@ -479,7 +480,8 @@ const untouchedParts = (pkg: Package, states: SlideState[]): Map<string, JSZip.J
 const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: SlideState[], removed: Set<string>,
     warnings: LintWarning[]): Promise<void> => {
     const lang = await deckLang(pkg.zip, plan.customProps)
-    const generated = await generateElements(plan.entries, lang)
+    const generated = plan.entries.some((e) => e.elements.length > 0)
+        ? await generateElements(plan.entries, lang, await readPalette(pkg.zip)) : null
     const links = new Map([ ...plan.links ].map(([ link, entry ]) => [ link, (states[plan.entries.indexOf(entry)] as SlideState).part ]))
     for (const [ i, s ] of states.entries()) {
         if (!s.touched)
@@ -494,7 +496,7 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
             part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes, lang, links
         })
         actions.push(...own.actions)
-        s.replacedImages = [ ...own.swaps, ...own.adopted.map((to) => ({ from: [], to })) ]
+        s.replacedImages = [ ...own.swaps, ...own.adopted ]
         s.replaced = own.replaced
         s.runImages = own.runImages
 
@@ -515,6 +517,15 @@ const UNREPLACED_PARTS: [ RegExp, string ][] = [
     [ /^ppt\/charts\/chart[^/]*\.xml$/, "chart" ],
     [ /^ppt\/diagrams\/(data|drawing)[^/]*\.xml$/, "SmartArt" ]
 ]
+
+/**  a chart cache value that is text (series names, categories): inside
+     a string cache, not a number cache  */
+const inStringCache = (v: Element): boolean => {
+    for (let n = v.parentNode; n !== null; n = n.parentNode)
+        if (n.nodeName === "c:strCache" || n.nodeName === "c:multiLvlStrCache")
+            return true
+    return false
+}
 
 /**  text.replace changes the text of shapes, placeholders, tables and
      notes only: a chart or SmartArt part of a slide it targets whose text
@@ -540,7 +551,8 @@ const replaceSkipped = (states: SlideState[], warnings: LintWarning[]): void => 
                 const frame = frameOf.get(view.part)
                 if (kind === undefined || view.doc === null || (frame !== undefined && replace.skip.includes(frame)))
                     continue
-                const texts = [ ...elements(view.doc, "a:t"), ...elements(view.doc, "c:v") ].map((t) => t.textContent ?? "")
+                const texts = [ ...elements(view.doc, "a:t"), ...elements(view.doc, "c:v").filter(inStringCache) ]
+                    .map((t) => t.textContent ?? "")
                 if (texts.some((t) => replacePlain(t, replace).count > 0))
                     found.set(kind, [ ...found.get(kind) ?? [], view.part ])
             }

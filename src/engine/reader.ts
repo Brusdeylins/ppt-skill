@@ -433,7 +433,7 @@ const textDirectionOf = (vert: string | null | undefined): TextDirectionInfo | u
 
 /**  the merged cells and the cells with vertical text of a table, by grid
      position (`gridSpan`/`rowSpan` on the top-left cell, `tcPr@vert`)  */
-const tableLayout = (frame: Element): Pick<ShapeInfo, "merges" | "cellTextDirections"> => {
+const tableLayout = (frame: Element): Pick<ShapeInfo, "merges" | "cellTextDirections" | "headerRow"> => {
     const merges: NonNullable<ShapeInfo["merges"]> = []
     const directions: NonNullable<ShapeInfo["cellTextDirections"]> = []
     elements(frame, "a:tr").forEach((tr, row) => {
@@ -447,9 +447,11 @@ const tableLayout = (frame: Element): Pick<ShapeInfo, "merges" | "cellTextDirect
                 directions.push({ row, col, textDirection })
         })
     })
+    const firstRow = firstElement(frame, "a:tblPr")?.getAttribute("firstRow")
     return {
         ...(merges.length > 0 && { merges }),
-        ...(directions.length > 0 && { cellTextDirections: directions })
+        ...(directions.length > 0 && { cellTextDirections: directions }),
+        ...((firstRow === "1" || firstRow === "true") && { headerRow: true })
     }
 }
 
@@ -507,9 +509,13 @@ const shapeStyle = (sp: Element, colors: Record<string, string>): Partial<ShapeI
     const prst = firstElement(sp, "a:prstGeom")?.getAttribute("prst")
     if (prst !== null && prst !== undefined)
         out.shape = prst
-    const fill = colorOf(directChild(spPr, ["a:solidFill"]), colors)
+    const solid = directChild(spPr, ["a:solidFill"])
+    const fill = colorOf(solid, colors)
     if (fill !== undefined)
         out.fill = fill
+    const alpha = Number(solid === null ? NaN : firstElement(solid, "a:alpha")?.getAttribute("val") ?? NaN)
+    if (Number.isFinite(alpha) && alpha < 100000)
+        out.transparency = Math.round((100000 - alpha) / 10) / 100
     const ln = directChild(spPr, ["a:ln"])
     const border = colorOf(directChild(ln, ["a:solidFill"]), colors)
     if (border !== undefined)

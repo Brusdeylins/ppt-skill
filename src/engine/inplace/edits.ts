@@ -20,7 +20,7 @@ import type { RichText } from "../../schema/payloads.js"
 import { digestBytes } from "../guard.js"
 import { fitImage, imageSize } from "../image-size.js"
 import { REL } from "../parts.js"
-import { replaceInBody, setBodyText, setClickLink, setShapeText } from "../text.js"
+import { replaceInBody, setBodyText, setClickLink, setShapeText, type ListStyle } from "../text.js"
 import { NS_A, NS_R, colorElement, elements, firstElement, relRefs } from "../xml.js"
 import type { Package } from "./package.js"
 
@@ -65,6 +65,22 @@ const setSolidFill = (props: Element, color: string, followers: string[]): void 
     const fill = (props.ownerDocument as Document).createElementNS(NS_A, "a:solidFill")
     fill.appendChild(colorElement(props.ownerDocument as Document, color))
     insertOrdered(props, fill, followers)
+}
+
+/**  DrawingML color elements (one of them per color)  */
+const COLORS = [ "a:scrgbClr", "a:srgbClr", "a:hslClr", "a:sysClr", "a:schemeClr", "a:prstClr" ]
+
+/**  set the transparency of a color in percent: its `a:alpha` (none at 0)  */
+const setAlpha = (color: Element | null, transparency: number): void => {
+    if (color === null)
+        return
+    for (const old of children(color, [ "a:alpha" ]))
+        color.removeChild(old)
+    if (transparency <= 0)
+        return
+    const alpha = (color.ownerDocument as Document).createElementNS(NS_A, "a:alpha")
+    alpha.setAttribute("val", String(Math.round((100 - transparency) * 1000)))
+    color.appendChild(alpha)
 }
 
 /**  the shape properties of an element (`p:spPr`, a group's `p:grpSpPr`)  */
@@ -217,6 +233,10 @@ const editTable = (shape: Element, set: PlannedEdit["set"], lang: string): void 
         const tr = rowsOf(tbl)[row]
         if (tr !== undefined)
             tbl.removeChild(tr)
+
+        /*  without its header row the table has none  */
+        if (row === 0)
+            children(tbl, [ "a:tblPr" ])[0]?.removeAttribute("firstRow")
     }
     if (set.addRows !== undefined) {
         const rows = rowsOf(tbl)
@@ -262,11 +282,12 @@ const partDigest = async (pkg: Package, part: string | null): Promise<string | n
     return file === null || file === undefined ? null : digestBytes(await file.async("nodebuffer"))
 }
 
-/**  an image an el.set replaced: the content hashes of the image parts
-     the picture showed and of the new one  */
+/**  an image an op replaced: the content hashes of the image parts the
+     element showed and of the new one (null: the element went without a
+     successor, a removed footer-band placeholder)  */
 export interface ImageSwap {
     from: string[]
-    to: string
+    to: string | null
 }
 
 /**  replace the image of a picture: a new media part, the blip (and an SVG
@@ -343,13 +364,15 @@ const replaceImage = async (pkg: Package, slidePart: string, rels: Document, sha
  *  @param shape - the element
  *  @param edit - the planned edit
  *  @param lang - the language of runs that state none
+ *  @param listStyle - the list style the element inherits when it is a
+ *                     placeholder (bullets by level), null when unknown
  *  @returns the image the edit replaced, null when it replaced none
  */
 export const applyEdit = async (pkg: Package, slidePart: string, rels: Document, shape: Element,
-    edit: PlannedEdit, lang: string): Promise<ImageSwap | null> => {
+    edit: PlannedEdit, lang: string, listStyle: ListStyle | null = null): Promise<ImageSwap | null> => {
     const { set } = edit
     if (set.text !== undefined)
-        setShapeText(shape, set.text, false, lang, true)
+        setShapeText(shape, set.text, false, lang, true, listStyle)
     if (set.fontColor !== undefined)
         for (const rPr of runProps(shape))
             setSolidFill(rPr, set.fontColor, [ "a:effectLst", "a:effectDag", "a:highlight", "a:uLnTx", "a:uLn",
@@ -360,10 +383,17 @@ export const applyEdit = async (pkg: Package, slidePart: string, rels: Document,
     if (set.frame !== undefined)
         setFrame(shape, set.frame)
     const swap = set.image === undefined ? null : await replaceImage(pkg, slidePart, rels, shape, set.image)
-    if (set.fill !== undefined) {
+    if (set.fill !== undefined || set.transparency !== undefined) {
         const props = shapeProps(shape)
-        if (props !== null)
+        const color = (): Element | null =>
+            props === null ? null : children(children(props, [ "a:solidFill" ])[0] ?? null, COLORS)[0] ?? null
+
+        /*  a new fill keeps the element's transparency  */
+        const alpha = children(color(), [ "a:alpha" ])[0]?.getAttribute("val") ?? null
+        if (props !== null && set.fill !== undefined)
             setSolidFill(props, set.fill, [ "a:ln", "a:effectLst", "a:effectDag", "a:scene3d", "a:sp3d", "a:extLst" ])
+        const transparency = set.transparency ?? (alpha === null ? 0 : (100000 - Number(alpha)) / 1000)
+        setAlpha(color(), transparency)
     }
     if (set.border !== undefined)
         setSolidFill(outlineOf(shape), set.border, [ "a:prstDash", "a:custDash", "a:round", "a:bevel", "a:miter",

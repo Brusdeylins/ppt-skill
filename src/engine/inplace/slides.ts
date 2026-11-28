@@ -6,7 +6,8 @@
 **  engine/inplace/slides: everything the in-place engine does to ONE slide.
 **  A touched slide is parsed once, receives all of its planned edits
 **  (removals, text, pictures, background, footer, notes, generated
-**  elements, hyperlinks, visibility, repairs) on its DOM and is serialized
+**  elements, the stacking order, hyperlinks, visibility, repairs) on its
+**  DOM and is serialized
 **  once. New slides are created from the deck's own layout part.
 */
 
@@ -15,13 +16,14 @@ import path from "node:path"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../../infra/errors.js"
 import { inchToEmu, type Frame } from "../../core/model.js"
-import type { SlidePlanEntry } from "../../core/ops/registry.js"
+import type { PlannedElement, SlidePlanEntry } from "../../core/ops/registry.js"
+import type { ZOrder } from "../../schema/payloads.js"
 import { notesOwner } from "../defects.js"
 import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.js"
 import { fitImage, imageSize, type Box, type ImageFit, type ImageSize } from "../image-size.js"
 import { slideFromLayout } from "../seed.js"
 import { digestBytes } from "../guard.js"
-import { HLINK_ATTR, setBodyText, setShapeText } from "../text.js"
+import { HLINK_ATTR, placeholderListStyle, setBodyText, setShapeText, type ListStyle } from "../text.js"
 import { NS_A, NS_P, NS_R, colorElement, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
 import type { Package } from "./package.js"
 import { removeShape, repairContent, repairRels, type Repair } from "./repair.js"
@@ -46,6 +48,53 @@ const shapeOf = (cNvPr: Element): Element => cNvPr.parentNode?.parentNode as Ele
 const findShape = (slide: Document, name: string, pick: (shape: Element) => boolean): Element | null =>
     elements(slide, "p:cNvPr").map(shapeOf).find((shape) =>
         firstElement(shape, "p:cNvPr")?.getAttribute("name") === name && pick(shape)) ?? null
+
+/**  the shapes of a shape tree, in stacking order (back to front): every
+     child but the group's own properties and extension list  */
+const stacked = (spTree: Element): Element[] => {
+    const out: Element[] = []
+    for (let n = spTree.firstChild; n !== null; n = n.nextSibling)
+        if (n.nodeType === 1 && ![ "p:nvGrpSpPr", "p:grpSpPr", "p:extLst" ].includes(n.nodeName))
+            out.push(n as Element)
+    return out
+}
+
+/**
+ *  Move a top-level shape in the stacking order of its slide: to the
+ *  front (before the tree's extension list), to the back (right after the
+ *  tree's group properties), or one shape forward or backward.
+ *
+ *  @param shape - the shape (a child of `p:spTree`)
+ *  @param zOrder - where it goes
+ */
+export const moveShape = (shape: Element, zOrder: ZOrder): void => {
+    const spTree = shape.parentNode as Element | null
+    if (spTree === null)
+        return
+    const order = stacked(spTree)
+    const at = order.indexOf(shape)
+    let before: Element | null
+    switch (zOrder) {
+        case "front":
+            before = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null
+            break
+        case "back":
+            before = order[0] ?? null
+            break
+        case "forward":
+            if (at < 0 || at === order.length - 1)
+                return
+            before = (order[at + 1] as Element).nextSibling as Element | null
+            break
+        case "backward":
+            if (at <= 0)
+                return
+            before = order[at - 1] as Element
+            break
+    }
+    if (before !== shape)
+        spTree.insertBefore(shape, before)
+}
 
 /**  set `show="0"` on the slide root for a hidden slide, clear it otherwise  */
 const setSlideVisibility = (slide: Document, hidden: boolean): void => {
@@ -127,25 +176,28 @@ type BandType = "ftr" | "sldNum" | "dt"
  *  @param content - the footer text, true to show the layout's content,
  *                   false to remove the placeholder
  *  @param lang - the language of the footer text
- *  @returns the image parts the slide now relates to (layout content) and
- *           the relationship ids the removed placeholder referenced
+ *  @returns the image parts the slide now relates to (layout content), the
+ *           image parts the removed placeholder showed and the
+ *           relationship ids it referenced
  */
 const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, rels: Document, layoutPart: string | null,
-    type: BandType, content: string | boolean, lang: string): Promise<{ images: string[], refs: string[] }> => {
+    type: BandType, content: string | boolean, lang: string): Promise<{ images: string[], removed: string[], refs: string[] }> => {
     const refs: string[] = []
     const spTree = firstElement(slide, "p:spTree")
     if (spTree === null)
-        return { images: [], refs }
+        return { images: [], removed: [], refs }
     for (const sp of elements(slide, "p:sp"))
         if (firstElement(sp, "p:ph")?.getAttribute("type") === type) {
             refs.push(...relRefs(sp).map((ref) => ref.attr.value))
             sp.parentNode?.removeChild(sp)
         }
+    const removed = pkg.targets(part, rels).filter((t) => t.kind === "image" && t.target !== null && refs.includes(t.id))
+        .map((t) => t.target as string)
     if (content === false || layoutPart === null || !pkg.has(layoutPart))
-        return { images: [], refs }
+        return { images: [], removed, refs }
     const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type)
     if (source === undefined)
-        return { images: [], refs }
+        return { images: [], removed, refs }
     const clone = slide.importNode(source, true) as Element
     firstElement(clone, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()))
     const txBody = firstElement(clone, "p:txBody")
@@ -159,7 +211,7 @@ const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, r
             props.setAttribute("lang", lang)
     const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone)
     spTree.insertBefore(clone, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
-    return { images, refs }
+    return { images, removed, refs }
 }
 
 /**  the frame of a shape's own `a:xfrm` in EMU, null when it has none  */
@@ -489,7 +541,7 @@ export interface SlideWork {
      text.replace removed a run that showed an image (a picture-filled run)  */
 export interface SlideEdited extends Repair {
     swaps: ImageSwap[]
-    adopted: string[]
+    adopted: ImageSwap[]
     replaced: { op: number, count: number }[]
     runImages: boolean
 }
@@ -561,8 +613,16 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         }
     for (const shape of doomed)
         removeShape(shape)
+
+    /*  the list style a placeholder inherits (bullets by level)  */
+    const layoutPart = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null
+    const layoutDoc = layoutPart !== null && pkg.has(layoutPart) ? await pkg.xml(layoutPart) : null
+    const masterPart = layoutPart === null || layoutDoc === null ? null
+        : pkg.targets(layoutPart, await pkg.rels(layoutPart)).find((t) => t.kind === "slideMaster")?.target ?? null
+    const masterDoc = masterPart !== null && pkg.has(masterPart) ? await pkg.xml(masterPart) : null
+    const listStyle = (shape: Element): ListStyle => placeholderListStyle(shape, layoutDoc, masterDoc)
     for (const { fill, shape } of fills)
-        setShapeText(shape, fill.text as NonNullable<typeof fill.text>, fill.append, work.lang)
+        setShapeText(shape, fill.text as NonNullable<typeof fill.text>, fill.append, work.lang, false, listStyle(shape))
 
     /*  pictures into picture placeholders  */
     for (const fill of entry.fills.filter((f) => f.image !== undefined)) {
@@ -584,10 +644,10 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         const shape = need(findShape(slide, edit.name, isTopLevel), `element '${edit.name}'`)
         for (const ref of relRefs(shape))
             unused.add(ref.attr.value)
-        const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang)
+        const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang, listStyle(shape))
 
         /*  an image swapped again in the same apply: only the last stays  */
-        const again = swap === null ? undefined : swaps.find((s) => swap.from.includes(s.to))
+        const again = swap === null ? undefined : swaps.find((s) => s.to !== null && swap.from.includes(s.to))
         if (swap !== null && again !== undefined) {
             again.from.push(...swap.from.filter((f) => f !== again.to))
             again.to = swap.to
@@ -599,12 +659,11 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
     /*  background, footer, slide number, date, notes  */
     if (entry.background !== null)
         setBackground(slide, entry.background)
-    const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null
-    const adoptedParts: string[] = []
+    const bands: { images: string[], removed: string[] }[] = []
     for (const [ type, content ] of [ [ "ftr", entry.footer ], [ "sldNum", entry.slideNumber ], [ "dt", entry.date ] ] as const)
         if (content !== null) {
-            const band = await setBandPlaceholder(pkg, part, slide, rels, layout, type, content, work.lang)
-            adoptedParts.push(...band.images)
+            const band = await setBandPlaceholder(pkg, part, slide, rels, layoutPart, type, content, work.lang)
+            bands.push(band)
             for (const id of band.refs)
                 unused.add(id)
         }
@@ -621,9 +680,18 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         }
     }
 
-    /*  generated elements, hyperlinks, visibility, links, repairs  */
-    if (work.generated !== null)
-        await work.generated.transplant(pkg, entry, slide, rels, part)
+    /*  generated elements, the stacking order, hyperlinks, visibility,
+        links, repairs  */
+    const placed = work.generated === null ? new Map<PlannedElement, Element>()
+        : await work.generated.transplant(pkg, entry, slide, rels, part)
+    for (const z of entry.zOrder) {
+        const shape = typeof z.target === "string" ? findShape(slide, z.target, isTopLevel) : placed.get(z.target) ?? null
+        if (shape === null)
+            continue
+        if (z.add)
+            moveShape(shape, "front")
+        moveShape(shape, z.zOrder)
+    }
     wireHyperlinks(pkg, part, slide, rels, work.links)
     setSlideVisibility(slide, entry.hidden)
     dropLinksToRemoved(pkg, part, slide, rels, work.removed)
@@ -633,11 +701,23 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         repaired.actions.unshift(`dropped relationships ${dropped.join(",")}`)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
-    const adopted: string[] = []
-    for (const image of adoptedParts) {
+    /*  a band placeholder's images: the layout's come, the removed
+        placeholder's may go  */
+    const digestOf = async (image: string): Promise<string[]> => {
         const file = pkg.zip.file(image)
-        if (file !== null)
-            adopted.push(digestBytes(await file.async("nodebuffer")))
+        return file === null ? [] : [ digestBytes(await file.async("nodebuffer")) ]
+    }
+    const adopted: ImageSwap[] = []
+    for (const band of bands) {
+        const from: string[] = []
+        for (const image of band.removed)
+            from.push(...await digestOf(image))
+        const to: string[] = []
+        for (const image of band.images)
+            to.push(...await digestOf(image))
+        if (to.length === 0 && from.length > 0)
+            adopted.push({ from, to: null })
+        to.forEach((hash, i) => adopted.push({ from: i === 0 ? from : [], to: hash }))
     }
     return { ...repaired, swaps, adopted, replaced, runImages }
 }

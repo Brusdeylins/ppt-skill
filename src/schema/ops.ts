@@ -11,7 +11,7 @@
 
 import { z } from "zod"
 import { ColorSchema, ElementSchema, FramePatchSchema, HyperlinkSchema, RichTextSchema, TextStringSchema,
-    XmlStringSchema } from "./payloads.js"
+    TransparencySchema, XmlStringSchema, ZOrderSchema } from "./payloads.js"
 
 /**
  *  Slide selector grammar:
@@ -131,12 +131,12 @@ export const ElRmSchema = z.object({
 const RowCellSchema = z.union([RichTextSchema, z.number(), z.boolean()])
 
 /**  the fields of `el.set` that change something  */
-const EL_SET_FIELDS = [ "text", "frame", "fill", "border", "borderPt", "fontColor", "altText", "title",
-    "hyperlink", "image", "cells", "addRows", "removeRows" ] as const
+const EL_SET_FIELDS = [ "text", "frame", "fill", "transparency", "border", "borderPt", "fontColor", "altText", "title",
+    "hyperlink", "image", "cells", "addRows", "removeRows", "zOrder" ] as const
 
 /**  Op: change a named element on a slide in place -- its text, frame,
-     style, alt text, picture or table cells/rows; each field is checked
-     against the element's type.  */
+     style, alt text, picture, table cells/rows or stacking order; each
+     field is checked against the element's type.  */
 export const ElSetSchema = z.object({
     op: z.literal("el.set"),
     slide: SlideSelectorSchema,
@@ -146,8 +146,12 @@ export const ElSetSchema = z.object({
     text: RichTextSchema.optional(),
     /**  move, resize or rotate: the given keys change, the others stay  */
     frame: FramePatchSchema.optional(),
-    /**  solid fill (placeholders, textboxes, shapes)  */
+    /**  solid fill (placeholders, textboxes, shapes); keeps the element's
+         transparency  */
     fill: ColorSchema.optional(),
+    /**  transparency of the solid fill in percent (0 opaque - 100
+         invisible): of the new `fill`, else of the element's own  */
+    transparency: TransparencySchema.optional(),
     /**  outline color and width in pt (also pictures and connectors)  */
     border: ColorSchema.optional(),
     borderPt: z.number().positive().optional(),
@@ -179,7 +183,10 @@ export const ElSetSchema = z.object({
         rows: z.array(z.array(RowCellSchema).min(1)).min(1)
     }).strict().optional(),
     /**  table: remove rows by 0-based index (before addRows and cells)  */
-    removeRows: z.array(z.number().int().min(0)).min(1).optional()
+    removeRows: z.array(z.number().int().min(0)).min(1).optional(),
+    /**  stacking order of any element: `front`/`back` to the top/bottom,
+         `forward`/`backward` one element up/down (op order counts)  */
+    zOrder: ZOrderSchema.optional()
 }).strict().refine((op) => EL_SET_FIELDS.some((f) => op[f] !== undefined),
     `el.set needs at least one of ${EL_SET_FIELDS.join(", ")}`)
 

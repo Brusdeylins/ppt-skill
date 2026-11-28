@@ -4,7 +4,8 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  Integration: theme colors. Every color field takes a bare theme slot
-**  (accent1-accent6, tx1, tx2, bg1, bg2, dk1, lt1, dk2, lt2) besides hex
+**  (accent1-accent6, tx1, tx2, bg1, bg2, dk1, lt1, dk2, lt2, hlink,
+**  folHlink) besides hex
 **  and writes it as `a:schemeClr` -- in el.add elements (also the slots
 **  PptxGenJS does not know, and chart series colors), in placeholder runs,
 **  in the background; a hex color that equals a color token stays hex;
@@ -61,6 +62,25 @@ describe("theme colors", () => {
         expect(firstElement(firstElement(doc, "p:bg") ?? doc.documentElement as never, "a:schemeClr")?.getAttribute("val")).toBe("accent5")
         const runs = elements(doc, "a:rPr").map((rPr) => [ ...attrs(rPr, "a:schemeClr", "val"), ...attrs(rPr, "a:srgbClr", "val") ])
         expect(runs.filter((r) => r.length > 0)).toEqual([ [ "accent1", "lt2" ], [ "1F4E79" ] ])
+    })
+
+    it("writes the hyperlink slots hlink and folHlink, distinct from inheriting text", async () => {
+        await apply(deck, [ { op: "slide.add", layout: "DEFAULT" }, { op: "el.add", slide: "$last", elements: [
+            { type: "shape", name: "Links", shape: "rect", frame: { x: 1, y: 1, w: 3, h: 1 }, fill: "hlink", border: "folHlink",
+                text: [ { runs: [ { text: "a", color: "accent1" }, { text: "b" } ] } ] },
+            /*  every slot in one apply: the token range holds them all  */
+            { type: "textbox", name: "All", frame: { x: 1, y: 3, w: 6, h: 1 }, text: [ { runs: [
+                "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "tx1", "tx2", "bg1", "bg2",
+                "dk1", "lt1", "dk2", "lt2", "hlink", "folHlink" ].map((color) => ({ text: color, color })) } ] }
+        ] } ].map((op, i) => i === 0 ? { ...op, ref: "last" } : op))
+        const links = (await shapeOf(deck, "Links")).shape
+        expect(attrs(firstElement(links, "p:spPr") as never, "a:schemeClr", "val")).toEqual([ "hlink", "folHlink" ])
+        expect(attrs(links, "a:srgbClr", "val")).toEqual([])
+        const all = (await shapeOf(deck, "All")).shape
+        expect(attrs(all, "a:schemeClr", "val")).toEqual([ "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
+            "tx1", "tx2", "bg1", "bg2", "dk1", "lt1", "dk2", "lt2", "hlink", "folHlink" ])
+        expect(elements(all, "a:solidFill").length).toBe(16)
+        expect(attrs(all, "a:srgbClr", "val")).toEqual([])
     })
 
     it("rejects an unknown color name", async () => {

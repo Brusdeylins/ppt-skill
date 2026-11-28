@@ -25,9 +25,16 @@ Usage rules
 -   Always write colors as `#RRGGBB` hex codes into the prompt, e.g.
     `deep blue (#1F4E79)` -- name the hue AND give the code.
 -   In ops (element fills, borders, fonts, table and chart colors, runs,
-    backgrounds) give the slot NAME instead (`"accent1"`, `"lt1"`): pptc
+    backgrounds) give the slot NAME instead (`"accent1"`, `"bg1"`): pptc
     writes it as a theme reference, so the element follows the template.
     Hex codes belong into image prompts, which cannot reference a theme.
+-   In ops, text colors are `tx1`/`tx2` and fills and backgrounds
+    `bg1`/`bg2`: they follow the master's color map, so text stays
+    readable on dark templates too (`tx1` is light where the master maps
+    it so). `dk1`/`lt1`/`dk2`/`lt2` are absolute -- use them only for
+    contrast against an image (overlay text on a photo). `hlink`/
+    `folHlink` are the template's link colors. Text without a color on an
+    `el.add` fill takes `dk1` or `lt1` by contrast with the fill.
 -   Primary slot default is `accent1`. If a template uses a different
     slot as its brand color, the template sidecar (or the user) may
     override the primary slot; everything else stays the same.

@@ -7,19 +7,23 @@
 **  calls on a generator slide; engine/inplace/transplant moves the result
 **  into the target slide. What PptxGenJS cannot write is finished on its
 **  output here: theme colors (written as color tokens first), one
-**  paragraph property set per paragraph, picture crops and the number
-**  format of a scatter chart's x axis.
+**  paragraph property set per paragraph, picture crops, the number
+**  format of a scatter chart's x axis, an area chart's grouping and a
+**  table's header row; text on a fill gets the theme color that
+**  contrasts with it.
 */
 
 import { readFileSync } from "node:fs"
 import type { Document, Element } from "@xmldom/xmldom"
+import type JSZip from "jszip"
 import { EMU_PER_INCH, inchToEmu } from "../core/model.js"
 import { layoutTable } from "../core/table-grid.js"
-import { isSchemeColor, type ChartData, type ElementSpec, type Paragraph, type RichText,
+import { SCHEME_COLORS, isSchemeColor, type ChartData, type ElementSpec, type Paragraph, type RichText,
     type SchemeColor, type TableCell, type TextDirection } from "../schema/payloads.js"
 import { fitImage, imageSize, type ImageSize } from "./image-size.js"
 import { BASELINE, paragraphRun, setClickLink } from "./text.js"
-import { NS_A, elements, firstElement } from "./xml.js"
+import { findPart, partText, readRels, relMap } from "./parts.js"
+import { NS_A, elements, firstElement, parseXml } from "./xml.js"
 
 /*  the PptxGenJS surface used by pptc, typed structurally  */
 
@@ -68,14 +72,19 @@ export class GenColors {
      *
      *  @param specs - every element of the apply (their hex colors and
      *                 texts must not collide with a token)
+     *  @param palette - the deck's theme slots as RRGGBB (`readPalette`),
+     *                   for the text color on a fill
      */
-    constructor(specs: ElementSpec[]) {
+    constructor(specs: ElementSpec[], private readonly palette: Partial<Record<SchemeColor, string>> = {}) {
         const used = new Set([ ...JSON.stringify(specs).matchAll(/[0-9A-Fa-f]{6}/g) ].map((m) => m[0].toUpperCase()))
+
+        /*  one token per theme slot, then the inherit token: all distinct  */
+        const size = SCHEME_COLORS.length + 1
         let base = 0x0C0FE0
-        while ([ ...Array(16).keys() ].some((i) => used.has(GenColors.hex(base + i))))
-            base += 0x10
+        while ([ ...Array(size).keys() ].some((i) => used.has(GenColors.hex(base + i))))
+            base += 0x20
         this.base = base
-        this.inherit = GenColors.hex(base + 15)
+        this.inherit = GenColors.hex(base + SCHEME_COLORS.length)
     }
 
     /**  RRGGBB of a number  */
@@ -100,6 +109,78 @@ export class GenColors {
         }
         return token
     }
+
+    /**
+     *  The color of text without one of its own on a fill: the theme's
+     *  dark or light slot (`dk1`, `lt1` -- absolute, not mapped), whichever
+     *  contrasts more with the fill (a theme fill resolved by the palette).
+     *
+     *  @param fill - a validated fill color (RRGGBB or theme slot)
+     *  @returns the color to hand to PptxGenJS (a token)
+     */
+    onFill(fill: string): string {
+        const hex = (isSchemeColor(fill) ? this.palette[fill] : fill) ?? null
+        const dark = this.palette.dk1 ?? "000000"
+        const light = this.palette.lt1 ?? "FFFFFF"
+        if (hex === null)
+            return this.gen("dk1")
+        return this.gen(contrast(hex, dark) >= contrast(hex, light) ? "dk1" : "lt1")
+    }
+}
+
+/**  the relative luminance of an RRGGBB color (WCAG)  */
+const luminance = (hex: string): number => {
+    const [ r, g, b ] = [ 0, 2, 4 ].map((i) => {
+        const c = parseInt(hex.slice(i, i + 2), 16) / 255
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+    }) as [ number, number, number ]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/**  the contrast ratio of two RRGGBB colors (WCAG, 1-21)  */
+const contrast = (a: string, b: string): number => {
+    const [ hi, lo ] = [ luminance(a), luminance(b) ].sort((x, y) => y - x) as [ number, number ]
+    return (hi + 0.05) / (lo + 0.05)
+}
+
+/**
+ *  The theme slots of a deck as RRGGBB: the color scheme of the first
+ *  slide master's theme, `tx1`/`bg1`/`tx2`/`bg2` through the master's
+ *  color map.
+ *
+ *  @param zip - the deck archive
+ *  @returns the slots that resolve
+ */
+export const readPalette = async (zip: JSZip): Promise<Partial<Record<SchemeColor, string>>> => {
+    const presRels = relMap(await readRels(zip, "ppt/presentation.xml"))
+    const pres = findPart(zip, "ppt/presentation.xml") === null ? null : parseXml(await partText(zip, "ppt/presentation.xml"))
+    const master = (pres === null ? [] : elements(pres, "p:sldMasterId"))
+        .map((m) => presRels.get(m.getAttribute("r:id") ?? "")?.target ?? null)
+        .find((part): part is string => part !== null && findPart(zip, part) !== null) ?? null
+    if (master === null)
+        return {}
+    const theme = (await readRels(zip, master)).find((r) => r.kind === "theme")?.target ?? null
+    if (theme === null || findPart(zip, theme) === null)
+        return {}
+    const out: Partial<Record<SchemeColor, string>> = {}
+    const scheme = firstElement(parseXml(await partText(zip, theme)), "a:clrScheme")
+    for (let n = scheme?.firstChild ?? null; n !== null; n = n.nextSibling) {
+        if (n.nodeType !== 1)
+            continue
+        const slot = n.nodeName.replace(/^a:/, "") as SchemeColor
+        const val = firstElement(n as Element, "a:srgbClr")?.getAttribute("val")
+            ?? firstElement(n as Element, "a:sysClr")?.getAttribute("lastClr")
+        if ((SCHEME_COLORS as readonly string[]).includes(slot) && val !== null && val !== undefined && /^[0-9A-Fa-f]{6}$/.test(val))
+            out[slot] = val.toUpperCase()
+    }
+    const clrMap = firstElement(parseXml(await partText(zip, master)), "p:clrMap")
+    for (const [ slot, fallback ] of [ [ "tx1", "dk1" ], [ "bg1", "lt1" ], [ "tx2", "dk2" ], [ "bg2", "lt2" ] ] as const) {
+        const mapped = (clrMap?.getAttribute(slot) ?? fallback) as SchemeColor
+        const val = out[mapped]
+        if (val !== undefined)
+            out[slot] = val
+    }
+    return out
 }
 
 /**
@@ -241,13 +322,27 @@ const genTableRows = (el: Extract<ElementSpec, { type: "table" }>, lang: string,
     return rows.map((row, r) => row.map((cell, k) => {
         const styled = typeof cell === "object" ? cell as TableCell : null
         const options: Record<string, unknown> = { lang }
+
+        /*  text on a fill contrasts with it (the default header keeps its
+            documented white), else it inherits  */
+        let fill: string | null = null
         if (r < header) {
             options.bold = true
-            options.color = colors.gen(data.style?.headerFg ?? "FFFFFF")
-            options.fill = { color: colors.gen(data.style?.headerBg ?? "333333") }
+            const headerBg = data.style?.headerBg
+            options.color = colors.gen(data.style?.headerFg ?? (headerBg === undefined ? "FFFFFF" : colors.onFill(headerBg)))
+            fill = data.style?.headerBg ?? "333333"
         }
         else if (data.style?.altRowBg !== undefined && (r - header) % 2 === 1)
-            options.fill = { color: colors.gen(data.style.altRowBg) }
+            fill = data.style.altRowBg
+        if (styled?.fill !== undefined)
+            fill = styled.fill
+        if (fill !== null)
+            options.fill = { color: colors.gen(fill), ...(styled?.transparency !== undefined && styled.fill !== undefined
+                && { transparency: styled.transparency }) }
+        if (r >= header && fill !== null)
+            options.color = colors.onFill(fill)
+        else if (r < header && styled?.fill !== undefined && data.style?.headerFg === undefined)
+            options.color = colors.onFill(styled.fill)
         const col = typeof grid === "string" ? k : grid.cells[r]?.[k]?.col ?? k
         const align = styled?.align ?? el.colAlign?.[col]
         if (align !== undefined)
@@ -257,8 +352,6 @@ const genTableRows = (el: Extract<ElementSpec, { type: "table" }>, lang: string,
                 options.bold = styled.bold
             if (styled.color !== undefined)
                 options.color = colors.gen(styled.color)
-            if (styled.fill !== undefined)
-                options.fill = { color: colors.gen(styled.fill) }
             if (styled.valign !== undefined)
                 options.valign = styled.valign
             if (styled.colspan !== undefined && styled.colspan > 1)
@@ -328,13 +421,32 @@ const chartOptions = (c: ChartData): Record<string, unknown> => {
 /**
  *  Finish a generated chart part: PptxGenJS writes the y axis number
  *  format onto the x value axis of a scatter or bubble chart as well; the
- *  x axis gets its own (`General` unless `axes.x.format` is given).
+ *  x axis gets its own (`General` unless `axes.x.format` is given). An
+ *  area chart gets its grouping, which PptxGenJS 4.0.1 writes for
+ *  `stacked` only (percent-stacked areas would draw as standard ones).
  *
  *  @param doc - the chart part DOM (changed in place)
  *  @param chart - the chart payload
  *  @returns true when the part changed
  */
 export const finishChart = (doc: Document, chart: ChartData): boolean => {
+    if (chart.type === "area" || chart.type === "areaStacked") {
+        const grouping = chart.stacked === "percent" ? "percentStacked" : chart.type === "areaStacked" ? "stacked" : null
+        let changed = false
+        for (const area of grouping === null ? [] : elements(doc, "c:areaChart")) {
+            let el = firstElement(area, "c:grouping")
+            if (el === null) {
+                /*  the first child of c:areaChart (before c:varyColors)  */
+                el = doc.createElementNS(area.namespaceURI, "c:grouping")
+                area.insertBefore(el, area.firstChild)
+            }
+            if (el.getAttribute("val") !== grouping) {
+                el.setAttribute("val", grouping as string)
+                changed = true
+            }
+        }
+        return changed
+    }
     if (chart.type !== "scatter" && chart.type !== "bubble")
         return false
     /*  PptxGenJS writes the x axis first  */
@@ -366,8 +478,9 @@ const imageBox = (el: Extract<ElementSpec, { type: "image" }>): { x: number, y: 
  *  Finish a generated shape after its move into the target slide: its
  *  alt text and title are the element's own -- PptxGenJS describes a
  *  picture by its local file path (a chart by ""), which never leaves
- *  pptc -- and a picture with `fit: crop` gets its centered `a:srcRect`
- *  (the same fit as picture placeholders).
+ *  pptc --, a box or shape gets its click target, a table with headers
+ *  its header row, and a picture with `fit: crop` its centered
+ *  `a:srcRect` (the same fit as picture placeholders).
  *
  *  @param shape - the moved shape element (changed in place)
  *  @param el - the element payload it was generated from
@@ -384,6 +497,11 @@ export const finishShape = (shape: Element, el: ElementSpec): void => {
         pictures only); wired with the slide's other links  */
     if ((el.type === "textbox" || el.type === "shape") && el.hyperlink !== undefined)
         setClickLink(shape, el.hyperlink)
+
+    /*  a table with headers has a header row (PowerPoint's Header Row
+        option), which el.set addRows cannot insert above  */
+    if (el.type === "table" && el.data.headers !== undefined)
+        firstElement(shape, "a:tblPr")?.setAttribute("firstRow", "1")
     if (el.type !== "image" || el.fit !== "crop")
         return
     const box = imageBox(el)
@@ -443,10 +561,12 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
             slide.addText(genTextRuns(el.text, el.lang ?? lang, colors), {
                 ...frame,
                 lang: el.lang ?? lang,
-                color: colors.inherit,
+                /*  text on a fill contrasts with it, else it inherits  */
+                color: el.fill !== undefined ? colors.onFill(el.fill) : colors.inherit,
                 valign: "top",
                 ...boxTextOptions(el),
-                ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill) } }),
+                ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill),
+                    ...(el.transparency !== undefined && { transparency: el.transparency }) } }),
                 ...(el.border !== undefined && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } })
             })
             break
@@ -515,9 +635,11 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
                 shape: gen.ShapeType[el.shape],
                 align: "center",
                 ...boxTextOptions(el),
-                ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill) } }),
+                ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill),
+                    ...(el.transparency !== undefined && { transparency: el.transparency }) } }),
                 ...(el.border !== undefined && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } }),
-                color: el.fontColor !== undefined ? colors.gen(el.fontColor) : colors.inherit,
+                color: el.fontColor !== undefined ? colors.gen(el.fontColor)
+                    : el.fill !== undefined ? colors.onFill(el.fill) : colors.inherit,
                 ...(el.fontSize !== undefined && { fontSize: el.fontSize })
             })
             break

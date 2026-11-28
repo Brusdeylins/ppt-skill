@@ -11,7 +11,7 @@
 
 import { PptcError } from "../../infra/errors.js"
 import type { ElSetOp, Op } from "../../schema/ops.js"
-import type { ElementSpec, RichText } from "../../schema/payloads.js"
+import type { ElementSpec, RichText, ZOrder } from "../../schema/payloads.js"
 import type { DeckState, Layout, TemplateInfo } from "../model.js"
 import type { LintWarning, SlideAddr } from "../lint.js"
 import type { SelectableSlide } from "../selector.js"
@@ -40,6 +40,18 @@ export interface PlannedElement {
     name: string | null
     /**  validated element payload  */
     spec: ElementSpec
+}
+
+/**  one change of the stacking order on a slide, applied in op order
+     after the generated elements are in place: an existing top-level
+     shape (by its full name) or an element planned in the document  */
+export interface PlannedZOrder {
+    /**  the element: a shape name, or the planned element itself  */
+    target: string | PlannedElement
+    /**  where it moves  */
+    zOrder: ZOrder
+    /**  el.add's placement: the element goes to the front first  */
+    add: boolean
 }
 
 /**  the changes of one el.set on an existing element (a top-level
@@ -118,6 +130,9 @@ export interface SlidePlanEntry {
     date: boolean | null
     /**  el.set changes of existing elements, in op order  */
     edits: PlannedEdit[]
+    /**  stacking-order changes (el.add placements, el.set zOrder), in op
+         order  */
+    zOrder: PlannedZOrder[]
     /**  existing elements to remove, by shape name  */
     removeNames: string[]
     /**  text.replace ops on the slide's existing content, in op order  */
@@ -161,6 +176,7 @@ export const newPlanEntry = (
     date: null,
     elements: [],
     edits: [],
+    zOrder: [],
     removeNames: [],
     replaces: [],
     replaced: [],

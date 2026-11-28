@@ -151,8 +151,9 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
                 placeholders by design and their footer-scale caption is intentional  */
             if (!name.startsWith(PROMPT_BOX_PREFIX)) {
                 const slideAddr = slideAddrOf(ctx, entry)
-                /*  warn when the new element covers a text-bearing shape  */
-                if (frame !== null) {
+                /*  warn when the new element covers a text-bearing shape --
+                    one sent to the back lies behind every shape  */
+                if (frame !== null && spec.zOrder !== "back") {
                     const overlap = lintElementOverlap(name, frame, overlapObstacles(ctx, entry), slideAddr)
                     if (overlap !== null)
                         ctx.plan.warnings.push(overlap)
@@ -162,7 +163,10 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
                 if (tooSmall !== null)
                     ctx.plan.warnings.push(tooSmall)
             }
-            entry.elements.push({ name: spec.name ?? null, spec })
+            /*  a new element goes to the front, then where its zOrder says  */
+            const planned = { name: spec.name ?? null, spec }
+            entry.elements.push(planned)
+            entry.zOrder.push({ target: planned, zOrder: spec.zOrder ?? "front", add: true })
         }
     }
 }
@@ -244,7 +248,9 @@ export const imgPrompts: OpHandler<Extract<Op, { op: "img.prompts" }>> = {
                 border: PROMPT_BORDER,
                 borderPt: 1
             }
-            entry.elements.push({ name: `${PROMPT_BOX_PREFIX}-${pic.idx}`, spec })
+            const planned = { name: `${PROMPT_BOX_PREFIX}-${pic.idx}`, spec }
+            entry.elements.push(planned)
+            entry.zOrder.push({ target: planned, zOrder: "front", add: true })
         }
     }
 }

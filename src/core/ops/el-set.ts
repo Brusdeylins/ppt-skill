@@ -4,8 +4,10 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  core/ops/el-set: plan transformer of `el.set` -- the in-place change of
-**  one named element: text, frame, fill/border/font color, alt text and
-**  title, the click target (URL or slide link), the image of a picture, the cells and rows of a table. Every
+**  one named element: text, frame, fill (with transparency)/border/font
+**  color, alt text and title, the click target (URL or slide link), the
+**  image of a picture, the cells and rows of a table, the stacking order
+**  (in op order, after the document's new elements are placed). Every
 **  field is checked against the element's type. An element planned earlier
 **  in the same document has its spec patched; an existing one gets a
 **  planned edit the engine applies after the slide's fills. A table's rows
@@ -36,6 +38,7 @@ const EXISTING_TYPES: Record<keyof ElementPatch, EditType[]> = {
     text: [ "placeholder", "textbox", "shape" ],
     frame: ALL,
     fill: [ "placeholder", "textbox", "shape" ],
+    transparency: [ "placeholder", "textbox", "shape" ],
     border: [ "placeholder", "textbox", "shape", "picture", "connector" ],
     borderPt: [ "placeholder", "textbox", "shape", "picture", "connector" ],
     fontColor: [ "placeholder", "textbox", "shape" ],
@@ -45,7 +48,8 @@ const EXISTING_TYPES: Record<keyof ElementPatch, EditType[]> = {
     image: [ "picture" ],
     cells: [ "table" ],
     addRows: [ "table" ],
-    removeRows: [ "table" ]
+    removeRows: [ "table" ],
+    zOrder: ALL
 }
 
 /**  the planned element types each el.set field applies to  */
@@ -53,6 +57,7 @@ const PLANNED_TYPES: Record<keyof ElementPatch, ElementSpec["type"][]> = {
     text: [ "textbox", "shape" ],
     frame: [ "textbox", "shape", "table", "chart", "image" ],
     fill: [ "textbox", "shape" ],
+    transparency: [ "textbox", "shape" ],
     border: [ "textbox", "shape", "connector" ],
     borderPt: [ "textbox", "shape", "connector" ],
     fontColor: [ "textbox", "shape" ],
@@ -62,7 +67,8 @@ const PLANNED_TYPES: Record<keyof ElementPatch, ElementSpec["type"][]> = {
     image: [ "image" ],
     cells: [ "table" ],
     addRows: [ "table" ],
-    removeRows: [ "table" ]
+    removeRows: [ "table" ],
+    zOrder: [ "textbox", "shape", "table", "chart", "image", "connector" ]
 }
 
 /**  preset geometries of lines and connectors (el.add draws a connector
@@ -93,6 +99,8 @@ export interface TableModel {
     cols: number
     merges: Merge[]
     overwritten: Set<string>
+    /**  whether row 0 is the table's header row  */
+    header: boolean
 }
 
 /**  the merge a grid cell lies in, null outside every merge  */
@@ -127,6 +135,8 @@ const applyTableEdit = (model: TableModel, set: ElementPatch, name: string): voi
         }
         if (rows.length >= model.origin.length)
             fail("a table keeps at least one row")
+        if (rows.includes(0))
+            model.header = false
         for (const row of rows) {
             model.origin.splice(row, 1)
             model.merges = model.merges.filter((m) => m.row !== row)
@@ -137,6 +147,8 @@ const applyTableEdit = (model: TableModel, set: ElementPatch, name: string): voi
         const at = set.addRows.at ?? model.origin.length
         if (at > model.origin.length)
             fail(`row position ${at} is out of range (0-${model.origin.length})`)
+        if (at === 0 && model.header)
+            fail("row 0 is the header row -- insert at 1 or later")
         const merge = spansInto(model.merges, at)
         if (merge !== null)
             fail(`row position ${at} lies inside the merged cell at row ${merge.row}, column ${merge.col}`)
@@ -174,7 +186,8 @@ export const tableModel = (shape: ShapeInfo, edits: PlannedEdit[]): TableModel =
         origin: rows.map((_, i) => i),
         cols: shape.colWidths?.length ?? rows[0]?.length ?? 0,
         merges: (shape.merges ?? []).map((m) => ({ ...m })),
-        overwritten: new Set()
+        overwritten: new Set(),
+        header: shape.headerRow === true
     }
     for (const edit of edits)
         if (edit.name === shape.name)
@@ -288,6 +301,11 @@ const patchSpec = (spec: ElementSpec, set: ElementPatch, name: string): void => 
                 spec.text = set.text
             if (set.fill !== undefined)
                 spec.fill = set.fill
+            if (set.transparency !== undefined) {
+                if (spec.fill === undefined)
+                    throw new PptcError("E_SCHEMA", `element '${name}' has no fill -- give 'fill' with 'transparency'`)
+                spec.transparency = set.transparency
+            }
             if (set.border !== undefined)
                 spec.border = set.border
             if (set.borderPt !== undefined)
@@ -364,8 +382,10 @@ export const elSet: OpHandler<ElSetOp> = {
         const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name))
         if (planned !== undefined) {
             patchSpec(planned.spec, set, op.name)
+            if (set.zOrder !== undefined)
+                entry.zOrder.push({ target: planned, zOrder: set.zOrder, add: false })
             const frame = specFrame(planned.spec)
-            if (set.frame !== undefined && !prompt && frame !== null) {
+            if (set.frame !== undefined && !prompt && frame !== null && set.zOrder !== "back") {
                 const overlap = lintElementOverlap(op.name, frame, overlapObstacles(ctx, entry, planned.name), slideAddr)
                 if (overlap !== null)
                     ctx.plan.warnings.push(overlap)
@@ -407,16 +427,28 @@ export const elSet: OpHandler<ElSetOp> = {
             const before = plannedFrame(entry, target.name, target.frame)
             const f = { ...before, ...Object.fromEntries(Object.entries(set.frame).filter(([ , v ]) => v !== undefined)) }
             const frame = rotatedBox(f as Frame & { rotation?: number })
-            if (!prompt && frame !== null) {
+            if (!prompt && frame !== null && set.zOrder !== "back") {
                 const overlap = lintElementOverlap(target.name, frame, overlapObstacles(ctx, entry, target.name), slideAddr)
                 if (overlap !== null)
                     ctx.plan.warnings.push(overlap)
             }
         }
+        /*  a transparency applies to a solid fill: the new one, one an
+            earlier el.set gave, or the element's own  */
+        if (set.transparency !== undefined && set.fill === undefined && target.fill === undefined
+            && !entry.edits.some((e) => e.name === target.name && e.set.fill !== undefined))
+            throw new PptcError("E_SCHEMA", `element '${target.name}' has no solid fill of its own -- `
+                + "give 'fill' with 'transparency'")
         if (type === "table")
             applyTableEdit(tableModel(target, entry.edits), set, target.name)
         if (set.text !== undefined && (target.placeholderKind === "title" || target.placeholderIdx === 0))
             entry.title = richTextToPlain(set.text).join(" ")
+        /*  the stacking order changes in op order, after the elements
+            the document adds are in place  */
+        if (set.zOrder !== undefined) {
+            entry.zOrder.push({ target: target.name, zOrder: set.zOrder, add: false })
+            delete set.zOrder
+        }
         if (fieldsOf(set).length > 0)
             entry.edits.push({ name: target.name, set })
     }

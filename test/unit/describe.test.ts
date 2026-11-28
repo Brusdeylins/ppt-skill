@@ -84,6 +84,15 @@ describe("lint", () => {
         expect(warning?.code).toBe("W_TEXT_OVERFLOW")
         expect(warning?.estimatedLines).toBeGreaterThan(warning?.maxLines as number)
     })
+    it("counts a vertical tab (line break) as a line of its own", () => {
+        const target = ph(13, "body", { x: 0, y: 0, w: 12, h: 1 })
+        const lines = (target.capacity as { lines: number }).lines
+        const text = Array.from({ length: lines + 1 }, (_, i) => `Zeile ${i}`)
+        expect(lintPlaceholderText(text.slice(0, lines).join("\v"), target, { id: 1, index: 0, title: null })).toBeNull()
+        expect(lintPlaceholderText(text.join("\v"), target, { id: 1, index: 0, title: null })?.code).toBe("W_TEXT_OVERFLOW")
+        expect(lintPlaceholderText([ { runs: [ { text: text.join("\v") } ] } ], target, { id: 1, index: 0, title: null })?.code)
+            .toBe("W_TEXT_OVERFLOW")
+    })
     it("stays silent when the text fits", () => {
         const target = ph(13, "body", { x: 0, y: 0, w: 12, h: 5 })
         expect(lintPlaceholderText("kurz", target, { id: 1, index: 0, title: null })).toBeNull()

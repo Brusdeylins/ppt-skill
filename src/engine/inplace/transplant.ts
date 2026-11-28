@@ -16,8 +16,8 @@ import PptxGenJsPkg from "pptxgenjs"
 import { randomUUID } from "node:crypto"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../../infra/errors.js"
-import type { ChartData, ElementSpec } from "../../schema/payloads.js"
-import type { SlidePlanEntry } from "../../core/ops/registry.js"
+import type { ChartData, SchemeColor } from "../../schema/payloads.js"
+import type { PlannedElement, SlidePlanEntry } from "../../core/ops/registry.js"
 import { GenColors, addElement, finishChart, finishGenerated, finishShape, type GenRoot, type GenSlide } from "../elements.js"
 import { PartAllocator, relTarget, relsPartOf } from "../parts.js"
 import { NS_R, elements, firstElement, relRefs } from "../xml.js"
@@ -69,8 +69,9 @@ export interface Generated {
      *  @param slide - the target slide DOM
      *  @param rels - the target slide's relationships
      *  @param part - the target slide part
+     *  @returns the shape each planned element became on the slide
      */
-    transplant(pkg: Package, entry: SlidePlanEntry, slide: Document, rels: Document, part: string): Promise<void>
+    transplant(pkg: Package, entry: SlidePlanEntry, slide: Document, rels: Document, part: string): Promise<Map<PlannedElement, Element>>
 }
 
 /**
@@ -117,14 +118,16 @@ const finishSource = async (source: Package, entries: SlidePlanEntry[],
  *
  *  @param entries - the plan entries of the apply
  *  @param lang - the language of text that states none (the deck language)
+ *  @param palette - the deck's theme slots as RRGGBB (text on fills)
  *  @returns the generated elements, null when no entry has any
  */
-export const generateElements = async (entries: SlidePlanEntry[], lang: string): Promise<Generated | null> => {
+export const generateElements = async (entries: SlidePlanEntry[], lang: string,
+    palette: Partial<Record<SchemeColor, string>> = {}): Promise<Generated | null> => {
     const withElements = entries.filter((e) => e.elements.length > 0)
     if (withElements.length === 0)
         return null
     const gen = new PptxGenJS()
-    const colors = new GenColors(withElements.flatMap((e) => e.elements.map((planned) => planned.spec)))
+    const colors = new GenColors(withElements.flatMap((e) => e.elements.map((planned) => planned.spec)), palette)
     const placed = new Map<SlidePlanEntry, { part: string, names: string[] }>()
     for (const [ k, entry ] of withElements.entries()) {
         const slide = gen.addSlide()
@@ -139,11 +142,12 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string):
     await finishSource(source, withElements, placed, colors)
 
     return {
-        async transplant(pkg, entry, slide, rels, part): Promise<void> {
+        async transplant(pkg, entry, slide, rels, part): Promise<Map<PlannedElement, Element>> {
             const info = placed.get(entry)
             const spTree = firstElement(slide, "p:spTree")
+            const shapes = new Map<PlannedElement, Element>()
             if (info === undefined || spTree === null)
-                return
+                return shapes
             const genSlide = await source.xml(info.part)
             const genRels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [ t.id, t ]))
             const nextId = PartAllocator.shapeIds(slide)
@@ -181,9 +185,12 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string):
                         el.setAttributeNS(NS_R, attr.name, id)
                 }
                 firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()))
-                finishShape(shape, entry.elements[info.names.indexOf(name)]?.spec as ElementSpec)
+                const planned = entry.elements[info.names.indexOf(name)] as PlannedElement
+                finishShape(shape, planned.spec)
                 spTree.insertBefore(shape, anchor)
+                shapes.set(planned, shape)
             }
+            return shapes
         }
     }
 }

@@ -41,8 +41,9 @@ export interface SlideExpect {
     textReplaced?: boolean
     /**  images an op put in place of others (el.set image) or brought in
          with layout content (footer, slide number, date): the new image
-         (`to`, content hash) must come, the old ones (`from`) may go  */
-    replaced?: { from: string[], to: string }[]
+         (`to`, content hash) must come, the old ones (`from`) may go --
+         `to` null: a removed footer-band placeholder's images may go  */
+    replaced?: { from: string[], to: string | null }[]
     /**  relationship ids of the source slide whose content a named repair
          removed (W_REPAIRED) -- left out of its fingerprint  */
     released?: string[]
@@ -243,17 +244,18 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
 
         /*  a replaced image: exactly the new one comes, the old may go  */
         for (const swap of exp.replaced ?? []) {
-            const k = added.indexOf(`image:${swap.to}[]`)
+            const k = swap.to === null ? -1 : added.indexOf(`image:${swap.to}[]`)
 
             /*  an image put in place of one with the same content changes
                 nothing the fingerprint sees  */
-            if (k < 0 && swap.from.includes(swap.to))
+            if (k < 0 && swap.to !== null && swap.from.includes(swap.to))
                 continue
-            if (k < 0) {
+            if (k < 0 && swap.to !== null) {
                 blocked.push(`slide ${exp.label}: the image an op put in place (${swap.to}) is missing`)
                 continue
             }
-            added.splice(k, 1)
+            if (k >= 0)
+                added.splice(k, 1)
             for (const from of swap.from) {
                 const g = gone.indexOf(`image:${from}[]`)
                 if (g >= 0)

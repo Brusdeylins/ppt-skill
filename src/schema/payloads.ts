@@ -14,7 +14,7 @@ import { z } from "zod"
 /**  theme color slots a color field may name instead of a hex value  */
 export const SCHEME_COLORS = [
     "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
-    "tx1", "tx2", "bg1", "bg2", "dk1", "lt1", "dk2", "lt2"
+    "tx1", "tx2", "bg1", "bg2", "dk1", "lt1", "dk2", "lt2", "hlink", "folHlink"
 ] as const
 
 /**  a theme color slot name  */
@@ -209,6 +209,17 @@ export const RichTextSchema = z.union([TextStringSchema, z.array(ParagraphSchema
 /**  Horizontal alignment of a table column or cell.  */
 export const CellAlignSchema = z.enum(["left", "center", "right"])
 
+/**  Transparency of a solid fill in percent: 0 opaque, 100 invisible
+     (written as the color's `a:alpha`).  */
+export const TransparencySchema = z.number().min(0).max(100)
+
+/**  a transparency needs a fill to apply to  */
+const fillForTransparency = (e: { fill?: string | undefined, transparency?: number | undefined }): boolean =>
+    e.transparency === undefined || e.fill !== undefined
+
+/**  the issue of a transparency without a fill  */
+const TRANSPARENCY_NEEDS_FILL = { message: "'transparency' needs a 'fill'", path: [ "transparency" ] }
+
 /**  A styled table cell; `colspan`/`rowspan` merge it with its neighbours
      to the right / below, whose cells are then omitted from their rows
      (as in HTML).  */
@@ -216,13 +227,15 @@ export const TableCellSchema = z.object({
     text: RichTextSchema,
     bold: z.boolean().optional(),
     fill: ColorSchema.optional(),
+    /**  transparency of `fill` in percent (0-100)  */
+    transparency: TransparencySchema.optional(),
     color: ColorSchema.optional(),
     align: CellAlignSchema.optional(),
     valign: ValignSchema.optional(),
     colspan: z.number().int().min(1).optional(),
     rowspan: z.number().int().min(1).optional(),
     textDirection: TextDirectionSchema.optional()
-}).strict()
+}).strict().refine(fillForTransparency, TRANSPARENCY_NEEDS_FILL)
 
 /**  One table cell: a plain value or a styled cell.  */
 export const CellSchema = z.union([TextStringSchema, z.number(), z.boolean(), TableCellSchema])
@@ -358,12 +371,23 @@ export const ChartSchema = z.object({
         issue([ "holeSize" ], "a hole size needs a doughnut chart")
 })
 
-/**  Shape types supported by the shape element (PptxGenJS naming subset).  */
+/**  Shape types supported by the shape element: a curated set of the
+     preset geometries (`a:prstGeom`), named as PowerPoint and PptxGenJS
+     name them.  */
 export const ShapeTypeSchema = z.enum([
-    "rect", "roundRect", "ellipse", "diamond", "triangle", "rightArrow",
-    "leftArrow", "upArrow", "downArrow", "pentagon", "hexagon", "chevron",
-    "star5", "cloud", "heart", "flowChartProcess", "flowChartDecision",
-    "flowChartTerminator", "line"
+    /*  basic shapes  */
+    "rect", "roundRect", "round1Rect", "round2SameRect", "snip1Rect", "ellipse", "diamond", "triangle",
+    "parallelogram", "trapezoid", "pentagon", "hexagon", "octagon", "plus", "donut", "pie", "blockArc",
+    "can", "frame", "star5", "cloud", "heart", "line",
+    /*  arrows and process steps  */
+    "rightArrow", "leftArrow", "upArrow", "downArrow", "leftRightArrow", "upDownArrow",
+    "notchedRightArrow", "curvedRightArrow", "circularArrow", "homePlate", "chevron",
+    /*  callouts, brackets and braces  */
+    "wedgeRectCallout", "wedgeRoundRectCallout", "wedgeEllipseCallout",
+    "leftBracket", "rightBracket", "leftBrace", "rightBrace",
+    /*  flowchart  */
+    "flowChartProcess", "flowChartDecision", "flowChartTerminator", "flowChartDocument",
+    "flowChartPredefinedProcess", "flowChartConnector"
 ])
 
 /**  Line end decoration of a connector.  */
@@ -384,6 +408,16 @@ const describedProps = {
     title: XmlStringSchema.optional()
 }
 
+/**  Stacking order of an element among the slide's elements: `front`
+     (the default of el.add) and `back` move it to the top or bottom,
+     `forward` and `backward` one element up or down.  */
+export const ZOrderSchema = z.enum([ "front", "back", "forward", "backward" ])
+
+/**  The stacking order of a new element: placed in front, then moved.  */
+const orderedProps = {
+    zOrder: ZOrderSchema.optional()
+}
+
 /**  A free element placed by `el.add`, discriminated by `type`.  */
 export const ElementSchema = z.discriminatedUnion("type", [
     z.object({
@@ -391,6 +425,8 @@ export const ElementSchema = z.discriminatedUnion("type", [
         frame: FrameSchema,
         text: RichTextSchema,
         fill: ColorSchema.optional(),
+        /**  transparency of `fill` in percent (0-100)  */
+        transparency: TransparencySchema.optional(),
         border: ColorSchema.optional(),
         borderPt: z.number().positive().optional(),
         ...boxTextProps,
@@ -399,8 +435,9 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  click target of the whole box (URL or slide link)  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
+        ...orderedProps,
         name: XmlStringSchema.optional()
-    }).strict(),
+    }).strict().refine(fillForTransparency, TRANSPARENCY_NEEDS_FILL),
     z.object({
         type: z.literal("table"),
         frame: FrameSchema,
@@ -415,6 +452,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  text language of every cell  */
         lang: LangSchema.optional(),
         ...describedProps,
+        ...orderedProps,
         name: XmlStringSchema.optional()
     }).strict(),
     z.object({
@@ -422,6 +460,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         frame: FrameSchema,
         data: ChartSchema,
         ...describedProps,
+        ...orderedProps,
         name: XmlStringSchema.optional()
     }).strict(),
     z.object({
@@ -430,6 +469,8 @@ export const ElementSchema = z.discriminatedUnion("type", [
         shape: ShapeTypeSchema,
         text: RichTextSchema.optional(),
         fill: ColorSchema.optional(),
+        /**  transparency of `fill` in percent (0-100)  */
+        transparency: TransparencySchema.optional(),
         border: ColorSchema.optional(),
         borderPt: z.number().positive().optional(),
         fontColor: ColorSchema.optional(),
@@ -441,8 +482,9 @@ export const ElementSchema = z.discriminatedUnion("type", [
              back button  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
+        ...orderedProps,
         name: XmlStringSchema.optional()
-    }).strict(),
+    }).strict().refine(fillForTransparency, TRANSPARENCY_NEEDS_FILL),
     z.object({
         type: z.literal("image"),
         frame: FrameSchema,
@@ -454,6 +496,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  click target of the picture (URL or slide link)  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
+        ...orderedProps,
         name: XmlStringSchema.optional()
     }).strict(),
     z.object({
@@ -467,6 +510,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         startArrow: ArrowSchema.optional(),
         endArrow: ArrowSchema.optional(),
         ...describedProps,
+        ...orderedProps,
         name: XmlStringSchema.optional()
     }).strict()
 ])
@@ -480,3 +524,4 @@ export type TableCell = z.infer<typeof TableCellSchema>
 export type TextDirection = z.infer<typeof TextDirectionSchema>
 export type ChartData = z.infer<typeof ChartSchema>
 export type ElementSpec = z.infer<typeof ElementSchema>
+export type ZOrder = z.infer<typeof ZOrderSchema>

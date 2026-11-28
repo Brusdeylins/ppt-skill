@@ -235,11 +235,76 @@ export const paragraphRun = (p: Paragraph): Run => ({
     ...(p.highlight !== undefined && { highlight: p.highlight })
 })
 
+/**  what the list style a placeholder inherits gives one paragraph
+     level: a bullet (character, picture or number) and a hanging indent  */
+export interface StyleLevel {
+    bullet: boolean
+    hanging: boolean
+}
+
+/**  the inherited list style of a placeholder by paragraph level (0-8)  */
+export type ListStyle = (lvl: number) => StyleLevel
+
+/**  the level properties (`a:lvlNpPr`) of a list style, null when absent  */
+const levelProps = (style: Element | null, lvl: number): Element | null =>
+    style === null ? null : children(style, [ `a:lvl${lvl + 1}pPr` ])[0] ?? null
+
+/**  the list style of a shape's text body, null when it has none  */
+const ownListStyle = (shape: Element | null): Element | null => {
+    const txBody = shape === null ? null : children(shape, [ "p:txBody" ])[0] ?? null
+    return txBody === null ? null : children(txBody, [ "a:lstStyle" ])[0] ?? null
+}
+
+/**  the placeholder shapes of a layout or master  */
+const placeholdersOf = (doc: Document | null): { sp: Element, ph: Element }[] => {
+    const tree = doc === null ? null : firstElement(doc, "p:spTree")
+    return (tree === null ? [] : children(tree, [ "p:sp" ])).flatMap((sp) => {
+        const ph = firstElement(sp, "p:ph")
+        return ph === null ? [] : [ { sp, ph } ]
+    })
+}
+
+/**
+ *  The list style a placeholder inherits, level by level: its own
+ *  `a:lstStyle`, then the layout placeholder's (by idx, else by type),
+ *  the master placeholder's (by type) and the master text style (title,
+ *  body or other). The first level that states a bullet (or `a:buNone`)
+ *  decides the bullet, the first that states an indent the hanging indent.
+ *
+ *  @param shape - the placeholder shape on the slide
+ *  @param layout - the slide's layout DOM, null when unknown
+ *  @param master - the layout's master DOM, null when unknown
+ *  @returns the inherited list style
+ */
+export const placeholderListStyle = (shape: Element, layout: Document | null, master: Document | null): ListStyle => {
+    const ph = firstElement(shape, "p:ph")
+    const type = ph?.getAttribute("type") ?? "obj"
+    const idx = ph?.getAttribute("idx") ?? "0"
+    const typeOf = (el: Element): string => el.getAttribute("type") ?? "obj"
+    const inLayout = placeholdersOf(layout)
+    const layoutSp = (inLayout.find((p) => (p.ph.getAttribute("idx") ?? "0") === idx && typeOf(p.ph) === type)
+        ?? inLayout.find((p) => (p.ph.getAttribute("idx") ?? "0") === idx)
+        ?? inLayout.find((p) => typeOf(p.ph) === type))?.sp ?? null
+    const kind = [ "title", "ctrTitle" ].includes(type) ? "title" : [ "dt", "ftr", "sldNum", "hdr" ].includes(type) ? type : "body"
+    const masterSp = placeholdersOf(master).find((p) => typeOf(p.ph) === kind)?.sp ?? null
+    const txStyles = master === null ? null : firstElement(master, "p:txStyles")
+    const textStyle = txStyles === null ? null : children(txStyles, [
+        kind === "title" ? "p:titleStyle" : kind === "body" ? "p:bodyStyle" : "p:otherStyle" ])[0] ?? null
+    const chain = [ ownListStyle(shape), ownListStyle(layoutSp), ownListStyle(masterSp), textStyle ]
+    return (lvl) => {
+        const levels = chain.map((style) => levelProps(style, lvl)).filter((l): l is Element => l !== null)
+        const bullet = levels.map((l) => children(l, BULLETS)[0]).find((b) => b !== undefined)
+        const indent = levels.find((l) => l.hasAttribute("indent"))?.getAttribute("indent") ?? "0"
+        return { bullet: bullet !== undefined && bullet.nodeName !== "a:buNone", hanging: Number(indent) < 0 }
+    }
+}
+
 /**  apply a paragraph's bullet to its properties: `false` none, `"number"`
-     a numbered list, `true` a bullet -- the list style's own in a
-     placeholder (`styleBullets`), else a bullet character with its
-     hanging indent; a kept bullet character or picture stays  */
-const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", styleBullets: boolean): void => {
+     a numbered list, `true` a bullet -- the list style's own where the
+     placeholder's style shows one at the level, else a bullet character
+     with its hanging indent (unless the style has one); a kept bullet
+     character or picture stays  */
+const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", style: StyleLevel): void => {
     if (bullet === false) {
         place(pPr, doc.createElementNS(NS_A, "a:buNone"), PPR_ORDER, BULLETS)
         return
@@ -252,13 +317,15 @@ const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", st
     }
     for (const old of children(pPr, [ "a:buNone", "a:buAutoNum" ]))
         pPr.removeChild(old)
-    if (styleBullets || children(pPr, [ "a:buChar", "a:buBlip" ]).length > 0)
+    if (style.bullet)
         return
-    if (Number(pPr.getAttribute("indent") ?? "0") >= 0) {
+    if (pPr.hasAttribute("indent") ? Number(pPr.getAttribute("indent")) >= 0 : !style.hanging) {
         /*  no hanging indent yet (PptxGenJS writes 0/0 for text without bullets)  */
         pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)))
         pPr.setAttribute("indent", String(-BULLET_INDENT))
     }
+    if (children(pPr, [ "a:buChar", "a:buBlip" ]).length > 0)
+        return
     if (children(pPr, [ "a:buSzTx", "a:buSzPct", "a:buSzPts" ]).length === 0) {
         const size = doc.createElementNS(NS_A, "a:buSzPct")
         size.setAttribute("val", "100000")
@@ -273,16 +340,29 @@ const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", st
      take the paragraph's language, else the given one. The paragraph's
      own fields go onto the kept first paragraph's properties (el.set),
      else onto fresh ones.  */
-const buildParagraph = (doc: Document, p: Paragraph, lang: string, kept: KeptFormat | null, styleBullets: boolean): Element => {
+const buildParagraph = (doc: Document, p: Paragraph, lang: string, kept: KeptFormat | null, styleAt: ListStyle): Element => {
     const el = doc.createElementNS(NS_A, "a:p")
+    const keptLevel = Number(kept?.pPr?.getAttribute("lvl") ?? "0")
+    const style = styleAt(p.level ?? keptLevel)
     const needsPPr = p.level !== undefined || p.alignment !== undefined || p.bullet === false
-        || p.bullet === "number" || (p.bullet === true && !styleBullets) || p.lineSpacing !== undefined
+        || p.bullet === "number" || (p.bullet === true && !style.bullet) || p.lineSpacing !== undefined
         || p.spaceBefore !== undefined || p.spaceAfter !== undefined
     const pPr = kept?.pPr !== null && kept?.pPr !== undefined ? doc.importNode(kept.pPr, true) as Element
         : needsPPr ? doc.createElementNS(NS_A, "a:pPr") : null
     if (pPr !== null) {
+        /*  a kept indent belongs to the kept level: another level takes
+            its list style's own  */
+        const relevel = p.level !== undefined && kept?.pPr !== null && kept?.pPr !== undefined && p.level !== keptLevel
+        if (relevel) {
+            pPr.removeAttribute("marL")
+            pPr.removeAttribute("indent")
+        }
         if (p.level !== undefined)
             pPr.setAttribute("lvl", String(p.level))
+
+        /*  a kept bullet character gets the hanging indent of the new level  */
+        if (relevel && p.bullet === undefined && children(pPr, [ "a:buChar", "a:buBlip" ]).length > 0)
+            applyBullet(doc, pPr, true, style)
         if (p.alignment !== undefined)
             pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment])
         if (p.lineSpacing !== undefined)
@@ -292,7 +372,7 @@ const buildParagraph = (doc: Document, p: Paragraph, lang: string, kept: KeptFor
         if (p.spaceAfter !== undefined)
             place(pPr, spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100), PPR_ORDER, [ "a:spcAft" ])
         if (p.bullet !== undefined)
-            applyBullet(doc, pPr, p.bullet, styleBullets)
+            applyBullet(doc, pPr, p.bullet, style)
         el.appendChild(pPr)
     }
     const runs: Run[] = p.runs ?? [ paragraphRun(p) ]
@@ -316,11 +396,15 @@ const buildParagraph = (doc: Document, p: Paragraph, lang: string, kept: KeptFor
  *  @param keep - whether the body's first paragraph and run format stays
  *                under the new text, its own fields merged in (el.set)
  *  @param styleBullets - whether the body's list style brings its own
- *                bullets (placeholders): `bullet: true` then writes none
+ *                bullets (`true`: at every level), or the inherited list
+ *                style of a placeholder by level: where it shows a bullet,
+ *                `bullet: true` writes none
  */
 export const setBodyText = (txBody: Element, text: RichText, append: boolean, lang: string, keep = false,
-    styleBullets = false): void => {
+    styleBullets: boolean | ListStyle = false): void => {
     const doc = txBody.ownerDocument as Document
+    const styleAt: ListStyle = typeof styleBullets === "function" ? styleBullets
+        : () => ({ bullet: styleBullets, hanging: false })
     const first = children(txBody, [ "a:p" ])[0]
     const kept: KeptFormat | null = !keep || first === undefined ? null : {
         pPr: children(first, [ "a:pPr" ])[0] ?? null,
@@ -336,7 +420,7 @@ export const setBodyText = (txBody: Element, text: RichText, append: boolean, la
         }
     }
     for (const paragraph of toParagraphs(text))
-        txBody.appendChild(buildParagraph(doc, paragraph, lang, kept, styleBullets))
+        txBody.appendChild(buildParagraph(doc, paragraph, lang, kept, styleAt))
 }
 
 /**
@@ -349,11 +433,14 @@ export const setBodyText = (txBody: Element, text: RichText, append: boolean, la
  *  @param lang - the language of runs that state none (the deck language)
  *  @param keep - whether new text keeps the first paragraph and run
  *                format, its own fields merged in (el.set)
+ *  @param listStyle - the list style a placeholder inherits
+ *                (`placeholderListStyle`); unknown: bullets at every level
  */
-export const setShapeText = (shape: Element, text: RichText, append: boolean, lang: string, keep = false): void => {
+export const setShapeText = (shape: Element, text: RichText, append: boolean, lang: string, keep = false,
+    listStyle: ListStyle | null = null): void => {
     const txBody = firstElement(shape, "p:txBody")
     if (txBody !== null)
-        setBodyText(txBody, text, append, lang, keep, firstElement(shape, "p:ph") !== null)
+        setBodyText(txBody, text, append, lang, keep, firstElement(shape, "p:ph") === null ? false : listStyle ?? true)
 }
 
 /**

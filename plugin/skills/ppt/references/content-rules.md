@@ -127,7 +127,9 @@ Elements (tables, charts, free shapes)
     picture in place (frame and animations stay, the image is cropped to
     fit the frame) and the old image
     is gone from the deck -- do it only when the user explicitly asks for
-    that image to change, never as a side effect of another edit.
+    that image to change, never as a side effect of another edit. The
+    old alt text stays with the picture: set `altText` for the new image
+    in the same `el.set`.
 -   **Never cover existing text fields** (placeholders incl. the
     footer/slide-number area, textboxes, tables, charts) with a new
     element -- prompt boxes and the AI-note textbox (where no footer
@@ -135,7 +137,9 @@ Elements (tables, charts, free shapes)
     AI note must not sit on text. pptc enforces this: `W_ELEMENT_OVERLAP`
     names the covered shape (also for an element `el.set` moves); under
     `--strict` the apply fails (exit 7). On a finding, REPOSITION the
-    element, never ignore it.
+    element, never ignore it. A background panel behind text is no
+    overlay: give it `zOrder: "back"` -- it lies behind every shape and
+    raises no finding.
 -   **Element font sizes -- from the template, readable, few.** Free
     `el.add` elements (chips, cards, captions, diagram labels,
     annotations) carry no template size of their own -- NEVER invent one.

@@ -123,8 +123,9 @@ tpl inspect <tpl>     # precise JSON: colors, layouts, placeholders, capacity
 tpl validate <tpl>    # check template against pptc's expectations (exit 7 on fail)
 new <deck> --template <tpl>
 state <deck> [--slide SEL] [--level summary|text|full]   # slides + rev; text: + section;
-                      #   full = shape geometry + rotation, altText/title, hyperlink (URL or
-                      #   slide:id:N), lang, table cells/colWidths/merges, autoshape styling,
+                      #   full = shapes back to front (z-order), geometry + rotation,
+                      #   altText/title, hyperlink (URL or slide:id:N), lang, table
+                      #   cells/colWidths/merges/headerRow, autoshape styling (fill transparency),
                       #   textDirection/valign/margin, arrows, styled paragraphs/runs
                       #   (round-trip; colors as RRGGBB)
 apply <deck> --ops @<ops.json> --rev <rev> [--dry-run] [--strict] [--template <tpl>]
@@ -142,34 +143,53 @@ Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 `slide.add`/`slide.fill` takes `placeholders` (a picture fill takes `fit`:
 `crop` -- the default --, `contain`, `stretch`), `notes`, `footer`,
 `slideNumber` and `date` (`true` shows the layout's slide-number / date
-field, `false` removes it), `background`, `hidden` and `section`.
+field with its layout content, `false` removes it), `background`, `hidden` and `section`.
 
 Text and colors (every op that writes text or color): rich text paragraphs
 take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
 `spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple) -- `bullet:
-true` is the placeholder's own bullet, elsewhere a bullet character; runs
+true` is the placeholder's own bullet where its level shows one,
+elsewhere (subtitle, caption, textbox, shape, cell) a bullet character; runs
 take `bold`, `italic`, `underline`, `strike`, `superscript`, `subscript`,
-`size`, `font`, `color`, `highlight`, `hyperlink`, `lang`. `\n` starts a
+`size`, `font`, `color`, `highlight`, `hyperlink`, `lang`. `font` also
+takes the theme fonts `+mj-lt` (heading font) and `+mn-lt` (body font) --
+prefer them over a typeface name, so the text follows the template. `\n` starts a
 paragraph, `\v` is a line break inside one (`state` reads it back as
-`\v`). Text without `color` takes the template's; `el.set` text keeps the
+`\v`). Text without `color` takes the template's (on an `el.add` fill:
+`dk1` or `lt1`, whichever contrasts with the fill); `el.set` text keeps the
 first paragraph's and run's format and changes only the fields given. A
 color is hex or a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`,
-`bg2`, `dk1`, `lt1`, `dk2`, `lt2`) -- prefer the slot over the hex it
-resolves to, so the element follows the template. Without `lang` text gets the deck
+`bg2`, `dk1`, `lt1`, `dk2`, `lt2`, `hlink`, `folHlink`) -- prefer the slot over the hex it
+resolves to, so the element follows the template: text `tx1`/`tx2`, fills
+and backgrounds `bg1`/`bg2` (they follow the master's color map, also on
+dark templates); `dk1`/`lt1`/`dk2`/`lt2` only for absolute contrast on
+images (see color-roles.md). A `fill` takes `transparency` in percent
+(0 opaque - 100 invisible). Without `lang` text gets the deck
 language (`pptcDeckLang`). There is NO shrink-to-fit.
 
 `el.add` element fields (authoritative: `schema el.add`):
 
 ```text
-textbox   frame, text, fill, border, borderPt, lang, hyperlink,
+textbox   frame, text, fill, transparency, border, borderPt, lang, hyperlink,
           valign top|middle|bottom, margin 0.1|[l,t,r,b] (in),
           textDirection horizontal|rotate90|rotate270|stacked
-shape     shape (preset), text (rich), fill, border, borderPt, fontColor,
-          fontSize, lang, valign, margin, textDirection, hyperlink
+shape     shape (preset), text (rich), fill, transparency, border, borderPt,
+          fontColor, fontSize, lang, valign, margin, textDirection, hyperlink
+          presets: rect roundRect round1Rect round2SameRect snip1Rect
+          ellipse diamond triangle parallelogram trapezoid pentagon
+          hexagon octagon plus donut pie blockArc can frame star5 cloud
+          heart line | rightArrow leftArrow upArrow downArrow
+          leftRightArrow upDownArrow notchedRightArrow curvedRightArrow
+          circularArrow homePlate chevron | wedgeRectCallout
+          wedgeRoundRectCallout wedgeEllipseCallout leftBracket
+          rightBracket leftBrace rightBrace | flowChartProcess
+          flowChartDecision flowChartTerminator flowChartDocument
+          flowChartPredefinedProcess flowChartConnector
 table     frame, data {headers, rows, style}, colWidths [in], colAlign
           [left|center|right], textDirection, lang; a cell = value or
-          {text, bold, fill, color, align, valign, colspan, rowspan,
-          textDirection} -- cells covered by a span are LEFT OUT (HTML)
+          {text, bold, fill, transparency, color, align, valign, colspan,
+          rowspan, textDirection} -- cells covered by a span are LEFT OUT
+          (HTML); headers make the first row the header row
 chart     frame, data {type, categories, series, title, colors, fontSize,
           legend true|top|bottom|left|right, labels {value, percent,
           format, position}, axes {x, y: {title, min, max, format}},
@@ -179,7 +199,8 @@ image     frame, path, fit stretch|crop|contain, hyperlink
 connector from, to, color, widthPt, dash solid|dash|dot|dashDot|longDash,
           startArrow/endArrow none|arrow|triangle|stealth|diamond|oval
 every     name, altText, title (accessibility: give images and charts an
-          altText in <deck-lang/>)
+          altText in <deck-lang/>), zOrder front (default)|back|forward|
+          backward (a background panel: back -- it covers nothing)
 ```
 
 `el.set` changes an element IN PLACE (keeps its id, animations and links --
@@ -192,16 +213,22 @@ text         placeholder, textbox, shape -- in the first paragraph's and
 frame        {x, y, w, h, rotation}: given keys change (any element; no
              rotation on table/chart); inherited placeholder frames work
 fill, fontColor              placeholder, textbox, shape
+transparency                 placeholder, textbox, shape: 0-100 % of the
+                             new fill, else of the element's own solid
+                             fill (a new fill keeps it)
 border, borderPt             + picture, connector
 altText, title               any element ("" removes)
 hyperlink    placeholder, textbox, shape, picture: click target, URL or
              slide link ("" removes)
 image        picture / filled picture placeholder -- ONLY on the user's
              explicit request; frame and animations stay, the image is
-             cropped centered to fit the frame
+             cropped centered to fit the frame; the old alt text stays --
+             give altText with the new image
 cells        table: [{row, col, text}] (0-based, header row 0)
-addRows      table: {at?, rows} (format of the neighbouring body row)
+addRows      table: {at?, rows} (format of the neighbouring body row;
+             never above a header row)
 removeRows   table: [indices] (applied first, then addRows, then cells)
+zOrder       any element: front|back|forward|backward, in op order
 ```
 
 It also patches elements and picture fills planned earlier in the SAME
@@ -209,7 +236,7 @@ ops document (a planned connector takes no hyperlink, a planned image no
 border). `text.replace {find, replace, slide?, matchCase?, wholeWord?,
 notes?}` replaces plain text in shapes, placeholders and table cells (notes
 only with `notes: true`, fields, charts and SmartArt never --
-W_REPLACE_SKIPPED), across formatted runs, and sees
+W_REPLACE_SKIPPED for chart titles, series names, categories and SmartArt text), across formatted runs, and sees
 every earlier op of the document; report `result.replacements` (count and
 slides per op) to the user -- zero matches is no error, say so.
 
