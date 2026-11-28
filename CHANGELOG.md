@@ -1,6 +1,15 @@
 # Changelog
 
-## 1.1.0
+## 1.2.0
+
+- **PptxGenJS 4.0.1.** The `el.add` generator moves from 3.12.0 to 4.0.1,
+  again pinned exactly. Its `exports` map makes the bundler and the tests
+  load the ESM build, whose default export is the generator class itself;
+  a unit test asserts it. The generated slide, chart and workbook XML stays
+  identical for every element type; only the PNG fallback of an SVG image
+  changed: it now holds the SVG bytes instead of PptxGenJS' "broken image"
+  placeholder, as 4.0.1 no longer replaces it in Node. The bundle shrinks
+  from 1.93 MB to 1.89 MB.
 
 - **New engine: decks are edited in place.** Every apply used to rebuild
   the whole deck through `pptx-automizer`, whose count-based, slide-local

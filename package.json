@@ -47,7 +47,7 @@
   "dependencies": {
     "@xmldom/xmldom": "^0.9.12",
     "jszip": "^3.10.1",
-    "pptxgenjs": "3.12.0",
+    "pptxgenjs": "4.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

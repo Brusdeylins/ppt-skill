@@ -26,16 +26,25 @@ interface Generator extends GenRoot {
     write(opts: { outputType: "nodebuffer" }): Promise<unknown>
 }
 
-/**  unwrap the CJS default export: plain node, esbuild and vitest disagree
-     on how many .default levels the interop introduces  */
-const unwrapDefault = (mod: unknown): new () => Generator => {
+/**
+ *  Unwrap the generator class from its module default export. PptxGenJS 4
+ *  ships an `exports` map, so esbuild, vitest and plain node all load its
+ *  ESM build and get the class directly; the loop only matters if a loader
+ *  falls back to the CommonJS build, whose interop may add `.default` levels.
+ *
+ *  @param mod - the imported default export
+ *  @returns the generator constructor
+ */
+export const unwrapDefault = (mod: unknown): new () => Generator => {
     let candidate: unknown = mod
     while (typeof candidate !== "function" && candidate !== null && typeof candidate === "object"
         && "default" in (candidate as Record<string, unknown>))
         candidate = (candidate as Record<string, unknown>)["default"]
     return candidate as new () => Generator
 }
-const PptxGenJS = unwrapDefault(PptxGenJsPkg)
+
+/**  the PptxGenJS generator class  */
+export const PptxGenJS = unwrapDefault(PptxGenJsPkg)
 
 /**  a PptxGenJS slide that stamps one object name on every object it adds  */
 const named = (slide: GenSlide, objectName: string): GenSlide => ({
@@ -96,8 +105,9 @@ export const generateElements = async (entries: SlidePlanEntry[]): Promise<Gener
             const nextId = PartAllocator.shapeIds(slide)
             const copies = new Map<string, string>()
 
-            /*  generated shapes go behind the existing ones, before the
-                tree's own extension list  */
+            /*  generated shapes go in front of the existing ones (later in
+                the tree = higher in z-order), but before the tree's own
+                extension list  */
             const anchor = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null
             for (const name of info.names) {
                 const cNvPr = elements(genSlide, "p:cNvPr").find((el) => el.getAttribute("name") === name)

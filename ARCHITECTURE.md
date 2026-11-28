@@ -124,8 +124,8 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
 - **PptxGenJS generates, the engine places.** All `el.add` elements of an
   apply are rendered into one PptxGenJS deck; each shape is moved into its
   target slide by its `<name>-<uuid>` object name, with the parts it
-  references copied under fresh names. `pptxgenjs` is pinned (3.12.0, the
-  version 1.0.x bundled) so generated XML stays stable.
+  references copied under fresh names. `pptxgenjs` is pinned exactly
+  (4.0.1) so generated XML stays stable.
 - **Repairs where pptc writes, and on package parts.** BOM stripping,
   absolute-to-relative targets and repair-trigger fixes happen on touched
   slides only; a slide whose input carries repair triggers counts as
