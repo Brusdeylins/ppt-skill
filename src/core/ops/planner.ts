@@ -18,11 +18,12 @@ import { slideCopy, slideFill, slideMove, slideRm } from "./slide-edit.js"
 import { elAdd, elRm, imgPrompts, metaProps } from "./elements.js"
 import { elSet } from "./el-set.js"
 import { textReplace } from "./replace.js"
+import { sectionRename, sectionRm } from "./sections.js"
 
 /**  the op registry: one handler per op name  */
 const HANDLERS: ReadonlyMap<string, OpHandler> = new Map(
     ([slideAdd, slideFill, slideRm, slideMove, slideCopy,
-        elAdd, elSet, elRm, imgPrompts, metaProps, textReplace] as OpHandler[])
+        elAdd, elSet, elRm, imgPrompts, metaProps, textReplace, sectionRename, sectionRm] as OpHandler[])
         .map((h) => [h.name, h]))
 
 /**
@@ -53,7 +54,7 @@ export const planOps = (
     const entries: SlidePlanEntry[] = deck.slides.map((slide) =>
         newPlanEntry({ kind: "self", part: slide.part }, slide.id, slide.title, slide.layoutIndex, slide.hidden))
     const ctx: PlanContext = {
-        plan: { entries, props: null, customProps: null, warnings: [], refs: new Map() },
+        plan: { entries, props: null, customProps: null, warnings: [], refs: new Map(), sections: null, links: new Map() },
         deck,
         deckLayouts,
         template,

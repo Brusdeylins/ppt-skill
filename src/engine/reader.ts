@@ -20,7 +20,7 @@ import { elements, firstElement, drawingText, parseXml } from "./xml.js"
 import { normalizeRelTargets, optText, relMap, relTargets, relsPartOf, slideList } from "./parts.js"
 import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
-    DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
+    DeckSection, DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
     RunInfo, ShapeInfo, SlideInfo, TemplateInfo, TextDirectionInfo
 } from "../core/model.js"
 
@@ -561,12 +561,20 @@ const bodyLayout = (bodyPr: Element | null): Pick<ShapeInfo, "valign" | "margin"
     }
 }
 
+/**  the click target of an `a:hlinkClick` as a write input takes it: the
+     URL of an external link, `slide:id:N` for a jump to a slide of the
+     deck; undefined for other actions (next slide, custom show, ...)  */
+type LinkOf = (hlink: Element | null) => string | undefined
+
 /**  read one `a:r` run into the RunInfo shape (mirrors a slide.fill run)  */
-const runStyle = (r: Element, colors: Record<string, string>): RunInfo => {
+const runStyle = (r: Element, colors: Record<string, string>, linkOf: LinkOf): RunInfo => {
     const out: RunInfo = { text: firstElement(r, "a:t")?.textContent ?? "" }
     const rPr = firstElement(r, "a:rPr")
     if (rPr === null)
         return out
+    const hyperlink = linkOf(directChild(rPr, ["a:hlinkClick"]))
+    if (hyperlink !== undefined)
+        out.hyperlink = hyperlink
     const face = firstElement(rPr, "a:latin")?.getAttribute("typeface")
     if (face !== null && face !== undefined && face !== "")
         out.font = face
@@ -608,13 +616,14 @@ const spacingOf = (pPr: Element, tag: string, unit: "a:spcPts" | "a:spcPct"): nu
      monospace code block or an emphasized word. Returns undefined for plain
      uniform text, where the flat `text` already says everything and the
      extra structure would only be noise.  */
-const richParagraphs = (txBody: Element, colors: Record<string, string>): ParaInfo[] | undefined => {
+const richParagraphs = (txBody: Element, colors: Record<string, string>, linkOf: LinkOf): ParaInfo[] | undefined => {
     const paras: ParaInfo[] = []
     let formatted = false
     for (const p of elements(txBody, "a:p")) {
-        const runs = elements(p, "a:r").map((r) => runStyle(r, colors))
+        const runs = elements(p, "a:r").map((r) => runStyle(r, colors, linkOf))
         if (runs.some((rn) => rn.font !== undefined || rn.bold === true || rn.italic === true
-            || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== undefined))
+            || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== undefined
+            || rn.hyperlink !== undefined))
             formatted = true
         const para: ParaInfo = { runs }
         const pPr = firstElement(p, "a:pPr")
@@ -643,6 +652,15 @@ const richParagraphs = (txBody: Element, colors: Record<string, string>): ParaIn
     return formatted ? paras : undefined
 }
 
+/**  the PowerPoint sections of a presentation (`p14:sectionLst`), empty
+     when it has none  */
+const readSections = (pres: Document): DeckSection[] =>
+    elements(pres, "p14:section").map((sec) => ({
+        name: sec.getAttribute("name") ?? "",
+        id: sec.getAttribute("id") ?? "",
+        slideIds: elements(sec, "p14:sldId").map((ref) => Number(ref.getAttribute("id") ?? ""))
+    }))
+
 /**
  *  Read the full deck state: slides, shapes, notes and the rev token.
  *
@@ -660,6 +678,13 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
     const hashParts: string[] = []
     const listed = slideList(archive.zip, pres, relTargets("ppt/presentation.xml", presRels, archive.zip))
         .flatMap((s) => s.part === null ? [] : [ { id: s.id, part: s.part } ])
+    const idOfPart = new Map(listed.map((s) => [ s.part, s.id ]))
+    const sections = readSections(pres)
+    const sectionOf = new Map<number, string>()
+    for (const sec of sections)
+        for (const id of sec.slideIds)
+            if (!sectionOf.has(id))
+                sectionOf.set(id, sec.name)
     for (let index = 0; index < listed.length; index++) {
         const { id, part } = listed[index] as { id: number, part: string }
         const partBase = path.posix.basename(part)
@@ -678,6 +703,15 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
             slideRels = []
         }
         const slideRelMap = relMap(slideRels)
+        const linkOf: LinkOf = (hlink) => {
+            const rel = hlink === null ? undefined : slideRelMap.get(hlink.getAttribute("r:id") ?? "")
+            if (hlink === null || rel === undefined)
+                return undefined
+            if (rel.kind === "hyperlink" && rel.target === null)
+                return rel.el.getAttribute("Target") ?? undefined
+            const id = rel.kind === "slide" && rel.target !== null ? idOfPart.get(rel.target) : undefined
+            return id !== undefined && (hlink.getAttribute("action") ?? "").includes("hlinksldjump") ? `slide:id:${id}` : undefined
+        }
         const layoutPart = slideRels.find((r) => r.kind === "slideLayout")?.target ?? null
         let layoutName = ""
         let layoutIndex = -1
@@ -716,6 +750,9 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                     text
                 }
                 Object.assign(shape, description(node))
+                const hyperlink = linkOf(directChild(cNvPr, ["a:hlinkClick"]))
+                if (hyperlink !== undefined)
+                    shape.hyperlink = hyperlink
                 if (node.nodeName === "p:sp")
                     Object.assign(shape, shapeStyle(node, info.colors))
                 if (node.nodeName === "p:sp" || node.nodeName === "p:cxnSp")
@@ -732,7 +769,7 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                         shape.lang = lang
                 }
                 if (txBody !== null) {
-                    const paras = richParagraphs(txBody, info.colors)
+                    const paras = richParagraphs(txBody, info.colors, linkOf)
                     if (paras !== undefined)
                         shape.paragraphs = paras
                 }
@@ -769,7 +806,7 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
             "Hide Slide". Absent (or "1") means visible.  */
         const show = doc.documentElement?.getAttribute("show")
         const hidden = show === "0" || show === "false"
-        slides.push({ id, index, title, layoutName, layoutIndex, shapes, notes, hidden, part })
+        slides.push({ id, index, title, layoutName, layoutIndex, shapes, notes, hidden, part, section: sectionOf.get(id) ?? null })
     }
 
     /*  custom document properties: the deck's self-describing memory  */
@@ -786,9 +823,11 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
         file: archive.file,
         /*  notes live in their own part: hash them too, or a notes-only edit
             by someone else would pass an --expect-rev check  */
-        rev: contentHash(...hashParts, JSON.stringify(slides.map((s) => [ s.id, s.notes ]))),
+        rev: contentHash(...hashParts, JSON.stringify(slides.map((s) => [ s.id, s.notes ])),
+            ...(sections.length > 0 ? [ JSON.stringify(sections) ] : [])),
         slideSize: info.slideSize,
         slides,
+        sections,
         customProps
     }
 }

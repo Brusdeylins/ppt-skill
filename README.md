@@ -229,7 +229,9 @@ The deck read model and the **`rev` token** for optimistic locking.
 
 - `--level summary` -- ids, indices, titles, layout indices, and `hidden:
   true` on every hidden slide ("Hide Slide"); preserved across `apply`
-- `--level text` (default) -- plus all placeholder texts and notes
+- `--level text` (default) -- plus all placeholder texts and notes, and
+  each slide's `section` (with the deck's `sections` in order) when the
+  deck has sections
 - `--level full` -- plus every shape with geometry and styling: type,
   name, `frame`, text, table cells + column widths (`colWidths`), merged
   cells (`merges`: row, col, rowspan, colspan; covered cells read as `""`)
@@ -401,7 +403,8 @@ Anatomy:
   `false` shows it; omitted keeps the current state), `slideNumber` and
   `date` (`true` clones the layout's slide-number / date placeholder with
   its field -- nothing when the layout has none --, `false` removes it;
-  omitted keeps it as it is). Text accepts plain
+  omitted keeps it as it is), `section` (starts a PowerPoint section at
+  the slide -- see [Sections](#sections)). Text accepts plain
   strings (`\n` = new paragraph) or rich text (runs with
   bold/italic/color/size, bullet levels).
 - **Rich text**: a paragraph is `{ "text": ... }` or `{ "runs": [...] }`
@@ -439,11 +442,12 @@ Recommended agent loop:
 | Op | Purpose |
 |---|---|
 | `slide.add` | add a slide from a template layout (`layout`: index or name; optional `ref`, `at`, inline fill) |
-| `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `slideNumber`, `date`, `background`, `hidden` (hide/show) of a slide |
+| `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `slideNumber`, `date`, `background`, `hidden` (hide/show), `section` of a slide |
 | `slide.rm` / `slide.move` / `slide.copy` | structure edits |
 | `el.add` | add free elements: `textbox`, `table`, `chart`, `shape`, `image`, `connector` -- all share `frame: {x,y,w,h}` in inches (see below) |
 | `el.set` / `el.rm` | change / remove an element by shape name in place; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document and the placeholders of slides added in it (`PptcPh-<idx>`); `el.set` takes text, frame, style, alt text, image and table cells/rows -- see below |
 | `text.replace` | find and replace plain text in the whole deck or on one `slide` -- see below |
+| `section.rename` / `section.rm` | rename a section (`from`, `to`) / remove one (`name`; its slides join the previous section) -- see below |
 | `img.prompts` | overlay picture placeholders with visible image-prompt boxes (removable via `el.rm`) |
 | `meta.props` | document properties: core fields (title, author, subject, keywords, category, comments) and/or arbitrary `custom` name/value pairs stored in the `.pptx` (read back by `state` -- the deck's self-describing memory) |
 
@@ -548,6 +552,25 @@ The apply result reports every `text.replace` in `result.replacements`
 (not under `--dry-run`): `{ "op": 2, "count": 5, "slides": [ { "id": 257,
 "index": 1, "count": 5 } ] }` -- `op` is its position in the document,
 the counts are per output slide (a copy made after the op counts its own).
+
+### Sections
+
+PowerPoint sections group consecutive slides. The fill field `section:
+"Name"` on `slide.add`/`slide.fill` starts a section at that slide
+(created if missing): it runs up to the next section start, so a slide
+inside a section splits it (a section left without slides goes; a slide
+already in a section of that name stays). In a deck without sections the
+slides before the first one form `"Default Section"` -- as PowerPoint
+does; rename it with `section.rename`. `{ "op": "section.rename", "from":
+"Teil 2", "to": "Ergebnis" }` renames a section, `{ "op": "section.rm",
+"name": "Teil 2" }` removes one: its slides stay and join the previous
+section (the next one when it was the first; removing the last section
+leaves the deck without sections). Names are unique: a name in use fails
+with `E_SCHEMA`, an unknown one with `E_ADDR_NOTFOUND`. Added, copied and
+moved slides join the section of the slide before them (the first section
+when they lead the deck). The ops compose in document order; `state`
+reports each slide's `section` (levels `text` and `full`) and the section
+names in deck order (`sections`).
 
 ### Ops document semantics
 

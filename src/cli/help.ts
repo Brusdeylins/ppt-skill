@@ -257,7 +257,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "notes": "...", "footer": "...",
                  "slideNumber": true, "date": false,  // show/remove
                  "background": { "color": "1F4E79" },
-                 "hidden": true }           // optional: hide/show the slide
+                 "hidden": true,            // optional: hide/show the slide
+                 "section": "Teil 2" }      // start a section at the slide
   slide.fill   same fill payload, on an existing slide ("slide": SEL)
   slide.rm     { "op": "slide.rm",   "slide": SEL }
   slide.move   { "op": "slide.move", "slide": SEL, "to": 2 }
@@ -318,6 +319,16 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "slide": SEL, "matchCase": false, "wholeWord": false,
                  "notes": false }
                -> result.replacements: [{ "op", "count", "slides" }]
+  section.rename { "op": "section.rename", "from": "Teil 2", "to": "Ergebnis" }
+  section.rm   { "op": "section.rm", "name": "Teil 2" } -- the slides stay
+               and join the previous section (the next one for the first)
+
+Sections: the fill field "section" starts a section at the slide (created
+if missing); it runs up to the next section start, so a slide inside a
+section splits it, and a section left without slides goes. In a deck
+without sections the slides before it form "Default Section" (as in
+PowerPoint). Names are unique. Added, copied and moved slides join the
+section of the slide before them. 'state' shows "section" per slide.
 
 Text values accept plain strings (\\n = new paragraph) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|

@@ -29,9 +29,11 @@ const renderSlide = (slide: SlideInfo, level: Level): Record<string, unknown> =>
     }
     if (level === "summary")
         return { ...base, shapes: slide.shapes.length, hasNotes: slide.notes !== null }
+    const section = slide.section !== null ? { section: slide.section } : {}
     if (level === "text")
         return {
             ...base,
+            ...section,
             texts: slide.shapes
                 .filter((s) => s.text !== null || s.table !== undefined)
                 .map((s) => ({
@@ -42,7 +44,7 @@ const renderSlide = (slide: SlideInfo, level: Level): Record<string, unknown> =>
                 })),
             notes: slide.notes
         }
-    return { ...base, shapes: slide.shapes, notes: slide.notes }
+    return { ...base, ...section, shapes: slide.shapes, notes: slide.notes }
 }
 
 /**
@@ -80,6 +82,7 @@ export const cmdState = async (argv: string[]): Promise<Record<string, unknown>>
         result: {
             slideSize: deck.slideSize,
             slideCount: deck.slides.length,
+            ...(deck.sections.length > 0 && { sections: deck.sections.map((s) => s.name) }),
             customProps: deck.customProps,
             slides: slides.map((s) => renderSlide(s, level))
         }

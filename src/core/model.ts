@@ -121,6 +121,9 @@ export interface RunInfo {
     subscript?: boolean
     /**  highlight color RRGGBB (theme colors resolved) when set on the run  */
     highlight?: string
+    /**  click target when the run is a link: the URL, or `slide:id:N` for
+         a jump to another slide of the deck  */
+    hyperlink?: string
 }
 
 /**  One paragraph of a text body (read model), its runs in order. Mirrors a
@@ -168,6 +171,10 @@ export interface ShapeInfo {
          mirror el.add / el.set `altText` and `title`  */
     altText?: string
     title?: string
+    /**  click target of the whole element when set: the URL, or
+         `slide:id:N` for a jump to another slide; mirrors el.add / el.set
+         `hyperlink`  */
+    hyperlink?: string
     /**  plain text content, paragraphs joined by newlines, null if none  */
     text: string | null
     /**  table cell texts (rows x cols) when the shape is a table  */
@@ -253,6 +260,20 @@ export interface SlideInfo {
     hidden: boolean
     /**  archive part path of the slide (engine address, e.g. "ppt/slides/slide3.xml")  */
     part: string
+    /**  name of the PowerPoint section the slide belongs to, null when the
+         deck has no sections (or none lists the slide)  */
+    section: string | null
+}
+
+/**  One PowerPoint section of a deck (read model): `p14:section` in the
+     presentation's extension list.  */
+export interface DeckSection {
+    /**  section name as shown in PowerPoint  */
+    name: string
+    /**  section id (a GUID in braces)  */
+    id: string
+    /**  sldIds of its slides in section order  */
+    slideIds: number[]
 }
 
 /**  Complete read model of a deck, the agent's source of truth.  */
@@ -265,6 +286,8 @@ export interface DeckState {
     slideSize: { w: number, h: number }
     /**  all slides in presentation order  */
     slides: SlideInfo[]
+    /**  PowerPoint sections in deck order, empty when the deck has none  */
+    sections: DeckSection[]
     /**  custom document properties (name→value) carried inside the .pptx
          (docProps/custom.xml) -- the deck's self-describing memory, e.g. the
          image/info-graphic style the skill chose. Empty when none are set.  */

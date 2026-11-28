@@ -66,10 +66,10 @@ const powerPointStyled = async (file: string): Promise<string> => {
 /**  expected content of one slide; `boxes` maps a textbox name to
      "text|x|fill|altText" and the table to its cells  */
 interface Expected { title: string, notes: string, image: string | null, chart: string | null, ole: string | null, id: number | null,
-    boxes: Record<string, string> }
+    section: string | null, boxes: Record<string, string> }
 
 /**  what one slide actually shows  */
-interface Actual { title: string, notes: string | null, id: number, image: string | null, chart: string | null, ole: string | null, section: number | null,
+interface Actual { title: string, notes: string | null, id: number, image: string | null, chart: string | null, ole: string | null, section: string | null,
     boxes: Record<string, string> }
 
 /**  the textboxes and the table of a slide as the fuzz model sees them  */
@@ -84,15 +84,23 @@ const boxesOf = (shapes: ShapeInfo[]): Record<string, string> => {
     return out
 }
 
+/**  the section names of the deck in order, as the file lists them  */
+const sectionNames = async (deck: string): Promise<string[]> => {
+    const zip = await JSZip.loadAsync(readFileSync(deck))
+    const pres = await (zip.file("ppt/presentation.xml") as JSZip.JSZipObject).async("string")
+    return [ ...pres.matchAll(/<p14:section name="([^"]*)"/g) ].map((m) => m[1] as string)
+}
+
 /**  what the deck actually shows, per slide in order  */
 const actual = async (deck: string): Promise<Actual[]> => {
     const state = await readDeckState(await DeckArchive.open(deck))
     const zip = await JSZip.loadAsync(readFileSync(deck))
     const pres = await (zip.file("ppt/presentation.xml") as JSZip.JSZipObject).async("string")
-    const sectionOf = new Map<number, number>()
-    for (const [ k, m ] of [ ...pres.matchAll(/<p14:section\b[^>]*>([\s\S]*?)<\/p14:section>/g) ].entries())
-        for (const id of (m[1] as string).matchAll(/<p14:sldId id="(\d+)"/g))
-            sectionOf.set(Number(id[1]), k)
+    const sectionOf = new Map<number, string>()
+    for (const m of pres.matchAll(/<p14:section name="([^"]*)"[^>]*>([\s\S]*?)<\/p14:section>/g))
+        for (const id of (m[2] as string).matchAll(/<p14:sldId id="(\d+)"/g))
+            if (!sectionOf.has(Number(id[1])))
+                sectionOf.set(Number(id[1]), m[1] as string)
     const out: Actual[] = []
     for (const s of state.slides) {
         const rels = await zip.file(`ppt/slides/_rels/${path.posix.basename(s.part)}.rels`)?.async("string") ?? ""
@@ -156,7 +164,7 @@ const injectSections = async (deck: string, ids: number[]): Promise<void> => {
      relative order (the longest increasing run of their old positions, first
      run on ties) keep their section; new, copied and moved slides join the
      section of their predecessor, the first one when they lead the deck  */
-const nextSections = (before: Actual[], order: number[]): Map<number, number> => {
+const nextSections = (before: Actual[], order: number[], first: string | null): Map<number, string | null> => {
     const oldPos = new Map(before.filter((s) => s.section !== null).map((s, i) => [ s.id, i ]))
     const kept = order.filter((id) => oldPos.has(id))
     const len = kept.map(() => 1)
@@ -171,14 +179,35 @@ const nextSections = (before: Actual[], order: number[]): Map<number, number> =>
     for (let i = len.indexOf(Math.max(0, ...len)); i >= 0; i = prev[i] as number)
         stable.add(kept[i] as number)
     const sectionOf = new Map(before.map((s) => [ s.id, s.section ]))
-    const out = new Map<number, number>()
-    let current = 0
+    const out = new Map<number, string | null>()
+    let current = first
     for (const id of order) {
         if (stable.has(id))
-            current = sectionOf.get(id) as number
+            current = sectionOf.get(id) as string
         out.set(id, current)
     }
     return out
+}
+
+/**  the expected sections after a slide starts the section `name` (a
+     fresh name): it runs up to the next section start, a section left
+     without slides goes, a deck without sections gets "Default Section"
+     for the slides before it  */
+const startSection = (model: Expected[], order: string[], idx: number, name: string, added: boolean): void => {
+    if (order.length === 0) {
+        if (idx > 0)
+            order.push("Default Section")
+        order.push(name)
+        model.forEach((m, i) => { m.section = i < idx ? "Default Section" : name })
+        return
+    }
+    const from = added ? (idx > 0 ? (model[idx - 1] as Expected).section : null) : (model[idx] as Expected).section
+    order.splice(from === null ? 0 : order.indexOf(from) + 1, 0, name)
+    ;(model[idx] as Expected).section = name
+    for (let j = idx + 1; from !== null && j < model.length && (model[j] as Expected).section === from; j++)
+        (model[j] as Expected).section = name
+    if (from !== null && !model.some((m) => m.section === from))
+        order.splice(order.indexOf(from), 1)
 }
 
 /**  run a seeded random session and compare after every apply  */
@@ -199,14 +228,20 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
     }
 
     let prev: Actual[] | null = null
+    let order: string[] = []
     for (let round = 0; round < rounds; round++) {
-        const kind = model.length < 2 ? 0 : pick(14)
+        const kind = model.length < 2 ? 0 : pick(17)
         const ops: unknown[] = []
         let oleFor: string | null = null
+
+        /*  whether the round sets the sections of the model itself  */
+        let sectioned = false
         if (kind === 0 || kind === 6) {
             const t = title()
             const at = pick(model.length + 1)
-            ops.push({ op: "slide.add", ref: "n", layout: 1, at, placeholders: { title: { text: t } }, notes: `notes-${t}` })
+            const section = model.length >= 2 && rnd() < 0.2 ? `Neu${round}` : null
+            ops.push({ op: "slide.add", ref: "n", layout: 1, at, placeholders: { title: { text: t } }, notes: `notes-${t}`,
+                ...(section !== null && { section }) })
             const withImage = rnd() < 0.5
             const withChart = rnd() < 0.3
             const withTable = rnd() < 0.3
@@ -226,7 +261,13 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
                 ops.push({ op: "el.add", slide: "$n", elements })
             oleFor = rnd() < 0.25 ? t : null
             model.splice(at, 0, { title: t, notes: `notes-${t}`, image: withImage ? t : null, chart: withChart ? `S-${t}` : null,
-                ole: oleFor === null ? null : `ole-${t}`, id: null, boxes })
+                ole: oleFor === null ? null : `ole-${t}`, id: null, section: null, boxes })
+
+            /*  the others keep their sections, the new slide starts its own  */
+            if (section !== null) {
+                startSection(model, order, at, section, true)
+                sectioned = true
+            }
         }
         else if (kind === 1) {
             const i = pick(model.length)
@@ -246,7 +287,7 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
             const t = title()
             ops.push({ op: "slide.copy", slide: `title:${src.title}`, ref: "c" },
                 { op: "slide.fill", slide: "$c", placeholders: { title: { text: t } } })
-            model.splice(i + 1, 0, { ...src, title: t, id: null, boxes: { ...src.boxes } })
+            model.splice(i + 1, 0, { ...src, title: t, id: null, section: null, boxes: { ...src.boxes } })
         }
         else if (kind === 4) {
             const target = model[pick(model.length)] as Expected
@@ -324,6 +365,38 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
             ops.push({ op: "el.set", slide: `title:${target.title}`, name: "Tab", ...set })
             target.boxes["Tab"] = JSON.stringify(rows)
         }
+        else if (kind === 14) {
+            /*  a slide starts a section: a fresh name, or its own (no-op)  */
+            const i = pick(model.length)
+            const target = model[i] as Expected
+            const own = target.section !== null && rnd() < 0.2
+            const name = own ? target.section as string : `Teil${round}`
+            ops.push({ op: "slide.fill", slide: `title:${target.title}`, section: name })
+            if (!own)
+                startSection(model, order, i, name, false)
+            sectioned = true
+        }
+        else if (kind === 15 && order.length > 0) {
+            const from = order[pick(order.length)] as string
+            ops.push({ op: "section.rename", from, to: `Umbenannt${round}` })
+            for (const m of model)
+                if (m.section === from)
+                    m.section = `Umbenannt${round}`
+            order[order.indexOf(from)] = `Umbenannt${round}`
+            sectioned = true
+        }
+        else if (kind === 16 && order.length > 0) {
+            /*  its slides join the previous section, the next for the first  */
+            const k = pick(order.length)
+            const name = order[k] as string
+            const into = (k > 0 ? order[k - 1] : order[k + 1]) ?? null
+            ops.push({ op: "section.rm", name })
+            for (const m of model)
+                if (m.section === name)
+                    m.section = into
+            order.splice(k, 1)
+            sectioned = true
+        }
         else if (kind === 13) {
             /*  text.replace in the notes of one slide  */
             const target = model[pick(model.length)] as Expected
@@ -337,14 +410,23 @@ const fuzz = async (template: string, tag: string, seed: number, rounds: number)
         if (oleFor !== null)
             await injectOle(deck, oleFor, `ole-${oleFor}`)
         const got = await actual(deck)
-        const sections = prev !== null && prev.some((p) => p.section !== null) ? nextSections(prev, got.map((g) => g.id)) : null
+        if (!sectioned) {
+            const sections = prev !== null && order.length > 0 ? nextSections(prev, got.map((g) => g.id), order[0] ?? null) : null
+            for (const [ i, m ] of model.entries())
+                m.section = sections?.get((got[i] as Actual).id) ?? null
+        }
         const want = model.map((m, i) => ({ title: m.title, notes: m.notes, image: m.image, chart: m.chart, ole: m.ole,
-            id: m.id ?? (got[i] as Actual).id, section: sections?.get((got[i] as Actual).id) ?? null, boxes: m.boxes }))
-        expect(got, `round ${round} (${JSON.stringify(ops).slice(0, 200)})`).toEqual(want)
+            id: m.id ?? (got[i] as Actual).id, section: m.section, boxes: m.boxes }))
+        const where = `round ${round} (${JSON.stringify(ops).slice(0, 200)})`
+        expect(got, where).toEqual(want)
+        expect(await sectionNames(deck), where).toEqual(order)
         for (const [ i, m ] of model.entries())
             m.id = (got[i] as Actual).id
-        if (sections === null && model.length >= 2)
+        if (order.length === 0 && model.length >= 2) {
             await injectSections(deck, got.map((g) => g.id))
+            order = [ "Erster", "Rest" ]
+            model.forEach((m, i) => { m.section = i === 0 ? "Erster" : "Rest" })
+        }
         prev = await actual(deck)
         if (round % 10 === 9)
             await expectIntact(deck)

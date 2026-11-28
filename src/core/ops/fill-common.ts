@@ -15,6 +15,7 @@ import { lintFontSize, lintPlaceholderText, richTextSizes, richTextToPlain } fro
 import { isFooterKind, seedPlaceholderName, type Layout, type Placeholder } from "../model.js"
 import type { PlaceholderFill } from "../../schema/ops.js"
 import { selectableEntries, slideAddrOf, type PlanContext, type SlidePlanEntry } from "./registry.js"
+import { startSection } from "./sections.js"
 
 /**
  *  Resolve a slide selector against the current plan entries.
@@ -107,6 +108,7 @@ export interface FillProps {
     hidden?: boolean | undefined
     slideNumber?: boolean | undefined
     date?: boolean | undefined
+    section?: string | undefined
 }
 
 /**
@@ -142,10 +144,12 @@ const placeholderShapeName = (ctx: PlanContext, entry: SlidePlanEntry, ph: Place
  *  @param ctx - planning context
  *  @param entry - target plan entry
  *  @param fill - placeholders/notes/footer/background payload
+ *  @param added - whether the op adds the slide (slide.add)
  *  @throws PptcError E_ADDR_* on unresolvable placeholders,
- *          E_SCHEMA when text/image is applied to an incompatible kind
+ *          E_SCHEMA when text/image is applied to an incompatible kind or
+ *          the section name belongs to another section
  */
-export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProps): void => {
+export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProps, added = false): void => {
     const layout = entryLayout(ctx, entry)
     for (const [key, content] of Object.entries(fill.placeholders ?? {}) as [string, PlaceholderFill][]) {
         if (layout === null)
@@ -195,4 +199,6 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
         entry.slideNumber = fill.slideNumber
     if (fill.date !== undefined)
         entry.date = fill.date
+    if (fill.section !== undefined)
+        startSection(ctx, entry, fill.section, added)
 }

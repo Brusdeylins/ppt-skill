@@ -24,7 +24,7 @@ import { atomicWrite } from "../../infra/fs.js"
 import { notesOwner, partDefects, type Finding, type PartView } from "../defects.js"
 import { byteGuard, digestBytes, verifyContent, type SlideExpect } from "../guard.js"
 import { deckLang } from "../lang.js"
-import { finishPackage } from "../post.js"
+import { finishPackage, type SectionOut } from "../post.js"
 import { ASSET_PART, REL, RELS, findPart, layoutOrder, relTarget, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
 import { findDefects } from "../verify.js"
@@ -398,6 +398,20 @@ const writeSlideList = (pkg: Package, deck: Deck, states: SlideState[], matched:
     pkg.writeRels("ppt/presentation.xml", presRels)
 }
 
+/**  the planned sections with the output sldIds of their slides (the
+     slide list is written: its order is the plan's), null when the plan
+     leaves the sections to the package step  */
+const sectionsOut = (plan: MutationPlan, deck: Deck): SectionOut[] | null => {
+    if (plan.sections === null)
+        return null
+    const ids = elements(deck.pres, "p:sldId").map((s) => Number(s.getAttribute("id")))
+    return plan.sections.map((section) => ({
+        name: section.name,
+        id: section.id,
+        slideIds: plan.entries.flatMap((e, i) => e.section === section ? [ ids[i] as number ] : [])
+    }))
+}
+
 /**  removed slides: their parts go, links to them from parts outside the
      slides go  */
 const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> => {
@@ -539,7 +553,7 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
     await editSlides(pkg, plan, deck, states, removed, warnings)
     writeSlideList(pkg, deck, states, matched, removed, renumbered || deck.dropped)
     await removeSlides(pkg, removed)
-    await finishPackage(pkg.zip, parts, plan.props, plan.customProps)
+    await finishPackage(pkg.zip, parts, plan.props, plan.customProps, sectionsOut(plan, deck))
     const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
 
     /*  self-checks before writing: repair triggers the apply adds, the

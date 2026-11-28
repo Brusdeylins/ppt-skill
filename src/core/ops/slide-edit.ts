@@ -11,6 +11,7 @@ import { PptcError } from "../../infra/errors.js"
 import type { SlideFillOp, Op } from "../../schema/ops.js"
 import { registerRef, type OpHandler, type SlidePlanEntry } from "./registry.js"
 import { planFill, resolveEntry } from "./fill-common.js"
+import { joinNeighbour } from "./sections.js"
 
 /**  op handler: slide.fill  */
 export const slideFill: OpHandler<SlideFillOp> = {
@@ -42,6 +43,7 @@ export const slideMove: OpHandler<Extract<Op, { op: "slide.move" }>> = {
                 `move target ${op.to} out of range (0-${ctx.plan.entries.length - 1})`)
         ctx.plan.entries.splice(ctx.plan.entries.indexOf(entry), 1)
         ctx.plan.entries.splice(op.to, 0, entry)
+        joinNeighbour(ctx, entry)
     }
 }
 

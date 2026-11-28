@@ -11,6 +11,7 @@
 */
 
 import type JSZip from "jszip"
+import { createHash } from "node:crypto"
 import type { Document, Element } from "@xmldom/xmldom"
 import { appendRel, cleanContentTypes, findPart, gcAssets, optText, partText, readRels, removeParts, tryRels } from "./parts.js"
 import { elements, firstElement, parseXml, serializeXml, utf8Declared, xmlEscape } from "./xml.js"
@@ -76,6 +77,86 @@ const syncSectionRefs = async (zip: JSZip): Promise<void> => {
             l.appendChild(ref)
         }
     }
+    zip.file(part, serializeXml(pres))
+}
+
+/**  the extension of the presentation that carries the sections  */
+const SECTION_EXT = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"
+
+/**  the PowerPoint 2010 namespace of `p14:sectionLst`  */
+const NS_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+
+/**  one section as the engine writes it  */
+export interface SectionOut {
+    /**  section name  */
+    name: string
+    /**  its id (GUID in braces), null for a new section  */
+    id: string | null
+    /**  the sldIds of its slides in order  */
+    slideIds: number[]
+}
+
+/**  a section id for a new section: a GUID derived from the name and the
+     ids in use, so an apply stays deterministic  */
+const sectionGuid = (name: string, used: Set<string>): string => {
+    for (let salt = 0; ; salt++) {
+        const h = createHash("sha1").update(`${name}\u0000${[ ...used ].sort().join(",")}\u0000${salt}`).digest("hex").toUpperCase()
+        const guid = `{${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}}`
+        if (!used.has(guid))
+            return guid
+    }
+}
+
+/**  write the planned sections into the presentation: the section list
+     is replaced as a whole (kept sections keep their id), an empty list
+     removes it with its extension  */
+const writeSections = async (zip: JSZip, sections: SectionOut[]): Promise<void> => {
+    const part = "ppt/presentation.xml"
+    const pres = parseXml(await partText(zip, part))
+    const root = pres.documentElement
+    if (root === null)
+        return
+    let extLst = elements(pres, "p:extLst").find((el) => el.parentNode === root) ?? null
+    let ext = extLst === null ? null
+        : elements(extLst, "p:ext").find((el) => el.getAttribute("uri") === SECTION_EXT) ?? null
+    if (sections.length === 0) {
+        if (ext === null)
+            return
+        extLst?.removeChild(ext)
+        if (extLst !== null && elements(extLst, "p:ext").length === 0)
+            root.removeChild(extLst)
+        zip.file(part, serializeXml(pres))
+        return
+    }
+    if (extLst === null) {
+        extLst = pres.createElementNS(root.namespaceURI, "p:extLst")
+        root.appendChild(extLst)
+    }
+    if (ext === null) {
+        ext = pres.createElementNS(root.namespaceURI, "p:ext")
+        ext.setAttribute("uri", SECTION_EXT)
+        extLst.insertBefore(ext, extLst.firstChild)
+    }
+    while (ext.firstChild !== null)
+        ext.removeChild(ext.firstChild)
+    const lst = pres.createElementNS(NS_P14, "p14:sectionLst")
+    const used = new Set(sections.flatMap((s) => s.id === null ? [] : [ s.id ]))
+    for (const s of sections) {
+        const sec = pres.createElementNS(NS_P14, "p14:section")
+        const id = s.id ?? sectionGuid(s.name, used)
+        used.add(id)
+        sec.setAttribute("name", s.name)
+        sec.setAttribute("id", id)
+        const ids = pres.createElementNS(NS_P14, "p14:sldIdLst")
+        for (const slideId of s.slideIds) {
+            const ref = pres.createElementNS(NS_P14, "p14:sldId")
+            ref.setAttribute("id", String(slideId))
+            ids.appendChild(ref)
+        }
+        sec.appendChild(ids)
+        lst.appendChild(sec)
+    }
+    ext.appendChild(lst)
     zip.file(part, serializeXml(pres))
 }
 
@@ -281,12 +362,15 @@ const sweepSlideRefs = async (zip: JSZip, slides: string[]): Promise<void> => {
  *  @param slides - output slide parts in final order
  *  @param props - document core-property patch, null for none
  *  @param customProps - custom document-property patch, null for none
+ *  @param sections - the planned sections, null to keep the deck's in
+ *                    step with the slide list
  */
 export const finishPackage = async (
     zip: JSZip,
     slides: string[],
     props: Record<string, string> | null,
-    customProps: Record<string, string> | null
+    customProps: Record<string, string> | null,
+    sections: SectionOut[] | null = null
 ): Promise<void> => {
     await sweepSlideRefs(zip, slides)
     if (props !== null)
@@ -294,7 +378,10 @@ export const finishPackage = async (
     if (customProps !== null)
         await setCustomProps(zip, customProps)
     await gcAssets(zip)
-    await syncSectionRefs(zip)
+    if (sections === null)
+        await syncSectionRefs(zip)
+    else
+        await writeSections(zip, sections)
     await cleanContentTypes(zip)
     await syncAppProperties(zip, slides)
 }

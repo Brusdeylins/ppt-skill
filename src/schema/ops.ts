@@ -49,6 +49,9 @@ export const PlaceholderFillSchema = z.object({
     "a placeholder fill needs 'text' or 'image'")
     .refine((f) => f.fit === undefined || f.image !== undefined, "'fit' needs an 'image'")
 
+/**  A PowerPoint section name (unique in the deck).  */
+export const SectionNameSchema = z.string().min(1).max(255)
+
 /**  Shared shape of the `fill` payload used by slide.add and slide.fill.  */
 const fillProps = {
     placeholders: z.record(PlaceholderKeySchema, PlaceholderFillSchema).optional(),
@@ -63,7 +66,11 @@ const fillProps = {
     slideNumber: z.boolean().optional(),
     /**  show the date (`true`: the layout's date placeholder with its field)
          or remove it (`false`); omitted leaves it as it is  */
-    date: z.boolean().optional()
+    date: z.boolean().optional(),
+    /**  start a PowerPoint section of this name at the slide (created if
+         missing): it runs up to the next section start, so a slide inside
+         a section splits it  */
+    section: SectionNameSchema.optional()
 }
 
 /**  Op: add a new slide based on a template layout.  */
@@ -186,6 +193,20 @@ export const TextReplaceSchema = z.object({
     notes: z.boolean().optional()
 }).strict()
 
+/**  Op: rename a PowerPoint section.  */
+export const SectionRenameSchema = z.object({
+    op: z.literal("section.rename"),
+    from: SectionNameSchema,
+    to: SectionNameSchema
+}).strict()
+
+/**  Op: remove a PowerPoint section; its slides stay and join the previous
+     section (the next one when it was the first).  */
+export const SectionRmSchema = z.object({
+    op: z.literal("section.rm"),
+    name: SectionNameSchema
+}).strict()
+
 /**  Op: overlay picture placeholders with visible image-prompt boxes.  */
 export const ImgPromptsSchema = z.object({
     op: z.literal("img.prompts"),
@@ -216,7 +237,7 @@ export const MetaPropsSchema = z.object({
 export const OpSchema = z.discriminatedUnion("op", [
     SlideAddSchema, SlideFillSchema, SlideRmSchema, SlideMoveSchema,
     SlideCopySchema, ElAddSchema, ElRmSchema, ElSetSchema,
-    ImgPromptsSchema, MetaPropsSchema, TextReplaceSchema
+    ImgPromptsSchema, MetaPropsSchema, TextReplaceSchema, SectionRenameSchema, SectionRmSchema
 ])
 
 /**  The ops document: optional revision lock plus the ordered op list.  */
@@ -234,9 +255,12 @@ export type SlideFillOp = z.infer<typeof SlideFillSchema>
 export type PlaceholderFill = z.infer<typeof PlaceholderFillSchema>
 export type ElSetOp = z.infer<typeof ElSetSchema>
 export type TextReplaceOp = z.infer<typeof TextReplaceSchema>
+export type SectionRenameOp = z.infer<typeof SectionRenameSchema>
+export type SectionRmOp = z.infer<typeof SectionRmSchema>
 
 /**  All op names, used by `pptc schema` for enumeration.  */
 export const OP_NAMES = [
     "slide.add", "slide.fill", "slide.rm", "slide.move", "slide.copy",
-    "el.add", "el.rm", "el.set", "img.prompts", "meta.props", "text.replace"
+    "el.add", "el.rm", "el.set", "img.prompts", "meta.props", "text.replace",
+    "section.rename", "section.rm"
 ] as const

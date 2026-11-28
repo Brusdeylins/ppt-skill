@@ -80,6 +80,15 @@ export interface PlannedReplace {
     skipCells: { name: string, row: number, col: number }[]
 }
 
+/**  one PowerPoint section of the planned deck; its slides are the plan
+     entries that name it (contiguous, in section order)  */
+export interface PlannedSection {
+    /**  section name, unique in the plan  */
+    name: string
+    /**  section id (GUID) of an existing section, null for a new one  */
+    id: string | null
+}
+
 /**  the planned future of one output slide  */
 export interface SlidePlanEntry {
     /**  where the slide content comes from  */
@@ -116,6 +125,9 @@ export interface SlidePlanEntry {
     /**  replacements text.replace ops made in the slide's planned content
          (fills, el.set texts, elements, footer, notes), per op  */
     replaced: { op: number, count: number }[]
+    /**  the section the slide belongs to once the plan models sections
+         (`MutationPlan.sections` not null), null otherwise  */
+    section: PlannedSection | null
 }
 
 /**
@@ -151,7 +163,8 @@ export const newPlanEntry = (
     edits: [],
     removeNames: [],
     replaces: [],
-    replaced: []
+    replaced: [],
+    section: null
 })
 
 /**  the complete mutation plan an apply run executes  */
@@ -166,6 +179,14 @@ export interface MutationPlan {
     warnings: LintWarning[]
     /**  refs declared by ops, mapped to their entry  */
     refs: Map<string, SlidePlanEntry>
+    /**  the sections in deck order once a section op or field touched
+         them (every entry then names its section, an empty list removes
+         all sections); null leaves the deck's sections to the engine,
+         which keeps them in step with the slide list  */
+    sections: PlannedSection[] | null
+    /**  slide-link targets (`slide:SEL` of a hyperlink) resolved against
+         the plan after the whole document  */
+    links: Map<string, SlidePlanEntry>
 }
 
 /**  shared mutable state all op transformers operate on  */

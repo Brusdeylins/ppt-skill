@@ -11,6 +11,7 @@ import { PptcError } from "../../infra/errors.js"
 import type { SlideAddOp } from "../../schema/ops.js"
 import { newPlanEntry, registerRef, type OpHandler, type PlanContext } from "./registry.js"
 import { planFill } from "./fill-common.js"
+import { joinNeighbour } from "./sections.js"
 
 /**  resolve a layout address (index or exact name). When a template was
      given, resolve against it; otherwise resolve against the deck's OWN
@@ -44,6 +45,7 @@ export const slideAdd: OpHandler<SlideAddOp> = {
         const at = Math.min(op.at ?? ctx.plan.entries.length, ctx.plan.entries.length)
         ctx.plan.entries.splice(at, 0, entry)
         registerRef(ctx, op.ref, entry)
-        planFill(ctx, entry, op)
+        joinNeighbour(ctx, entry)
+        planFill(ctx, entry, op, true)
     }
 }

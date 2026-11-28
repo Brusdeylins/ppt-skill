@@ -16489,7 +16489,8 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "notes": "...", "footer": "...",
                  "slideNumber": true, "date": false,  // show/remove
                  "background": { "color": "1F4E79" },
-                 "hidden": true }           // optional: hide/show the slide
+                 "hidden": true,            // optional: hide/show the slide
+                 "section": "Teil 2" }      // start a section at the slide
   slide.fill   same fill payload, on an existing slide ("slide": SEL)
   slide.rm     { "op": "slide.rm",   "slide": SEL }
   slide.move   { "op": "slide.move", "slide": SEL, "to": 2 }
@@ -16550,6 +16551,16 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "slide": SEL, "matchCase": false, "wholeWord": false,
                  "notes": false }
                -> result.replacements: [{ "op", "count", "slides" }]
+  section.rename { "op": "section.rename", "from": "Teil 2", "to": "Ergebnis" }
+  section.rm   { "op": "section.rm", "name": "Teil 2" } -- the slides stay
+               and join the previous section (the next one for the first)
+
+Sections: the fill field "section" starts a section at the slide (created
+if missing); it runs up to the next section start, so a slide inside a
+section splits it, and a section left without slides goes. In a deck
+without sections the slides before it form "Default Section" (as in
+PowerPoint). Names are unique. Added, copied and moved slides join the
+section of the slide before them. 'state' shows "section" per slide.
 
 Text values accept plain strings (\\n = new paragraph) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
@@ -16653,7 +16664,8 @@ var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
   edits: [],
   removeNames: [],
   replaces: [],
-  replaced: []
+  replaced: [],
+  section: null
 });
 var slideAddrOf = (ctx, entry) => ({
   id: entry.virtualId > 0 ? entry.virtualId : null,
@@ -16850,6 +16862,124 @@ var EMU_PER_INCH = 914400;
 var emuToInch = (emu) => Math.round(emu / EMU_PER_INCH * 100) / 100;
 var inchToEmu = (inch) => Math.round(inch * EMU_PER_INCH);
 
+// src/core/ops/sections.ts
+var DEFAULT_SECTION = "Default Section";
+var planSections = (ctx) => {
+  if (ctx.plan.sections !== null)
+    return ctx.plan.sections;
+  const sections = ctx.deck.sections.map((s) => ({ name: s.name, id: s.id }));
+  const sectionOf = /* @__PURE__ */ new Map();
+  const oldPos = /* @__PURE__ */ new Map();
+  ctx.deck.sections.forEach((sec, k) => {
+    for (const id of sec.slideIds)
+      if (!sectionOf.has(id)) {
+        sectionOf.set(id, k);
+        oldPos.set(id, oldPos.size);
+      }
+  });
+  const entries = ctx.plan.entries;
+  const kept = entries.filter((e) => e.virtualId > 0 && oldPos.has(e.virtualId));
+  const pos = (e) => oldPos.get(e.virtualId);
+  const len = kept.map(() => 1);
+  const prev = kept.map(() => -1);
+  for (let i = 0; i < kept.length; i++)
+    for (let j = 0; j < i; j++)
+      if (pos(kept[j]) < pos(kept[i]) && len[j] + 1 > len[i]) {
+        len[i] = len[j] + 1;
+        prev[i] = j;
+      }
+  const stable = /* @__PURE__ */ new Set();
+  for (let i = len.indexOf(Math.max(0, ...len)); i >= 0; i = prev[i])
+    stable.add(kept[i]);
+  let current = 0;
+  for (const entry of entries) {
+    if (stable.has(entry))
+      current = sectionOf.get(entry.virtualId);
+    entry.section = sections[current] ?? null;
+  }
+  ctx.plan.sections = sections;
+  return sections;
+};
+var joinNeighbour = (ctx, entry) => {
+  const sections = ctx.plan.sections;
+  if (sections === null)
+    return;
+  const idx = ctx.plan.entries.indexOf(entry);
+  entry.section = idx > 0 ? ctx.plan.entries[idx - 1].section : sections[0] ?? null;
+};
+var sectionNamed = (sections, name) => {
+  const hits = sections.filter((s) => s.name === name);
+  if (hits.length === 0)
+    throw new PptcError(
+      "E_ADDR_NOTFOUND",
+      `no section named '${name}'`,
+      { sections: sections.map((s) => s.name) }
+    );
+  if (hits.length > 1)
+    throw new PptcError("E_ADDR_AMBIGUOUS", `the deck has ${hits.length} sections named '${name}'`);
+  return hits[0];
+};
+var checkFree = (sections, name) => {
+  if (sections.some((s) => s.name === name))
+    throw new PptcError(
+      "E_SCHEMA",
+      `a section named '${name}' exists already -- section names are unique`,
+      { sections: sections.map((s) => s.name) }
+    );
+};
+var startSection = (ctx, entry, name, added) => {
+  const sections = planSections(ctx);
+  const entries = ctx.plan.entries;
+  const idx = entries.indexOf(entry);
+  if (!added && entry.section?.name === name)
+    return;
+  checkFree(sections, name);
+  const fresh = { name, id: null };
+  if (sections.length === 0) {
+    const lead = { name: DEFAULT_SECTION, id: null };
+    if (idx > 0) {
+      checkFree([fresh], DEFAULT_SECTION);
+      sections.push(lead);
+    }
+    sections.push(fresh);
+    entries.forEach((e, i) => {
+      e.section = i < idx ? lead : fresh;
+    });
+    return;
+  }
+  const from = added ? idx > 0 ? entries[idx - 1].section : null : entry.section;
+  sections.splice(from === null ? 0 : sections.indexOf(from) + 1, 0, fresh);
+  entry.section = fresh;
+  for (let j = idx + 1; from !== null && j < entries.length && entries[j].section === from; j++)
+    entries[j].section = fresh;
+  if (from !== null && !entries.some((e) => e.section === from))
+    sections.splice(sections.indexOf(from), 1);
+};
+var sectionRename = {
+  name: "section.rename",
+  plan(ctx, op) {
+    const sections = planSections(ctx);
+    const section = sectionNamed(sections, op.from);
+    if (op.to === op.from)
+      return;
+    checkFree(sections, op.to);
+    section.name = op.to;
+  }
+};
+var sectionRm = {
+  name: "section.rm",
+  plan(ctx, op) {
+    const sections = planSections(ctx);
+    const section = sectionNamed(sections, op.name);
+    const k = sections.indexOf(section);
+    const into = (k > 0 ? sections[k - 1] : sections[k + 1]) ?? null;
+    for (const entry of ctx.plan.entries)
+      if (entry.section === section)
+        entry.section = into;
+    sections.splice(k, 1);
+  }
+};
+
 // src/core/ops/fill-common.ts
 var resolveEntry = (ctx, selector) => {
   const view = selectableEntries(ctx);
@@ -16916,7 +17046,7 @@ var placeholderShapeName = (ctx, entry, ph) => {
     );
   return shape.name;
 };
-var planFill = (ctx, entry, fill) => {
+var planFill = (ctx, entry, fill, added = false) => {
   const layout = entryLayout(ctx, entry);
   for (const [key, content] of Object.entries(fill.placeholders ?? {})) {
     if (layout === null)
@@ -16969,6 +17099,8 @@ var planFill = (ctx, entry, fill) => {
     entry.slideNumber = fill.slideNumber;
   if (fill.date !== void 0)
     entry.date = fill.date;
+  if (fill.section !== void 0)
+    startSection(ctx, entry, fill.section, added);
 };
 
 // src/core/ops/slide-add.ts
@@ -17005,7 +17137,8 @@ var slideAdd = {
     const at = Math.min(op.at ?? ctx.plan.entries.length, ctx.plan.entries.length);
     ctx.plan.entries.splice(at, 0, entry);
     registerRef(ctx, op.ref, entry);
-    planFill(ctx, entry, op);
+    joinNeighbour(ctx, entry);
+    planFill(ctx, entry, op, true);
   }
 };
 
@@ -17037,6 +17170,7 @@ var slideMove = {
       );
     ctx.plan.entries.splice(ctx.plan.entries.indexOf(entry), 1);
     ctx.plan.entries.splice(op.to, 0, entry);
+    joinNeighbour(ctx, entry);
   }
 };
 var slideCopy = {
@@ -17893,7 +18027,9 @@ var HANDLERS = new Map(
     elRm,
     imgPrompts,
     metaProps,
-    textReplace
+    textReplace,
+    sectionRename,
+    sectionRm
   ].map((h) => [h.name, h])
 );
 var planOps = (doc, deck, deckLayouts, template, minFontPt) => {
@@ -17905,7 +18041,7 @@ var planOps = (doc, deck, deckLayouts, template, minFontPt) => {
     );
   const entries = deck.slides.map((slide) => newPlanEntry({ kind: "self", part: slide.part }, slide.id, slide.title, slide.layoutIndex, slide.hidden));
   const ctx = {
-    plan: { entries, props: null, customProps: null, warnings: [], refs: /* @__PURE__ */ new Map() },
+    plan: { entries, props: null, customProps: null, warnings: [], refs: /* @__PURE__ */ new Map(), sections: null, links: /* @__PURE__ */ new Map() },
     deck,
     deckLayouts,
     template,
@@ -38015,6 +38151,7 @@ var PlaceholderFillSchema = external_exports.object({
   (f) => f.text !== void 0 || f.image !== void 0,
   "a placeholder fill needs 'text' or 'image'"
 ).refine((f) => f.fit === void 0 || f.image !== void 0, "'fit' needs an 'image'");
+var SectionNameSchema = external_exports.string().min(1).max(255);
 var fillProps = {
   placeholders: external_exports.record(PlaceholderKeySchema, PlaceholderFillSchema).optional(),
   notes: external_exports.string().optional(),
@@ -38028,7 +38165,11 @@ var fillProps = {
   slideNumber: external_exports.boolean().optional(),
   /**  show the date (`true`: the layout's date placeholder with its field)
        or remove it (`false`); omitted leaves it as it is  */
-  date: external_exports.boolean().optional()
+  date: external_exports.boolean().optional(),
+  /**  start a PowerPoint section of this name at the slide (created if
+       missing): it runs up to the next section start, so a slide inside
+       a section splits it  */
+  section: SectionNameSchema.optional()
 };
 var SlideAddSchema = external_exports.object({
   op: external_exports.literal("slide.add"),
@@ -38138,6 +38279,15 @@ var TextReplaceSchema = external_exports.object({
   /**  also replace in the speaker notes (default false)  */
   notes: external_exports.boolean().optional()
 }).strict();
+var SectionRenameSchema = external_exports.object({
+  op: external_exports.literal("section.rename"),
+  from: SectionNameSchema,
+  to: SectionNameSchema
+}).strict();
+var SectionRmSchema = external_exports.object({
+  op: external_exports.literal("section.rm"),
+  name: SectionNameSchema
+}).strict();
 var ImgPromptsSchema = external_exports.object({
   op: external_exports.literal("img.prompts"),
   slide: SlideSelectorSchema,
@@ -38169,7 +38319,9 @@ var OpSchema = external_exports.discriminatedUnion("op", [
   ElSetSchema,
   ImgPromptsSchema,
   MetaPropsSchema,
-  TextReplaceSchema
+  TextReplaceSchema,
+  SectionRenameSchema,
+  SectionRmSchema
 ]);
 var OpsDocumentSchema = external_exports.object({
   /**  optimistic lock: must equal the deck's current `rev` when given  */
@@ -38187,7 +38339,9 @@ var OP_NAMES = [
   "el.set",
   "img.prompts",
   "meta.props",
-  "text.replace"
+  "text.replace",
+  "section.rename",
+  "section.rm"
 ];
 
 // src/engine/reader.ts
@@ -39081,11 +39235,14 @@ var bodyLayout = (bodyPr) => {
     ...set2 && { margin: margin.every((m) => m === margin[0]) ? margin[0] : margin }
   };
 };
-var runStyle = (r, colors) => {
+var runStyle = (r, colors, linkOf) => {
   const out = { text: firstElement(r, "a:t")?.textContent ?? "" };
   const rPr = firstElement(r, "a:rPr");
   if (rPr === null)
     return out;
+  const hyperlink = linkOf(directChild(rPr, ["a:hlinkClick"]));
+  if (hyperlink !== void 0)
+    out.hyperlink = hyperlink;
   const face = firstElement(rPr, "a:latin")?.getAttribute("typeface");
   if (face !== null && face !== void 0 && face !== "")
     out.font = face;
@@ -39118,12 +39275,12 @@ var spacingOf = (pPr, tag2, unit) => {
     return void 0;
   return unit === "a:spcPts" ? Number(val) / 100 : Number(val) / 1e5;
 };
-var richParagraphs = (txBody, colors) => {
+var richParagraphs = (txBody, colors, linkOf) => {
   const paras = [];
   let formatted = false;
   for (const p of elements(txBody, "a:p")) {
-    const runs = elements(p, "a:r").map((r) => runStyle(r, colors));
-    if (runs.some((rn) => rn.font !== void 0 || rn.bold === true || rn.italic === true || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== void 0))
+    const runs = elements(p, "a:r").map((r) => runStyle(r, colors, linkOf));
+    if (runs.some((rn) => rn.font !== void 0 || rn.bold === true || rn.italic === true || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== void 0 || rn.hyperlink !== void 0))
       formatted = true;
     const para = { runs };
     const pPr = firstElement(p, "a:pPr");
@@ -39151,6 +39308,11 @@ var richParagraphs = (txBody, colors) => {
   }
   return formatted ? paras : void 0;
 };
+var readSections = (pres) => elements(pres, "p14:section").map((sec) => ({
+  name: sec.getAttribute("name") ?? "",
+  id: sec.getAttribute("id") ?? "",
+  slideIds: elements(sec, "p14:sldId").map((ref) => Number(ref.getAttribute("id") ?? ""))
+}));
 var readDeckState = async (archive) => {
   const info = await readTemplateInfo(archive);
   const layoutIndexByName = new Map(info.layouts.map((l) => [l.name, l.index]));
@@ -39159,6 +39321,13 @@ var readDeckState = async (archive) => {
   const slides = [];
   const hashParts = [];
   const listed = slideList(archive.zip, pres, relTargets("ppt/presentation.xml", presRels, archive.zip)).flatMap((s) => s.part === null ? [] : [{ id: s.id, part: s.part }]);
+  const idOfPart = new Map(listed.map((s) => [s.part, s.id]));
+  const sections = readSections(pres);
+  const sectionOf = /* @__PURE__ */ new Map();
+  for (const sec of sections)
+    for (const id of sec.slideIds)
+      if (!sectionOf.has(id))
+        sectionOf.set(id, sec.name);
   for (let index = 0; index < listed.length; index++) {
     const { id, part } = listed[index];
     const partBase = path3.posix.basename(part);
@@ -39175,6 +39344,15 @@ var readDeckState = async (archive) => {
       slideRels = [];
     }
     const slideRelMap = relMap(slideRels);
+    const linkOf = (hlink) => {
+      const rel = hlink === null ? void 0 : slideRelMap.get(hlink.getAttribute("r:id") ?? "");
+      if (hlink === null || rel === void 0)
+        return void 0;
+      if (rel.kind === "hyperlink" && rel.target === null)
+        return rel.el.getAttribute("Target") ?? void 0;
+      const id2 = rel.kind === "slide" && rel.target !== null ? idOfPart.get(rel.target) : void 0;
+      return id2 !== void 0 && (hlink.getAttribute("action") ?? "").includes("hlinksldjump") ? `slide:id:${id2}` : void 0;
+    };
     const layoutPart = slideRels.find((r) => r.kind === "slideLayout")?.target ?? null;
     let layoutName = "";
     let layoutIndex = -1;
@@ -39209,6 +39387,9 @@ var readDeckState = async (archive) => {
           text
         };
         Object.assign(shape, description(node2));
+        const hyperlink = linkOf(directChild(cNvPr, ["a:hlinkClick"]));
+        if (hyperlink !== void 0)
+          shape.hyperlink = hyperlink;
         if (node2.nodeName === "p:sp")
           Object.assign(shape, shapeStyle(node2, info.colors));
         if (node2.nodeName === "p:sp" || node2.nodeName === "p:cxnSp")
@@ -39224,7 +39405,7 @@ var readDeckState = async (archive) => {
             shape.lang = lang;
         }
         if (txBody !== null) {
-          const paras = richParagraphs(txBody, info.colors);
+          const paras = richParagraphs(txBody, info.colors, linkOf);
           if (paras !== void 0)
             shape.paragraphs = paras;
         }
@@ -39255,7 +39436,7 @@ var readDeckState = async (archive) => {
     }
     const show = doc.documentElement?.getAttribute("show");
     const hidden = show === "0" || show === "false";
-    slides.push({ id, index, title, layoutName, layoutIndex, shapes, notes, hidden, part });
+    slides.push({ id, index, title, layoutName, layoutIndex, shapes, notes, hidden, part, section: sectionOf.get(id) ?? null });
   }
   const customProps = {};
   const customXml = await archive.text("docProps/custom.xml");
@@ -39269,9 +39450,14 @@ var readDeckState = async (archive) => {
     file: archive.file,
     /*  notes live in their own part: hash them too, or a notes-only edit
         by someone else would pass an --expect-rev check  */
-    rev: contentHash(...hashParts, JSON.stringify(slides.map((s) => [s.id, s.notes]))),
+    rev: contentHash(
+      ...hashParts,
+      JSON.stringify(slides.map((s) => [s.id, s.notes])),
+      ...sections.length > 0 ? [JSON.stringify(sections)] : []
+    ),
     slideSize: info.slideSize,
     slides,
+    sections,
     customProps
   };
 };
@@ -39623,6 +39809,7 @@ var deckLang = async (zip, customPatch) => {
 };
 
 // src/engine/post.ts
+import { createHash as createHash3 } from "node:crypto";
 var syncSectionRefs = async (zip) => {
   const part = "ppt/presentation.xml";
   const xml = await partText(zip, part);
@@ -39674,6 +39861,64 @@ var syncSectionRefs = async (zip) => {
       l.appendChild(ref);
     }
   }
+  zip.file(part, serializeXml(pres));
+};
+var SECTION_EXT = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
+var NS_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main";
+var sectionGuid = (name, used) => {
+  for (let salt = 0; ; salt++) {
+    const h = createHash3("sha1").update(`${name}\0${[...used].sort().join(",")}\0${salt}`).digest("hex").toUpperCase();
+    const guid3 = `{${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}}`;
+    if (!used.has(guid3))
+      return guid3;
+  }
+};
+var writeSections = async (zip, sections) => {
+  const part = "ppt/presentation.xml";
+  const pres = parseXml(await partText(zip, part));
+  const root = pres.documentElement;
+  if (root === null)
+    return;
+  let extLst = elements(pres, "p:extLst").find((el) => el.parentNode === root) ?? null;
+  let ext = extLst === null ? null : elements(extLst, "p:ext").find((el) => el.getAttribute("uri") === SECTION_EXT) ?? null;
+  if (sections.length === 0) {
+    if (ext === null)
+      return;
+    extLst?.removeChild(ext);
+    if (extLst !== null && elements(extLst, "p:ext").length === 0)
+      root.removeChild(extLst);
+    zip.file(part, serializeXml(pres));
+    return;
+  }
+  if (extLst === null) {
+    extLst = pres.createElementNS(root.namespaceURI, "p:extLst");
+    root.appendChild(extLst);
+  }
+  if (ext === null) {
+    ext = pres.createElementNS(root.namespaceURI, "p:ext");
+    ext.setAttribute("uri", SECTION_EXT);
+    extLst.insertBefore(ext, extLst.firstChild);
+  }
+  while (ext.firstChild !== null)
+    ext.removeChild(ext.firstChild);
+  const lst = pres.createElementNS(NS_P14, "p14:sectionLst");
+  const used = new Set(sections.flatMap((s) => s.id === null ? [] : [s.id]));
+  for (const s of sections) {
+    const sec = pres.createElementNS(NS_P14, "p14:section");
+    const id = s.id ?? sectionGuid(s.name, used);
+    used.add(id);
+    sec.setAttribute("name", s.name);
+    sec.setAttribute("id", id);
+    const ids = pres.createElementNS(NS_P14, "p14:sldIdLst");
+    for (const slideId of s.slideIds) {
+      const ref = pres.createElementNS(NS_P14, "p14:sldId");
+      ref.setAttribute("id", String(slideId));
+      ids.appendChild(ref);
+    }
+    sec.appendChild(ids);
+    lst.appendChild(sec);
+  }
+  ext.appendChild(lst);
   zip.file(part, serializeXml(pres));
 };
 var slideTitle = (slide) => {
@@ -39825,14 +40070,17 @@ var sweepSlideRefs = async (zip, slides) => {
   if (dropped)
     zip.file("ppt/presentation.xml", serializeXml(pres));
 };
-var finishPackage = async (zip, slides, props, customProps) => {
+var finishPackage = async (zip, slides, props, customProps, sections = null) => {
   await sweepSlideRefs(zip, slides);
   if (props !== null)
     await setProps(zip, props);
   if (customProps !== null)
     await setCustomProps(zip, customProps);
   await gcAssets(zip);
-  await syncSectionRefs(zip);
+  if (sections === null)
+    await syncSectionRefs(zip);
+  else
+    await writeSections(zip, sections);
   await cleanContentTypes(zip);
   await syncAppProperties(zip, slides);
 };
@@ -47546,6 +47794,16 @@ var writeSlideList = (pkg, deck, states, matched, removed, force) => {
   pkg.write("ppt/presentation.xml", pres);
   pkg.writeRels("ppt/presentation.xml", presRels);
 };
+var sectionsOut = (plan, deck) => {
+  if (plan.sections === null)
+    return null;
+  const ids = elements(deck.pres, "p:sldId").map((s) => Number(s.getAttribute("id")));
+  return plan.sections.map((section) => ({
+    name: section.name,
+    id: section.id,
+    slideIds: plan.entries.flatMap((e, i) => e.section === section ? [ids[i]] : [])
+  }));
+};
 var removeSlides = async (pkg, removed) => {
   if (removed.size === 0)
     return;
@@ -47663,7 +47921,7 @@ var executePlan = async (outFile, plan, archive) => {
   await editSlides(pkg, plan, deck, states, removed, warnings);
   writeSlideList(pkg, deck, states, matched, removed, renumbered || deck.dropped);
   await removeSlides(pkg, removed);
-  await finishPackage(pkg.zip, parts, plan.props, plan.customProps);
+  await finishPackage(pkg.zip, parts, plan.props, plan.customProps, sectionsOut(plan, deck));
   const finalBytes = await pkg.zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
   const after = await import_jszip7.default.loadAsync(finalBytes);
   const expects = expectations(states);
@@ -47975,9 +48233,11 @@ var renderSlide = (slide, level) => {
   };
   if (level === "summary")
     return { ...base, shapes: slide.shapes.length, hasNotes: slide.notes !== null };
+  const section = slide.section !== null ? { section: slide.section } : {};
   if (level === "text")
     return {
       ...base,
+      ...section,
       texts: slide.shapes.filter((s) => s.text !== null || s.table !== void 0).map((s) => ({
         name: s.name,
         ...s.placeholderIdx !== null && { placeholder: s.placeholderIdx },
@@ -47986,7 +48246,7 @@ var renderSlide = (slide, level) => {
       })),
       notes: slide.notes
     };
-  return { ...base, shapes: slide.shapes, notes: slide.notes };
+  return { ...base, ...section, shapes: slide.shapes, notes: slide.notes };
 };
 var cmdState = async (argv) => {
   const args = parse3(argv, {
@@ -48011,6 +48271,7 @@ var cmdState = async (argv) => {
     result: {
       slideSize: deck.slideSize,
       slideCount: deck.slides.length,
+      ...deck.sections.length > 0 && { sections: deck.sections.map((s) => s.name) },
       customProps: deck.customProps,
       slides: slides.map((s) => renderSlide(s, level))
     }
