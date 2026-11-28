@@ -602,6 +602,37 @@ const runStyle = (r: Element, colors: Record<string, string>, linkOf: LinkOf): R
     return out
 }
 
+/**  the runs of a paragraph; a line break (`a:br`) reads as a vertical
+     tab at the end of the run before it (the start of the first run)  */
+const paragraphRuns = (p: Element, colors: Record<string, string>, linkOf: LinkOf): RunInfo[] => {
+    const runs: RunInfo[] = []
+    let pending = ""
+    const walk = (el: Element): void => {
+        for (let n = el.firstChild; n !== null; n = n.nextSibling)
+            if (n.nodeType !== 1)
+                continue
+            else if (n.nodeName === "a:r") {
+                const run = runStyle(n as Element, colors, linkOf)
+                run.text = pending + run.text
+                pending = ""
+                runs.push(run)
+            }
+            else if (n.nodeName === "a:br") {
+                const last = runs[runs.length - 1]
+                if (last !== undefined)
+                    last.text += "\v"
+                else
+                    pending += "\v"
+            }
+            else
+                walk(n as Element)
+    }
+    walk(p)
+    if (pending !== "")
+        runs.push({ text: pending })
+    return runs
+}
+
 /**  a paragraph spacing value: points (spcPts, 1/100 pt) or a multiple
      (spcPct, 1/1000 %), undefined when set the other way or not at all  */
 const spacingOf = (pPr: Element, tag: string, unit: "a:spcPts" | "a:spcPct"): number | undefined => {
@@ -620,7 +651,7 @@ const richParagraphs = (txBody: Element, colors: Record<string, string>, linkOf:
     const paras: ParaInfo[] = []
     let formatted = false
     for (const p of elements(txBody, "a:p")) {
-        const runs = elements(p, "a:r").map((r) => runStyle(r, colors, linkOf))
+        const runs = paragraphRuns(p, colors, linkOf)
         if (runs.some((rn) => rn.font !== undefined || rn.bold === true || rn.italic === true
             || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== undefined
             || rn.hyperlink !== undefined))

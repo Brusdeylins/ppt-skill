@@ -28,12 +28,12 @@ import { finishPackage, type SectionOut } from "../post.js"
 import { ASSET_PART, REL, RELS, findPart, layoutOrder, relTarget, readRels, relIs, relsOwner, relsPartOf, slideList } from "../parts.js"
 import type { DeckArchive } from "../reader.js"
 import { findDefects } from "../verify.js"
-import { NS_P, NS_R, elements, firstElement } from "../xml.js"
+import { NS_P, NS_R, elements, firstElement, relRefs } from "../xml.js"
 import { Package } from "./package.js"
 import { repairPart } from "./repair.js"
 import { createSlide, dropLinksToRemoved, editSlide } from "./slides.js"
 import { generateElements } from "./transplant.js"
-import { mayMatch } from "../../core/text-replace.js"
+import { mayMatch, replacePlain } from "../../core/text-replace.js"
 
 /**  is a part outside every slide's own content (presentation, masters,
      layouts, themes, document properties, custom XML, ...)  */
@@ -510,6 +510,48 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
     }
 }
 
+/**  the parts whose text text.replace leaves as it is, by kind  */
+const UNREPLACED_PARTS: [ RegExp, string ][] = [
+    [ /^ppt\/charts\/chart[^/]*\.xml$/, "chart" ],
+    [ /^ppt\/diagrams\/(data|drawing)[^/]*\.xml$/, "SmartArt" ]
+]
+
+/**  text.replace changes the text of shapes, placeholders, tables and
+     notes only: a chart or SmartArt part of a slide it targets whose text
+     holds a match is reported (W_REPLACE_SKIPPED) -- unless an earlier op
+     of the document removed the element showing it  */
+const replaceSkipped = (states: SlideState[], warnings: LintWarning[]): void => {
+    states.forEach((s, index) => {
+        if (s.entry.replaces.length === 0)
+            return
+        const slide = s.closure[0]
+        const target = new Map((slide?.rels ?? []).map((r) => [ r.id, r.target ]))
+        const frameOf = new Map<string, string>()
+        for (const frame of slide?.doc === null || slide === undefined ? [] : elements(slide.doc, "p:graphicFrame"))
+            for (const ref of relRefs(frame)) {
+                const part = target.get(ref.attr.value) ?? null
+                if (part !== null)
+                    frameOf.set(part, firstElement(frame, "p:cNvPr")?.getAttribute("name") ?? "")
+            }
+        for (const replace of s.entry.replaces) {
+            const found = new Map<string, string[]>()
+            for (const view of s.closure) {
+                const kind = UNREPLACED_PARTS.find(([ re ]) => re.test(view.part))?.[1]
+                const frame = frameOf.get(view.part)
+                if (kind === undefined || view.doc === null || (frame !== undefined && replace.skip.includes(frame)))
+                    continue
+                const texts = [ ...elements(view.doc, "a:t"), ...elements(view.doc, "c:v") ].map((t) => t.textContent ?? "")
+                if (texts.some((t) => replacePlain(t, replace).count > 0))
+                    found.set(kind, [ ...found.get(kind) ?? [], view.part ])
+            }
+            for (const [ kind, parts ] of found)
+                warnings.push({ code: "W_REPLACE_SKIPPED", slide: { id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index, title: s.entry.title },
+                    message: `text.replace (op ${replace.op}) leaves ${kind} text as it is: '${replace.find}' found in ${parts.join(", ")} `
+                        + `-- change it in PowerPoint, or replace the ${kind === "chart" ? "chart (el.rm + el.add)" : "SmartArt"}` })
+        }
+    })
+}
+
 /**  the repair triggers of the output that the apply adds: a trigger the
      input already carried (same rule and part, as often) and pptc cannot
      repair stays as it was and is reported (W_INPUT_DEFECT)  */
@@ -559,6 +601,7 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
     /*  structure, classification, edits, slide list, package-wide steps  */
     const parts = await buildSlides(pkg, plan, matched)
     const states = await classifySlides(pkg, plan, parts, removed)
+    replaceSkipped(states, warnings)
     const untouched = untouchedParts(pkg, states)
     await editSlides(pkg, plan, deck, states, removed, warnings)
     writeSlideList(pkg, deck, states, matched, removed, renumbered || deck.dropped)

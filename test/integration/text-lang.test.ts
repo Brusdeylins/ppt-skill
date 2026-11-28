@@ -83,7 +83,8 @@ describe("text language", () => {
         expect(langs.get("PptcPh-0")).toEqual([ "Übersicht=de-DE" ])
         expect(langs.get("PptcPh-1")).toEqual([ "Punkt=de-DE", "point=en-GB", "eins=it-IT", "deux=fr-FR" ])
         expect([ ...langs.values() ].flat()).toContain("Fußzeile=de-DE")
-        expect(await notesLangs(DE, 0)).toEqual([ "de-DE" ])
+        /*  the notes text and the slide-number field of the notes slide  */
+        expect(await notesLangs(DE, 0)).toEqual([ "de-DE", "de-DE" ])
     })
 
     it("writes it into el.add textboxes, shapes and tables, with overrides", async () => {

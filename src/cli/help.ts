@@ -111,7 +111,9 @@ Options:
                     deck carried PowerPoint repair triggers, which pptc
                     repaired -- tell the user), W_INPUT_DEFECT (the input
                     deck carries repair triggers pptc cannot repair; they
-                    stay as they were -- tell the user)
+                    stay as they were -- tell the user), W_REPLACE_SKIPPED
+                    (text.replace found its text in a chart or SmartArt,
+                    which it leaves as it is -- tell the user)
   --min-font-pt N   readability floor for explicit font sizes (default
                     8); runs/elements below N trigger W_FONT_TOO_SMALL.
                     0 disables the check. Footer/slide-number/date
@@ -142,7 +144,9 @@ Example:
 
     "note": `pptc note <deck> --slide SEL "speaker notes"
 
-Set a slide's speaker notes (compiles to one slide.fill op).
+Set a slide's speaker notes (compiles to one slide.fill op). An existing
+notes page keeps everything but its notes text; a new one is built from
+the notes master (slide image, notes body, slide number).
 Options: --slide SEL, --rev R, --strict, --dry-run (as in 'apply').
 
 Example:
@@ -295,8 +299,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
-                 "text" (placeholder/textbox/shape; text without format
-                   keeps the first paragraph's and run's format),
+                 "text" (placeholder/textbox/shape; in the first
+                   paragraph's and run's format, merged with the fields
+                   a paragraph or run sets),
                  "frame": { "x", "y", "w", "h", "rotation" } (given keys
                    change; not rotation on table/chart),
                  "fill", "fontColor" (placeholder/textbox/shape),
@@ -324,8 +329,10 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
   text.replace find/replace plain text in shapes, placeholders and table
                cells of the deck (or of "slide"), notes only on request,
-               fields never; a match may span runs (the first keeps its
-               format); sees every earlier op of the document
+               fields, charts and SmartArt never (W_REPLACE_SKIPPED when
+               a targeted slide's chart or SmartArt holds the text); a
+               match may span runs (the first keeps its format); sees
+               every earlier op of the document
                { "op": "text.replace", "find": "2025", "replace": "2026",
                  "slide": SEL, "matchCase": false, "wholeWord": false,
                  "notes": false }
@@ -341,11 +348,14 @@ without sections the slides before it form "Default Section" (as in
 PowerPoint). Names are unique. Added, copied and moved slides join the
 section of the slide before them. 'state' shows "section" per slide.
 
-Text values accept plain strings (\\n = new paragraph) or rich text:
+Text values accept plain strings (\\n = new paragraph, \\v = line break
+inside the paragraph; state reads one back as \\v) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
-"number"|false, "spaceBefore"/"spaceAfter" (pt), "lineSpacing" (1.5) },
-runs { "text", "bold", "italic", "underline", "strike", "superscript",
-"subscript", "size", "font", "color", "highlight", "hyperlink", "lang" }.
+"number"|false (true: the placeholder's own bullet, elsewhere a bullet
+character with hanging indent), "spaceBefore"/"spaceAfter" (pt),
+"lineSpacing" (1.5) }, runs { "text", "bold", "italic", "underline",
+"strike", "superscript", "subscript", "size", "font", "color",
+"highlight", "hyperlink", "lang" }.
 Links: "hyperlink" takes a URL or a slide link "slide:SEL" -- slide:$ref,
 slide:id:256, slide:title:Agenda, slide:index:2 -- resolved after the
 whole document (slides added later count, moved ones follow; a target
@@ -353,6 +363,9 @@ missing then fails with E_ADDR_NOTFOUND). A later removal of the target
 drops the link; copies keep it; 'state --level full' reads slide:id:N.
 Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
 bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
+Text without "color" takes the template's (el.add table headers: white).
+Control characters but tab, line feed and carriage return (and \\v
+outside text) fail with E_SCHEMA naming the field.
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
 Picture fills crop to the placeholder by default ("fit": "crop");
 "contain" shows the whole image, "stretch" distorts it.

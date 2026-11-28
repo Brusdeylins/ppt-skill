@@ -9,7 +9,7 @@
 
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
 import type { Attr, Document, Element } from "@xmldom/xmldom"
-import { isSchemeColor } from "../schema/payloads.js"
+import { isSchemeColor, unicodeName, xmlIllegalAt } from "../schema/payloads.js"
 
 /**  DrawingML main namespace (`a:`)  */
 export const NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -20,17 +20,66 @@ export const NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relat
 /**  Package relationships namespace (rels parts)  */
 export const NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 
+/**  whether a code point is a character XML 1.0 allows  */
+const xmlChar = (cp: number): boolean =>
+    cp === 0x9 || cp === 0xA || cp === 0xD || (cp >= 0x20 && cp <= 0xD7FF) || (cp >= 0xE000 && cp <= 0xFFFD)
+        || (cp >= 0x10000 && cp <= 0x10FFFF)
+
+/**
+ *  The first character an XML 1.0 document must not contain, raw or as a
+ *  character reference (`&#11;`) -- xmldom accepts both, PowerPoint
+ *  rejects the part.
+ *
+ *  @param xml - XML text
+ *  @returns a description of the character and its offset, null when none
+ */
+export const illegalXmlChar = (xml: string): string | null => {
+    const at = xmlIllegalAt(xml, false)
+    if (at >= 0)
+        return `character ${unicodeName(xml.charCodeAt(at))} not allowed in XML (offset ${at})`
+    for (const ref of xml.matchAll(/&#(x[0-9A-Fa-f]+|[0-9]+);/g)) {
+        const body = ref[1] as string
+        const cp = body.startsWith("x") ? parseInt(body.slice(1), 16) : parseInt(body, 10)
+        if (!xmlChar(cp))
+            return `character reference ${ref[0]} (${unicodeName(cp)}) not allowed in XML (offset ${ref.index})`
+    }
+    return null
+}
+
+/**
+ *  A text with the characters XML cannot store left out -- a vertical tab
+ *  (a line break inside a paragraph) as a space -- for text pptc copies
+ *  from the deck into another part (the slide titles of the app
+ *  properties).
+ *
+ *  @param s - the text
+ *  @returns the storable text
+ */
+export const xmlStorable = (s: string): string => {
+    let out = ""
+    let from = 0
+    for (let at = xmlIllegalAt(s, false); at >= 0; at = xmlIllegalAt(s.slice(from), false)) {
+        out += s.slice(from, from + at) + (s.charCodeAt(from + at) === 0x0B ? " " : "")
+        from += at + 1
+    }
+    return out + s.slice(from)
+}
+
 /**
  *  Parse an XML string into a DOM document. A leading byte-order mark
  *  (written by some .NET tools and 6 of PowerPoint's own themes) is
  *  dropped -- xmldom would reject the declaration behind it.
  *
  *  @param xml - XML source text
- *  @param strict - whether recoverable errors fail as well (verify)
+ *  @param strict - whether recoverable errors and characters XML does not
+ *                 allow fail as well (verify)
  *  @returns parsed document
  */
-export const parseXml = (xml: string, strict = false): Document =>
-    new DOMParser({
+export const parseXml = (xml: string, strict = false): Document => {
+    const illegal = strict ? illegalXmlChar(xml) : null
+    if (illegal !== null)
+        throw new Error(illegal)
+    return new DOMParser({
         onError: (level, msg): void => {
             /*  lenient: recoverable errors are tolerated silently (no stderr
                 noise), only fatal ones fail; strict: everything fails but
@@ -39,6 +88,7 @@ export const parseXml = (xml: string, strict = false): Document =>
                 throw new Error(msg)
         }
     }).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml")
+}
 
 /**
  *  Decode the bytes of an XML part: UTF-8 (with or without byte-order
@@ -163,20 +213,39 @@ export const firstElement = (scope: Document | Element, qname: string): Element 
     scope.getElementsByTagName(qname).item(0) as Element | null
 
 /**
+ *  The text of one paragraph: its `a:t` texts in order, a line break
+ *  (`a:br`) as a vertical tab -- the form the text writers take it in.
+ *
+ *  @param p - the `a:p` element
+ *  @returns the paragraph text
+ */
+export const paragraphText = (p: Element): string => {
+    let text = ""
+    const walk = (el: Element): void => {
+        for (let n = el.firstChild; n !== null; n = n.nextSibling)
+            if (n.nodeType !== 1)
+                continue
+            else if (n.nodeName === "a:t")
+                text += n.textContent ?? ""
+            else if (n.nodeName === "a:br")
+                text += "\v"
+            else
+                walk(n as Element)
+    }
+    walk(p)
+    return text
+}
+
+/**
  *  Concatenated text content of all `a:t` runs below a scope element.
- *  Paragraphs (`a:p`) are joined with newlines.
+ *  Paragraphs (`a:p`) are joined with newlines, a line break inside a
+ *  paragraph (`a:br`) reads as a vertical tab.
  *
  *  @param scope - element containing DrawingML text (e.g. a txBody)
  *  @returns plain text, empty string when there is none
  */
-export const drawingText = (scope: Element): string => {
-    const parts: string[] = []
-    for (const p of elements(scope, "a:p")) {
-        const runs = elements(p, "a:t").map((t) => t.textContent ?? "")
-        parts.push(runs.join(""))
-    }
-    return parts.join("\n")
-}
+export const drawingText = (scope: Element): string =>
+    elements(scope, "a:p").map(paragraphText).join("\n")
 
 /**
  *  Build the DrawingML color element of a validated color: `a:srgbClr`

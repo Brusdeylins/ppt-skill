@@ -141,12 +141,13 @@ describe("el.set text keeps the format", () => {
         expect(elements(box, "a:srgbClr").map((c) => c.getAttribute("val"))).toEqual([ "C00000", "C00000" ])
     })
 
-    it("takes the format the new text gives", async () => {
+    it("takes the format the new text gives, merged onto the kept one", async () => {
         await apply(deck, [ { op: "el.set", slide: "0", name: "Box", text: [ { runs: [ { text: "kursiv", italic: true } ], alignment: "right" } ] } ])
         const box = shapeNamed(await slideDoc(deck, 0), "Box")
         expect(firstElement(box, "a:pPr")?.getAttribute("algn")).toBe("r")
         const rPr = firstElement(box, "a:rPr")
-        expect([ rPr?.getAttribute("i"), rPr?.getAttribute("b") ]).toEqual([ "1", null ])
+        expect([ rPr?.getAttribute("i"), rPr?.getAttribute("b"), rPr?.getAttribute("sz") ]).toEqual([ "1", "1", "2000" ])
+        expect(elements(box, "a:srgbClr").map((c) => c.getAttribute("val"))).toEqual([ "C00000" ])
     })
 })
 

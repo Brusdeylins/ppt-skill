@@ -55,6 +55,11 @@ export const TEXT_DIRECTION_VERT: Record<TextDirection, string> = {
 export class GenColors {
     /**  token (RRGGBB) to theme slot  */
     readonly tokens = new Map<string, SchemeColor>()
+    /**  token (RRGGBB) of text without a color of its own: PptxGenJS
+         colors such text black (table headers white), so it goes in as
+         this token, whose fill `finish` removes -- the text then takes
+         the color of the template  */
+    readonly inherit: string
     private readonly byName = new Map<SchemeColor, string>()
     private readonly base: number
 
@@ -70,6 +75,7 @@ export class GenColors {
         while ([ ...Array(16).keys() ].some((i) => used.has(GenColors.hex(base + i))))
             base += 0x10
         this.base = base
+        this.inherit = GenColors.hex(base + 15)
     }
 
     /**  RRGGBB of a number  */
@@ -98,17 +104,26 @@ export class GenColors {
 
 /**
  *  Finish a generated slide or chart part: color tokens become their
- *  `a:schemeClr`, and every paragraph keeps only its first `a:pPr` --
+ *  `a:schemeClr`, the fill of text without a color of its own goes (it
+ *  inherits), and every paragraph keeps only its first `a:pPr` --
  *  PptxGenJS writes one per run, which is invalid after the first run.
  *
  *  @param doc - the part DOM (changed in place)
  *  @param tokens - the color tokens of the apply
+ *  @param inherit - the token of text without a color, null for none
  *  @returns true when the part changed
  */
-export const finishGenerated = (doc: Document, tokens: Map<string, SchemeColor>): boolean => {
+export const finishGenerated = (doc: Document, tokens: Map<string, SchemeColor>, inherit: string | null = null): boolean => {
     let changed = false
     for (const clr of elements(doc, "a:srgbClr")) {
-        const slot = tokens.get((clr.getAttribute("val") ?? "").toUpperCase())
+        const val = (clr.getAttribute("val") ?? "").toUpperCase()
+        const fill = clr.parentNode as Element | null
+        if (val === inherit && fill !== null && fill.nodeName === "a:solidFill") {
+            fill.parentNode?.removeChild(fill)
+            changed = true
+            continue
+        }
+        const slot = tokens.get(val)
         if (slot === undefined)
             continue
         const scheme = doc.createElementNS(NS_A, "a:schemeClr")
@@ -151,38 +166,49 @@ const chartType = (gen: GenRoot, type: ChartData["type"]): { type: unknown, extr
      carries its language (run, else paragraph, else the element's).
      Paragraph properties go on every run of the paragraph (PptxGenJS
      starts a new paragraph when they change), the bullet on its first
-     run only (PptxGenJS starts a new paragraph at every bulleted run).  */
+     run only (PptxGenJS starts a new paragraph at every bulleted run). A
+     vertical tab is a line break inside the paragraph: the run is split
+     there, the next piece breaks the line before it (`a:br`).  */
 const genTextRuns = (text: RichText, lang: string, colors: GenColors): unknown => {
-    if (typeof text === "string")
+    if (typeof text === "string" && !text.includes("\v"))
         return text
+    const paragraphs: Paragraph[] = typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text
     const out: Record<string, unknown>[] = []
-    for (const p of text as Paragraph[]) {
+    for (const p of paragraphs) {
         const runs = p.runs ?? [ paragraphRun(p) ]
         runs.forEach((r, i) => {
-            out.push({
-                text: r.text,
-                options: {
-                    breakLine: i === runs.length - 1,
-                    lang: r.lang ?? p.lang ?? lang,
-                    ...(r.bold !== undefined && { bold: r.bold }),
-                    ...(r.italic !== undefined && { italic: r.italic }),
-                    ...(r.underline === true && { underline: { style: "sng" } }),
-                    ...(r.strike === true && { strike: "sngStrike" }),
-                    /*  PptxGenJS writes baseline * 50 (1/1000 %)  */
-                    ...(r.superscript === true && { baseline: BASELINE.superscript / 50 }),
-                    ...(r.subscript === true && { baseline: BASELINE.subscript / 50 }),
-                    ...(r.size !== undefined && { fontSize: r.size }),
-                    ...(r.font !== undefined && { fontFace: r.font }),
-                    ...(r.color !== undefined && { color: colors.gen(r.color) }),
-                    ...(r.highlight !== undefined && { highlight: colors.gen(r.highlight) }),
-                    ...("hyperlink" in r && r.hyperlink !== undefined && { hyperlink: { url: r.hyperlink } }),
-                    ...(p.level !== undefined && { indentLevel: p.level }),
-                    ...(p.alignment !== undefined && { align: p.alignment }),
-                    ...(p.spaceBefore !== undefined && { paraSpaceBefore: p.spaceBefore }),
-                    ...(p.spaceAfter !== undefined && { paraSpaceAfter: p.spaceAfter }),
-                    ...(p.lineSpacing !== undefined && { lineSpacingMultiple: p.lineSpacing }),
-                    ...(i === 0 && p.bullet !== undefined && { bullet: p.bullet === "number" ? { type: "number" } : p.bullet })
-                }
+            const options = {
+                lang: r.lang ?? p.lang ?? lang,
+                ...(r.bold !== undefined && { bold: r.bold }),
+                ...(r.italic !== undefined && { italic: r.italic }),
+                ...(r.underline === true && { underline: { style: "sng" } }),
+                ...(r.strike === true && { strike: "sngStrike" }),
+                /*  PptxGenJS writes baseline * 50 (1/1000 %)  */
+                ...(r.superscript === true && { baseline: BASELINE.superscript / 50 }),
+                ...(r.subscript === true && { baseline: BASELINE.subscript / 50 }),
+                ...(r.size !== undefined && { fontSize: r.size }),
+                ...(r.font !== undefined && { fontFace: r.font }),
+                ...(r.color !== undefined && { color: colors.gen(r.color) }),
+                ...(r.highlight !== undefined && { highlight: colors.gen(r.highlight) }),
+                ...("hyperlink" in r && r.hyperlink !== undefined && { hyperlink: { url: r.hyperlink } }),
+                ...(p.level !== undefined && { indentLevel: p.level }),
+                ...(p.alignment !== undefined && { align: p.alignment }),
+                ...(p.spaceBefore !== undefined && { paraSpaceBefore: p.spaceBefore }),
+                ...(p.spaceAfter !== undefined && { paraSpaceAfter: p.spaceAfter }),
+                ...(p.lineSpacing !== undefined && { lineSpacingMultiple: p.lineSpacing })
+            }
+            const pieces = r.text.split("\v")
+            pieces.forEach((piece, k) => {
+                out.push({
+                    text: piece,
+                    options: {
+                        breakLine: i === runs.length - 1 && k === pieces.length - 1,
+                        ...options,
+                        ...(k > 0 && { softBreakBefore: true }),
+                        ...(i === 0 && k === 0 && p.bullet !== undefined
+                            && { bullet: p.bullet === "number" ? { type: "number" } : p.bullet })
+                    }
+                })
             })
         })
     }
@@ -242,7 +268,7 @@ const genTableRows = (el: Extract<ElementSpec, { type: "table" }>, lang: string,
             if (styled.textDirection !== undefined)
                 options.textDirection = TEXT_DIRECTION_VERT[styled.textDirection]
         }
-        return { text: styled !== null ? genTextRuns(styled.text, lang, colors) : String(cell), options }
+        return { text: genTextRuns(styled !== null ? styled.text : String(cell), lang, colors), options }
     }))
 }
 
@@ -417,6 +443,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
             slide.addText(genTextRuns(el.text, el.lang ?? lang, colors), {
                 ...frame,
                 lang: el.lang ?? lang,
+                color: colors.inherit,
                 valign: "top",
                 ...boxTextOptions(el),
                 ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill) } }),
@@ -428,6 +455,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
             const opts: Record<string, unknown> = {
                 ...frame,
                 border: { type: "solid", color: colors.gen(st?.border ?? "ACACAC"), pt: 0.5 },
+                color: colors.inherit,
                 valign: "middle"
             }
             if (st?.fontSize !== undefined)
@@ -489,7 +517,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
                 ...boxTextOptions(el),
                 ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill) } }),
                 ...(el.border !== undefined && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } }),
-                ...(el.fontColor !== undefined && { color: colors.gen(el.fontColor) }),
+                color: el.fontColor !== undefined ? colors.gen(el.fontColor) : colors.inherit,
                 ...(el.fontSize !== undefined && { fontSize: el.fontSize })
             })
             break

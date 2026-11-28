@@ -298,7 +298,10 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
   -- and pptc repaired it, naming what it removed; the deck is written,
   tell the user) and `W_INPUT_DEFECT` (the input deck carries repair
   triggers pptc cannot repair, e.g. a slide listed twice; they stay as
-  they were, only triggers pptc itself would add block the write). Content
+  they were, only triggers pptc itself would add block the write), and
+  `W_REPLACE_SKIPPED` (a `text.replace` found its text in a chart or
+  SmartArt of a targeted slide, which it leaves as it is -- the message
+  names the slide and part; tell the user). Content
   of a slide that would vanish, move or change although no op asked for it
   fails with `E_INTEGRITY`
 - `--min-font-pt N` -- readability floor for explicit font sizes (default
@@ -325,7 +328,9 @@ Set placeholder text. `--ph` takes a placeholder key (default `title`);
 
 #### `pptc note <deck> --slide SEL "speaker notes"`
 
-Set the slide's speaker notes.
+Set the slide's speaker notes. An existing notes page keeps everything but
+the text of its notes body; a new one is built from the notes master
+(slide image, notes body, slide number), as PowerPoint does.
 
 #### `pptc footer <deck> [--slide SEL] ["footer text"] [--number] [--date]`
 
@@ -406,18 +411,26 @@ Anatomy:
   its field -- nothing when the layout has none --, `false` removes it;
   omitted keeps it as it is), `section` (starts a PowerPoint section at
   the slide -- see [Sections](#sections)). Text accepts plain
-  strings (`\n` = new paragraph) or rich text (runs with
+  strings (`\n` = new paragraph, `\v` -- a vertical tab -- a line break
+  inside the paragraph, as PowerPoint writes it) or rich text (runs with
   bold/italic/color/size, bullet levels).
 - **Rich text**: a paragraph is `{ "text": ... }` or `{ "runs": [...] }`
   with `level`, `alignment`, `bullet` (`true`, `"number"` for 1. 2. 3.,
   `false`; in placeholders `true` keeps the placeholder's own bullet
-  style), `spaceBefore`/`spaceAfter` (pt) and `lineSpacing` (a multiple,
-  `1.5`); a run takes `bold`, `italic`, `underline`, `strike`,
+  style, in textboxes, shapes and table cells it writes a bullet `•` with
+  a hanging indent), `spaceBefore`/`spaceAfter` (pt) and `lineSpacing`
+  (a multiple, `1.5`); a run takes `bold`, `italic`, `underline`, `strike`,
   `superscript`, `subscript`, `size`, `font`, `color`, `highlight`,
   `hyperlink` (see *Links*) and `lang` (paragraph-level character fields
   apply to a paragraph without runs). The same vocabulary works in
-  `slide.fill`, `el.set` and `el.add`. There is no shrink-to-fit: text that
-  overflows is shortened or split (`W_TEXT_OVERFLOW`).
+  `slide.fill`, `el.set` and `el.add`. A `\v` in a text is a line break
+  inside its paragraph (`a:br`); `state` reads a line break back as `\v`.
+  Characters a PowerPoint file cannot store (control characters but tab,
+  line feed and carriage return; `\v` outside text) fail with `E_SCHEMA`
+  naming the field. Text without a `color` takes the template's color
+  (`el.add` included). There is no shrink-to-fit: text that overflows is
+  shortened or split (`W_TEXT_OVERFLOW`); replaced text drops the shrink
+  scale PowerPoint had computed for the old one.
 - **Links**: `hyperlink` -- on a run, and on a `textbox`, `shape` or
   `image` as the click target of the whole element (`el.add`, `el.set`)
   -- takes a URL or a slide link `slide:SEL`: `slide:$ref`,
@@ -461,7 +474,7 @@ Recommended agent loop:
 | `text.replace` | find and replace plain text in the whole deck or on one `slide` -- see below |
 | `section.rename` / `section.rm` | rename a section (`from`, `to`) / remove one (`name`; its slides join the previous section) -- see below |
 | `img.prompts` | overlay picture placeholders with visible image-prompt boxes (removable via `el.rm`) |
-| `meta.props` | document properties: core fields (title, author, subject, keywords, category, comments) and/or arbitrary `custom` name/value pairs stored in the `.pptx` (read back by `state` -- the deck's self-describing memory) |
+| `meta.props` | document properties: core fields (title, author, subject, keywords, category, comments) and/or arbitrary `custom` name/value pairs stored in the `.pptx` (read back by `state` -- the deck's self-describing memory); only the named custom properties change (as text), every other one stays as it is, whatever its type |
 
 Run `pptc schema <op>` for the authoritative JSON Schema with all fields, or
 `pptc schema document` for the whole ops document.
@@ -490,7 +503,9 @@ except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
   `lang`. A cell (also a header cell) is a plain value or `{text, bold,
   fill, color, align, valign, colspan, rowspan, textDirection}` with rich
   `text`; a cell covered by a `colspan`/`rowspan` is left out of its row,
-  as in HTML. Rows that do not fill the grid, and `colWidths`/`colAlign`
+  as in HTML. The header row is bold, white on dark gray (`333333`) unless
+  `headerFg`/`headerBg` say otherwise; body text without a `color` takes
+  the template's. Rows that do not fill the grid, and `colWidths`/`colAlign`
   of the wrong length, fail with `E_SCHEMA`.
 - **`chart`**: `data: {type, categories, series, title, colors, legend,
   fontSize, labels, axes, stacked, smooth, holeSize}`. `type` is `bar`,
@@ -529,7 +544,7 @@ field; each is checked against the element's type (`E_SCHEMA` otherwise):
 
 | Field | Elements | Effect |
 |---|---|---|
-| `text` | placeholder, textbox, shape | new rich text; a paragraph or run that sets no format keeps the first paragraph's and run's format (alignment, bullets, font, size, color, language) |
+| `text` | placeholder, textbox, shape | new rich text in the first paragraph's and run's format (alignment, bullets, font, size, color, language): a paragraph or run that sets fields of its own changes only those |
 | `frame` | every element (rotation: not table/chart) | `{x, y, w, h, rotation}` -- the given keys move, resize or rotate it, the others stay; a placeholder that inherits its frame gets the layout's frame written into the slide; a group keeps its children's coordinates (they scale with it); a table's columns and rows scale to the new size |
 | `fill` | placeholder, textbox, shape | solid fill |
 | `border`, `borderPt` | placeholder, textbox, shape, picture, connector | outline color and width in pt |
@@ -557,7 +572,9 @@ one in the deck -- the skill does it only on the user's explicit request.
 "matchCase": false, "wholeWord": false, "notes": false }` replaces plain
 text in every shape, placeholder and table cell of the deck -- or of
 `slide` only --, in the speaker notes with `notes: true`, never in fields
-(slide number, date). A match may span runs (text split by formatting):
+(slide number, date) and never in charts or SmartArt: a targeted slide
+whose chart or SmartArt holds the text raises `W_REPLACE_SKIPPED`. A match
+may span runs (text split by formatting):
 the first touched run takes the replacement and keeps its format. The op
 sees the deck after every earlier op of the document (text set or
 elements added before it are replaced, later ones are not), and slide

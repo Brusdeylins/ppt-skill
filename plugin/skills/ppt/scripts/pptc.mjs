@@ -16355,7 +16355,9 @@ Options:
                     deck carried PowerPoint repair triggers, which pptc
                     repaired -- tell the user), W_INPUT_DEFECT (the input
                     deck carries repair triggers pptc cannot repair; they
-                    stay as they were -- tell the user)
+                    stay as they were -- tell the user), W_REPLACE_SKIPPED
+                    (text.replace found its text in a chart or SmartArt,
+                    which it leaves as it is -- tell the user)
   --min-font-pt N   readability floor for explicit font sizes (default
                     8); runs/elements below N trigger W_FONT_TOO_SMALL.
                     0 disables the check. Footer/slide-number/date
@@ -16384,7 +16386,9 @@ Example:
   pptc text deck.pptx --slide title:Agenda --ph body "Fourth point" --append`,
   "note": `pptc note <deck> --slide SEL "speaker notes"
 
-Set a slide's speaker notes (compiles to one slide.fill op).
+Set a slide's speaker notes (compiles to one slide.fill op). An existing
+notes page keeps everything but its notes text; a new one is built from
+the notes master (slide image, notes body, slide number).
 Options: --slide SEL, --rev R, --strict, --dry-run (as in 'apply').
 
 Example:
@@ -16527,8 +16531,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
-                 "text" (placeholder/textbox/shape; text without format
-                   keeps the first paragraph's and run's format),
+                 "text" (placeholder/textbox/shape; in the first
+                   paragraph's and run's format, merged with the fields
+                   a paragraph or run sets),
                  "frame": { "x", "y", "w", "h", "rotation" } (given keys
                    change; not rotation on table/chart),
                  "fill", "fontColor" (placeholder/textbox/shape),
@@ -16556,8 +16561,10 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
   text.replace find/replace plain text in shapes, placeholders and table
                cells of the deck (or of "slide"), notes only on request,
-               fields never; a match may span runs (the first keeps its
-               format); sees every earlier op of the document
+               fields, charts and SmartArt never (W_REPLACE_SKIPPED when
+               a targeted slide's chart or SmartArt holds the text); a
+               match may span runs (the first keeps its format); sees
+               every earlier op of the document
                { "op": "text.replace", "find": "2025", "replace": "2026",
                  "slide": SEL, "matchCase": false, "wholeWord": false,
                  "notes": false }
@@ -16573,11 +16580,14 @@ without sections the slides before it form "Default Section" (as in
 PowerPoint). Names are unique. Added, copied and moved slides join the
 section of the slide before them. 'state' shows "section" per slide.
 
-Text values accept plain strings (\\n = new paragraph) or rich text:
+Text values accept plain strings (\\n = new paragraph, \\v = line break
+inside the paragraph; state reads one back as \\v) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
-"number"|false, "spaceBefore"/"spaceAfter" (pt), "lineSpacing" (1.5) },
-runs { "text", "bold", "italic", "underline", "strike", "superscript",
-"subscript", "size", "font", "color", "highlight", "hyperlink", "lang" }.
+"number"|false (true: the placeholder's own bullet, elsewhere a bullet
+character with hanging indent), "spaceBefore"/"spaceAfter" (pt),
+"lineSpacing" (1.5) }, runs { "text", "bold", "italic", "underline",
+"strike", "superscript", "subscript", "size", "font", "color",
+"highlight", "hyperlink", "lang" }.
 Links: "hyperlink" takes a URL or a slide link "slide:SEL" -- slide:$ref,
 slide:id:256, slide:title:Agenda, slide:index:2 -- resolved after the
 whole document (slides added later count, moved ones follow; a target
@@ -16585,6 +16595,9 @@ missing then fails with E_ADDR_NOTFOUND). A later removal of the target
 drops the link; copies keep it; 'state --level full' reads slide:id:N.
 Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
 bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
+Text without "color" takes the template's (el.add table headers: white).
+Control characters but tab, line feed and carriage return (and \\v
+outside text) fail with E_SCHEMA naming the field.
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
 Picture fills crop to the placeholder by default ("fit": "crop");
 "contain" shows the whole image, "stretch" distorts it.
@@ -26014,8 +26027,8 @@ var error20 = () => {
       case "invalid_union":
         return "\u05E7\u05DC\u05D8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF";
       case "invalid_element": {
-        const place = withDefinite(issue2.origin ?? "array");
-        return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF \u05D1${place}`;
+        const place2 = withDefinite(issue2.origin ?? "array");
+        return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF \u05D1${place2}`;
       }
       default:
         return `\u05E7\u05DC\u05D8 \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF`;
@@ -37852,6 +37865,32 @@ var SCHEME_COLORS = [
   "lt2"
 ];
 var isSchemeColor = (color) => SCHEME_COLORS.includes(color);
+var xmlIllegalAt = (s, lineBreaks) => {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 32) {
+      if (c !== 9 && c !== 10 && c !== 13 && !(lineBreaks && c === 11))
+        return i;
+    } else if (c >= 55296 && c <= 56319) {
+      const next = s.charCodeAt(i + 1);
+      if (!(next >= 56320 && next <= 57343))
+        return i;
+      i++;
+    } else if (c >= 56320 && c <= 57343 || c === 65534 || c === 65535)
+      return i;
+  }
+  return -1;
+};
+var unicodeName = (code) => `U+${code.toString(16).toUpperCase().padStart(4, "0")}`;
+var xmlChars = (lineBreaks) => (v, ctx) => {
+  const at = xmlIllegalAt(v, lineBreaks);
+  if (at < 0)
+    return;
+  const code = v.charCodeAt(at);
+  ctx.addIssue({ code: "custom", message: code === 11 ? `contains a vertical tab (${unicodeName(code)}) at position ${at}: a line break is only allowed in text` : `contains the character ${unicodeName(code)} at position ${at}, which a PowerPoint file (XML 1.0) cannot store` });
+};
+var XmlStringSchema = external_exports.string().superRefine(xmlChars(false));
+var TextStringSchema = external_exports.string().superRefine(xmlChars(true));
 var ColorSchema = external_exports.string().regex(
   new RegExp(`^(#?[0-9a-fA-F]{6}|${SCHEME_COLORS.join("|")})$`),
   `expected a 6-digit hex color like '#1F4E79' or a theme color (${SCHEME_COLORS.join(", ")})`
@@ -37882,7 +37921,7 @@ var UrlSchema = external_exports.string().url();
 var HyperlinkSchema = external_exports.string().describe("a URL (https://...) or a slide link: slide:$ref, slide:id:256, slide:title:Agenda, slide:index:2").superRefine((v, ctx) => {
   if (v.startsWith("slide:") ? !SLIDE_LINK.test(v) : !UrlSchema.safeParse(v).success)
     ctx.addIssue({ code: "custom", message: "expected a URL or a slide link like 'slide:$ref', 'slide:id:256', 'slide:title:Agenda' or 'slide:index:2'" });
-});
+}).superRefine((v, ctx) => xmlChars(v.startsWith("slide:"))(v, ctx));
 var fontProps = {
   bold: external_exports.boolean().optional(),
   italic: external_exports.boolean().optional(),
@@ -37891,7 +37930,7 @@ var fontProps = {
   superscript: external_exports.boolean().optional(),
   subscript: external_exports.boolean().optional(),
   size: external_exports.number().positive().optional(),
-  font: external_exports.string().min(1).optional(),
+  font: XmlStringSchema.min(1).optional(),
   color: ColorSchema.optional(),
   /**  text highlight (marker) color  */
   highlight: ColorSchema.optional(),
@@ -37900,12 +37939,12 @@ var fontProps = {
 };
 var oneBaseline = (f) => f.superscript !== true || f.subscript !== true;
 var RunSchema = external_exports.object({
-  text: external_exports.string(),
+  text: TextStringSchema,
   hyperlink: HyperlinkSchema.optional(),
   ...fontProps
 }).strict().refine(oneBaseline, "a run is either 'superscript' or 'subscript' (not both)");
 var ParagraphSchema = external_exports.object({
-  text: external_exports.string().optional(),
+  text: TextStringSchema.optional(),
   runs: external_exports.array(RunSchema).optional(),
   level: external_exports.number().int().min(0).max(8).optional(),
   alignment: external_exports.enum(["left", "center", "right", "justify"]).optional(),
@@ -37922,7 +37961,7 @@ var ParagraphSchema = external_exports.object({
   (p) => p.text !== void 0 !== (p.runs !== void 0),
   "a paragraph needs either 'text' or 'runs' (not both)"
 ).refine(oneBaseline, "a paragraph is either 'superscript' or 'subscript' (not both)");
-var RichTextSchema = external_exports.union([external_exports.string(), external_exports.array(ParagraphSchema).min(1)]);
+var RichTextSchema = external_exports.union([TextStringSchema, external_exports.array(ParagraphSchema).min(1)]);
 var CellAlignSchema = external_exports.enum(["left", "center", "right"]);
 var TableCellSchema = external_exports.object({
   text: RichTextSchema,
@@ -37935,9 +37974,9 @@ var TableCellSchema = external_exports.object({
   rowspan: external_exports.number().int().min(1).optional(),
   textDirection: TextDirectionSchema.optional()
 }).strict();
-var CellSchema = external_exports.union([external_exports.string(), external_exports.number(), external_exports.boolean(), TableCellSchema]);
+var CellSchema = external_exports.union([TextStringSchema, external_exports.number(), external_exports.boolean(), TableCellSchema]);
 var TableSchema = external_exports.object({
-  headers: external_exports.array(external_exports.union([external_exports.string(), TableCellSchema])).optional(),
+  headers: external_exports.array(external_exports.union([TextStringSchema, TableCellSchema])).optional(),
   rows: external_exports.array(external_exports.array(CellSchema)).min(1),
   style: external_exports.object({
     headerBg: ColorSchema.optional(),
@@ -37978,11 +38017,11 @@ var LabelPositionSchema = external_exports.enum([
   "below"
 ]);
 var AxisSchema = external_exports.object({
-  title: external_exports.string().optional(),
+  title: XmlStringSchema.optional(),
   min: external_exports.number().optional(),
   max: external_exports.number().optional(),
   /**  number format code, e.g. "0%" or "#,##0"  */
-  format: external_exports.string().min(1).optional()
+  format: XmlStringSchema.min(1).optional()
 }).strict();
 var LABEL_POSITIONS = {
   clustered: ["center", "insideEnd", "insideBase", "outsideEnd"],
@@ -38001,15 +38040,15 @@ var labelFamily = (type, stacked) => {
 };
 var ChartSchema = external_exports.object({
   type: ChartTypeSchema,
-  categories: external_exports.array(external_exports.union([external_exports.string(), external_exports.number()])).optional(),
+  categories: external_exports.array(external_exports.union([XmlStringSchema, external_exports.number()])).optional(),
   series: external_exports.array(external_exports.object({
-    name: external_exports.string(),
+    name: XmlStringSchema,
     values: external_exports.array(external_exports.number()).optional(),
     x: external_exports.array(external_exports.number()).optional(),
     y: external_exports.array(external_exports.number()).optional(),
     size: external_exports.array(external_exports.number()).optional()
   }).strict()).min(1),
-  title: external_exports.string().optional(),
+  title: XmlStringSchema.optional(),
   colors: external_exports.array(ColorSchema).optional(),
   /**  show the legend (`true`: at the bottom) or place it  */
   legend: external_exports.union([external_exports.boolean(), external_exports.enum(["top", "bottom", "left", "right"])]).optional(),
@@ -38019,7 +38058,7 @@ var ChartSchema = external_exports.object({
   labels: external_exports.object({
     value: external_exports.boolean().optional(),
     percent: external_exports.boolean().optional(),
-    format: external_exports.string().min(1).optional(),
+    format: XmlStringSchema.min(1).optional(),
     position: LabelPositionSchema.optional()
   }).strict().optional(),
   /**  x = category axis (the x value axis of scatter/bubble), y = value axis  */
@@ -38096,8 +38135,8 @@ var boxTextProps = {
   textDirection: TextDirectionSchema.optional()
 };
 var describedProps = {
-  altText: external_exports.string().optional(),
-  title: external_exports.string().optional()
+  altText: XmlStringSchema.optional(),
+  title: XmlStringSchema.optional()
 };
 var ElementSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
@@ -38113,7 +38152,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  click target of the whole box (URL or slide link)  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
-    name: external_exports.string().optional()
+    name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("table"),
@@ -38129,14 +38168,14 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  text language of every cell  */
     lang: LangSchema.optional(),
     ...describedProps,
-    name: external_exports.string().optional()
+    name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("chart"),
     frame: FrameSchema,
     data: ChartSchema,
     ...describedProps,
-    name: external_exports.string().optional()
+    name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("shape"),
@@ -38155,7 +38194,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
          back button  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
-    name: external_exports.string().optional()
+    name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("image"),
@@ -38168,7 +38207,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  click target of the picture (URL or slide link)  */
     hyperlink: HyperlinkSchema.optional(),
     ...describedProps,
-    name: external_exports.string().optional()
+    name: XmlStringSchema.optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("connector"),
@@ -38181,7 +38220,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     startArrow: ArrowSchema.optional(),
     endArrow: ArrowSchema.optional(),
     ...describedProps,
-    name: external_exports.string().optional()
+    name: XmlStringSchema.optional()
   }).strict()
 ]);
 
@@ -38209,11 +38248,11 @@ var PlaceholderFillSchema = external_exports.object({
   (f) => f.text !== void 0 || f.image !== void 0,
   "a placeholder fill needs 'text' or 'image'"
 ).refine((f) => f.fit === void 0 || f.image !== void 0, "'fit' needs an 'image'");
-var SectionNameSchema = external_exports.string().min(1).max(255);
+var SectionNameSchema = XmlStringSchema.min(1).max(255);
 var fillProps = {
   placeholders: external_exports.record(PlaceholderKeySchema, PlaceholderFillSchema).optional(),
-  notes: external_exports.string().optional(),
-  footer: external_exports.string().optional(),
+  notes: TextStringSchema.optional(),
+  footer: TextStringSchema.optional(),
   background: external_exports.object({ color: ColorSchema }).strict().optional(),
   /**  hide ("Hide Slide", `show="0"`) or show the slide; omitted leaves the
        current visibility untouched (kept slides keep their hidden state)  */
@@ -38302,8 +38341,8 @@ var ElSetSchema = external_exports.object({
   fontColor: ColorSchema.optional(),
   /**  alt text (`cNvPr@descr`) and title (`cNvPr@title`) of any element;
        an empty string removes them  */
-  altText: external_exports.string().optional(),
-  title: external_exports.string().optional(),
+  altText: XmlStringSchema.optional(),
+  title: XmlStringSchema.optional(),
   /**  click target of the whole element (placeholders, textboxes,
        shapes, pictures): a URL or a slide link; an empty string removes it  */
   hyperlink: external_exports.union([HyperlinkSchema, external_exports.literal("")]).optional(),
@@ -38333,8 +38372,8 @@ var ElSetSchema = external_exports.object({
 );
 var TextReplaceSchema = external_exports.object({
   op: external_exports.literal("text.replace"),
-  find: external_exports.string().min(1),
-  replace: external_exports.string(),
+  find: XmlStringSchema.min(1),
+  replace: XmlStringSchema,
   /**  only this slide; the whole deck when omitted  */
   slide: SlideSelectorSchema.optional(),
   /**  match upper/lower case exactly (default false)  */
@@ -38357,20 +38396,20 @@ var ImgPromptsSchema = external_exports.object({
   op: external_exports.literal("img.prompts"),
   slide: SlideSelectorSchema,
   /**  prompt text per picture-placeholder idx, or one prompt for all  */
-  prompts: external_exports.union([external_exports.string(), external_exports.record(external_exports.string().regex(/^\d+$/), external_exports.string())])
+  prompts: external_exports.union([TextStringSchema, external_exports.record(external_exports.string().regex(/^\d+$/), TextStringSchema)])
 }).strict();
 var MetaPropsSchema = external_exports.object({
   op: external_exports.literal("meta.props"),
   set: external_exports.object({
-    title: external_exports.string().optional(),
-    author: external_exports.string().optional(),
-    subject: external_exports.string().optional(),
-    keywords: external_exports.string().optional(),
-    category: external_exports.string().optional(),
-    comments: external_exports.string().optional(),
+    title: XmlStringSchema.optional(),
+    author: XmlStringSchema.optional(),
+    subject: XmlStringSchema.optional(),
+    keywords: XmlStringSchema.optional(),
+    category: XmlStringSchema.optional(),
+    comments: XmlStringSchema.optional(),
     /**  arbitrary custom document properties (name→value); a value
          may be empty to clear the visible content of a property  */
-    custom: external_exports.record(external_exports.string().min(1), external_exports.string()).optional()
+    custom: external_exports.record(XmlStringSchema.min(1), XmlStringSchema).optional()
   }).strict()
 }).strict();
 var OpSchema = external_exports.discriminatedUnion("op", [
@@ -38471,12 +38510,39 @@ var NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main";
 var NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main";
 var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 var NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
-var parseXml = (xml, strict = false) => new import_xmldom.DOMParser({
-  onError: (level, msg) => {
-    if (level === "fatalError" || strict && !/replacement character/i.test(msg))
-      throw new Error(msg);
+var xmlChar = (cp) => cp === 9 || cp === 10 || cp === 13 || cp >= 32 && cp <= 55295 || cp >= 57344 && cp <= 65533 || cp >= 65536 && cp <= 1114111;
+var illegalXmlChar = (xml) => {
+  const at = xmlIllegalAt(xml, false);
+  if (at >= 0)
+    return `character ${unicodeName(xml.charCodeAt(at))} not allowed in XML (offset ${at})`;
+  for (const ref of xml.matchAll(/&#(x[0-9A-Fa-f]+|[0-9]+);/g)) {
+    const body = ref[1];
+    const cp = body.startsWith("x") ? parseInt(body.slice(1), 16) : parseInt(body, 10);
+    if (!xmlChar(cp))
+      return `character reference ${ref[0]} (${unicodeName(cp)}) not allowed in XML (offset ${ref.index})`;
   }
-}).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
+  return null;
+};
+var xmlStorable = (s) => {
+  let out = "";
+  let from = 0;
+  for (let at = xmlIllegalAt(s, false); at >= 0; at = xmlIllegalAt(s.slice(from), false)) {
+    out += s.slice(from, from + at) + (s.charCodeAt(from + at) === 11 ? " " : "");
+    from += at + 1;
+  }
+  return out + s.slice(from);
+};
+var parseXml = (xml, strict = false) => {
+  const illegal = strict ? illegalXmlChar(xml) : null;
+  if (illegal !== null)
+    throw new Error(illegal);
+  return new import_xmldom.DOMParser({
+    onError: (level, msg) => {
+      if (level === "fatalError" || strict && !/replacement character/i.test(msg))
+        throw new Error(msg);
+    }
+  }).parseFromString(xml.replace(/^\uFEFF/, ""), "application/xml");
+};
 var decodeXml = (bytes) => {
   const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (buf[0] === 255 && buf[1] === 254)
@@ -38523,14 +38589,23 @@ var elements = (scope, qname) => {
   return out;
 };
 var firstElement = (scope, qname) => scope.getElementsByTagName(qname).item(0);
-var drawingText = (scope) => {
-  const parts = [];
-  for (const p of elements(scope, "a:p")) {
-    const runs = elements(p, "a:t").map((t) => t.textContent ?? "");
-    parts.push(runs.join(""));
-  }
-  return parts.join("\n");
+var paragraphText = (p) => {
+  let text = "";
+  const walk = (el) => {
+    for (let n = el.firstChild; n !== null; n = n.nextSibling)
+      if (n.nodeType !== 1)
+        continue;
+      else if (n.nodeName === "a:t")
+        text += n.textContent ?? "";
+      else if (n.nodeName === "a:br")
+        text += "\v";
+      else
+        walk(n);
+  };
+  walk(p);
+  return text;
 };
+var drawingText = (scope) => elements(scope, "a:p").map(paragraphText).join("\n");
 var colorElement = (doc, color) => {
   const el = doc.createElementNS(NS_A, isSchemeColor(color) ? "a:schemeClr" : "a:srgbClr");
   el.setAttribute("val", color);
@@ -39334,6 +39409,32 @@ var runStyle = (r, colors, linkOf) => {
     out.highlight = highlight;
   return out;
 };
+var paragraphRuns = (p, colors, linkOf) => {
+  const runs = [];
+  let pending = "";
+  const walk = (el) => {
+    for (let n = el.firstChild; n !== null; n = n.nextSibling)
+      if (n.nodeType !== 1)
+        continue;
+      else if (n.nodeName === "a:r") {
+        const run = runStyle(n, colors, linkOf);
+        run.text = pending + run.text;
+        pending = "";
+        runs.push(run);
+      } else if (n.nodeName === "a:br") {
+        const last = runs[runs.length - 1];
+        if (last !== void 0)
+          last.text += "\v";
+        else
+          pending += "\v";
+      } else
+        walk(n);
+  };
+  walk(p);
+  if (pending !== "")
+    runs.push({ text: pending });
+  return runs;
+};
 var spacingOf = (pPr, tag2, unit) => {
   const val = directChild(directChild(pPr, [tag2]), [unit])?.getAttribute("val");
   if (val === null || val === void 0 || val === "" || !Number.isFinite(Number(val)))
@@ -39344,7 +39445,7 @@ var richParagraphs = (txBody, colors, linkOf) => {
   const paras = [];
   let formatted = false;
   for (const p of elements(txBody, "a:p")) {
-    const runs = elements(p, "a:r").map((r) => runStyle(r, colors, linkOf));
+    const runs = paragraphRuns(p, colors, linkOf);
     if (runs.some((rn) => rn.font !== void 0 || rn.bold === true || rn.italic === true || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== void 0 || rn.hyperlink !== void 0))
       formatted = true;
     const para = { runs };
@@ -40020,7 +40121,7 @@ var syncAppProperties = async (zip, slides) => {
   let seen = 0;
   const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) => seen++ === at ? `<vt:i4>${n}</vt:i4>` : m);
   const entries = [...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g)].map((m) => m[1]);
-  const kept = [...entries.slice(0, leading), ...titles.map((t) => xmlEscape(t)), ...entries.slice(leading + old)];
+  const kept = [...entries.slice(0, leading), ...titles.map((t) => xmlEscape(xmlStorable(t))), ...entries.slice(leading + old)];
   const lpstr = kept.map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("");
   xml = xml.replace(/<Slides>\d+<\/Slides>/, () => `<Slides>${n}</Slides>`).replace(hp[0], () => `<HeadingPairs>${newHp}</HeadingPairs>`).replace(tp[0], () => `<TitlesOfParts><vt:vector size="${kept.length}" baseType="lpstr">${lpstr}</vt:vector></TitlesOfParts>`);
   zip.file(part, utf8Declared(xml));
@@ -40061,24 +40162,31 @@ var NS_CUSTOM = "http://schemas.openxmlformats.org/officeDocument/2006/custom-pr
 var NS_VT = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
 var CUSTOM_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
 var setCustomProps = async (zip, patch) => {
-  const props = /* @__PURE__ */ new Map();
   const existing = await optText(zip, CUSTOM_PROPS_PART);
-  if (existing !== null)
-    for (const p of elements(parseXml(existing), "property")) {
-      const vt = firstElement(p, "vt:lpwstr");
-      props.set(p.getAttribute("name") ?? "", vt?.textContent ?? "");
+  const doc = parseXml(existing ?? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r
+<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}"></Properties>`);
+  const root = doc.documentElement;
+  if (root === null)
+    return;
+  const props = elements(doc, "property");
+  let pid = Math.max(1, ...props.map((p) => Number(p.getAttribute("pid") ?? "0")).filter(Number.isFinite)) + 1;
+  for (const [name, value] of Object.entries(patch)) {
+    let prop = props.find((p) => p.getAttribute("name") === name);
+    if (prop === void 0) {
+      prop = doc.createElementNS(root.namespaceURI, "property");
+      prop.setAttribute("fmtid", CUSTOM_FMTID);
+      prop.setAttribute("pid", String(pid++));
+      prop.setAttribute("name", name);
+      root.appendChild(prop);
+      props.push(prop);
     }
-  for (const [k, v] of Object.entries(patch))
-    props.set(k, v);
-  let pid = 2;
-  let body = "";
-  for (const [name, value] of props)
-    body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name, true)}"><vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`;
-  zip.file(
-    CUSTOM_PROPS_PART,
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r
-<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}">${body}</Properties>`
-  );
+    while (prop.firstChild !== null)
+      prop.removeChild(prop.firstChild);
+    const vt = doc.createElementNS(NS_VT, "vt:lpwstr");
+    vt.appendChild(doc.createTextNode(value));
+    prop.appendChild(vt);
+  }
+  zip.file(CUSTOM_PROPS_PART, serializeXml(doc));
   const ct = parseXml(await partText(zip, "[Content_Types].xml"));
   if (!elements(ct, "Override").some((o) => (o.getAttribute("PartName") ?? "").toLowerCase() === `/${CUSTOM_PROPS_PART}`.toLowerCase())) {
     const override = ct.createElementNS(ct.documentElement?.namespaceURI ?? null, "Override");
@@ -40948,44 +41056,104 @@ var setClickLink = (shape, target) => {
 };
 var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
 var BASELINE = { superscript: 3e4, subscript: -25e3 };
-var buildRunProps = (doc, run, lang) => {
-  const rPr = doc.createElementNS(NS_A, "a:rPr");
-  rPr.setAttribute("lang", run.lang ?? lang);
+var RPR_ORDER = [
+  "a:ln",
+  "a:noFill",
+  "a:solidFill",
+  "a:gradFill",
+  "a:blipFill",
+  "a:pattFill",
+  "a:grpFill",
+  "a:effectLst",
+  "a:effectDag",
+  "a:highlight",
+  "a:uLnTx",
+  "a:uLn",
+  "a:uFillTx",
+  "a:uFill",
+  "a:latin",
+  "a:ea",
+  "a:cs",
+  "a:sym",
+  "a:hlinkClick",
+  "a:hlinkMouseOver",
+  "a:rtl",
+  "a:extLst"
+];
+var PPR_ORDER = [
+  "a:lnSpc",
+  "a:spcBef",
+  "a:spcAft",
+  "a:buClrTx",
+  "a:buClr",
+  "a:buSzTx",
+  "a:buSzPct",
+  "a:buSzPts",
+  "a:buFontTx",
+  "a:buFont",
+  "a:buNone",
+  "a:buAutoNum",
+  "a:buChar",
+  "a:buBlip",
+  "a:tabLst",
+  "a:defRPr",
+  "a:extLst"
+];
+var RUN_FILLS = ["a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill", "a:grpFill"];
+var BULLETS = ["a:buNone", "a:buAutoNum", "a:buChar", "a:buBlip"];
+var BULLET_INDENT = 342900;
+var place = (parent, child, order, replaces) => {
+  for (const old of children(parent, replaces))
+    parent.removeChild(old);
+  const rank = order.indexOf(child.nodeName);
+  parent.insertBefore(child, children(parent, order.slice(rank + 1))[0] ?? null);
+};
+var applyRunFormat = (doc, rPr, run, merge2) => {
   if (run.bold !== void 0)
     rPr.setAttribute("b", run.bold ? "1" : "0");
   if (run.italic !== void 0)
     rPr.setAttribute("i", run.italic ? "1" : "0");
   if (run.underline === true)
     rPr.setAttribute("u", "sng");
+  else if (run.underline === false && merge2)
+    rPr.setAttribute("u", "none");
   if (run.strike !== void 0)
     rPr.setAttribute("strike", run.strike ? "sngStrike" : "noStrike");
+  const baseline = Number(rPr.getAttribute("baseline") ?? "0");
   if (run.superscript === true)
     rPr.setAttribute("baseline", String(BASELINE.superscript));
   else if (run.subscript === true)
     rPr.setAttribute("baseline", String(BASELINE.subscript));
+  else if (run.superscript === false && baseline > 0 || run.subscript === false && baseline < 0)
+    rPr.removeAttribute("baseline");
   if (run.size !== void 0)
     rPr.setAttribute("sz", String(Math.round(run.size * 100)));
   if (run.color !== void 0) {
     const fill = doc.createElementNS(NS_A, "a:solidFill");
     fill.appendChild(colorElement(doc, run.color));
-    rPr.appendChild(fill);
+    place(rPr, fill, RPR_ORDER, RUN_FILLS);
   }
   if (run.highlight !== void 0) {
     const highlight = doc.createElementNS(NS_A, "a:highlight");
     highlight.appendChild(colorElement(doc, run.highlight));
-    rPr.appendChild(highlight);
+    place(rPr, highlight, RPR_ORDER, ["a:highlight"]);
   }
   if (run.font !== void 0) {
     const latin = doc.createElementNS(NS_A, "a:latin");
     latin.setAttribute("typeface", run.font);
-    rPr.appendChild(latin);
+    place(rPr, latin, RPR_ORDER, ["a:latin"]);
   }
   if (run.hyperlink !== void 0) {
     const hlink = doc.createElementNS(NS_A, "a:hlinkClick");
     hlink.setAttribute(HLINK_ATTR, run.hyperlink);
-    rPr.appendChild(hlink);
+    place(rPr, hlink, RPR_ORDER, ["a:hlinkClick"]);
   }
   return rPr;
+};
+var buildRunProps = (doc, run, lang) => {
+  const rPr = doc.createElementNS(NS_A, "a:rPr");
+  rPr.setAttribute("lang", run.lang ?? lang);
+  return applyRunFormat(doc, rPr, run, false);
 };
 var runFormatted = (run) => [
   run.bold,
@@ -41007,38 +41175,37 @@ var keptRunProps = (doc, kept, lang, deckLang2) => {
     if (attr !== null && attr.name !== "err")
       rPr.setAttribute(attr.name, attr.value);
   }
-  for (const child of children(kept, [
-    "a:ln",
-    "a:noFill",
-    "a:solidFill",
-    "a:gradFill",
-    "a:blipFill",
-    "a:pattFill",
-    "a:grpFill",
-    "a:effectLst",
-    "a:effectDag",
-    "a:highlight",
-    "a:uLnTx",
-    "a:uLn",
-    "a:uFillTx",
-    "a:uFill",
-    "a:latin",
-    "a:ea",
-    "a:cs",
-    "a:sym",
-    "a:rtl"
-  ]))
+  for (const child of children(kept, RPR_ORDER.filter((name) => !["a:hlinkClick", "a:hlinkMouseOver", "a:extLst"].includes(name))))
     rPr.appendChild(doc.importNode(child, true));
   rPr.setAttribute("lang", lang ?? kept.getAttribute("lang") ?? deckLang2);
   return rPr;
 };
+var breakProps = (rPr) => {
+  const props = rPr.cloneNode(true);
+  for (const link of children(props, ["a:hlinkClick", "a:hlinkMouseOver"]))
+    props.removeChild(link);
+  return props;
+};
 var buildRun = (doc, run, lang, kept = null, own2) => {
-  const r = doc.createElementNS(NS_A, "a:r");
-  r.appendChild(kept?.rPr !== null && kept?.rPr !== void 0 && !runFormatted(run) ? keptRunProps(doc, kept.rPr, run.lang ?? own2, lang) : buildRunProps(doc, run, run.lang ?? own2 ?? lang));
-  const t = doc.createElementNS(NS_A, "a:t");
-  t.appendChild(doc.createTextNode(run.text));
-  r.appendChild(t);
-  return r;
+  const rPr = kept?.rPr === null || kept?.rPr === void 0 ? buildRunProps(doc, run, run.lang ?? own2 ?? lang) : runFormatted(run) ? applyRunFormat(doc, keptRunProps(doc, kept.rPr, run.lang ?? own2, lang), run, true) : keptRunProps(doc, kept.rPr, run.lang ?? own2, lang);
+  const pieces = run.text.split("\v");
+  const out = [];
+  pieces.forEach((piece, i) => {
+    if (i > 0) {
+      const br = doc.createElementNS(NS_A, "a:br");
+      br.appendChild(breakProps(rPr));
+      out.push(br);
+    }
+    if (piece === "" && pieces.length > 1)
+      return;
+    const r = doc.createElementNS(NS_A, "a:r");
+    r.appendChild(rPr.cloneNode(true));
+    const t = doc.createElementNS(NS_A, "a:t");
+    t.appendChild(doc.createTextNode(piece));
+    r.appendChild(t);
+    out.push(r);
+  });
+  return out;
 };
 var spacing = (doc, tag2, unit, val) => {
   const el = doc.createElementNS(NS_A, tag2);
@@ -41060,54 +41227,81 @@ var paragraphRun = (p) => ({
   ...p.color !== void 0 && { color: p.color },
   ...p.highlight !== void 0 && { highlight: p.highlight }
 });
-var buildParagraph = (doc, p, lang, kept = null) => {
+var applyBullet = (doc, pPr, bullet, styleBullets) => {
+  if (bullet === false) {
+    place(pPr, doc.createElementNS(NS_A, "a:buNone"), PPR_ORDER, BULLETS);
+    return;
+  }
+  if (bullet === "number") {
+    const num = doc.createElementNS(NS_A, "a:buAutoNum");
+    num.setAttribute("type", "arabicPeriod");
+    place(pPr, num, PPR_ORDER, BULLETS);
+    return;
+  }
+  for (const old of children(pPr, ["a:buNone", "a:buAutoNum"]))
+    pPr.removeChild(old);
+  if (styleBullets || children(pPr, ["a:buChar", "a:buBlip"]).length > 0)
+    return;
+  if (Number(pPr.getAttribute("indent") ?? "0") >= 0) {
+    pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)));
+    pPr.setAttribute("indent", String(-BULLET_INDENT));
+  }
+  if (children(pPr, ["a:buSzTx", "a:buSzPct", "a:buSzPts"]).length === 0) {
+    const size = doc.createElementNS(NS_A, "a:buSzPct");
+    size.setAttribute("val", "100000");
+    place(pPr, size, PPR_ORDER, []);
+  }
+  const char = doc.createElementNS(NS_A, "a:buChar");
+  char.setAttribute("char", "\u2022");
+  place(pPr, char, PPR_ORDER, []);
+};
+var buildParagraph = (doc, p, lang, kept, styleBullets) => {
   const el = doc.createElementNS(NS_A, "a:p");
-  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false || p.bullet === "number" || p.lineSpacing !== void 0 || p.spaceBefore !== void 0 || p.spaceAfter !== void 0;
-  if (!needsPPr && p.bullet === void 0 && kept?.pPr !== null && kept?.pPr !== void 0)
-    el.appendChild(doc.importNode(kept.pPr, true));
-  else if (needsPPr) {
-    const pPr = doc.createElementNS(NS_A, "a:pPr");
+  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false || p.bullet === "number" || p.bullet === true && !styleBullets || p.lineSpacing !== void 0 || p.spaceBefore !== void 0 || p.spaceAfter !== void 0;
+  const pPr = kept?.pPr !== null && kept?.pPr !== void 0 ? doc.importNode(kept.pPr, true) : needsPPr ? doc.createElementNS(NS_A, "a:pPr") : null;
+  if (pPr !== null) {
     if (p.level !== void 0)
       pPr.setAttribute("lvl", String(p.level));
     if (p.alignment !== void 0)
       pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment]);
     if (p.lineSpacing !== void 0)
-      pPr.appendChild(spacing(doc, "a:lnSpc", "a:spcPct", p.lineSpacing * 1e5));
+      place(pPr, spacing(doc, "a:lnSpc", "a:spcPct", p.lineSpacing * 1e5), PPR_ORDER, ["a:lnSpc"]);
     if (p.spaceBefore !== void 0)
-      pPr.appendChild(spacing(doc, "a:spcBef", "a:spcPts", p.spaceBefore * 100));
+      place(pPr, spacing(doc, "a:spcBef", "a:spcPts", p.spaceBefore * 100), PPR_ORDER, ["a:spcBef"]);
     if (p.spaceAfter !== void 0)
-      pPr.appendChild(spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100));
-    if (p.bullet === false)
-      pPr.appendChild(doc.createElementNS(NS_A, "a:buNone"));
-    else if (p.bullet === "number") {
-      const num = doc.createElementNS(NS_A, "a:buAutoNum");
-      num.setAttribute("type", "arabicPeriod");
-      pPr.appendChild(num);
-    }
+      place(pPr, spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100), PPR_ORDER, ["a:spcAft"]);
+    if (p.bullet !== void 0)
+      applyBullet(doc, pPr, p.bullet, styleBullets);
     el.appendChild(pPr);
   }
   const runs = p.runs ?? [paragraphRun(p)];
   for (const run of runs)
-    el.appendChild(kept === null ? buildRun(doc, run, p.lang ?? lang) : buildRun(doc, run, lang, kept, p.lang));
+    for (const node2 of kept === null ? buildRun(doc, run, p.lang ?? lang) : buildRun(doc, run, lang, kept, p.lang))
+      el.appendChild(node2);
   return el;
 };
-var setBodyText = (txBody, text, append, lang, keep = false) => {
+var setBodyText = (txBody, text, append, lang, keep = false, styleBullets = false) => {
   const doc = txBody.ownerDocument;
   const first = children(txBody, ["a:p"])[0];
   const kept = !keep || first === void 0 ? null : {
     pPr: children(first, ["a:pPr"])[0] ?? null,
     rPr: children(txBody, ["a:p"]).flatMap((p) => children(p, ["a:r"])).map((r) => children(r, ["a:rPr"])[0] ?? null)[0] ?? children(first, ["a:endParaRPr"])[0] ?? null
   };
-  if (!append)
+  if (!append) {
     for (const p of children(txBody, ["a:p"]))
       txBody.removeChild(p);
+    for (const fit of children(txBody, ["a:bodyPr"]).flatMap((bodyPr) => children(bodyPr, ["a:normAutofit"]))) {
+      fit.removeAttribute("fontScale");
+      fit.removeAttribute("lnSpcReduction");
+    }
+  }
   for (const paragraph of toParagraphs(text))
-    txBody.appendChild(buildParagraph(doc, paragraph, lang, kept));
+    txBody.appendChild(buildParagraph(doc, paragraph, lang, kept, styleBullets));
 };
 var setShapeText = (shape, text, append, lang, keep = false) => {
   const txBody = firstElement(shape, "p:txBody");
   if (txBody !== null)
-    setBodyText(txBody, text, append, lang, keep);
+    setBodyText(txBody, text, append, lang, keep, firstElement(shape, "p:ph") !== null);
 };
 var replaceInBody = (txBody, spec) => {
   let count = 0;
@@ -41549,20 +41743,11 @@ var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, conten
   const clone2 = slide.importNode(source, true);
   firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()));
   const txBody = firstElement(clone2, "p:txBody");
-  if (typeof content === "string" && txBody !== null) {
-    for (const p2 of elements(txBody, "a:p"))
-      txBody.removeChild(p2);
-    const p = slide.createElementNS(NS_A, "a:p");
-    const r = slide.createElementNS(NS_A, "a:r");
-    const rPr = slide.createElementNS(NS_A, "a:rPr");
-    rPr.setAttribute("lang", lang);
-    r.appendChild(rPr);
-    const t = slide.createElementNS(NS_A, "a:t");
-    t.appendChild(slide.createTextNode(content));
-    r.appendChild(t);
-    p.appendChild(r);
-    txBody.appendChild(p);
-  }
+  if (typeof content === "string" && txBody !== null)
+    setBodyText(txBody, content, false, lang, false, true);
+  else
+    for (const props of [...elements(clone2, "a:rPr"), ...elements(clone2, "a:endParaRPr")])
+      props.setAttribute("lang", lang);
   const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone2);
   spTree.insertBefore(clone2, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
   return { images, refs };
@@ -41640,14 +41825,80 @@ var fillPicturePlaceholder = (slide, rid, phIdx, frame, size, fit) => {
   sp.parentNode?.replaceChild(pic, sp);
   return true;
 };
-var setNotes = async (pkg, slidePart, slideRels, text, notesMaster, lang) => {
+var NOTES_PLACEHOLDERS = [
+  {
+    type: "sldImg",
+    name: "Slide Image Placeholder",
+    locks: '<a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/>',
+    fallback: '<p:ph type="sldImg"/>'
+  },
+  { type: "body", name: "Notes Placeholder", locks: '<a:spLocks noGrp="1"/>', fallback: '<p:ph type="body" idx="1"/>' },
+  { type: "sldNum", name: "Slide Number Placeholder", locks: '<a:spLocks noGrp="1"/>', fallback: null }
+];
+var notesPlaceholder = (doc, type) => elements(doc, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type) ?? null;
+var phXml = (ph) => {
+  let attrs = "";
+  for (let i = 0; i < ph.attributes.length; i++) {
+    const attr = ph.attributes.item(i);
+    if (attr !== null && !attr.name.startsWith("xmlns"))
+      attrs += ` ${attr.name}="${xmlEscape(attr.value, true)}"`;
+  }
+  return `<p:ph${attrs}/>`;
+};
+var notesShapes = (master, lang) => {
+  let id = 2;
+  let xml = "";
+  for (const spec of NOTES_PLACEHOLDERS) {
+    const sp = master === null ? null : notesPlaceholder(master, spec.type);
+    const ph = sp === null ? null : firstElement(sp, "p:ph");
+    const field = spec.type === "sldNum" && sp !== null ? firstElement(sp, "a:fld") : null;
+    if (ph === null && spec.fallback === null || spec.type === "sldNum" && field === null)
+      continue;
+    let body = "";
+    if (spec.type === "body")
+      body = "<p:txBody><a:bodyPr/><a:lstStyle/></p:txBody>";
+    else if (field !== null)
+      body = `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="${xmlEscape(field.getAttribute("id") ?? "", true)}" type="slidenum"><a:rPr lang="${xmlEscape(lang, true)}"/><a:t>\u2039#\u203A</a:t></a:fld></a:p></p:txBody>`;
+    xml += `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${spec.name} ${id - 1}"/><p:cNvSpPr>${spec.locks}</p:cNvSpPr><p:nvPr>${ph === null ? spec.fallback ?? "" : phXml(ph)}</p:nvPr></p:nvSpPr><p:spPr/>${body}</p:sp>`;
+    id++;
+  }
+  return xml;
+};
+var notesBodyText = (notes, master, lang) => {
+  let sp = notesPlaceholder(notes, "body");
+  if (sp === null) {
+    const spec = parseXml(`<p:spTree xmlns:a="${NS_A}" xmlns:p="${NS_P}">${notesShapes(master, lang)}</p:spTree>`);
+    const spTree = firstElement(notes, "p:spTree");
+    const body = notesPlaceholder(spec, "body");
+    const ids = PartAllocator.shapeIds(notes);
+    firstElement(body, "p:cNvPr")?.setAttribute("id", String(ids()));
+    sp = notes.importNode(body, true);
+    spTree?.insertBefore(sp, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
+  }
+  let txBody = firstElement(sp, "p:txBody");
+  if (txBody === null) {
+    txBody = notes.createElementNS(NS_P, "p:txBody");
+    txBody.appendChild(notes.createElementNS(NS_A, "a:bodyPr"));
+    txBody.appendChild(notes.createElementNS(NS_A, "a:lstStyle"));
+    sp.appendChild(txBody);
+  }
+  return txBody;
+};
+var setNotes = async (pkg, slidePart, slideRels, text, notesMaster, lang, shared) => {
+  const master = notesMaster !== "" && pkg.has(notesMaster) ? await pkg.xml(notesMaster) : null;
+  const current = pkg.targets(slidePart, slideRels).find((t) => t.kind === "notesSlide")?.target ?? null;
+  if (current !== null && pkg.has(current)) {
+    const own2 = shared ? await unshareNotes(pkg, slidePart, slideRels) ?? current : current;
+    const notes2 = await pkg.xml(own2);
+    setBodyText(notesBodyText(notes2, master, lang), text, false, lang, false, true);
+    pkg.write(own2, notes2);
+    return;
+  }
   const notesPart = pkg.alloc.part("ppt/notesSlides", "notesSlide", ".xml");
-  const paras = text.split("\n").map((line) => `<a:p><a:r><a:rPr lang="${xmlEscape(lang, true)}"/><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("");
-  pkg.write(
-    notesPart,
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Notes Placeholder"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`
-  );
+  const notes = parseXml(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notes xmlns:a="${NS_A}" xmlns:r="${NS_R}" xmlns:p="${NS_P}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${notesShapes(master, lang)}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`);
+  setBodyText(notesBodyText(notes, master, lang), text, false, lang, false, true);
+  pkg.write(notesPart, notes);
   pkg.write(
     relsPartOf(notesPart),
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -41805,7 +42056,7 @@ var editSlide = async (pkg, work) => {
     }
   const notesReplaces = entry.notes === null ? entry.replaces.filter((r) => r.notes) : [];
   if (entry.notes !== null)
-    await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang);
+    await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang, work.sharedNotes);
   else if (work.sharedNotes || notesReplaces.length > 0) {
     const copy = await unshareNotes(pkg, part, rels);
     if (copy !== null && notesReplaces.length > 0) {
@@ -47169,6 +47420,11 @@ var TEXT_DIRECTION_VERT = {
 var GenColors = class _GenColors {
   /**  token (RRGGBB) to theme slot  */
   tokens = /* @__PURE__ */ new Map();
+  /**  token (RRGGBB) of text without a color of its own: PptxGenJS
+       colors such text black (table headers white), so it goes in as
+       this token, whose fill `finish` removes -- the text then takes
+       the color of the template  */
+  inherit;
   byName = /* @__PURE__ */ new Map();
   base;
   /**
@@ -47183,6 +47439,7 @@ var GenColors = class _GenColors {
     while ([...Array(16).keys()].some((i) => used.has(_GenColors.hex(base + i))))
       base += 16;
     this.base = base;
+    this.inherit = _GenColors.hex(base + 15);
   }
   /**  RRGGBB of a number  */
   static hex(n) {
@@ -47206,10 +47463,17 @@ var GenColors = class _GenColors {
     return token;
   }
 };
-var finishGenerated = (doc, tokens) => {
+var finishGenerated = (doc, tokens, inherit = null) => {
   let changed = false;
   for (const clr of elements(doc, "a:srgbClr")) {
-    const slot = tokens.get((clr.getAttribute("val") ?? "").toUpperCase());
+    const val = (clr.getAttribute("val") ?? "").toUpperCase();
+    const fill = clr.parentNode;
+    if (val === inherit && fill !== null && fill.nodeName === "a:solidFill") {
+      fill.parentNode?.removeChild(fill);
+      changed = true;
+      continue;
+    }
+    const slot = tokens.get(val);
     if (slot === void 0)
       continue;
     const scheme = doc.createElementNS(NS_A, "a:schemeClr");
@@ -47246,36 +47510,44 @@ var chartType = (gen, type) => {
   return { type: gen.ChartType[entry[0]], extra: entry[1] };
 };
 var genTextRuns = (text, lang, colors) => {
-  if (typeof text === "string")
+  if (typeof text === "string" && !text.includes("\v"))
     return text;
+  const paragraphs = typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
   const out = [];
-  for (const p of text) {
+  for (const p of paragraphs) {
     const runs = p.runs ?? [paragraphRun(p)];
     runs.forEach((r, i) => {
-      out.push({
-        text: r.text,
-        options: {
-          breakLine: i === runs.length - 1,
-          lang: r.lang ?? p.lang ?? lang,
-          ...r.bold !== void 0 && { bold: r.bold },
-          ...r.italic !== void 0 && { italic: r.italic },
-          ...r.underline === true && { underline: { style: "sng" } },
-          ...r.strike === true && { strike: "sngStrike" },
-          /*  PptxGenJS writes baseline * 50 (1/1000 %)  */
-          ...r.superscript === true && { baseline: BASELINE.superscript / 50 },
-          ...r.subscript === true && { baseline: BASELINE.subscript / 50 },
-          ...r.size !== void 0 && { fontSize: r.size },
-          ...r.font !== void 0 && { fontFace: r.font },
-          ...r.color !== void 0 && { color: colors.gen(r.color) },
-          ...r.highlight !== void 0 && { highlight: colors.gen(r.highlight) },
-          ..."hyperlink" in r && r.hyperlink !== void 0 && { hyperlink: { url: r.hyperlink } },
-          ...p.level !== void 0 && { indentLevel: p.level },
-          ...p.alignment !== void 0 && { align: p.alignment },
-          ...p.spaceBefore !== void 0 && { paraSpaceBefore: p.spaceBefore },
-          ...p.spaceAfter !== void 0 && { paraSpaceAfter: p.spaceAfter },
-          ...p.lineSpacing !== void 0 && { lineSpacingMultiple: p.lineSpacing },
-          ...i === 0 && p.bullet !== void 0 && { bullet: p.bullet === "number" ? { type: "number" } : p.bullet }
-        }
+      const options = {
+        lang: r.lang ?? p.lang ?? lang,
+        ...r.bold !== void 0 && { bold: r.bold },
+        ...r.italic !== void 0 && { italic: r.italic },
+        ...r.underline === true && { underline: { style: "sng" } },
+        ...r.strike === true && { strike: "sngStrike" },
+        /*  PptxGenJS writes baseline * 50 (1/1000 %)  */
+        ...r.superscript === true && { baseline: BASELINE.superscript / 50 },
+        ...r.subscript === true && { baseline: BASELINE.subscript / 50 },
+        ...r.size !== void 0 && { fontSize: r.size },
+        ...r.font !== void 0 && { fontFace: r.font },
+        ...r.color !== void 0 && { color: colors.gen(r.color) },
+        ...r.highlight !== void 0 && { highlight: colors.gen(r.highlight) },
+        ..."hyperlink" in r && r.hyperlink !== void 0 && { hyperlink: { url: r.hyperlink } },
+        ...p.level !== void 0 && { indentLevel: p.level },
+        ...p.alignment !== void 0 && { align: p.alignment },
+        ...p.spaceBefore !== void 0 && { paraSpaceBefore: p.spaceBefore },
+        ...p.spaceAfter !== void 0 && { paraSpaceAfter: p.spaceAfter },
+        ...p.lineSpacing !== void 0 && { lineSpacingMultiple: p.lineSpacing }
+      };
+      const pieces = r.text.split("\v");
+      pieces.forEach((piece, k) => {
+        out.push({
+          text: piece,
+          options: {
+            breakLine: i === runs.length - 1 && k === pieces.length - 1,
+            ...options,
+            ...k > 0 && { softBreakBefore: true },
+            ...i === 0 && k === 0 && p.bullet !== void 0 && { bullet: p.bullet === "number" ? { type: "number" } : p.bullet }
+          }
+        });
       });
     });
   }
@@ -47327,7 +47599,7 @@ var genTableRows = (el, lang, colors) => {
       if (styled.textDirection !== void 0)
         options.textDirection = TEXT_DIRECTION_VERT[styled.textDirection];
     }
-    return { text: styled !== null ? genTextRuns(styled.text, lang, colors) : String(cell), options };
+    return { text: genTextRuns(styled !== null ? styled.text : String(cell), lang, colors), options };
   }));
 };
 var DEFAULT_COLORS = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
@@ -47460,6 +47732,7 @@ var addElement = (slide, gen, el, lang, colors) => {
       slide.addText(genTextRuns(el.text, el.lang ?? lang, colors), {
         ...frame,
         lang: el.lang ?? lang,
+        color: colors.inherit,
         valign: "top",
         ...boxTextOptions(el),
         ...el.fill !== void 0 && { fill: { color: colors.gen(el.fill) } },
@@ -47471,6 +47744,7 @@ var addElement = (slide, gen, el, lang, colors) => {
       const opts = {
         ...frame,
         border: { type: "solid", color: colors.gen(st?.border ?? "ACACAC"), pt: 0.5 },
+        color: colors.inherit,
         valign: "middle"
       };
       if (st?.fontSize !== void 0)
@@ -47527,7 +47801,7 @@ var addElement = (slide, gen, el, lang, colors) => {
         ...boxTextOptions(el),
         ...el.fill !== void 0 && { fill: { color: colors.gen(el.fill) } },
         ...el.border !== void 0 && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } },
-        ...el.fontColor !== void 0 && { color: colors.gen(el.fontColor) },
+        color: el.fontColor !== void 0 ? colors.gen(el.fontColor) : colors.inherit,
         ...el.fontSize !== void 0 && { fontSize: el.fontSize }
       });
       break;
@@ -47595,7 +47869,7 @@ var finishSource = async (source, entries, placed, colors) => {
   for (const part of parts) {
     const doc = await source.xml(part);
     const chart = charts.get(part);
-    const changed = finishGenerated(doc, colors.tokens);
+    const changed = finishGenerated(doc, colors.tokens, colors.inherit);
     if (chart !== void 0 && finishChart(doc, chart) || changed)
       source.write(part, doc);
   }
@@ -47989,6 +48263,43 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
       ));
   }
 };
+var UNREPLACED_PARTS = [
+  [/^ppt\/charts\/chart[^/]*\.xml$/, "chart"],
+  [/^ppt\/diagrams\/(data|drawing)[^/]*\.xml$/, "SmartArt"]
+];
+var replaceSkipped = (states, warnings) => {
+  states.forEach((s, index) => {
+    if (s.entry.replaces.length === 0)
+      return;
+    const slide = s.closure[0];
+    const target = new Map((slide?.rels ?? []).map((r) => [r.id, r.target]));
+    const frameOf = /* @__PURE__ */ new Map();
+    for (const frame of slide?.doc === null || slide === void 0 ? [] : elements(slide.doc, "p:graphicFrame"))
+      for (const ref of relRefs(frame)) {
+        const part = target.get(ref.attr.value) ?? null;
+        if (part !== null)
+          frameOf.set(part, firstElement(frame, "p:cNvPr")?.getAttribute("name") ?? "");
+      }
+    for (const replace of s.entry.replaces) {
+      const found = /* @__PURE__ */ new Map();
+      for (const view of s.closure) {
+        const kind = UNREPLACED_PARTS.find(([re]) => re.test(view.part))?.[1];
+        const frame = frameOf.get(view.part);
+        if (kind === void 0 || view.doc === null || frame !== void 0 && replace.skip.includes(frame))
+          continue;
+        const texts = [...elements(view.doc, "a:t"), ...elements(view.doc, "c:v")].map((t) => t.textContent ?? "");
+        if (texts.some((t) => replacePlain(t, replace).count > 0))
+          found.set(kind, [...found.get(kind) ?? [], view.part]);
+      }
+      for (const [kind, parts] of found)
+        warnings.push({
+          code: "W_REPLACE_SKIPPED",
+          slide: { id: s.entry.virtualId > 0 ? s.entry.virtualId : null, index, title: s.entry.title },
+          message: `text.replace (op ${replace.op}) leaves ${kind} text as it is: '${replace.find}' found in ${parts.join(", ")} -- change it in PowerPoint, or replace the ${kind === "chart" ? "chart (el.rm + el.add)" : "SmartArt"}`
+        });
+    }
+  });
+};
 var newDefects = async (after, before, warnings) => {
   const found = await findDefects(after, before);
   if (found.length === 0)
@@ -48028,6 +48339,7 @@ var executePlan = async (outFile, plan, archive) => {
   const removed = removedSlides(pkg, deck, matched, warnings);
   const parts = await buildSlides(pkg, plan, matched);
   const states = await classifySlides(pkg, plan, parts, removed);
+  replaceSkipped(states, warnings);
   const untouched = untouchedParts(pkg, states);
   await editSlides(pkg, plan, deck, states, removed, warnings);
   writeSlideList(pkg, deck, states, matched, removed, renumbered || deck.dropped);

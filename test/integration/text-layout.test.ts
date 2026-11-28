@@ -112,6 +112,10 @@ describe("text layout in placeholders", () => {
             return facts(body as Element)
         }
         expect(await placeholderFacts()).toEqual(EXPECTED)
+
+        /*  el.set merges the given options onto the kept first paragraph and
+            run: on a body of plain text they come out as slide.fill writes them  */
+        await apply(deck, [ { op: "slide.fill", slide: "1", placeholders: { body: { text: "plain" } } } ])
         await apply(deck, [ { op: "el.set", slide: "1", name: "PptcPh-1", text: RICH } ])
         expect(await placeholderFacts()).toEqual(EXPECTED)
         const read = (await stateOf(deck)).slides[1]?.shapes.find((sh) => sh.name === "PptcPh-1")

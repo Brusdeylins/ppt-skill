@@ -10,7 +10,8 @@
 */
 
 import { z } from "zod"
-import { ColorSchema, ElementSchema, FramePatchSchema, HyperlinkSchema, RichTextSchema } from "./payloads.js"
+import { ColorSchema, ElementSchema, FramePatchSchema, HyperlinkSchema, RichTextSchema, TextStringSchema,
+    XmlStringSchema } from "./payloads.js"
 
 /**
  *  Slide selector grammar:
@@ -50,13 +51,13 @@ export const PlaceholderFillSchema = z.object({
     .refine((f) => f.fit === undefined || f.image !== undefined, "'fit' needs an 'image'")
 
 /**  A PowerPoint section name (unique in the deck).  */
-export const SectionNameSchema = z.string().min(1).max(255)
+export const SectionNameSchema = XmlStringSchema.min(1).max(255)
 
 /**  Shared shape of the `fill` payload used by slide.add and slide.fill.  */
 const fillProps = {
     placeholders: z.record(PlaceholderKeySchema, PlaceholderFillSchema).optional(),
-    notes: z.string().optional(),
-    footer: z.string().optional(),
+    notes: TextStringSchema.optional(),
+    footer: TextStringSchema.optional(),
     background: z.object({ color: ColorSchema }).strict().optional(),
     /**  hide ("Hide Slide", `show="0"`) or show the slide; omitted leaves the
          current visibility untouched (kept slides keep their hidden state)  */
@@ -154,8 +155,8 @@ export const ElSetSchema = z.object({
     fontColor: ColorSchema.optional(),
     /**  alt text (`cNvPr@descr`) and title (`cNvPr@title`) of any element;
          an empty string removes them  */
-    altText: z.string().optional(),
-    title: z.string().optional(),
+    altText: XmlStringSchema.optional(),
+    title: XmlStringSchema.optional(),
     /**  click target of the whole element (placeholders, textboxes,
          shapes, pictures): a URL or a slide link; an empty string removes it  */
     hyperlink: z.union([ HyperlinkSchema, z.literal("") ]).optional(),
@@ -187,8 +188,8 @@ export const ElSetSchema = z.object({
      fields (slide number, date) never.  */
 export const TextReplaceSchema = z.object({
     op: z.literal("text.replace"),
-    find: z.string().min(1),
-    replace: z.string(),
+    find: XmlStringSchema.min(1),
+    replace: XmlStringSchema,
     /**  only this slide; the whole deck when omitted  */
     slide: SlideSelectorSchema.optional(),
     /**  match upper/lower case exactly (default false)  */
@@ -218,7 +219,7 @@ export const ImgPromptsSchema = z.object({
     op: z.literal("img.prompts"),
     slide: SlideSelectorSchema,
     /**  prompt text per picture-placeholder idx, or one prompt for all  */
-    prompts: z.union([z.string(), z.record(z.string().regex(/^\d+$/), z.string())])
+    prompts: z.union([TextStringSchema, z.record(z.string().regex(/^\d+$/), TextStringSchema)])
 }).strict()
 
 /**  Op: set document properties -- standard core fields and/or arbitrary
@@ -227,15 +228,15 @@ export const ImgPromptsSchema = z.object({
 export const MetaPropsSchema = z.object({
     op: z.literal("meta.props"),
     set: z.object({
-        title: z.string().optional(),
-        author: z.string().optional(),
-        subject: z.string().optional(),
-        keywords: z.string().optional(),
-        category: z.string().optional(),
-        comments: z.string().optional(),
+        title: XmlStringSchema.optional(),
+        author: XmlStringSchema.optional(),
+        subject: XmlStringSchema.optional(),
+        keywords: XmlStringSchema.optional(),
+        category: XmlStringSchema.optional(),
+        comments: XmlStringSchema.optional(),
         /**  arbitrary custom document properties (name→value); a value
              may be empty to clear the visible content of a property  */
-        custom: z.record(z.string().min(1), z.string()).optional()
+        custom: z.record(XmlStringSchema.min(1), XmlStringSchema).optional()
     }).strict()
 }).strict()
 

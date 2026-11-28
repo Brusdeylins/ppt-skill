@@ -104,7 +104,7 @@ const finishSource = async (source: Package, entries: SlidePlanEntry[],
     for (const part of parts) {
         const doc = await source.xml(part)
         const chart = charts.get(part)
-        const changed = finishGenerated(doc, colors.tokens)
+        const changed = finishGenerated(doc, colors.tokens, colors.inherit)
         if ((chart !== undefined && finishChart(doc, chart)) || changed)
             source.write(part, doc)
     }

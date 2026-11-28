@@ -29,6 +29,64 @@ export type SchemeColor = typeof SCHEME_COLORS[number]
 export const isSchemeColor = (color: string): color is SchemeColor =>
     (SCHEME_COLORS as readonly string[]).includes(color)
 
+/**
+ *  The position of the first character of a string that a PowerPoint file
+ *  (XML 1.0) cannot store: a C0 control but tab, line feed and carriage
+ *  return, the noncharacters U+FFFE/U+FFFF or a lone surrogate.
+ *
+ *  @param s - the string
+ *  @param lineBreaks - whether a vertical tab passes (text: a line break)
+ *  @returns the index of the character, -1 when every character is storable
+ */
+export const xmlIllegalAt = (s: string, lineBreaks: boolean): number => {
+    for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i)
+        if (c < 0x20) {
+            if (c !== 0x09 && c !== 0x0A && c !== 0x0D && !(lineBreaks && c === 0x0B))
+                return i
+        }
+        else if (c >= 0xD800 && c <= 0xDBFF) {
+            const next = s.charCodeAt(i + 1)
+            if (!(next >= 0xDC00 && next <= 0xDFFF))
+                return i
+            i++
+        }
+        else if ((c >= 0xDC00 && c <= 0xDFFF) || c === 0xFFFE || c === 0xFFFF)
+            return i
+    }
+    return -1
+}
+
+/**
+ *  A character as Unicode names it ("U+000B").
+ *
+ *  @param code - the UTF-16 code unit or code point
+ *  @returns the U+ notation
+ */
+export const unicodeName = (code: number): string =>
+    `U+${code.toString(16).toUpperCase().padStart(4, "0")}`
+
+/**  the refinement of every string that ends up in the deck: characters
+     XML cannot store fail validation, a vertical tab only passes in text,
+     where it is a line break inside the paragraph (`a:br`)  */
+const xmlChars = (lineBreaks: boolean) => (v: string, ctx: z.RefinementCtx): void => {
+    const at = xmlIllegalAt(v, lineBreaks)
+    if (at < 0)
+        return
+    const code = v.charCodeAt(at)
+    ctx.addIssue({ code: "custom", message: code === 0x0B
+        ? `contains a vertical tab (${unicodeName(code)}) at position ${at}: a line break is only allowed in text`
+        : `contains the character ${unicodeName(code)} at position ${at}, which a PowerPoint file (XML 1.0) cannot store` })
+}
+
+/**  a string written into the deck (names, alt texts, properties, chart
+     labels): no character XML cannot store  */
+export const XmlStringSchema = z.string().superRefine(xmlChars(false))
+
+/**  a text written into the deck as runs: as XmlStringSchema, but a
+     vertical tab is a line break inside the paragraph (`a:br`)  */
+export const TextStringSchema = z.string().superRefine(xmlChars(true))
+
 /**  6-digit hex color, with or without leading `#`, normalized to RRGGBB --
      or a bare theme color slot (`accent1`, `tx1`, `dk2`, ...), written as
      a theme reference that follows the template's color scheme  */
@@ -95,6 +153,8 @@ export const HyperlinkSchema = z.string()
             ctx.addIssue({ code: "custom", message: "expected a URL or a slide link like 'slide:$ref', 'slide:id:256', "
                 + "'slide:title:Agenda' or 'slide:index:2'" })
     })
+    /*  a URL is written into the relationships; a slide link only selects  */
+    .superRefine((v, ctx) => xmlChars(v.startsWith("slide:"))(v, ctx))
 
 /**  Character-level formatting shared by paragraphs and runs.  */
 const fontProps = {
@@ -105,7 +165,7 @@ const fontProps = {
     superscript: z.boolean().optional(),
     subscript: z.boolean().optional(),
     size: z.number().positive().optional(),
-    font: z.string().min(1).optional(),
+    font: XmlStringSchema.min(1).optional(),
     color: ColorSchema.optional(),
     /**  text highlight (marker) color  */
     highlight: ColorSchema.optional(),
@@ -119,14 +179,14 @@ const oneBaseline = (f: { superscript?: boolean | undefined, subscript?: boolean
 
 /**  One formatted text run inside a paragraph.  */
 export const RunSchema = z.object({
-    text: z.string(),
+    text: TextStringSchema,
     hyperlink: HyperlinkSchema.optional(),
     ...fontProps
 }).strict().refine(oneBaseline, "a run is either 'superscript' or 'subscript' (not both)")
 
 /**  One paragraph of rich text: plain `text` or formatted `runs`.  */
 export const ParagraphSchema = z.object({
-    text: z.string().optional(),
+    text: TextStringSchema.optional(),
     runs: z.array(RunSchema).optional(),
     level: z.number().int().min(0).max(8).optional(),
     alignment: z.enum(["left", "center", "right", "justify"]).optional(),
@@ -144,7 +204,7 @@ export const ParagraphSchema = z.object({
     .refine(oneBaseline, "a paragraph is either 'superscript' or 'subscript' (not both)")
 
 /**  Rich text content: a single plain string or a list of paragraphs.  */
-export const RichTextSchema = z.union([z.string(), z.array(ParagraphSchema).min(1)])
+export const RichTextSchema = z.union([TextStringSchema, z.array(ParagraphSchema).min(1)])
 
 /**  Horizontal alignment of a table column or cell.  */
 export const CellAlignSchema = z.enum(["left", "center", "right"])
@@ -165,11 +225,11 @@ export const TableCellSchema = z.object({
 }).strict()
 
 /**  One table cell: a plain value or a styled cell.  */
-export const CellSchema = z.union([z.string(), z.number(), z.boolean(), TableCellSchema])
+export const CellSchema = z.union([TextStringSchema, z.number(), z.boolean(), TableCellSchema])
 
 /**  Table payload: headers, rows and optional styling.  */
 export const TableSchema = z.object({
-    headers: z.array(z.union([z.string(), TableCellSchema])).optional(),
+    headers: z.array(z.union([TextStringSchema, TableCellSchema])).optional(),
     rows: z.array(z.array(CellSchema)).min(1),
     style: z.object({
         headerBg: ColorSchema.optional(),
@@ -198,11 +258,11 @@ export const LabelPositionSchema = z.enum([
 
 /**  One chart axis: title, value range and number format.  */
 const AxisSchema = z.object({
-    title: z.string().optional(),
+    title: XmlStringSchema.optional(),
     min: z.number().optional(),
     max: z.number().optional(),
     /**  number format code, e.g. "0%" or "#,##0"  */
-    format: z.string().min(1).optional()
+    format: XmlStringSchema.min(1).optional()
 }).strict()
 
 /**  the data-label positions per chart type (bar/column stacked or not)  */
@@ -227,15 +287,15 @@ const labelFamily = (type: string, stacked: boolean): string | null => {
 /**  Chart payload: type, categories and one or more data series.  */
 export const ChartSchema = z.object({
     type: ChartTypeSchema,
-    categories: z.array(z.union([z.string(), z.number()])).optional(),
+    categories: z.array(z.union([XmlStringSchema, z.number()])).optional(),
     series: z.array(z.object({
-        name: z.string(),
+        name: XmlStringSchema,
         values: z.array(z.number()).optional(),
         x: z.array(z.number()).optional(),
         y: z.array(z.number()).optional(),
         size: z.array(z.number()).optional()
     }).strict()).min(1),
-    title: z.string().optional(),
+    title: XmlStringSchema.optional(),
     colors: z.array(ColorSchema).optional(),
     /**  show the legend (`true`: at the bottom) or place it  */
     legend: z.union([z.boolean(), z.enum(["top", "bottom", "left", "right"])]).optional(),
@@ -245,7 +305,7 @@ export const ChartSchema = z.object({
     labels: z.object({
         value: z.boolean().optional(),
         percent: z.boolean().optional(),
-        format: z.string().min(1).optional(),
+        format: XmlStringSchema.min(1).optional(),
         position: LabelPositionSchema.optional()
     }).strict().optional(),
     /**  x = category axis (the x value axis of scatter/bubble), y = value axis  */
@@ -320,8 +380,8 @@ const boxTextProps = {
 /**  Accessibility description of an element: `altText` (screen readers,
      `cNvPr@descr`) and `title` (`cNvPr@title`).  */
 const describedProps = {
-    altText: z.string().optional(),
-    title: z.string().optional()
+    altText: XmlStringSchema.optional(),
+    title: XmlStringSchema.optional()
 }
 
 /**  A free element placed by `el.add`, discriminated by `type`.  */
@@ -339,7 +399,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  click target of the whole box (URL or slide link)  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
-        name: z.string().optional()
+        name: XmlStringSchema.optional()
     }).strict(),
     z.object({
         type: z.literal("table"),
@@ -355,14 +415,14 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  text language of every cell  */
         lang: LangSchema.optional(),
         ...describedProps,
-        name: z.string().optional()
+        name: XmlStringSchema.optional()
     }).strict(),
     z.object({
         type: z.literal("chart"),
         frame: FrameSchema,
         data: ChartSchema,
         ...describedProps,
-        name: z.string().optional()
+        name: XmlStringSchema.optional()
     }).strict(),
     z.object({
         type: z.literal("shape"),
@@ -381,7 +441,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
              back button  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
-        name: z.string().optional()
+        name: XmlStringSchema.optional()
     }).strict(),
     z.object({
         type: z.literal("image"),
@@ -394,7 +454,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  click target of the picture (URL or slide link)  */
         hyperlink: HyperlinkSchema.optional(),
         ...describedProps,
-        name: z.string().optional()
+        name: XmlStringSchema.optional()
     }).strict(),
     z.object({
         type: z.literal("connector"),
@@ -407,7 +467,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         startArrow: ArrowSchema.optional(),
         endArrow: ArrowSchema.optional(),
         ...describedProps,
-        name: z.string().optional()
+        name: XmlStringSchema.optional()
     }).strict()
 ])
 

@@ -21,7 +21,7 @@ import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.
 import { fitImage, imageSize, type Box, type ImageFit, type ImageSize } from "../image-size.js"
 import { slideFromLayout } from "../seed.js"
 import { digestBytes } from "../guard.js"
-import { HLINK_ATTR, setShapeText } from "../text.js"
+import { HLINK_ATTR, setBodyText, setShapeText } from "../text.js"
 import { NS_A, NS_P, NS_R, colorElement, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
 import type { Package } from "./package.js"
 import { removeShape, repairContent, repairRels, type Repair } from "./repair.js"
@@ -149,20 +149,14 @@ const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, r
     const clone = slide.importNode(source, true) as Element
     firstElement(clone, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()))
     const txBody = firstElement(clone, "p:txBody")
-    if (typeof content === "string" && txBody !== null) {
-        for (const p of elements(txBody, "a:p"))
-            txBody.removeChild(p)
-        const p = slide.createElementNS(NS_A, "a:p")
-        const r = slide.createElementNS(NS_A, "a:r")
-        const rPr = slide.createElementNS(NS_A, "a:rPr")
-        rPr.setAttribute("lang", lang)
-        r.appendChild(rPr)
-        const t = slide.createElementNS(NS_A, "a:t")
-        t.appendChild(slide.createTextNode(content))
-        r.appendChild(t)
-        p.appendChild(r)
-        txBody.appendChild(p)
-    }
+
+    /*  the footer text as the deck's text; the layout's own content (the
+        slide-number or date field, a footer text) takes the deck language  */
+    if (typeof content === "string" && txBody !== null)
+        setBodyText(txBody, content, false, lang, false, true)
+    else
+        for (const props of [ ...elements(clone, "a:rPr"), ...elements(clone, "a:endParaRPr") ])
+            props.setAttribute("lang", lang)
     const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone)
     spTree.insertBefore(clone, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
     return { images, refs }
@@ -263,25 +257,115 @@ const fillPicturePlaceholder = (slide: Document, rid: string, phIdx: number, fra
     return true
 }
 
-/**  write speaker notes into a fresh notesSlide part and point the slide at
-     it (the previous notes part is collected by the package sweep)  */
+/**  the placeholders of a notes slide in PowerPoint's order: the slide
+     image, the notes body and the slide number  */
+const NOTES_PLACEHOLDERS = [
+    { type: "sldImg", name: "Slide Image Placeholder", locks: "<a:spLocks noGrp=\"1\" noRot=\"1\" noChangeAspect=\"1\"/>",
+        fallback: "<p:ph type=\"sldImg\"/>" },
+    { type: "body", name: "Notes Placeholder", locks: "<a:spLocks noGrp=\"1\"/>", fallback: "<p:ph type=\"body\" idx=\"1\"/>" },
+    { type: "sldNum", name: "Slide Number Placeholder", locks: "<a:spLocks noGrp=\"1\"/>", fallback: null }
+] as const
+
+/**  the shape of a placeholder type in a notes part or the notes master  */
+const notesPlaceholder = (doc: Document, type: string): Element | null =>
+    elements(doc, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type) ?? null
+
+/**  a `p:ph` element as XML text, with the attributes of the given one  */
+const phXml = (ph: Element): string => {
+    let attrs = ""
+    for (let i = 0; i < ph.attributes.length; i++) {
+        const attr = ph.attributes.item(i)
+        if (attr !== null && !attr.name.startsWith("xmlns"))
+            attrs += ` ${attr.name}="${xmlEscape(attr.value, true)}"`
+    }
+    return `<p:ph${attrs}/>`
+}
+
+/**  the placeholder shapes of a new notes slide, as PowerPoint creates
+     them: each placeholder the notes master has (by type, with its idx --
+     an idx of another master placeholder would inherit that one's frame),
+     with an empty notes body and the master's slide-number field  */
+const notesShapes = (master: Document | null, lang: string): string => {
+    let id = 2
+    let xml = ""
+    for (const spec of NOTES_PLACEHOLDERS) {
+        const sp = master === null ? null : notesPlaceholder(master, spec.type)
+        const ph = sp === null ? null : firstElement(sp, "p:ph")
+        const field = spec.type === "sldNum" && sp !== null ? firstElement(sp, "a:fld") : null
+        if ((ph === null && spec.fallback === null) || (spec.type === "sldNum" && field === null))
+            continue
+        let body = ""
+        if (spec.type === "body")
+            body = "<p:txBody><a:bodyPr/><a:lstStyle/></p:txBody>"
+        else if (field !== null)
+            body = "<p:txBody><a:bodyPr/><a:lstStyle/><a:p>"
+                + `<a:fld id="${xmlEscape(field.getAttribute("id") ?? "", true)}" type="slidenum">`
+                + `<a:rPr lang="${xmlEscape(lang, true)}"/><a:t>\u2039#\u203A</a:t></a:fld></a:p></p:txBody>`
+        xml += `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${spec.name} ${id - 1}"/><p:cNvSpPr>${spec.locks}</p:cNvSpPr>`
+            + `<p:nvPr>${ph === null ? spec.fallback ?? "" : phXml(ph)}</p:nvPr></p:nvSpPr><p:spPr/>${body}</p:sp>`
+        id++
+    }
+    return xml
+}
+
+/**  the notes body of a notes part, created from the notes master when
+     the part has none  */
+const notesBodyText = (notes: Document, master: Document | null, lang: string): Element => {
+    let sp = notesPlaceholder(notes, "body")
+    if (sp === null) {
+        const spec = parseXml(`<p:spTree xmlns:a="${NS_A}" xmlns:p="${NS_P}">${notesShapes(master, lang)}</p:spTree>`)
+        const spTree = firstElement(notes, "p:spTree")
+        const body = notesPlaceholder(spec, "body") as Element
+        const ids = PartAllocator.shapeIds(notes)
+        firstElement(body, "p:cNvPr")?.setAttribute("id", String(ids()))
+        sp = notes.importNode(body, true) as Element
+        spTree?.insertBefore(sp, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
+    }
+    let txBody = firstElement(sp, "p:txBody")
+    if (txBody === null) {
+        txBody = notes.createElementNS(NS_P, "p:txBody")
+        txBody.appendChild(notes.createElementNS(NS_A, "a:bodyPr"))
+        txBody.appendChild(notes.createElementNS(NS_A, "a:lstStyle"))
+        sp.appendChild(txBody)
+    }
+    return txBody
+}
+
+/**
+ *  Write the speaker notes of a slide. An existing notes part keeps
+ *  everything but the text of its notes body (the slide's own copy when
+ *  it shares one); a new one is built from the notes master's
+ *  placeholders, as PowerPoint creates it, and related to the slide and
+ *  the notes master.
+ *
+ *  @param pkg - the deck package
+ *  @param slidePart - the slide part
+ *  @param slideRels - the slide's relationships (edited in place)
+ *  @param text - the notes text
+ *  @param notesMaster - the deck's notes master part
+ *  @param lang - the language of the notes text
+ *  @param shared - whether the slide's notes part belongs to another
+ *                  slide or none
+ */
 const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, text: string, notesMaster: string,
-    lang: string): Promise<void> => {
+    lang: string, shared: boolean): Promise<void> => {
+    const master = notesMaster !== "" && pkg.has(notesMaster) ? await pkg.xml(notesMaster) : null
+    const current = pkg.targets(slidePart, slideRels).find((t) => t.kind === "notesSlide")?.target ?? null
+    if (current !== null && pkg.has(current)) {
+        const own = shared ? await unshareNotes(pkg, slidePart, slideRels) ?? current : current
+        const notes = await pkg.xml(own)
+        setBodyText(notesBodyText(notes, master, lang), text, false, lang, false, true)
+        pkg.write(own, notes)
+        return
+    }
     const notesPart = pkg.alloc.part("ppt/notesSlides", "notesSlide", ".xml")
-    const paras = text.split("\n").map((line) =>
-        `<a:p><a:r><a:rPr lang="${xmlEscape(lang, true)}"/><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`).join("")
-    pkg.write(notesPart,
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-        + "<p:notes xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
-        + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\""
-        + " xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+    const notes = parseXml("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        + `<p:notes xmlns:a="${NS_A}" xmlns:r="${NS_R}" xmlns:p="${NS_P}">`
         + "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
-        + "<p:grpSpPr/>"
-        + "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Notes Placeholder\"/>"
-        + "<p:cNvSpPr><a:spLocks noGrp=\"1\"/></p:cNvSpPr>"
-        + "<p:nvPr><p:ph type=\"body\" idx=\"1\"/></p:nvPr></p:nvSpPr>"
-        + `<p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody></p:sp>`
-        + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>")
+        + `<p:grpSpPr/>${notesShapes(master, lang)}</p:spTree></p:cSld>`
+        + "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>")
+    setBodyText(notesBodyText(notes, master, lang), text, false, lang, false, true)
+    pkg.write(notesPart, notes)
     pkg.write(relsPartOf(notesPart),
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
         + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
@@ -526,7 +610,7 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         }
     const notesReplaces = entry.notes === null ? entry.replaces.filter((r) => r.notes) : []
     if (entry.notes !== null)
-        await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang)
+        await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang, work.sharedNotes)
     else if (work.sharedNotes || notesReplaces.length > 0) {
         const copy = await unshareNotes(pkg, part, rels)
         if (copy !== null && notesReplaces.length > 0) {

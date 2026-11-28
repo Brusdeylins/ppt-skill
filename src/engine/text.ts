@@ -68,48 +68,88 @@ const toParagraphs = (text: RichText): Paragraph[] =>
      (PowerPoint's own values)  */
 export const BASELINE = { superscript: 30000, subscript: -25000 }
 
-/**  build the `a:rPr` run properties element (always: it carries the
-     run's language); children in schema order: fill, highlight, latin,
-     hlinkClick  */
-const buildRunProps = (doc: Document, run: Partial<Run>, lang: string): Element => {
-    const rPr = doc.createElementNS(NS_A, "a:rPr")
-    rPr.setAttribute("lang", run.lang ?? lang)
+/**  the schema order of the `a:rPr` children  */
+const RPR_ORDER = [ "a:ln", "a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill", "a:grpFill",
+    "a:effectLst", "a:effectDag", "a:highlight", "a:uLnTx", "a:uLn", "a:uFillTx", "a:uFill", "a:latin", "a:ea",
+    "a:cs", "a:sym", "a:hlinkClick", "a:hlinkMouseOver", "a:rtl", "a:extLst" ]
+
+/**  the schema order of the `a:pPr` children  */
+const PPR_ORDER = [ "a:lnSpc", "a:spcBef", "a:spcAft", "a:buClrTx", "a:buClr", "a:buSzTx", "a:buSzPct", "a:buSzPts",
+    "a:buFontTx", "a:buFont", "a:buNone", "a:buAutoNum", "a:buChar", "a:buBlip", "a:tabLst", "a:defRPr", "a:extLst" ]
+
+/**  the fills of a run (one at most)  */
+const RUN_FILLS = [ "a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill", "a:grpFill" ]
+
+/**  the bullet kinds of a paragraph (one at most)  */
+const BULLETS = [ "a:buNone", "a:buAutoNum", "a:buChar", "a:buBlip" ]
+
+/**  the bullet indent of a box without list-style bullets in EMU: 27 pt,
+     as PowerPoint and PptxGenJS write it, one more per level  */
+const BULLET_INDENT = 342900
+
+/**  put a child into its place by the schema order of its parent, after
+     removing the children of the given names  */
+const place = (parent: Element, child: Element, order: string[], replaces: string[]): void => {
+    for (const old of children(parent, replaces))
+        parent.removeChild(old)
+    const rank = order.indexOf(child.nodeName)
+    parent.insertBefore(child, children(parent, order.slice(rank + 1))[0] ?? null)
+}
+
+/**  apply a run's own character format to run properties: on a fresh
+     `a:rPr` a `false` underline or baseline states nothing, on kept
+     properties (`merge`) it clears the kept one  */
+const applyRunFormat = (doc: Document, rPr: Element, run: Partial<Run>, merge: boolean): Element => {
     if (run.bold !== undefined)
         rPr.setAttribute("b", run.bold ? "1" : "0")
     if (run.italic !== undefined)
         rPr.setAttribute("i", run.italic ? "1" : "0")
     if (run.underline === true)
         rPr.setAttribute("u", "sng")
+    else if (run.underline === false && merge)
+        rPr.setAttribute("u", "none")
     if (run.strike !== undefined)
         rPr.setAttribute("strike", run.strike ? "sngStrike" : "noStrike")
+    const baseline = Number(rPr.getAttribute("baseline") ?? "0")
     if (run.superscript === true)
         rPr.setAttribute("baseline", String(BASELINE.superscript))
     else if (run.subscript === true)
         rPr.setAttribute("baseline", String(BASELINE.subscript))
+    else if ((run.superscript === false && baseline > 0) || (run.subscript === false && baseline < 0))
+        rPr.removeAttribute("baseline")
     if (run.size !== undefined)
         rPr.setAttribute("sz", String(Math.round(run.size * 100)))
     if (run.color !== undefined) {
         const fill = doc.createElementNS(NS_A, "a:solidFill")
         fill.appendChild(colorElement(doc, run.color))
-        rPr.appendChild(fill)
+        place(rPr, fill, RPR_ORDER, RUN_FILLS)
     }
     if (run.highlight !== undefined) {
         const highlight = doc.createElementNS(NS_A, "a:highlight")
         highlight.appendChild(colorElement(doc, run.highlight))
-        rPr.appendChild(highlight)
+        place(rPr, highlight, RPR_ORDER, [ "a:highlight" ])
     }
     if (run.font !== undefined) {
         const latin = doc.createElementNS(NS_A, "a:latin")
         latin.setAttribute("typeface", run.font)
-        rPr.appendChild(latin)
+        place(rPr, latin, RPR_ORDER, [ "a:latin" ])
     }
     if (run.hyperlink !== undefined) {
         /*  the relationship id is assigned by the engine; mark with the URL  */
         const hlink = doc.createElementNS(NS_A, "a:hlinkClick")
         hlink.setAttribute(HLINK_ATTR, run.hyperlink)
-        rPr.appendChild(hlink)
+        place(rPr, hlink, RPR_ORDER, [ "a:hlinkClick" ])
     }
     return rPr
+}
+
+/**  build the `a:rPr` run properties element (always: it carries the
+     run's language); children in schema order: fill, highlight, latin,
+     hlinkClick  */
+const buildRunProps = (doc: Document, run: Partial<Run>, lang: string): Element => {
+    const rPr = doc.createElementNS(NS_A, "a:rPr")
+    rPr.setAttribute("lang", run.lang ?? lang)
+    return applyRunFormat(doc, rPr, run, false)
 }
 
 /**  whether a run sets any character format of its own  */
@@ -117,9 +157,9 @@ const runFormatted = (run: Partial<Run>): boolean =>
     [ run.bold, run.italic, run.underline, run.strike, run.superscript, run.subscript, run.size, run.font,
         run.color, run.highlight, run.hyperlink ].some((v) => v !== undefined)
 
-/**  the kept run properties for a run without format of its own: a copy
-     without links (they belong to the old text) and spelling marks, in the
-     run's language, else the kept one, else the deck's  */
+/**  the kept run properties: a copy without links (they belong to the old
+     text) and spelling marks, in the run's language, else the kept one,
+     else the deck's  */
 const keptRunProps = (doc: Document, kept: Element, lang: string | undefined, deckLang: string): Element => {
     const rPr = doc.createElementNS(NS_A, "a:rPr")
     for (let i = 0; i < kept.attributes.length; i++) {
@@ -127,24 +167,47 @@ const keptRunProps = (doc: Document, kept: Element, lang: string | undefined, de
         if (attr !== null && attr.name !== "err")
             rPr.setAttribute(attr.name, attr.value)
     }
-    for (const child of children(kept, [ "a:ln", "a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill",
-        "a:grpFill", "a:effectLst", "a:effectDag", "a:highlight", "a:uLnTx", "a:uLn", "a:uFillTx", "a:uFill", "a:latin",
-        "a:ea", "a:cs", "a:sym", "a:rtl" ]))
+    for (const child of children(kept, RPR_ORDER.filter((name) => ![ "a:hlinkClick", "a:hlinkMouseOver", "a:extLst" ].includes(name))))
         rPr.appendChild(doc.importNode(child, true))
     rPr.setAttribute("lang", lang ?? kept.getAttribute("lang") ?? deckLang)
     return rPr
 }
 
-/**  build one `a:r` text run  */
-const buildRun = (doc: Document, run: Run, lang: string, kept: KeptFormat | null = null, own?: string): Element => {
-    const r = doc.createElementNS(NS_A, "a:r")
-    r.appendChild(kept?.rPr !== null && kept?.rPr !== undefined && !runFormatted(run)
-        ? keptRunProps(doc, kept.rPr, run.lang ?? own, lang)
-        : buildRunProps(doc, run, run.lang ?? own ?? lang))
-    const t = doc.createElementNS(NS_A, "a:t")
-    t.appendChild(doc.createTextNode(run.text))
-    r.appendChild(t)
-    return r
+/**  the properties of a line break (`a:br`) inside a run: the run's own,
+     without its click target  */
+const breakProps = (rPr: Element): Element => {
+    const props = rPr.cloneNode(true) as Element
+    for (const link of children(props, [ "a:hlinkClick", "a:hlinkMouseOver" ]))
+        props.removeChild(link)
+    return props
+}
+
+/**  build the `a:r` text runs of one run; a vertical tab in its text is a
+     line break inside the paragraph (`a:br` with the run's properties)  */
+const buildRun = (doc: Document, run: Run, lang: string, kept: KeptFormat | null = null, own?: string): Element[] => {
+    const rPr = kept?.rPr === null || kept?.rPr === undefined
+        ? buildRunProps(doc, run, run.lang ?? own ?? lang)
+        : runFormatted(run)
+            ? applyRunFormat(doc, keptRunProps(doc, kept.rPr, run.lang ?? own, lang), run, true)
+            : keptRunProps(doc, kept.rPr, run.lang ?? own, lang)
+    const pieces = run.text.split("\v")
+    const out: Element[] = []
+    pieces.forEach((piece, i) => {
+        if (i > 0) {
+            const br = doc.createElementNS(NS_A, "a:br")
+            br.appendChild(breakProps(rPr))
+            out.push(br)
+        }
+        if (piece === "" && pieces.length > 1)
+            return
+        const r = doc.createElementNS(NS_A, "a:r")
+        r.appendChild(rPr.cloneNode(true))
+        const t = doc.createElementNS(NS_A, "a:t")
+        t.appendChild(doc.createTextNode(piece))
+        r.appendChild(t)
+        out.push(r)
+    })
+    return out
 }
 
 /**  a spacing element (`a:lnSpc`, `a:spcBef`, `a:spcAft`) with its value  */
@@ -172,56 +235,91 @@ export const paragraphRun = (p: Paragraph): Run => ({
     ...(p.highlight !== undefined && { highlight: p.highlight })
 })
 
-/**  build one `a:p` paragraph including paragraph properties (children in
-     schema order: line spacing, space before/after, bullet); its runs
-     take the paragraph's language, else the given one. `bullet: true`
-     keeps the placeholder's own bullet style.  */
-const buildParagraph = (doc: Document, p: Paragraph, lang: string, kept: KeptFormat | null = null): Element => {
+/**  apply a paragraph's bullet to its properties: `false` none, `"number"`
+     a numbered list, `true` a bullet -- the list style's own in a
+     placeholder (`styleBullets`), else a bullet character with its
+     hanging indent; a kept bullet character or picture stays  */
+const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", styleBullets: boolean): void => {
+    if (bullet === false) {
+        place(pPr, doc.createElementNS(NS_A, "a:buNone"), PPR_ORDER, BULLETS)
+        return
+    }
+    if (bullet === "number") {
+        const num = doc.createElementNS(NS_A, "a:buAutoNum")
+        num.setAttribute("type", "arabicPeriod")
+        place(pPr, num, PPR_ORDER, BULLETS)
+        return
+    }
+    for (const old of children(pPr, [ "a:buNone", "a:buAutoNum" ]))
+        pPr.removeChild(old)
+    if (styleBullets || children(pPr, [ "a:buChar", "a:buBlip" ]).length > 0)
+        return
+    if (Number(pPr.getAttribute("indent") ?? "0") >= 0) {
+        /*  no hanging indent yet (PptxGenJS writes 0/0 for text without bullets)  */
+        pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)))
+        pPr.setAttribute("indent", String(-BULLET_INDENT))
+    }
+    if (children(pPr, [ "a:buSzTx", "a:buSzPct", "a:buSzPts" ]).length === 0) {
+        const size = doc.createElementNS(NS_A, "a:buSzPct")
+        size.setAttribute("val", "100000")
+        place(pPr, size, PPR_ORDER, [])
+    }
+    const char = doc.createElementNS(NS_A, "a:buChar")
+    char.setAttribute("char", "•")
+    place(pPr, char, PPR_ORDER, [])
+}
+
+/**  build one `a:p` paragraph including paragraph properties; its runs
+     take the paragraph's language, else the given one. The paragraph's
+     own fields go onto the kept first paragraph's properties (el.set),
+     else onto fresh ones.  */
+const buildParagraph = (doc: Document, p: Paragraph, lang: string, kept: KeptFormat | null, styleBullets: boolean): Element => {
     const el = doc.createElementNS(NS_A, "a:p")
     const needsPPr = p.level !== undefined || p.alignment !== undefined || p.bullet === false
-        || p.bullet === "number" || p.lineSpacing !== undefined || p.spaceBefore !== undefined
-        || p.spaceAfter !== undefined
-    if (!needsPPr && p.bullet === undefined && kept?.pPr !== null && kept?.pPr !== undefined)
-        el.appendChild(doc.importNode(kept.pPr, true))
-    else if (needsPPr) {
-        const pPr = doc.createElementNS(NS_A, "a:pPr")
+        || p.bullet === "number" || (p.bullet === true && !styleBullets) || p.lineSpacing !== undefined
+        || p.spaceBefore !== undefined || p.spaceAfter !== undefined
+    const pPr = kept?.pPr !== null && kept?.pPr !== undefined ? doc.importNode(kept.pPr, true) as Element
+        : needsPPr ? doc.createElementNS(NS_A, "a:pPr") : null
+    if (pPr !== null) {
         if (p.level !== undefined)
             pPr.setAttribute("lvl", String(p.level))
         if (p.alignment !== undefined)
             pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment])
         if (p.lineSpacing !== undefined)
-            pPr.appendChild(spacing(doc, "a:lnSpc", "a:spcPct", p.lineSpacing * 100000))
+            place(pPr, spacing(doc, "a:lnSpc", "a:spcPct", p.lineSpacing * 100000), PPR_ORDER, [ "a:lnSpc" ])
         if (p.spaceBefore !== undefined)
-            pPr.appendChild(spacing(doc, "a:spcBef", "a:spcPts", p.spaceBefore * 100))
+            place(pPr, spacing(doc, "a:spcBef", "a:spcPts", p.spaceBefore * 100), PPR_ORDER, [ "a:spcBef" ])
         if (p.spaceAfter !== undefined)
-            pPr.appendChild(spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100))
-        if (p.bullet === false)
-            pPr.appendChild(doc.createElementNS(NS_A, "a:buNone"))
-        else if (p.bullet === "number") {
-            const num = doc.createElementNS(NS_A, "a:buAutoNum")
-            num.setAttribute("type", "arabicPeriod")
-            pPr.appendChild(num)
-        }
+            place(pPr, spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100), PPR_ORDER, [ "a:spcAft" ])
+        if (p.bullet !== undefined)
+            applyBullet(doc, pPr, p.bullet, styleBullets)
         el.appendChild(pPr)
     }
     const runs: Run[] = p.runs ?? [ paragraphRun(p) ]
     for (const run of runs)
-        el.appendChild(kept === null ? buildRun(doc, run, p.lang ?? lang) : buildRun(doc, run, lang, kept, p.lang))
+        for (const node of kept === null ? buildRun(doc, run, p.lang ?? lang) : buildRun(doc, run, lang, kept, p.lang))
+            el.appendChild(node)
     return el
 }
 
 /**
  *  Replace (or append to) the text of a text body (`p:txBody` of a
- *  shape, `a:txBody` of a table cell).
+ *  shape, `a:txBody` of a table cell). A vertical tab in the text is a
+ *  line break inside its paragraph (`a:br`). Replaced text drops the
+ *  shrink-on-overflow scale PowerPoint computed for the old one
+ *  (`a:normAutofit` stays, without `fontScale` and `lnSpcReduction`).
  *
  *  @param txBody - the text body
  *  @param text - validated rich text payload
  *  @param append - keep existing paragraphs and append instead of replacing
  *  @param lang - the language of runs that state none (the deck language)
- *  @param keep - whether paragraphs and runs that set no format keep the
- *                body's first paragraph and run format (el.set)
+ *  @param keep - whether the body's first paragraph and run format stays
+ *                under the new text, its own fields merged in (el.set)
+ *  @param styleBullets - whether the body's list style brings its own
+ *                bullets (placeholders): `bullet: true` then writes none
  */
-export const setBodyText = (txBody: Element, text: RichText, append: boolean, lang: string, keep = false): void => {
+export const setBodyText = (txBody: Element, text: RichText, append: boolean, lang: string, keep = false,
+    styleBullets = false): void => {
     const doc = txBody.ownerDocument as Document
     const first = children(txBody, [ "a:p" ])[0]
     const kept: KeptFormat | null = !keep || first === undefined ? null : {
@@ -229,27 +327,33 @@ export const setBodyText = (txBody: Element, text: RichText, append: boolean, la
         rPr: children(txBody, [ "a:p" ]).flatMap((p) => children(p, [ "a:r" ]))
             .map((r) => children(r, [ "a:rPr" ])[0] ?? null)[0] ?? children(first, [ "a:endParaRPr" ])[0] ?? null
     }
-    if (!append)
+    if (!append) {
         for (const p of children(txBody, [ "a:p" ]))
             txBody.removeChild(p)
+        for (const fit of children(txBody, [ "a:bodyPr" ]).flatMap((bodyPr) => children(bodyPr, [ "a:normAutofit" ]))) {
+            fit.removeAttribute("fontScale")
+            fit.removeAttribute("lnSpcReduction")
+        }
+    }
     for (const paragraph of toParagraphs(text))
-        txBody.appendChild(buildParagraph(doc, paragraph, lang, kept))
+        txBody.appendChild(buildParagraph(doc, paragraph, lang, kept, styleBullets))
 }
 
 /**
- *  Replace (or append to) the text content of a shape's txBody.
+ *  Replace (or append to) the text content of a shape's txBody. A
+ *  placeholder keeps the bullets of its list style.
  *
  *  @param shape - the `p:sp` element to write into
  *  @param text - validated rich text payload
  *  @param append - keep existing paragraphs and append instead of replacing
  *  @param lang - the language of runs that state none (the deck language)
- *  @param keep - whether new text that sets no format keeps the first
- *                paragraph and run format (el.set)
+ *  @param keep - whether new text keeps the first paragraph and run
+ *                format, its own fields merged in (el.set)
  */
 export const setShapeText = (shape: Element, text: RichText, append: boolean, lang: string, keep = false): void => {
     const txBody = firstElement(shape, "p:txBody")
     if (txBody !== null)
-        setBodyText(txBody, text, append, lang, keep)
+        setBodyText(txBody, text, append, lang, keep, firstElement(shape, "p:ph") !== null)
 }
 
 /**

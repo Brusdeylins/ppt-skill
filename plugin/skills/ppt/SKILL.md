@@ -81,7 +81,10 @@ Execution Rules
   it. A W_INPUT_DEFECT warning means the deck already carried repair
   triggers pptc cannot repair; they stay as they were -- tell the user,
   quoting the message, that they predate this edit (PowerPoint may still
-  offer a repair) and were not caused by it.
+  offer a repair) and were not caused by it. A W_REPLACE_SKIPPED warning
+  means `text.replace` found the text in a chart or SmartArt, which it
+  leaves as it is -- tell the user which slide and part still show the
+  old text.
 - **The user edits between turns.** Treat every deck as changed: begin
   EVERY write with a fresh `state` (rev + structure) and pass that rev to
   `apply --rev`. On exit 6 (E_REV_CONFLICT): re-read `state`, re-check your
@@ -143,12 +146,16 @@ field, `false` removes it), `background`, `hidden` and `section`.
 
 Text and colors (every op that writes text or color): rich text paragraphs
 take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
-`spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple); runs take
-`bold`, `italic`, `underline`, `strike`, `superscript`, `subscript`,
-`size`, `font`, `color`, `highlight`, `hyperlink`, `lang`. A color is hex
-or a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`, `dk1`,
-`lt1`, `dk2`, `lt2`) -- prefer the slot over the hex it resolves to, so
-the element follows the template. Without `lang` text gets the deck
+`spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple) -- `bullet:
+true` is the placeholder's own bullet, elsewhere a bullet character; runs
+take `bold`, `italic`, `underline`, `strike`, `superscript`, `subscript`,
+`size`, `font`, `color`, `highlight`, `hyperlink`, `lang`. `\n` starts a
+paragraph, `\v` is a line break inside one (`state` reads it back as
+`\v`). Text without `color` takes the template's; `el.set` text keeps the
+first paragraph's and run's format and changes only the fields given. A
+color is hex or a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`,
+`bg2`, `dk1`, `lt1`, `dk2`, `lt2`) -- prefer the slot over the hex it
+resolves to, so the element follows the template. Without `lang` text gets the deck
 language (`pptcDeckLang`). There is NO shrink-to-fit.
 
 `el.add` element fields (authoritative: `schema el.add`):
@@ -180,8 +187,8 @@ prefer it over `el.rm` + `el.add`); at least one field, each checked
 against the element's type (authoritative: `schema el.set`):
 
 ```text
-text         placeholder, textbox, shape -- text without format keeps the
-             first paragraph's and run's format
+text         placeholder, textbox, shape -- in the first paragraph's and
+             run's format; fields a paragraph or run sets change only those
 frame        {x, y, w, h, rotation}: given keys change (any element; no
              rotation on table/chart); inherited placeholder frames work
 fill, fontColor              placeholder, textbox, shape
@@ -201,7 +208,8 @@ It also patches elements and picture fills planned earlier in the SAME
 ops document (a planned connector takes no hyperlink, a planned image no
 border). `text.replace {find, replace, slide?, matchCase?, wholeWord?,
 notes?}` replaces plain text in shapes, placeholders and table cells (notes
-only with `notes: true`, fields never), across formatted runs, and sees
+only with `notes: true`, fields, charts and SmartArt never --
+W_REPLACE_SKIPPED), across formatted runs, and sees
 every earlier op of the document; report `result.replacements` (count and
 slides per op) to the user -- zero matches is no error, say so.
 

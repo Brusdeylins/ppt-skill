@@ -14,7 +14,7 @@ import type JSZip from "jszip"
 import { createHash } from "node:crypto"
 import type { Document, Element } from "@xmldom/xmldom"
 import { appendRel, cleanContentTypes, findPart, gcAssets, optText, partText, readRels, removeParts, tryRels } from "./parts.js"
-import { elements, firstElement, parseXml, serializeXml, utf8Declared, xmlEscape } from "./xml.js"
+import { elements, firstElement, parseXml, serializeXml, utf8Declared, xmlEscape, xmlStorable } from "./xml.js"
 
 /**  sync user-created sections with the slide list. Sections are
      contiguous runs of the slide order, so the slides that kept their
@@ -205,7 +205,7 @@ const syncAppProperties = async (zip: JSZip, slides: string[]): Promise<void> =>
     const newHp = hpBody.replace(/<vt:i4>\d+<\/vt:i4>/g, (m) =>
         seen++ === at ? `<vt:i4>${n}</vt:i4>` : m)
     const entries = [ ...tpBody.matchAll(/<vt:lpstr>([\s\S]*?)<\/vt:lpstr>/g) ].map((m) => m[1] as string)
-    const kept = [ ...entries.slice(0, leading), ...titles.map((t) => xmlEscape(t)), ...entries.slice(leading + old) ]
+    const kept = [ ...entries.slice(0, leading), ...titles.map((t) => xmlEscape(xmlStorable(t))), ...entries.slice(leading + old) ]
     const lpstr = kept.map((e) => `<vt:lpstr>${e}</vt:lpstr>`).join("")
 
     /*  replacer functions: a title like "US$'000" must not read as a
@@ -258,30 +258,39 @@ const NS_VT = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTy
 const CUSTOM_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
 
 /**  create or patch docProps/custom.xml with a name→value patch, ensuring
-     the content-type override and the package relationship exist. Existing
-     custom properties not named in the patch are preserved; PowerPoint keeps
-     these across edit/save, so they make the deck self-describing.  */
+     the content-type override and the package relationship exist. Only
+     the named properties change (a string value, `vt:lpwstr`, attributes
+     like a link target kept); every other property stays exactly as it
+     is, whatever its type. PowerPoint keeps custom properties across
+     edit/save, so they make the deck self-describing.  */
 const setCustomProps = async (zip: JSZip, patch: Record<string, string>): Promise<void> => {
-    /*  merge: existing properties first, then the patch overrides/adds  */
-    const props = new Map<string, string>()
     const existing = await optText(zip, CUSTOM_PROPS_PART)
-    if (existing !== null)
-        for (const p of elements(parseXml(existing), "property")) {
-            const vt = firstElement(p, "vt:lpwstr")
-            props.set(p.getAttribute("name") ?? "", vt?.textContent ?? "")
-        }
-    for (const [k, v] of Object.entries(patch))
-        props.set(k, v)
+    const doc = parseXml(existing ?? "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n"
+        + `<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}"></Properties>`)
+    const root = doc.documentElement
+    if (root === null)
+        return
+    const props = elements(doc, "property")
 
-    /*  pids are sequential and MUST start at 2 (pid 1 is reserved)  */
-    let pid = 2
-    let body = ""
-    for (const [name, value] of props)
-        body += `<property fmtid="${CUSTOM_FMTID}" pid="${pid++}" name="${xmlEscape(name, true)}">`
-            + `<vt:lpwstr>${xmlEscape(value)}</vt:lpwstr></property>`
-    zip.file(CUSTOM_PROPS_PART,
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n"
-        + `<Properties xmlns="${NS_CUSTOM}" xmlns:vt="${NS_VT}">${body}</Properties>`)
+    /*  pids are unique and MUST start at 2 (pid 1 is reserved)  */
+    let pid = Math.max(1, ...props.map((p) => Number(p.getAttribute("pid") ?? "0")).filter(Number.isFinite)) + 1
+    for (const [ name, value ] of Object.entries(patch)) {
+        let prop = props.find((p) => p.getAttribute("name") === name)
+        if (prop === undefined) {
+            prop = doc.createElementNS(root.namespaceURI, "property")
+            prop.setAttribute("fmtid", CUSTOM_FMTID)
+            prop.setAttribute("pid", String(pid++))
+            prop.setAttribute("name", name)
+            root.appendChild(prop)
+            props.push(prop)
+        }
+        while (prop.firstChild !== null)
+            prop.removeChild(prop.firstChild)
+        const vt = doc.createElementNS(NS_VT, "vt:lpwstr")
+        vt.appendChild(doc.createTextNode(value))
+        prop.appendChild(vt)
+    }
+    zip.file(CUSTOM_PROPS_PART, serializeXml(doc))
 
     /*  content-type override (idempotent)  */
     const ct = parseXml(await partText(zip, "[Content_Types].xml"))

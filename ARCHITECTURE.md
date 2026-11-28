@@ -48,17 +48,17 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/seed.ts` | slides and decks from layouts: `slideFromLayout` (empty slide with cloned placeholders `PptcPh-<idx>`), `buildEmptyDeck` for `new` |
 | `engine/inplace/engine.ts` | `runSession`: package repairs, slide structure, slide classification (touched, repairs), one pass per touched slide, slide list, package-wide steps, self-checks (verify, content guard, byte guard), atomic write; `preflight` for `--dry-run` |
 | `engine/inplace/package.ts` | part-level package access; rel-graph clone under fresh names (`slide.copy`, transplanted parts) |
-| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: text.replace on the existing content, removals, text, picture placeholders, el.set edits, background, footer/slide number/date (cloned from the layout with relationships of their own), notes, transplanted elements, hyperlinks (URLs, and slide links to their target's output part with a slide jump), visibility, links to removed slides, repairs |
+| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: text.replace on the existing content, removals, text, picture placeholders, el.set edits, background, footer/slide number/date (cloned from the layout with relationships of their own, in the deck language), notes (an existing notes part keeps all but its body text; a new one is built from the notes master's placeholders), transplanted elements, hyperlinks (URLs, and slide links to their target's output part with a slide jump), visibility, links to removed slides, repairs |
 | `engine/inplace/edits.ts` | the in-place changes of existing elements: el.set (text with the kept format, frame, fill, border, font color, alt text, click target, image swap, table cells and rows) and text.replace on a slide's and its notes' text bodies |
 | `engine/inplace/repair.ts` | the repairs of the triggers `defects.ts` detects, on any part: duplicate/dead relationships, references to missing relationships (smallest valid removal, named), duplicate shape ids |
 | `engine/inplace/transplant.ts` | `el.add`: one PptxGenJS deck per apply (one generator slide per target slide), shapes moved by object name with their parts; a slide link PptxGenJS carried as a URL becomes a link marker again |
-| `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`), every run with its `lang`; link markers of runs and whole elements; el.set's kept format (first paragraph's and run's properties); text.replace on a body's runs (fields and line breaks separate) |
+| `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`), every run with its `lang`; link markers of runs and whole elements; el.set's kept format (first paragraph's and run's properties, the given fields merged in); `\v` as a line break (`a:br`); bullet characters outside list styles; text.replace on a body's runs (fields and line breaks separate) |
 | `engine/lang.ts` | the deck language of written text: `pptcDeckLang`, else the deck's default text language, else the first run language, else `en-US` |
 | `engine/image-size.ts` | pixel size from image headers (PNG, JPEG, GIF, WebP, BMP, SVG) and the crop/contain/stretch fit of an image into a frame |
-| `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide, and the finishing of its output for what PptxGenJS cannot write: theme colors (passed as hex tokens, turned into `a:schemeClr`), one `a:pPr` per paragraph, picture crops, a scatter chart's x-axis format |
+| `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide, and the finishing of its output for what PptxGenJS cannot write: theme colors (passed as hex tokens, turned into `a:schemeClr`), text without a color (a token whose fill is removed, so it inherits), `\v` line breaks (soft breaks), one `a:pPr` per paragraph, picture crops, a scatter chart's x-axis format |
 | `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections (the planned list written, or the deck's kept in step with the slide list), content types, app properties |
 | `engine/defects.ts` | the repair triggers of a single part (duplicate or dead relationships, references to missing relationships, duplicate shape ids, notes ownership) -- ONE rule set: the engine detects its input defects with it and repairs exactly these, verify reports them |
-| `engine/verify.ts` | read-only integrity check: the part rules of `defects.ts` on every part plus the package-level rules (slide list, content types, notes 1:1, app properties, orphans); backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
+| `engine/verify.ts` | read-only integrity check: every XML part well-formed (strictly: characters XML 1.0 does not allow, raw or as a reference, fail too), the part rules of `defects.ts` on every part plus the package-level rules (slide list, content types, notes 1:1, app properties, orphans); backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
 | `engine/guard.ts` | content self-check and byte guard before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them -- an image swap declares exactly its new image (by content hash) and the old ones that may go --, layouts/masters must not change (`E_INTEGRITY`) |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries, relationship references, escaping |
 | `engine/parts.ts` | the OPC layer below every engine module: case-insensitive part names, relationships read through the DOM, the relationship-type taxonomy, content types, part removal, asset GC, layout order, and `PartAllocator`: every fresh part name, relationship id, sldId and shape id of an apply |
@@ -145,8 +145,10 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   (4.0.1) so generated XML stays stable. What PptxGenJS cannot write is
   finished on its output before the move (`engine/elements.ts`): theme
   colors go in as hex tokens no element uses and come out as
-  `a:schemeClr`, a paragraph keeps one `a:pPr`, pictures get their crop,
-  a scatter chart's x axis its own number format.
+  `a:schemeClr`, text without a color goes in as such a token whose fill
+  is then removed (PptxGenJS would color it black), a paragraph keeps one
+  `a:pPr`, pictures get their crop, a scatter chart's x axis its own
+  number format.
 - **Repairs where pptc writes, and on package parts.** BOM stripping,
   absolute-to-relative targets and repair-trigger fixes happen on touched
   slides only; a slide whose input carries repair triggers counts as

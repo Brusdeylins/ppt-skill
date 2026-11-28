@@ -158,6 +158,51 @@
   shrink-to-fit, images replaced only on the user's explicit request, alt
   text on images and charts, a section per chapter and an agenda that
   links to its chapters.
+- **Fix: control characters made decks PowerPoint could not open.** A
+  vertical tab -- the line break inside a paragraph, as PowerPoint and
+  python-pptx export it -- and other control characters went unfiltered
+  into slides, notes and the app properties, and `verify` passed the
+  broken parts. A `\v` in text is now a line break (`a:br`) in every text
+  writer (fills, `el.set`, notes, footer, `el.add` through PptxGenJS'
+  soft breaks), and `state` reads a line break back as `\v`, so texts and
+  `title:` selectors round-trip. Every other character XML 1.0 cannot
+  store (and `\v` outside text: names, alt texts, properties, chart
+  labels, `text.replace`) fails with `E_SCHEMA` naming the field; slide
+  titles copied into the app properties leave them out. `verify` checks
+  every part for such characters, raw or as a reference; an input deck
+  that already carries one keeps it (`W_INPUT_DEFECT`).
+- **Fix: speaker notes lost the slide image and slide number.** Writing
+  notes built a fresh notes part with a lone body placeholder of idx 1,
+  which inherited the frame of the notes master's date placeholder. An
+  existing notes part now keeps everything but the text of its notes
+  body; a new one is built from the notes master's placeholders (slide
+  image, notes body with the master's idx, slide number with its field),
+  as PowerPoint does.
+- **Fix: `meta.props` emptied custom properties of other types.** Every
+  custom property was rewritten as a string: numbers, dates and booleans
+  lost their value, a linked property its link. Only the properties the op
+  names change now (to a string value); every other one stays as it is.
+- **Fix: `el.add` text was black.** PptxGenJS colors text without a
+  color black, so textboxes, shapes and table cells ignored the template's
+  text color. Such text now has no color of its own and takes the
+  template's; table headers keep their white on the default dark fill.
+- **Fix: `el.set` text with formatting dropped the kept format.** A
+  paragraph or run that set any field of its own was written from scratch;
+  the given fields are now merged onto the kept first paragraph's and
+  run's format (a bold run in a 24 pt Georgia box stays 24 pt Georgia).
+- **Fix: `bullet: true` outside placeholders.** Textboxes, shapes and table
+  cells got no bullet from the text writer (`slide.fill`, `el.set`), and
+  `el.set` removed the bullets of a bulleted textbox. Where no list style
+  brings one, `bullet: true` now writes a bullet character with a hanging
+  indent (as PptxGenJS does), and a kept bullet stays.
+- **Fix: replaced text kept the old shrink scale.** PowerPoint's computed
+  `fontScale`/`lnSpcReduction` of the old text stayed with the new one;
+  replaced text drops both (`normAutofit` stays).
+- **Fix: `text.replace` skipped charts and SmartArt silently.** It still
+  leaves their text as it is, but now reports a targeted slide whose chart
+  or SmartArt holds a match (`W_REPLACE_SKIPPED`, naming the part).
+- **Fix: cloned slide-number and date fields kept the layout's language.**
+  They now take the deck language like every text pptc writes.
 
 ## 1.1.0
 
