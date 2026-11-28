@@ -77,25 +77,35 @@ export const cmdNote = async (argv: string[]): Promise<ExecuteResult> => {
 }
 
 /**
- *  CLI command `pptc footer <deck> [--slide SEL] "footer text"`.
- *  Without --slide the footer is set on every slide.
+ *  CLI command `pptc footer <deck> [--slide SEL] ["footer text"] [--number] [--date]`.
+ *  Without --slide the footer is set on every slide; --number and --date
+ *  show the slide number and the date as well (the text may then be
+ *  omitted).
  *
  *  @param argv - raw arguments after the command name
  *  @returns the apply result payload
  */
 export const cmdFooter = async (argv: string[]): Promise<ExecuteResult> => {
-    const args = parse(argv, COMMON, ["deck", "text"])
+    const args = parse(argv, { ...COMMON, "number": { type: "boolean" }, "date": { type: "boolean" } },
+        ["deck", "text"], 1)
     const deck = args.positionals[0] as string
-    const text = args.positionals[1] as string
+    const text = args.positionals[1]
+    if (text === undefined && !args.flag("number") && !args.flag("date"))
+        throw new PptcError("E_USAGE", "missing argument <text> (or --number / --date)", { expected: [ "deck", "text" ] })
+    const fill = {
+        ...(text !== undefined && { footer: text }),
+        ...(args.flag("number") && { slideNumber: true }),
+        ...(args.flag("date") && { date: true })
+    }
     const selector = args.str("slide")
     const ops: Op[] = selector !== null
-        ? [{ op: "slide.fill", slide: selector, footer: text }]
+        ? [{ op: "slide.fill", slide: selector, ...fill }]
         : []
     if (selector === null) {
         /*  one fill op per existing slide, addressed by stable index  */
         const deckState = await readDeckState(await DeckArchive.open(deck))
         for (const slide of deckState.slides)
-            ops.push({ op: "slide.fill", slide: `id:${slide.id}`, footer: text })
+            ops.push({ op: "slide.fill", slide: `id:${slide.id}`, ...fill })
         if (ops.length === 0)
             throw new PptcError("E_ADDR_NOTFOUND", "deck has no slides")
     }

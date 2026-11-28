@@ -53,12 +53,14 @@ export const slideCopy: OpHandler<Extract<Op, { op: "slide.copy" }>> = {
         const copy: SlidePlanEntry = {
             ...source,
             virtualId: ctx.nextVirtualId--,
-            fills: [...source.fills],
+            fills: structuredClone(source.fills),
             /*  deep-copy planned elements: a later el.set on the copy must
                 not patch the original's planned spec through aliasing  */
             elements: source.elements.map((e) => ({ name: e.name, spec: structuredClone(e.spec) })),
-            setTexts: [...source.setTexts],
-            removeNames: [...source.removeNames]
+            edits: structuredClone(source.edits),
+            removeNames: [...source.removeNames],
+            replaces: structuredClone(source.replaces),
+            replaced: structuredClone(source.replaced)
         }
         ctx.plan.entries.splice(ctx.plan.entries.indexOf(source) + 1, 0, copy)
         registerRef(ctx, op.ref, copy)

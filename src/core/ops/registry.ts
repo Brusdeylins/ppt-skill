@@ -10,7 +10,7 @@
 */
 
 import { PptcError } from "../../infra/errors.js"
-import type { Op } from "../../schema/ops.js"
+import type { ElSetOp, Op } from "../../schema/ops.js"
 import type { ElementSpec, RichText } from "../../schema/payloads.js"
 import type { DeckState, Layout, TemplateInfo } from "../model.js"
 import type { LintWarning, SlideAddr } from "../lint.js"
@@ -42,6 +42,44 @@ export interface PlannedElement {
     spec: ElementSpec
 }
 
+/**  the changes of one el.set on an existing element (a top-level
+     shape): every field of the op but its address. A frame patch of a
+     placeholder that inherits its frame carries all four of x, y, w, h.  */
+export type ElementPatch = Omit<ElSetOp, "op" | "slide" | "name">
+
+/**  one el.set on an existing element, applied in op order after the
+     slide's placeholder fills  */
+export interface PlannedEdit {
+    /**  full shape name of the element  */
+    name: string
+    /**  what changes  */
+    set: ElementPatch
+}
+
+/**  one text.replace as the engine applies it to the content a slide
+     carries before the apply (planned content is replaced while planning)  */
+export interface PlannedReplace {
+    /**  position of the op in the ops document  */
+    op: number
+    /**  the plain text to find and its replacement  */
+    find: string
+    replace: string
+    /**  match case exactly, match whole words only  */
+    matchCase: boolean
+    wholeWord: boolean
+    /**  also the speaker notes  */
+    notes: boolean
+    /**  top-level shapes whose original text the op does not see (an
+         earlier op replaced their text or removed them); `@ftr`, `@sldNum`
+         and `@dt` stand for the footer, slide-number and date placeholders
+         an earlier op set  */
+    skip: string[]
+    /**  table cells whose original text an earlier el.set replaced or
+         removed (`col` -1: the whole row), by their position before the
+         apply  */
+    skipCells: { name: string, row: number, col: number }[]
+}
+
 /**  the planned future of one output slide  */
 export interface SlidePlanEntry {
     /**  where the slide content comes from  */
@@ -65,10 +103,19 @@ export interface SlidePlanEntry {
     hidden: boolean
     /**  elements to generate via PptxGenJS  */
     elements: PlannedElement[]
-    /**  existing elements to retext: shape name to new content  */
-    setTexts: { name: string, text: RichText }[]
+    /**  show (true) or remove (false) the slide number, null = leave untouched  */
+    slideNumber: boolean | null
+    /**  show (true) or remove (false) the date, null = leave untouched  */
+    date: boolean | null
+    /**  el.set changes of existing elements, in op order  */
+    edits: PlannedEdit[]
     /**  existing elements to remove, by shape name  */
     removeNames: string[]
+    /**  text.replace ops on the slide's existing content, in op order  */
+    replaces: PlannedReplace[]
+    /**  replacements text.replace ops made in the slide's planned content
+         (fills, el.set texts, elements, footer, notes), per op  */
+    replaced: { op: number, count: number }[]
 }
 
 /**
@@ -98,9 +145,13 @@ export const newPlanEntry = (
     footer: null,
     background: null,
     hidden,
+    slideNumber: null,
+    date: null,
     elements: [],
-    setTexts: [],
-    removeNames: []
+    edits: [],
+    removeNames: [],
+    replaces: [],
+    replaced: []
 })
 
 /**  the complete mutation plan an apply run executes  */
@@ -131,6 +182,8 @@ export interface PlanContext {
     nextVirtualId: number
     /**  font-size floor in pt for the readability lint (0 disables)  */
     minFontPt: number
+    /**  position of the op being planned in the ops document  */
+    opIndex: number
 }
 
 /**  slide address of a plan entry as reported on lint findings; owns the

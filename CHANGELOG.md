@@ -76,6 +76,56 @@
   several runs in an `el.add` textbox got one paragraph property set per
   run from PptxGenJS (invalid after the first run, and a bulleted run
   started a new paragraph); it now keeps one.
+- **`el.set` changes elements in place.** Besides `text`, `el.set` takes
+  `frame` (`x`, `y`, `w`, `h`, `rotation` -- the given keys move, resize
+  or rotate; a placeholder that inherits its frame gets the layout's frame
+  written into the slide, a group keeps its children's coordinates, a
+  table's columns and rows scale), `fill`, `border`, `borderPt` and
+  `fontColor`, each checked against the element's type (`E_SCHEMA`
+  otherwise). It also changes elements planned earlier in the same
+  document, and the placeholders of slides added in it; the overlap lint
+  sees the planned frames and lints a moved element. New text that sets
+  no format keeps the first paragraph's and run's format (alignment,
+  bullets, font, size, color, language) instead of falling back to the
+  layout's.
+- **Alt text.** Every `el.add` element takes `altText` and `title`, and
+  `el.set` sets or (with `""`) removes them on any element
+  (`cNvPr@descr`/`@title`); `state --level full` reports them, with a
+  shape's `rotation` and a text body's `valign` and `margin`. PptxGenJS
+  described every `el.add` picture by its local file path, which leaked
+  into the deck; the description is now the given alt text or none.
+- **Image replace.** `el.set` `image` puts another image into a picture
+  or a filled picture placeholder: a new media part, the frame, the
+  animations and a crop (re-cut centered to the new aspect) stay, an SVG
+  shows through PowerPoint's SVG extension. The content guard learned the
+  swap: the new image (by content hash) must come, the old one may go --
+  any other change of the slide's images still fails the apply.
+- **Table cells and rows in place.** `el.set` on a table takes `cells`
+  (`[{row, col, text}]`, 0-based grid position, header row 0), `addRows`
+  (`{at, rows}`, in the format of the row above) and `removeRows`
+  (indices); the table style and the cell formatting stay, the frame's
+  height follows the rows. Covered cells of a merge, rows of a vertical
+  merge and positions inside one fail with `E_SCHEMA` at plan time, also
+  after earlier row changes in the same document.
+- **Text replace.** The new op `text.replace {find, replace, slide,
+  matchCase, wholeWord, notes}` replaces plain text in the shapes,
+  placeholders and table cells of the deck or one slide, in the notes on
+  request, never in fields. A match may span runs split by formatting: the
+  first touched run takes the replacement and keeps its format. The op
+  sees the deck after every earlier op of the document -- planned texts,
+  elements, footers and notes are replaced while planning, the existing
+  content by the engine without what an earlier op replaced or removed --
+  and title selectors after it see the new titles. The apply result
+  reports `replacements` per op (count and slides); zero matches is no
+  error.
+- **Slide number and date.** The fill fields `slideNumber` and `date`
+  clone the layout's slide-number and date placeholders with their field
+  (`true`) or remove them (`false`); `pptc footer` takes `--number` and
+  `--date`. Footer, slide-number and date clones now go in front of the
+  shape tree's extension list (a footer used to be appended after it) and
+  get relationships of their own for what the layout content references
+  (a footer's link pointed at whatever relationship of the slide had the
+  layout's id).
 
 - **New engine: decks are edited in place.** Every apply used to rebuild
   the whole deck through `pptx-automizer`, whose count-based, slide-local

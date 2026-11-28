@@ -337,14 +337,22 @@ const imageBox = (el: Extract<ElementSpec, { type: "image" }>): { x: number, y: 
         : { x: inchToEmu(el.frame.x), y: inchToEmu(el.frame.y), w: inchToEmu(el.frame.w), h: inchToEmu(el.frame.h) }
 
 /**
- *  Finish a generated shape after its move into the target slide: a
- *  picture with `fit: crop` gets its centered `a:srcRect` (the same fit
- *  as picture placeholders).
+ *  Finish a generated shape after its move into the target slide: its
+ *  alt text and title are the element's own -- PptxGenJS describes a
+ *  picture by its local file path (a chart by ""), which never leaves
+ *  pptc -- and a picture with `fit: crop` gets its centered `a:srcRect`
+ *  (the same fit as picture placeholders).
  *
  *  @param shape - the moved shape element (changed in place)
  *  @param el - the element payload it was generated from
  */
 export const finishShape = (shape: Element, el: ElementSpec): void => {
+    const cNvPr = firstElement(shape, "p:cNvPr")
+    for (const [ attr, value ] of [ [ "descr", el.altText ], [ "title", el.title ] ] as const)
+        if (value !== undefined && value !== "")
+            cNvPr?.setAttribute(attr, value)
+        else
+            cNvPr?.removeAttribute(attr)
     if (el.type !== "image" || el.fit !== "crop")
         return
     const box = imageBox(el)

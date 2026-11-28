@@ -59,8 +59,22 @@ export interface ExecuteResult {
         slideCount: number
         dryRun: boolean
         slides: Record<string, { id: number, index: number }>
+        /**  per text.replace op (not on --dry-run): its position in the
+             ops document, the replacements it made in the output slides
+             and the slides they are on  */
+        replacements?: Replacement[]
     }
     warnings: LintWarning[]
+}
+
+/**  the outcome of one text.replace op  */
+export interface Replacement {
+    /**  position of the op in the ops document  */
+    op: number
+    /**  replacements in the output deck  */
+    count: number
+    /**  the output slides with replacements  */
+    slides: { id: number, index: number, count: number }[]
 }
 
 /**
@@ -129,6 +143,14 @@ export const executeOps = async (
         for (const el of entry.elements)
             if (el.spec.type === "image")
                 requireFile(el.spec.path, "image")
+        for (const { set } of entry.edits)
+            if (set.image !== undefined) {
+                requireFile(set.image, "image")
+                const ext = path.extname(set.image).slice(1).toLowerCase()
+                if (ext !== "" && IMAGE_TYPES[ext] === undefined)
+                    throw new PptcError("E_SCHEMA", `unsupported image type '.${ext}' for a picture`,
+                        { supported: Object.keys(IMAGE_TYPES) })
+            }
     }
     if (opts.strict && plan.warnings.length > 0)
         throw new PptcError("E_LINT",
@@ -155,10 +177,35 @@ export const executeOps = async (
         if (slide !== undefined)
             slides[ref] = { id: slide.id, index: slide.index }
     }
+
+    /*  text.replace: planned content counted while planning, the slides'
+        existing content by the engine  */
+    const replaceOps = doc.ops.flatMap((op, i) => op.op === "text.replace" ? [ i ] : [])
+    const replacements = replaceOps.map((op): Replacement => {
+        const perSlide = new Map<number, number>()
+        const add = (index: number, count: number): void => {
+            perSlide.set(index, (perSlide.get(index) ?? 0) + count)
+        }
+        plan.entries.forEach((entry, index) => {
+            for (const r of entry.replaced)
+                if (r.op === op)
+                    add(index, r.count)
+        })
+        for (const r of session.replaced)
+            if (r.op === op)
+                add(r.index, r.count)
+        const hits = [ ...perSlide ].filter(([ , count ]) => count > 0).sort((a, b) => a[0] - b[0])
+        return {
+            op,
+            count: hits.reduce((sum, [ , count ]) => sum + count, 0),
+            slides: hits.map(([ index, count ]) => ({ id: finalState.slides[index]?.id ?? 0, index, count }))
+        }
+    })
     return {
         file: finalState.file,
         rev: { before: deck.rev, after: finalState.rev },
-        result: { applied: doc.ops.length, slideCount: session.slideCount, dryRun: false, slides },
+        result: { applied: doc.ops.length, slideCount: session.slideCount, dryRun: false, slides,
+            ...(replacements.length > 0 && { replacements }) },
         warnings: [ ...plan.warnings, ...session.warnings ]
     }
 }

@@ -30,13 +30,16 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `cli/help.ts` | usage text and the per-command detailed help registry |
 | `commands/*` | per-command orchestration (5-40 lines each); `apply.ts` owns `executeOps`, the single write path also used by `new` and the sugar commands |
 | `schema/payloads.ts` | Zod: rich text, table, chart, frame, elements |
-| `schema/ops.ts` | Zod: the ~10 ops and the ops document |
+| `schema/ops.ts` | Zod: the ~11 ops and the ops document |
 | `core/model.ts` | engine-free domain model (Frame, Layout, DeckState, ...) |
 | `core/selector.ts` | selector grammar `id:/title:/index:/$ref` + resolver |
 | `core/describe/*` | pure geometry→semantics: position bands, ASCII minimap, capacity model, Markdown narration |
 | `core/lint.ts` | capacity lint over the describe model |
 | `core/ops/registry.ts` | op contract (`plan(ctx, op)`) and the MutationPlan model |
-| `core/ops/*` | one plan transformer per op (slide-add, slide-edit, elements) |
+| `core/ops/*` | one plan transformer per op (slide-add, slide-edit, elements, el-set, replace) |
+| `core/ops/el-set.ts` | `el.set`: every field checked against the element's type; a planned element's spec is patched, an existing element gets a planned edit; existing tables are modelled through the document (rows, merges) so cell and row addresses fail at plan time |
+| `core/ops/replace.ts` | `text.replace` with sequence semantics: the content planned so far is replaced and counted while planning, the slide's existing content is left to the engine with what earlier ops replaced or removed excluded |
+| `core/text-replace.ts` | the plain-text find/replace over runs shared by planner and engine: a match may span runs, the first touched run takes the replacement, emptied runs go |
 | `core/ops/fill-common.ts` | the shared fill payload (placeholders, notes, footer, background, hidden) planned identically for `slide.add` and `slide.fill` |
 | `core/table-grid.ts` | the HTML-like grid of a table payload with merged cells (positions, column count, plan-time checks) |
 | `core/ops/planner.ts` | registry assembly, rev check, whole-document planning |
@@ -44,17 +47,18 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/seed.ts` | slides and decks from layouts: `slideFromLayout` (empty slide with cloned placeholders `PptcPh-<idx>`), `buildEmptyDeck` for `new` |
 | `engine/inplace/engine.ts` | `runSession`: package repairs, slide structure, slide classification (touched, repairs), one pass per touched slide, slide list, package-wide steps, self-checks (verify, content guard, byte guard), atomic write; `preflight` for `--dry-run` |
 | `engine/inplace/package.ts` | part-level package access; rel-graph clone under fresh names (`slide.copy`, transplanted parts) |
-| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: removals, text, picture placeholders, background, footer, notes, transplanted elements, hyperlinks, visibility, links to removed slides, repairs |
+| `engine/inplace/slides.ts` | everything done to ONE slide in a single parse/serialize pass: text.replace on the existing content, removals, text, picture placeholders, el.set edits, background, footer/slide number/date (cloned from the layout with relationships of their own), notes, transplanted elements, hyperlinks, visibility, links to removed slides, repairs |
+| `engine/inplace/edits.ts` | the in-place changes of existing elements: el.set (text with the kept format, frame, fill, border, font color, alt text, image swap, table cells and rows) and text.replace on a slide's and its notes' text bodies |
 | `engine/inplace/repair.ts` | the repairs of the triggers `defects.ts` detects, on any part: duplicate/dead relationships, references to missing relationships (smallest valid removal, named), duplicate shape ids |
 | `engine/inplace/transplant.ts` | `el.add`: one PptxGenJS deck per apply (one generator slide per target slide), shapes moved by object name with their parts |
-| `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`), every run with its `lang` |
+| `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`), every run with its `lang`; el.set's kept format (first paragraph's and run's properties); text.replace on a body's runs (fields and line breaks separate) |
 | `engine/lang.ts` | the deck language of written text: `pptcDeckLang`, else the deck's default text language, else the first run language, else `en-US` |
 | `engine/image-size.ts` | pixel size from image headers (PNG, JPEG, GIF, WebP, BMP, SVG) and the crop/contain/stretch fit of an image into a frame |
 | `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide, and the finishing of its output for what PptxGenJS cannot write: theme colors (passed as hex tokens, turned into `a:schemeClr`), one `a:pPr` per paragraph, picture crops, a scatter chart's x-axis format |
 | `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections, content types, app properties |
 | `engine/defects.ts` | the repair triggers of a single part (duplicate or dead relationships, references to missing relationships, duplicate shape ids, notes ownership) -- ONE rule set: the engine detects its input defects with it and repairs exactly these, verify reports them |
 | `engine/verify.ts` | read-only integrity check: the part rules of `defects.ts` on every part plus the package-level rules (slide list, content types, notes 1:1, app properties, orphans); backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
-| `engine/guard.ts` | content self-check and byte guard before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them, layouts/masters must not change (`E_INTEGRITY`) |
+| `engine/guard.ts` | content self-check and byte guard before every write: each touched slide must keep its notes and related parts (images, charts, embeddings) unless an op changes them -- an image swap declares exactly its new image (by content hash) and the old ones that may go --, layouts/masters must not change (`E_INTEGRITY`) |
 | `engine/xml.ts` | shared XML DOM helpers: parse/serialize, OOXML namespaces, element queries, relationship references, escaping |
 | `engine/parts.ts` | the OPC layer below every engine module: case-insensitive part names, relationships read through the DOM, the relationship-type taxonomy, content types, part removal, asset GC, layout order, and `PartAllocator`: every fresh part name, relationship id, sldId and shape id of an apply |
 | `infra/args.ts` | `util.parseArgs` wrapper with usage errors |
@@ -85,9 +89,11 @@ touch       a kept slide is touched when an op edits or (un)hides it, it
 generate    PptxGenJS renders every el.add element of the apply into one
             in-memory deck
 slides      repairs of the slide's other parts (notes, charts, ...), then
-            one pass per touched slide: removals, text, picture placeholders,
-            background, footer, notes, transplanted elements, hyperlinks,
-            visibility, links to removed slides, repairs
+            one pass per touched slide: text.replace on the existing
+            content, removals, text, picture placeholders, el.set edits,
+            background, footer/slide number/date, notes, transplanted
+            elements, hyperlinks, visibility, links to removed slides,
+            repairs
 package     sldIdLst (kept ids, fresh ids for new and copied slides), removed
             slides and links to them, then engine/post.ts: notes sweep, doc
             props, asset GC, sections, content types, app properties
@@ -197,7 +203,8 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   slide keeps its bytes across edits, additions, copies, moves and removals
 - `test/integration/fuzz-semantic.test.ts` -- seeded random apply sequences
   against an expected model (title, notes, image, chart, OLE payload,
-  section, sldId) after every apply; long runs via `PPTC_FUZZ_ROUNDS` and
+  section, sldId, textboxes and table after el.set and text.replace) after
+  every apply; long runs via `PPTC_FUZZ_ROUNDS` and
   `PPTC_FUZZ_SEEDS`
 - `test/integration/stress.test.ts` -- agent-like sessions: many applies in
   a row covering every op kind and element type, plus seeded-random edit

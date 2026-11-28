@@ -2913,8 +2913,8 @@ var require_utils = __commonJS({
       var result = transform2[inputType][outputType](input2);
       return result;
     };
-    exports.resolve = function(path10) {
-      var parts = path10.split("/");
+    exports.resolve = function(path11) {
+      var parts = path11.split("/");
       var result = [];
       for (var index = 0; index < parts.length; index++) {
         var part = parts[index];
@@ -8767,18 +8767,18 @@ var require_object = __commonJS({
       var object2 = new ZipObject(name, zipObjectContent, o);
       this.files[name] = object2;
     };
-    var parentFolder = function(path10) {
-      if (path10.slice(-1) === "/") {
-        path10 = path10.substring(0, path10.length - 1);
+    var parentFolder = function(path11) {
+      if (path11.slice(-1) === "/") {
+        path11 = path11.substring(0, path11.length - 1);
       }
-      var lastSlash = path10.lastIndexOf("/");
-      return lastSlash > 0 ? path10.substring(0, lastSlash) : "";
+      var lastSlash = path11.lastIndexOf("/");
+      return lastSlash > 0 ? path11.substring(0, lastSlash) : "";
     };
-    var forceTrailingSlash = function(path10) {
-      if (path10.slice(-1) !== "/") {
-        path10 += "/";
+    var forceTrailingSlash = function(path11) {
+      if (path11.slice(-1) !== "/") {
+        path11 += "/";
       }
-      return path10;
+      return path11;
     };
     var folderAdd = function(name, createFolders) {
       createFolders = typeof createFolders !== "undefined" ? createFolders : defaults.createFolders;
@@ -10251,12 +10251,12 @@ var require_grammar = __commonJS({
       reg(/\(/, S_OPT, PCDATA, S_OPT, /\)/)
     );
     var _children_quantity = /[?*+]?/;
-    var children = reg(
+    var children3 = reg(
       /\([^>]+\)/,
       _children_quantity
       /*regg(choice, '|', seq), _children_quantity*/
     );
-    var contentspec = regg("EMPTY", "|", "ANY", "|", Mixed, "|", children);
+    var contentspec = regg("EMPTY", "|", "ANY", "|", Mixed, "|", children3);
     var ELEMENTDECL_START = "<!ELEMENT";
     var elementdecl = reg(ELEMENTDECL_START, S, regg(QName, "|", PEReference), S, regg(contentspec, "|", PEReference), S_OPT, ">");
     var NotationType = reg("NOTATION", S, /\(/, S_OPT, Name, regg(S_OPT, /\|/, S_OPT, Name), "*", S_OPT, /\)/);
@@ -16276,9 +16276,11 @@ Options:
                    type, name, frame, text, table cells + column widths
                    (colWidths) + merged cells (merges) + vertical cell
                    text (cellTextDirections), autoshape preset/fill/
-                   border/font, textDirection, connector startArrow/
-                   endArrow, the text language (lang), a picture's media
-                   file name (image), and -- for a body with explicit run
+                   border/font, textDirection, valign and margin of a
+                   text body, rotation, altText and title, connector
+                   startArrow/endArrow, the text language (lang), a
+                   picture's media file name (image), and -- for a body
+                   with explicit run
                    formatting -- its paragraphs/runs (per-run font, size,
                    bold, italic, strike, super-/subscript, color,
                    highlight; per paragraph bullet, spacing), which pass
@@ -16383,15 +16385,17 @@ Options: --slide SEL, --rev R, --strict, --dry-run (as in 'apply').
 
 Example:
   pptc note deck.pptx --slide id:257 "Key message, figures, transition."`,
-  "footer": `pptc footer <deck> [--slide SEL] "footer text"
+  "footer": `pptc footer <deck> [--slide SEL] ["footer text"] [--number] [--date]
 
 Set the footer of one slide -- or, without --slide, of EVERY slide.
 Clones the layout's footer placeholder; layouts without one (typically
-title/closing layouts) are skipped silently.
-Options: --slide SEL, --rev R, --strict, --dry-run (as in 'apply').
+title/closing layouts) are skipped silently. --number and --date show
+the slide number and the date as well (the layout's placeholders with
+their fields); with one of them the text may be omitted.
+Options: --slide SEL, --number, --date, --rev R, --strict, --dry-run.
 
 Example:
-  pptc footer deck.pptx "\xA9 Acme Corp | My Talk | 2026"`,
+  pptc footer deck.pptx "\xA9 Acme Corp | My Talk | 2026" --number`,
   "rm": `pptc rm <deck> --slide SEL
 
 Remove a slide (compiles to one slide.rm op).
@@ -16483,6 +16487,7 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                                    "image": { "image": "photo.png",
                                               "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
+                 "slideNumber": true, "date": false,  // show/remove
                  "background": { "color": "1F4E79" },
                  "hidden": true }           // optional: hide/show the slide
   slide.fill   same fill payload, on an existing slide ("slide": SEL)
@@ -16511,9 +16516,23 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "dash": solid|dash|dot|dashDot|longDash,
                  "startArrow"/"endArrow": none|arrow|triangle|stealth|
                  diamond|oval
-  el.set       retext an element:  { "op": "el.set", "slide": SEL,
-                 "name": "Box1", "text": "new text" } -- placeholders,
-               textboxes and shapes only
+               every element also takes "altText" and "title"
+  el.set       change an element in place (at least one field, each
+               checked against the element's type):
+               { "op": "el.set", "slide": SEL, "name": "Box1", ... }
+                 "text" (placeholder/textbox/shape; text without format
+                   keeps the first paragraph's and run's format),
+                 "frame": { "x", "y", "w", "h", "rotation" } (given keys
+                   change; not rotation on table/chart),
+                 "fill", "fontColor" (placeholder/textbox/shape),
+                 "border", "borderPt" (also picture/connector),
+                 "altText", "title" (any element; "" removes),
+                 "image" (picture or filled picture placeholder: frame,
+                   crop and animations stay -- only on explicit request),
+                 table: "cells": [{ "row", "col", "text" }] (0-based,
+                   header row 0), "addRows": { "at", "rows" } (format of
+                   the row above), "removeRows": [ 2 ]
+               -- also on elements planned earlier in the document
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -16523,6 +16542,14 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                so they travel with the file and 'state' reads them back
                { "op": "meta.props", "set": { "title": "Q3",
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
+  text.replace find/replace plain text in shapes, placeholders and table
+               cells of the deck (or of "slide"), notes only on request,
+               fields never; a match may span runs (the first keeps its
+               format); sees every earlier op of the document
+               { "op": "text.replace", "find": "2025", "replace": "2026",
+                 "slide": SEL, "matchCase": false, "wholeWord": false,
+                 "notes": false }
+               -> result.replacements: [{ "op", "count", "slides" }]
 
 Text values accept plain strings (\\n = new paragraph) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
@@ -16607,7 +16634,7 @@ var toPptcError = (err) => {
 var VERSION = true ? "1.1.0" : "0.0.0-dev";
 
 // src/commands/apply.ts
-import path7 from "node:path";
+import path8 from "node:path";
 
 // src/core/ops/registry.ts
 var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
@@ -16620,9 +16647,13 @@ var newPlanEntry = (source, virtualId, title, layoutIndex, hidden = false) => ({
   footer: null,
   background: null,
   hidden,
+  slideNumber: null,
+  date: null,
   elements: [],
-  setTexts: [],
-  removeNames: []
+  edits: [],
+  removeNames: [],
+  replaces: [],
+  replaced: []
 });
 var slideAddrOf = (ctx, entry) => ({
   id: entry.virtualId > 0 ? entry.virtualId : null,
@@ -16934,6 +16965,10 @@ var planFill = (ctx, entry, fill) => {
     entry.background = fill.background.color;
   if (fill.hidden !== void 0)
     entry.hidden = fill.hidden;
+  if (fill.slideNumber !== void 0)
+    entry.slideNumber = fill.slideNumber;
+  if (fill.date !== void 0)
+    entry.date = fill.date;
 };
 
 // src/core/ops/slide-add.ts
@@ -17011,12 +17046,14 @@ var slideCopy = {
     const copy = {
       ...source,
       virtualId: ctx.nextVirtualId--,
-      fills: [...source.fills],
+      fills: structuredClone(source.fills),
       /*  deep-copy planned elements: a later el.set on the copy must
           not patch the original's planned spec through aliasing  */
       elements: source.elements.map((e) => ({ name: e.name, spec: structuredClone(e.spec) })),
-      setTexts: [...source.setTexts],
-      removeNames: [...source.removeNames]
+      edits: structuredClone(source.edits),
+      removeNames: [...source.removeNames],
+      replaces: structuredClone(source.replaces),
+      replaced: structuredClone(source.replaced)
     };
     ctx.plan.entries.splice(ctx.plan.entries.indexOf(source) + 1, 0, copy);
     registerRef(ctx, op.ref, copy);
@@ -17179,10 +17216,8 @@ var layoutTable = (rows) => {
 
 // src/core/ops/elements.ts
 var PROMPT_BOX_PREFIX = "PptcPromptBox";
-var specFrame = (spec) => {
-  if (spec.type === "connector")
-    return null;
-  const f = spec.frame;
+var specFrame = (spec) => spec.type === "connector" ? null : rotatedBox(spec.frame);
+var rotatedBox = (f) => {
   if (f.w === void 0 || f.h === void 0)
     return null;
   const rad = (f.rotation ?? 0) * Math.PI / 180;
@@ -17226,25 +17261,44 @@ var collectElementSizes = (spec) => {
       return [];
   }
 };
-var overlapObstacles = (ctx, entry) => {
+var plannedFrame = (entry, name, frame) => {
+  let f = frame;
+  for (const edit of entry.edits)
+    if (edit.name === name && edit.set.frame !== void 0) {
+      const patch = edit.set.frame;
+      const base = f ?? { x: patch.x ?? 0, y: patch.y ?? 0, w: patch.w ?? 0, h: patch.h ?? 0 };
+      f = {
+        x: patch.x ?? base.x,
+        y: patch.y ?? base.y,
+        w: patch.w ?? base.w,
+        h: patch.h ?? base.h,
+        ...(patch.rotation ?? base.rotation) !== void 0 && { rotation: patch.rotation ?? base.rotation }
+      };
+    }
+  return f === null || f.w === 0 || f.h === 0 ? null : f.rotation === void 0 ? f : rotatedBox(f);
+};
+var overlapObstacles = (ctx, entry, self2 = null) => {
   const obstacles = [];
   const layout = entryLayout(ctx, entry);
+  const shapes = existingShapes(ctx, entry);
   if (layout !== null) {
-    for (const ph of layout.placeholders)
-      if (ph.kind !== "picture" && ph.frame !== null)
-        obstacles.push({ name: ph.name, frame: ph.frame });
+    for (const ph of layout.placeholders) {
+      const name = entry.source.kind === "seed" ? seedPlaceholderName(ph.idx) : shapes.find((sh) => sh.placeholderIdx === ph.idx)?.name ?? null;
+      const frame = name === null ? ph.frame : plannedFrame(entry, name, ph.frame);
+      if (ph.kind !== "picture" && frame !== null && (name === null || name !== self2))
+        obstacles.push({ name: ph.name, frame });
+    }
     for (const frame of layout.reserved)
       obstacles.push({ name: "footer/slide-number/date area", frame });
   }
-  if (entry.source.kind === "self") {
-    const part = entry.source.part;
-    for (const sh of ctx.deck.slides.find((s) => s.part === part)?.shapes ?? [])
-      if (sh.frame !== null && !sh.name.startsWith(PROMPT_BOX_PREFIX) && sh.placeholderKind !== "picture" && sh.type !== "picture" && sh.type !== "connector" && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
-        obstacles.push({ name: sh.name, frame: sh.frame });
+  for (const sh of shapes) {
+    const frame = plannedFrame(entry, sh.name, sh.frame);
+    if (frame !== null && sh.name !== self2 && !sh.name.startsWith(PROMPT_BOX_PREFIX) && sh.placeholderKind !== "picture" && sh.type !== "picture" && sh.type !== "connector" && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
+      obstacles.push({ name: sh.name, frame });
   }
   for (const planned of entry.elements) {
     const frame = specFrame(planned.spec);
-    if (frame !== null && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX)))
+    if (frame !== null && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self2))
       obstacles.push({ name: planned.name ?? planned.spec.type, frame });
   }
   return obstacles;
@@ -17274,61 +17328,11 @@ var elAdd = {
   }
 };
 var nameMatches = (shapeName, address) => shapeName === address || shapeName.startsWith(`${address}-`);
-var TEXT_TYPES = ["placeholder", "textbox", "shape"];
-var LINE_GEOMETRY = /^(line|straightConnector\d|bentConnector\d|curvedConnector\d)$/;
 var existingShapes = (ctx, entry) => {
   if (entry.source.kind !== "self")
     return [];
   const part = entry.source.part;
   return ctx.deck.slides.find((s) => s.part === part)?.shapes ?? [];
-};
-var elSet = {
-  name: "el.set",
-  plan(ctx, op) {
-    const entry = resolveEntry(ctx, op.slide);
-    if (!op.name.startsWith(PROMPT_BOX_PREFIX)) {
-      const tooSmall = lintFontSize(
-        { element: op.name },
-        richTextSizes(op.text),
-        ctx.minFontPt,
-        slideAddrOf(ctx, entry)
-      );
-      if (tooSmall !== null)
-        ctx.plan.warnings.push(tooSmall);
-    }
-    const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name));
-    if (planned !== void 0) {
-      if (planned.spec.type === "textbox" || planned.spec.type === "shape")
-        planned.spec.text = op.text;
-      else
-        throw new PptcError(
-          "E_SCHEMA",
-          `element '${op.name}' is a ${planned.spec.type} -- only textbox and shape text can be set`
-        );
-      return;
-    }
-    const matches = existingShapes(ctx, entry).filter((sh) => nameMatches(sh.name, op.name));
-    if (matches.length === 0)
-      throw new PptcError(
-        "E_ADDR_NOTFOUND",
-        `slide has no element named '${op.name}'`,
-        { available: existingShapes(ctx, entry).map((sh) => sh.name) }
-      );
-    if (matches.length > 1)
-      throw new PptcError(
-        "E_ADDR_AMBIGUOUS",
-        `'${op.name}' matches ${matches.length} elements`,
-        { candidates: matches.map((sh) => sh.name) }
-      );
-    const target = matches[0];
-    const type = target.type === "shape" && LINE_GEOMETRY.test(target.shape ?? "") ? "connector" : target.type;
-    if (!TEXT_TYPES.includes(type))
-      throw new PptcError(
-        "E_SCHEMA",
-        `element '${target.name}' is a ${type} -- only placeholder, textbox and shape text can be set`
-      );
-    entry.setTexts.push({ name: target.name, text: op.text });
-  }
 };
 var elRm = {
   name: "el.rm",
@@ -17408,6 +17412,474 @@ var metaProps = {
   }
 };
 
+// src/core/ops/el-set.ts
+var ALL = ["placeholder", "textbox", "shape", "picture", "table", "chart", "connector", "group", "other"];
+var EXISTING_TYPES = {
+  text: ["placeholder", "textbox", "shape"],
+  frame: ALL,
+  fill: ["placeholder", "textbox", "shape"],
+  border: ["placeholder", "textbox", "shape", "picture", "connector"],
+  borderPt: ["placeholder", "textbox", "shape", "picture", "connector"],
+  fontColor: ["placeholder", "textbox", "shape"],
+  altText: ALL,
+  title: ALL,
+  image: ["picture"],
+  cells: ["table"],
+  addRows: ["table"],
+  removeRows: ["table"]
+};
+var PLANNED_TYPES = {
+  text: ["textbox", "shape"],
+  frame: ["textbox", "shape", "table", "chart", "image"],
+  fill: ["textbox", "shape"],
+  border: ["textbox", "shape", "connector"],
+  borderPt: ["textbox", "shape", "connector"],
+  fontColor: ["textbox", "shape"],
+  altText: ["textbox", "shape", "table", "chart", "image", "connector"],
+  title: ["textbox", "shape", "table", "chart", "image", "connector"],
+  image: ["image"],
+  cells: ["table"],
+  addRows: ["table"],
+  removeRows: ["table"]
+};
+var LINE_GEOMETRY = /^(line|straightConnector\d|bentConnector\d|curvedConnector\d)$/;
+var fieldsOf = (patch) => Object.keys(patch).filter((k) => patch[k] !== void 0);
+var checkFields = (name, type, fields, allowed) => {
+  for (const field of fields)
+    if (!allowed[field].includes(type))
+      throw new PptcError("E_SCHEMA", `element '${name}' is a ${type} -- '${field}' applies to ${allowed[field].join(", ")} only`);
+};
+var mergeAt = (merges, row, col) => merges.find((m) => m.row <= row && row < m.row + m.rowspan && m.col <= col && col < m.col + m.colspan) ?? null;
+var spansInto = (merges, row) => merges.find((m) => m.rowspan > 1 && m.row < row && row < m.row + m.rowspan) ?? null;
+var applyTableEdit = (model, set2, name) => {
+  const fail = (message) => {
+    throw new PptcError("E_SCHEMA", `table '${name}': ${message}`);
+  };
+  if (set2.removeRows !== void 0) {
+    const rows = [...new Set(set2.removeRows)].sort((a, b) => b - a);
+    for (const row of rows) {
+      if (row >= model.origin.length)
+        fail(`row ${row} is out of range (0-${model.origin.length - 1})`);
+      const merge2 = model.merges.find((m) => m.rowspan > 1 && m.row <= row && row < m.row + m.rowspan);
+      if (merge2 !== void 0)
+        fail(`row ${row} is part of the merged cell at row ${merge2.row}, column ${merge2.col}`);
+    }
+    if (rows.length >= model.origin.length)
+      fail("a table keeps at least one row");
+    for (const row of rows) {
+      model.origin.splice(row, 1);
+      model.merges = model.merges.filter((m) => m.row !== row).map((m) => m.row > row ? { ...m, row: m.row - 1 } : m);
+    }
+  }
+  if (set2.addRows !== void 0) {
+    const at = set2.addRows.at ?? model.origin.length;
+    if (at > model.origin.length)
+      fail(`row position ${at} is out of range (0-${model.origin.length})`);
+    const merge2 = spansInto(model.merges, at);
+    if (merge2 !== null)
+      fail(`row position ${at} lies inside the merged cell at row ${merge2.row}, column ${merge2.col}`);
+    for (const [i, row] of set2.addRows.rows.entries())
+      if (row.length !== model.cols)
+        fail(`added row ${i} has ${row.length} cell(s), the table has ${model.cols} column(s)`);
+    const n = set2.addRows.rows.length;
+    model.origin.splice(at, 0, ...new Array(n).fill(null));
+    model.merges = model.merges.map((m) => m.row >= at ? { ...m, row: m.row + n } : m);
+  }
+  for (const cell of set2.cells ?? []) {
+    if (cell.row >= model.origin.length || cell.col >= model.cols)
+      fail(`cell row ${cell.row}, column ${cell.col} is out of range (${model.origin.length} row(s), ${model.cols} column(s))`);
+    const merge2 = mergeAt(model.merges, cell.row, cell.col);
+    if (merge2 !== null && (merge2.row !== cell.row || merge2.col !== cell.col))
+      fail(`cell row ${cell.row}, column ${cell.col} is covered by the merged cell at row ${merge2.row}, column ${merge2.col}`);
+    const origin = model.origin[cell.row];
+    if (origin !== null && origin !== void 0)
+      model.overwritten.add(`${origin},${cell.col}`);
+  }
+};
+var tableModel = (shape, edits) => {
+  const rows = shape.table ?? [];
+  const model = {
+    origin: rows.map((_, i) => i),
+    cols: shape.colWidths?.length ?? rows[0]?.length ?? 0,
+    merges: (shape.merges ?? []).map((m) => ({ ...m })),
+    overwritten: /* @__PURE__ */ new Set()
+  };
+  for (const edit of edits)
+    if (edit.name === shape.name)
+      applyTableEdit(model, edit.set, shape.name);
+  return model;
+};
+var payloadCell = (value) => typeof value === "object" ? { text: value } : value;
+var patchTable = (spec, set2, name) => {
+  const fail = (message) => {
+    throw new PptcError("E_SCHEMA", `table '${name}': ${message}`);
+  };
+  const headers = spec.data.headers !== void 0;
+  let rows = [...headers ? [spec.data.headers] : [], ...spec.data.rows];
+  let headerKept = headers;
+  const grid = () => {
+    const g = layoutTable(rows);
+    if (typeof g === "string")
+      return fail(g);
+    return { cols: g.cols, cells: g.cells, merges: g.cells.flat().filter((c) => c.colspan > 1 || c.rowspan > 1) };
+  };
+  if (set2.removeRows !== void 0) {
+    const { merges } = grid();
+    const remove = [...new Set(set2.removeRows)].sort((a, b) => b - a);
+    for (const row of remove) {
+      if (row >= rows.length)
+        fail(`row ${row} is out of range (0-${rows.length - 1})`);
+      const merge2 = merges.find((m) => m.rowspan > 1 && m.row <= row && row < m.row + m.rowspan);
+      if (merge2 !== void 0)
+        fail(`row ${row} is part of the merged cell at row ${merge2.row}, column ${merge2.col}`);
+    }
+    for (const row of remove) {
+      rows.splice(row, 1);
+      if (row === 0)
+        headerKept = false;
+    }
+  }
+  if (set2.addRows !== void 0) {
+    const { cols, merges } = grid();
+    const at = set2.addRows.at ?? rows.length;
+    if (at > rows.length)
+      fail(`row position ${at} is out of range (0-${rows.length})`);
+    if (at === 0 && headerKept)
+      fail("row 0 is the header row -- insert at 1 or later");
+    const merge2 = spansInto(merges, at);
+    if (merge2 !== null)
+      fail(`row position ${at} lies inside the merged cell at row ${merge2.row}, column ${merge2.col}`);
+    for (const [i, row] of set2.addRows.rows.entries())
+      if (row.length !== cols)
+        fail(`added row ${i} has ${row.length} cell(s), the table has ${cols} column(s)`);
+    rows.splice(at, 0, ...set2.addRows.rows.map((row) => row.map(payloadCell)));
+  }
+  if (set2.cells !== void 0) {
+    const { cols, cells, merges } = grid();
+    rows = rows.map((row) => [...row]);
+    for (const cell of set2.cells) {
+      if (cell.row >= rows.length || cell.col >= cols)
+        fail(`cell row ${cell.row}, column ${cell.col} is out of range (${rows.length} row(s), ${cols} column(s))`);
+      const k = (cells[cell.row] ?? []).findIndex((c) => c.col === cell.col);
+      if (k < 0) {
+        const merge2 = mergeAt(merges, cell.row, cell.col);
+        fail(`cell row ${cell.row}, column ${cell.col} is covered by the merged cell at row ${merge2.row}, column ${merge2.col}`);
+      }
+      const row = rows[cell.row];
+      const old = row[k];
+      row[k] = typeof old === "object" && old !== null ? { ...old, text: cell.text } : typeof cell.text === "string" ? cell.text : { text: cell.text };
+    }
+  }
+  const body = headerKept ? rows.slice(1) : rows;
+  if (body.length === 0)
+    fail("a table keeps at least one body row");
+  spec.data = { ...spec.data, ...headerKept ? { headers: rows[0] } : {}, rows: body };
+  if (!headerKept)
+    delete spec.data.headers;
+  checkTable(spec, name);
+};
+var colored = (text, color) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line, color })) : text.map((p) => p.runs === void 0 ? { ...p, color } : { ...p, runs: p.runs.map((r) => ({ ...r, color })) });
+var patchSpec = (spec, set2, name) => {
+  checkFields(name, spec.type, fieldsOf(set2), PLANNED_TYPES);
+  if (spec.type !== "connector" && set2.frame !== void 0) {
+    for (const [key, value] of Object.entries(set2.frame))
+      if (value !== void 0)
+        spec.frame[key] = value;
+  }
+  if (set2.altText !== void 0)
+    spec.altText = set2.altText;
+  if (set2.title !== void 0)
+    spec.title = set2.title;
+  switch (spec.type) {
+    case "textbox":
+    case "shape":
+      if (set2.text !== void 0)
+        spec.text = set2.text;
+      if (set2.fill !== void 0)
+        spec.fill = set2.fill;
+      if (set2.border !== void 0)
+        spec.border = set2.border;
+      if (set2.borderPt !== void 0)
+        spec.borderPt = set2.borderPt;
+      if (set2.fontColor !== void 0 && spec.type === "shape")
+        spec.fontColor = set2.fontColor;
+      else if (set2.fontColor !== void 0 && spec.type === "textbox")
+        spec.text = colored(spec.text, set2.fontColor);
+      break;
+    case "connector":
+      if (set2.border !== void 0)
+        spec.color = set2.border;
+      if (set2.borderPt !== void 0)
+        spec.widthPt = set2.borderPt;
+      break;
+    case "image":
+      if (set2.image !== void 0)
+        spec.path = set2.image;
+      break;
+    case "table":
+      if (set2.cells !== void 0 || set2.addRows !== void 0 || set2.removeRows !== void 0)
+        patchTable(spec, set2, name);
+      break;
+    default:
+      break;
+  }
+};
+var completeFrame = (ctx, entry, shape, patch) => {
+  if (plannedFrame(entry, shape.name, shape.frame) !== null)
+    return patch;
+  const inherited = shape.placeholderIdx === null ? null : entryLayout(ctx, entry)?.placeholders.find((p) => p.idx === shape.placeholderIdx)?.frame ?? null;
+  const base = inherited ?? {};
+  const full = { x: patch.x ?? base.x, y: patch.y ?? base.y, w: patch.w ?? base.w, h: patch.h ?? base.h };
+  if (full.x === void 0 || full.y === void 0 || full.w === void 0 || full.h === void 0)
+    throw new PptcError("E_SCHEMA", `element '${shape.name}' inherits its frame and the layout gives none -- set x, y, w and h`);
+  return { ...patch, x: full.x, y: full.y, w: full.w, h: full.h };
+};
+var editableShapes = (ctx, entry) => entry.source.kind === "self" ? existingShapes(ctx, entry) : (entryLayout(ctx, entry)?.placeholders ?? []).map((ph) => ({
+  name: seedPlaceholderName(ph.idx),
+  id: 0,
+  type: "placeholder",
+  placeholderIdx: ph.idx,
+  placeholderKind: ph.kind,
+  frame: null,
+  text: null
+}));
+var elSet = {
+  name: "el.set",
+  plan(ctx, op) {
+    const entry = resolveEntry(ctx, op.slide);
+    const set2 = Object.fromEntries(Object.entries(op).filter(([key]) => !["op", "slide", "name"].includes(key)));
+    const slideAddr = slideAddrOf(ctx, entry);
+    const prompt = op.name.startsWith(PROMPT_BOX_PREFIX);
+    if (!prompt && op.text !== void 0) {
+      const tooSmall = lintFontSize({ element: op.name }, richTextSizes(op.text), ctx.minFontPt, slideAddr);
+      if (tooSmall !== null)
+        ctx.plan.warnings.push(tooSmall);
+    }
+    const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name));
+    if (planned !== void 0) {
+      patchSpec(planned.spec, set2, op.name);
+      const frame = specFrame(planned.spec);
+      if (set2.frame !== void 0 && !prompt && frame !== null) {
+        const overlap = lintElementOverlap(op.name, frame, overlapObstacles(ctx, entry, planned.name), slideAddr);
+        if (overlap !== null)
+          ctx.plan.warnings.push(overlap);
+      }
+      return;
+    }
+    const shapes = editableShapes(ctx, entry).filter((sh) => !entry.removeNames.includes(sh.name));
+    const matches = shapes.filter((sh) => nameMatches(sh.name, op.name));
+    if (matches.length === 0)
+      throw new PptcError(
+        "E_ADDR_NOTFOUND",
+        `slide has no element named '${op.name}'`,
+        { available: shapes.map((sh) => sh.name) }
+      );
+    if (matches.length > 1)
+      throw new PptcError(
+        "E_ADDR_AMBIGUOUS",
+        `'${op.name}' matches ${matches.length} elements`,
+        { candidates: matches.map((sh) => sh.name) }
+      );
+    const target = matches[0];
+    const imageFill = entry.fills.find((f) => f.image !== void 0 && f.phName === target.name);
+    const type = imageFill !== void 0 ? "picture" : target.type === "shape" && LINE_GEOMETRY.test(target.shape ?? "") ? "connector" : target.type;
+    if (set2.image !== void 0 && type === "placeholder" && target.placeholderKind === "picture")
+      throw new PptcError(
+        "E_SCHEMA",
+        `element '${target.name}' is an empty picture placeholder -- fill it with slide.fill 'image'`
+      );
+    checkFields(target.name, type, fieldsOf(set2), EXISTING_TYPES);
+    if (set2.frame?.rotation !== void 0 && ["table", "chart", "other"].includes(type))
+      throw new PptcError("E_SCHEMA", `element '${target.name}' is a ${type} -- it cannot be rotated`);
+    if (imageFill !== void 0 && set2.image !== void 0) {
+      imageFill.image = set2.image;
+      delete set2.image;
+    }
+    if (set2.frame !== void 0) {
+      set2.frame = completeFrame(ctx, entry, target, set2.frame);
+      const before = plannedFrame(entry, target.name, target.frame);
+      const f = { ...before, ...Object.fromEntries(Object.entries(set2.frame).filter(([, v]) => v !== void 0)) };
+      const frame = rotatedBox(f);
+      if (!prompt && frame !== null) {
+        const overlap = lintElementOverlap(target.name, frame, overlapObstacles(ctx, entry, target.name), slideAddr);
+        if (overlap !== null)
+          ctx.plan.warnings.push(overlap);
+      }
+    }
+    if (type === "table")
+      applyTableEdit(tableModel(target, entry.edits), set2, target.name);
+    if (set2.text !== void 0 && (target.placeholderKind === "title" || target.placeholderIdx === 0))
+      entry.title = richTextToPlain(set2.text).join(" ");
+    if (fieldsOf(set2).length > 0)
+      entry.edits.push({ name: target.name, set: set2 });
+  }
+};
+
+// src/core/text-replace.ts
+var matcher = (spec) => {
+  const escaped = spec.find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = spec.wholeWord ? `(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])` : escaped;
+  return new RegExp(pattern, spec.matchCase ? "gu" : "giu");
+};
+var mayMatch = (text, spec) => matcher({ ...spec, wholeWord: false }).test(text);
+var replaceRuns = (texts, spec) => {
+  const joined = texts.join("");
+  const matches = [...joined.matchAll(matcher(spec))];
+  if (matches.length === 0)
+    return { texts, count: 0 };
+  const owner = [];
+  texts.forEach((t, i) => {
+    for (let k = 0; k < t.length; k++)
+      owner.push(i);
+  });
+  const out = texts.map(() => "");
+  const touched = texts.map(() => false);
+  const hosts = texts.map(() => false);
+  let pos = 0;
+  for (const m of matches) {
+    const start = m.index;
+    const end = start + m[0].length;
+    for (let k = pos; k < start; k++)
+      out[owner[k]] += joined[k];
+    const host = owner[start];
+    out[host] += spec.replace;
+    hosts[host] = true;
+    for (let k = start; k < end; k++)
+      touched[owner[k]] = true;
+    pos = end;
+  }
+  for (let k = pos; k < joined.length; k++)
+    out[owner[k]] += joined[k];
+  return {
+    texts: out.map((t, i) => t === "" && (touched[i] === true || hosts[i] === true) ? null : t),
+    count: matches.length
+  };
+};
+var replacePlain = (text, spec) => {
+  let count = 0;
+  const lines = text.split("\n").map((line) => {
+    const done = replaceRuns([line], spec);
+    count += done.count;
+    return done.texts[0] ?? "";
+  });
+  return { text: lines.join("\n"), count };
+};
+var replaceRichText = (text, spec) => {
+  if (typeof text === "string")
+    return replacePlain(text, spec);
+  let count = 0;
+  const paragraphs = text.map((p) => {
+    if (p.runs === void 0) {
+      const done2 = replacePlain(p.text ?? "", spec);
+      count += done2.count;
+      return done2.count === 0 ? p : { ...p, text: done2.text };
+    }
+    const done = replaceRuns(p.runs.map((r) => r.text), spec);
+    count += done.count;
+    if (done.count === 0)
+      return p;
+    return { ...p, runs: p.runs.flatMap((r, i) => {
+      const t = done.texts[i];
+      return t === null || t === void 0 ? [] : [{ ...r, text: t }];
+    }) };
+  });
+  return { text: count === 0 ? text : paragraphs, count };
+};
+
+// src/core/ops/replace.ts
+var replaceCell = (cell, rich) => {
+  if (typeof cell === "object" && cell !== null)
+    return { ...cell, text: rich(cell.text) };
+  const text = String(cell);
+  const done = rich(text);
+  return done === text ? cell : done;
+};
+var replaceSpec = (spec, rich) => {
+  if (spec.type === "textbox" || spec.type === "shape" && spec.text !== void 0)
+    spec.text = rich(spec.text);
+  else if (spec.type === "table")
+    spec.data = {
+      ...spec.data,
+      ...spec.data.headers !== void 0 && { headers: spec.data.headers.map((c) => replaceCell(c, rich)) },
+      rows: spec.data.rows.map((row) => row.map((c) => replaceCell(c, rich)))
+    };
+};
+var skipped = (ctx, entry) => {
+  const skip = [
+    ...entry.removeNames,
+    ...entry.fills.filter((f) => f.text !== void 0 && !f.append || f.image !== void 0).map((f) => f.phName),
+    ...entry.edits.filter((e) => e.set.text !== void 0).map((e) => e.name),
+    ...entry.footer !== null ? ["@ftr"] : [],
+    ...entry.slideNumber !== null ? ["@sldNum"] : [],
+    ...entry.date !== null ? ["@dt"] : []
+  ];
+  const skipCells = [];
+  const tables = new Set(entry.edits.filter((e) => e.set.cells !== void 0 || e.set.addRows !== void 0 || e.set.removeRows !== void 0).map((e) => e.name));
+  for (const shape of existingShapes(ctx, entry).filter((sh) => tables.has(sh.name))) {
+    const model = tableModel(shape, entry.edits);
+    for (const cell of model.overwritten) {
+      const [row, col] = cell.split(",").map(Number);
+      skipCells.push({ name: shape.name, row, col });
+    }
+    for (let row = 0; row < (shape.table ?? []).length; row++)
+      if (!model.origin.includes(row))
+        skipCells.push({ name: shape.name, row, col: -1 });
+  }
+  return { skip: [...new Set(skip)], skipCells };
+};
+var textReplace = {
+  name: "text.replace",
+  plan(ctx, op) {
+    const spec = {
+      find: op.find,
+      replace: op.replace,
+      matchCase: op.matchCase ?? false,
+      wholeWord: op.wholeWord ?? false
+    };
+    const entries = op.slide === void 0 ? [...ctx.plan.entries] : [resolveEntry(ctx, op.slide)];
+    for (const entry of entries) {
+      let count = 0;
+      const rich = (text) => {
+        const done = replaceRichText(text, spec);
+        count += done.count;
+        return done.text;
+      };
+      const plain = (text) => {
+        const done = replacePlain(text, spec);
+        count += done.count;
+        return done.text;
+      };
+      for (const fill of entry.fills)
+        if (fill.text !== void 0)
+          fill.text = rich(fill.text);
+      for (const { set: set2 } of entry.edits) {
+        if (set2.text !== void 0)
+          set2.text = rich(set2.text);
+        if (set2.cells !== void 0)
+          set2.cells = set2.cells.map((cell) => ({ ...cell, text: rich(cell.text) }));
+        if (set2.addRows !== void 0)
+          set2.addRows = { ...set2.addRows, rows: set2.addRows.rows.map((row) => row.map((cell) => replaceCell(cell, rich))) };
+      }
+      for (const planned of entry.elements)
+        replaceSpec(planned.spec, rich);
+      if (entry.footer !== null)
+        entry.footer = plain(entry.footer);
+      if (op.notes === true && entry.notes !== null)
+        entry.notes = plain(entry.notes);
+      if (count > 0)
+        entry.replaced.push({ op: ctx.opIndex, count });
+      if (entry.title !== null)
+        entry.title = replacePlain(entry.title, spec).text;
+      entry.replaces.push({
+        op: ctx.opIndex,
+        ...spec,
+        notes: op.notes === true && entry.notes === null,
+        ...skipped(ctx, entry)
+      });
+    }
+  }
+};
+
 // src/core/ops/planner.ts
 var HANDLERS = new Map(
   [
@@ -17420,7 +17892,8 @@ var HANDLERS = new Map(
     elSet,
     elRm,
     imgPrompts,
-    metaProps
+    metaProps,
+    textReplace
   ].map((h) => [h.name, h])
 );
 var planOps = (doc, deck, deckLayouts, template, minFontPt) => {
@@ -17437,13 +17910,15 @@ var planOps = (doc, deck, deckLayouts, template, minFontPt) => {
     deckLayouts,
     template,
     nextVirtualId: -1,
-    minFontPt
+    minFontPt,
+    opIndex: 0
   };
   doc.ops.forEach((op, i) => {
     const handler = HANDLERS.get(op.op);
     if (handler === void 0)
       throw new PptcError("E_SCHEMA", `unknown op '${op.op}'`);
     try {
+      ctx.opIndex = i;
       handler.plan(ctx, op);
     } catch (err) {
       if (err instanceof PptcError)
@@ -18275,10 +18750,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path10) {
-  if (!path10)
+function getElementAtPath(obj, path11) {
+  if (!path11)
     return obj;
-  return path10.reduce((acc, key) => acc?.[key], obj);
+  return path11.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -18618,11 +19093,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path10, issues) {
+function prefixIssues(path11, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path10);
+    iss.path.unshift(path11);
     return iss;
   });
 }
@@ -19084,16 +19559,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path10 = []) => {
+  const processError = (error63, path11 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else {
-        const fullpath = [...path10, ...issue2.path];
+        const fullpath = [...path11, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -19132,17 +19607,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path10 = []) => {
+  const processError = (error63, path11 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else {
-        const fullpath = [...path10, ...issue2.path];
+        const fullpath = [...path11, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -19181,8 +19656,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path10 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path10) {
+  const path11 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path11) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -32973,12 +33448,12 @@ function _check(fn, params) {
   return ch;
 }
 // @__NO_SIDE_EFFECTS__
-function describe(description) {
+function describe(description2) {
   const ch = new $ZodCheck({ check: "describe" });
   ch._zod.onattach = [
     (inst) => {
       const existing = globalRegistry.get(inst) ?? {};
-      globalRegistry.add(inst, { ...existing, description });
+      globalRegistry.add(inst, { ...existing, description: description2 });
     }
   ];
   ch._zod.check = () => {
@@ -34793,9 +35268,9 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   readonly() {
     return readonly(this);
   },
-  describe(description) {
+  describe(description2) {
     const cl = this.clone();
-    globalRegistry.add(cl, { description });
+    globalRegistry.add(cl, { description: description2 });
     return cl;
   },
   meta(...args) {
@@ -36320,13 +36795,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path10 = ref.slice(1).split("/").filter(Boolean);
-  if (path10.length === 0) {
+  const path11 = ref.slice(1).split("/").filter(Boolean);
+  if (path11.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path10[0] === defsKey) {
-    const key = path10[1] === void 0 ? void 0 : decodeJSONPointerSegment(path10[1]);
+  if (path11[0] === defsKey) {
+    const key = path11[1] === void 0 ? void 0 : decodeJSONPointerSegment(path11[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -37204,6 +37679,13 @@ var FrameSchema = external_exports.object({
   h: external_exports.number().positive().optional(),
   rotation: external_exports.number().min(-360).max(360).optional()
 }).strict();
+var FramePatchSchema = external_exports.object({
+  x: external_exports.number().min(0).optional(),
+  y: external_exports.number().min(0).optional(),
+  w: external_exports.number().positive().optional(),
+  h: external_exports.number().positive().optional(),
+  rotation: external_exports.number().min(-360).max(360).optional()
+}).strict().refine((f) => Object.values(f).some((v) => v !== void 0), "a frame needs at least one of x, y, w, h, rotation");
 var LangSchema = external_exports.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "expected a language tag like 'de-DE' or 'en-US'");
 var TextDirectionSchema = external_exports.enum(["horizontal", "rotate90", "rotate270", "stacked"]);
 var ValignSchema = external_exports.enum(["top", "middle", "bottom"]);
@@ -37360,8 +37842,8 @@ var ChartSchema = external_exports.object({
   /**  doughnut: hole size in percent of the diameter  */
   holeSize: external_exports.number().int().min(10).max(90).optional()
 }).strict().superRefine((c, ctx) => {
-  const issue2 = (path10, message) => {
-    ctx.addIssue({ code: "custom", path: path10, message });
+  const issue2 = (path11, message) => {
+    ctx.addIssue({ code: "custom", path: path11, message });
   };
   const xy = c.type === "scatter" || c.type === "bubble";
   if (c.axes !== void 0 && (c.type === "pie" || c.type === "doughnut"))
@@ -37424,6 +37906,10 @@ var boxTextProps = {
   margin: MarginSchema.optional(),
   textDirection: TextDirectionSchema.optional()
 };
+var describedProps = {
+  altText: external_exports.string().optional(),
+  title: external_exports.string().optional()
+};
 var ElementSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
     type: external_exports.literal("textbox"),
@@ -37435,6 +37921,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     ...boxTextProps,
     /**  text language of the element (paragraphs and runs may override)  */
     lang: LangSchema.optional(),
+    ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37450,12 +37937,14 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     textDirection: TextDirectionSchema.optional(),
     /**  text language of every cell  */
     lang: LangSchema.optional(),
+    ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
     type: external_exports.literal("chart"),
     frame: FrameSchema,
     data: ChartSchema,
+    ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37471,6 +37960,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     ...boxTextProps,
     /**  text language of the shape's text  */
     lang: LangSchema.optional(),
+    ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37483,6 +37973,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     fit: external_exports.enum(["crop", "contain", "stretch"]).optional(),
     /**  click target of the picture  */
     hyperlink: HyperlinkSchema.optional(),
+    ...describedProps,
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37495,6 +37986,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     /**  decoration at the `from` / `to` end  */
     startArrow: ArrowSchema.optional(),
     endArrow: ArrowSchema.optional(),
+    ...describedProps,
     name: external_exports.string().optional()
   }).strict()
 ]);
@@ -37530,7 +38022,13 @@ var fillProps = {
   background: external_exports.object({ color: ColorSchema }).strict().optional(),
   /**  hide ("Hide Slide", `show="0"`) or show the slide; omitted leaves the
        current visibility untouched (kept slides keep their hidden state)  */
-  hidden: external_exports.boolean().optional()
+  hidden: external_exports.boolean().optional(),
+  /**  show the slide number (`true`: the layout's slide-number placeholder
+       with its field) or remove it (`false`); omitted leaves it as it is  */
+  slideNumber: external_exports.boolean().optional(),
+  /**  show the date (`true`: the layout's date placeholder with its field)
+       or remove it (`false`); omitted leaves it as it is  */
+  date: external_exports.boolean().optional()
 };
 var SlideAddSchema = external_exports.object({
   op: external_exports.literal("slide.add"),
@@ -37571,11 +38069,74 @@ var ElRmSchema = external_exports.object({
   slide: SlideSelectorSchema,
   name: external_exports.string().min(1)
 }).strict();
+var RowCellSchema = external_exports.union([RichTextSchema, external_exports.number(), external_exports.boolean()]);
+var EL_SET_FIELDS = [
+  "text",
+  "frame",
+  "fill",
+  "border",
+  "borderPt",
+  "fontColor",
+  "altText",
+  "title",
+  "image",
+  "cells",
+  "addRows",
+  "removeRows"
+];
 var ElSetSchema = external_exports.object({
   op: external_exports.literal("el.set"),
   slide: SlideSelectorSchema,
   name: external_exports.string().min(1),
-  text: RichTextSchema
+  /**  new text (placeholders, textboxes, shapes); keeps the first
+       paragraph's and run's format where the new text sets none  */
+  text: RichTextSchema.optional(),
+  /**  move, resize or rotate: the given keys change, the others stay  */
+  frame: FramePatchSchema.optional(),
+  /**  solid fill (placeholders, textboxes, shapes)  */
+  fill: ColorSchema.optional(),
+  /**  outline color and width in pt (also pictures and connectors)  */
+  border: ColorSchema.optional(),
+  borderPt: external_exports.number().positive().optional(),
+  /**  color of every text run (placeholders, textboxes, shapes)  */
+  fontColor: ColorSchema.optional(),
+  /**  alt text (`cNvPr@descr`) and title (`cNvPr@title`) of any element;
+       an empty string removes them  */
+  altText: external_exports.string().optional(),
+  title: external_exports.string().optional(),
+  /**  replace the image of a picture or a filled picture placeholder; the
+       frame, a crop (re-cropped to the new aspect) and animations stay  */
+  image: external_exports.string().min(1).optional(),
+  /**  table: set cell texts by 0-based grid position (header row 0)  */
+  cells: external_exports.array(external_exports.object({
+    row: external_exports.number().int().min(0),
+    col: external_exports.number().int().min(0),
+    text: RichTextSchema
+  }).strict()).min(1).optional(),
+  /**  table: insert rows at a 0-based row position (default: append);
+       they take the format of the row above (the first row at 0)  */
+  addRows: external_exports.object({
+    at: external_exports.number().int().min(0).optional(),
+    rows: external_exports.array(external_exports.array(RowCellSchema).min(1)).min(1)
+  }).strict().optional(),
+  /**  table: remove rows by 0-based index (before addRows and cells)  */
+  removeRows: external_exports.array(external_exports.number().int().min(0)).min(1).optional()
+}).strict().refine(
+  (op) => EL_SET_FIELDS.some((f) => op[f] !== void 0),
+  `el.set needs at least one of ${EL_SET_FIELDS.join(", ")}`
+);
+var TextReplaceSchema = external_exports.object({
+  op: external_exports.literal("text.replace"),
+  find: external_exports.string().min(1),
+  replace: external_exports.string(),
+  /**  only this slide; the whole deck when omitted  */
+  slide: SlideSelectorSchema.optional(),
+  /**  match upper/lower case exactly (default false)  */
+  matchCase: external_exports.boolean().optional(),
+  /**  match whole words only (default false)  */
+  wholeWord: external_exports.boolean().optional(),
+  /**  also replace in the speaker notes (default false)  */
+  notes: external_exports.boolean().optional()
 }).strict();
 var ImgPromptsSchema = external_exports.object({
   op: external_exports.literal("img.prompts"),
@@ -37607,7 +38168,8 @@ var OpSchema = external_exports.discriminatedUnion("op", [
   ElRmSchema,
   ElSetSchema,
   ImgPromptsSchema,
-  MetaPropsSchema
+  MetaPropsSchema,
+  TextReplaceSchema
 ]);
 var OpsDocumentSchema = external_exports.object({
   /**  optimistic lock: must equal the deck's current `rev` when given  */
@@ -37624,7 +38186,8 @@ var OP_NAMES = [
   "el.rm",
   "el.set",
   "img.prompts",
-  "meta.props"
+  "meta.props",
+  "text.replace"
 ];
 
 // src/engine/reader.ts
@@ -38491,6 +39054,33 @@ var shapeStyle = (sp, colors) => {
     out.fontFace = face;
   return out;
 };
+var description = (node2) => {
+  const cNvPr = firstElement(node2, "p:cNvPr");
+  const descr = cNvPr?.getAttribute("descr") ?? "";
+  const title = cNvPr?.getAttribute("title") ?? "";
+  const rot = Number((firstElement(node2, "a:xfrm") ?? firstElement(node2, "p:xfrm"))?.getAttribute("rot") ?? "0");
+  const rotation = Number.isFinite(rot) ? Math.round(rot / 600) / 100 : 0;
+  return {
+    ...rotation !== 0 && { rotation },
+    ...descr !== "" && { altText: descr },
+    ...title !== "" && { title }
+  };
+};
+var bodyLayout = (bodyPr) => {
+  if (bodyPr === null)
+    return {};
+  const valign = { t: "top", ctr: "middle", b: "bottom" }[bodyPr.getAttribute("anchor")];
+  const sides = [["lIns", 91440], ["tIns", 45720], ["rIns", 91440], ["bIns", 45720]];
+  const set2 = sides.some(([attr]) => (bodyPr.getAttribute(attr) ?? "") !== "");
+  const margin = sides.map(([attr, def]) => {
+    const v = Number(bodyPr.getAttribute(attr) ?? "");
+    return emuToInch((bodyPr.getAttribute(attr) ?? "") !== "" && Number.isFinite(v) ? v : def);
+  });
+  return {
+    ...valign !== void 0 && { valign },
+    ...set2 && { margin: margin.every((m) => m === margin[0]) ? margin[0] : margin }
+  };
+};
 var runStyle = (r, colors) => {
   const out = { text: firstElement(r, "a:t")?.textContent ?? "" };
   const rPr = firstElement(r, "a:rPr");
@@ -38618,6 +39208,7 @@ var readDeckState = async (archive) => {
           frame: shapeFrame(node2),
           text
         };
+        Object.assign(shape, description(node2));
         if (node2.nodeName === "p:sp")
           Object.assign(shape, shapeStyle(node2, info.colors));
         if (node2.nodeName === "p:sp" || node2.nodeName === "p:cxnSp")
@@ -38625,6 +39216,8 @@ var readDeckState = async (archive) => {
         const textDirection = txBody === null ? void 0 : textDirectionOf(directChild(txBody, ["a:bodyPr"])?.getAttribute("vert"));
         if (textDirection !== void 0)
           shape.textDirection = textDirection;
+        if (txBody !== null)
+          Object.assign(shape, bodyLayout(directChild(txBody, ["a:bodyPr"])));
         if (node2.nodeName === "p:sp" || shape.type === "table") {
           const lang = firstElement(node2, "a:rPr")?.getAttribute("lang");
           if (lang !== null && lang !== void 0 && lang !== "")
@@ -38685,8 +39278,8 @@ var readDeckState = async (archive) => {
 
 // src/engine/inplace/engine.ts
 var import_jszip7 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync7 } from "node:fs";
-import path6 from "node:path";
+import { readFileSync as readFileSync8 } from "node:fs";
+import path7 from "node:path";
 
 // src/engine/defects.ts
 var finding = (rule, part, detail) => ({ rule, part, text: `${part}: ${detail}` });
@@ -38842,6 +39435,21 @@ var verifyContent = async (before, after, expects, repaired = /* @__PURE__ */ ne
       continue;
     const gone = minus(was.assets, now.assets);
     const added = minus(now.assets, was.assets);
+    for (const swap of exp.replaced ?? []) {
+      const k = added.indexOf(`image:${swap.to}[]`);
+      if (k < 0 && swap.from.includes(swap.to))
+        continue;
+      if (k < 0) {
+        blocked.push(`slide ${exp.label}: the image an op put in place (${swap.to}) is missing`);
+        continue;
+      }
+      added.splice(k, 1);
+      for (const from of swap.from) {
+        const g = gone.indexOf(`image:${from}[]`);
+        if (g >= 0)
+          gone.splice(g, 1);
+      }
+    }
     if (exp.assets === "grow" && exp.grow !== void 0) {
       const images = [...exp.grow.images];
       let fallbacks = exp.grow.fallbacks;
@@ -39778,8 +40386,8 @@ var repairPart = async (pkg, part) => {
 };
 
 // src/engine/inplace/slides.ts
-import { readFileSync as readFileSync5 } from "node:fs";
-import path5 from "node:path";
+import { readFileSync as readFileSync6 } from "node:fs";
+import path6 from "node:path";
 
 // src/engine/image-size.ts
 var sized = (w, h) => Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? { w, h } : null;
@@ -40005,6 +40613,13 @@ var buildEmptyDeck = async (template) => {
 };
 
 // src/engine/text.ts
+var children = (parent, names) => {
+  const out = [];
+  for (let n = parent.firstChild; n !== null; n = n.nextSibling)
+    if (n.nodeType === 1 && names.includes(n.nodeName))
+      out.push(n);
+  return out;
+};
 var HLINK_ATTR = "pptc-hlink";
 var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
 var BASELINE = { superscript: 3e4, subscript: -25e3 };
@@ -40047,9 +40662,54 @@ var buildRunProps = (doc, run, lang) => {
   }
   return rPr;
 };
-var buildRun = (doc, run, lang) => {
+var runFormatted = (run) => [
+  run.bold,
+  run.italic,
+  run.underline,
+  run.strike,
+  run.superscript,
+  run.subscript,
+  run.size,
+  run.font,
+  run.color,
+  run.highlight,
+  run.hyperlink
+].some((v) => v !== void 0);
+var keptRunProps = (doc, kept, lang, deckLang2) => {
+  const rPr = doc.createElementNS(NS_A, "a:rPr");
+  for (let i = 0; i < kept.attributes.length; i++) {
+    const attr = kept.attributes.item(i);
+    if (attr !== null && attr.name !== "err")
+      rPr.setAttribute(attr.name, attr.value);
+  }
+  for (const child of children(kept, [
+    "a:ln",
+    "a:noFill",
+    "a:solidFill",
+    "a:gradFill",
+    "a:blipFill",
+    "a:pattFill",
+    "a:grpFill",
+    "a:effectLst",
+    "a:effectDag",
+    "a:highlight",
+    "a:uLnTx",
+    "a:uLn",
+    "a:uFillTx",
+    "a:uFill",
+    "a:latin",
+    "a:ea",
+    "a:cs",
+    "a:sym",
+    "a:rtl"
+  ]))
+    rPr.appendChild(doc.importNode(child, true));
+  rPr.setAttribute("lang", lang ?? kept.getAttribute("lang") ?? deckLang2);
+  return rPr;
+};
+var buildRun = (doc, run, lang, kept = null, own2) => {
   const r = doc.createElementNS(NS_A, "a:r");
-  r.appendChild(buildRunProps(doc, run, lang));
+  r.appendChild(kept?.rPr !== null && kept?.rPr !== void 0 && !runFormatted(run) ? keptRunProps(doc, kept.rPr, run.lang ?? own2, lang) : buildRunProps(doc, run, run.lang ?? own2 ?? lang));
   const t = doc.createElementNS(NS_A, "a:t");
   t.appendChild(doc.createTextNode(run.text));
   r.appendChild(t);
@@ -40075,10 +40735,12 @@ var paragraphRun = (p) => ({
   ...p.color !== void 0 && { color: p.color },
   ...p.highlight !== void 0 && { highlight: p.highlight }
 });
-var buildParagraph = (doc, p, lang) => {
+var buildParagraph = (doc, p, lang, kept = null) => {
   const el = doc.createElementNS(NS_A, "a:p");
   const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false || p.bullet === "number" || p.lineSpacing !== void 0 || p.spaceBefore !== void 0 || p.spaceAfter !== void 0;
-  if (needsPPr) {
+  if (!needsPPr && p.bullet === void 0 && kept?.pPr !== null && kept?.pPr !== void 0)
+    el.appendChild(doc.importNode(kept.pPr, true));
+  else if (needsPPr) {
     const pPr = doc.createElementNS(NS_A, "a:pPr");
     if (p.level !== void 0)
       pPr.setAttribute("lvl", String(p.level));
@@ -40101,19 +40763,386 @@ var buildParagraph = (doc, p, lang) => {
   }
   const runs = p.runs ?? [paragraphRun(p)];
   for (const run of runs)
-    el.appendChild(buildRun(doc, run, p.lang ?? lang));
+    el.appendChild(kept === null ? buildRun(doc, run, p.lang ?? lang) : buildRun(doc, run, lang, kept, p.lang));
   return el;
 };
-var setShapeText = (shape, text, append, lang) => {
-  const doc = shape.ownerDocument;
-  const txBody = firstElement(shape, "p:txBody");
-  if (txBody === null)
-    return;
+var setBodyText = (txBody, text, append, lang, keep = false) => {
+  const doc = txBody.ownerDocument;
+  const first = children(txBody, ["a:p"])[0];
+  const kept = !keep || first === void 0 ? null : {
+    pPr: children(first, ["a:pPr"])[0] ?? null,
+    rPr: children(txBody, ["a:p"]).flatMap((p) => children(p, ["a:r"])).map((r) => children(r, ["a:rPr"])[0] ?? null)[0] ?? children(first, ["a:endParaRPr"])[0] ?? null
+  };
   if (!append)
-    for (const p of elements(txBody, "a:p"))
+    for (const p of children(txBody, ["a:p"]))
       txBody.removeChild(p);
   for (const paragraph of toParagraphs(text))
-    txBody.appendChild(buildParagraph(doc, paragraph, lang));
+    txBody.appendChild(buildParagraph(doc, paragraph, lang, kept));
+};
+var setShapeText = (shape, text, append, lang, keep = false) => {
+  const txBody = firstElement(shape, "p:txBody");
+  if (txBody !== null)
+    setBodyText(txBody, text, append, lang, keep);
+};
+var replaceInBody = (txBody, spec) => {
+  let count = 0;
+  const dropped = [];
+  for (const p of children(txBody, ["a:p"])) {
+    const segments = [[]];
+    for (let n = p.firstChild; n !== null; n = n.nextSibling)
+      if (n.nodeType === 1 && n.nodeName === "a:r")
+        segments[segments.length - 1].push(n);
+      else if (n.nodeType === 1)
+        segments.push([]);
+    for (const runs of segments.filter((seg) => seg.length > 0)) {
+      const ts = runs.map((r) => children(r, ["a:t"])[0] ?? null);
+      const done = replaceRuns(ts.map((t) => t?.textContent ?? ""), spec);
+      if (done.count === 0)
+        continue;
+      count += done.count;
+      runs.forEach((r, i) => {
+        const text = done.texts[i];
+        const t = ts[i] ?? null;
+        if (text === null || text === void 0) {
+          p.removeChild(r);
+          dropped.push(r);
+        } else if (t !== null && text !== t.textContent) {
+          while (t.firstChild !== null)
+            t.removeChild(t.firstChild);
+          t.appendChild(r.ownerDocument.createTextNode(text));
+        }
+      });
+    }
+  }
+  return { count, dropped };
+};
+
+// src/engine/inplace/edits.ts
+import { readFileSync as readFileSync5 } from "node:fs";
+import path5 from "node:path";
+var FILLS = ["a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill", "a:grpFill"];
+var NS_ASVG = "http://schemas.microsoft.com/office/drawing/2016/SVG/main";
+var SVG_EXT = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
+var children2 = (parent, names) => {
+  const out = [];
+  for (let n = parent?.firstChild ?? null; n !== null; n = n.nextSibling)
+    if (n.nodeType === 1 && names.includes(n.nodeName))
+      out.push(n);
+  return out;
+};
+var insertOrdered = (parent, child, followers) => {
+  parent.insertBefore(child, children2(parent, followers)[0] ?? null);
+};
+var ensureChild = (parent, name, followers) => {
+  const found = children2(parent, [name])[0];
+  if (found !== void 0)
+    return found;
+  const el = parent.ownerDocument.createElementNS(NS_A, name);
+  insertOrdered(parent, el, followers);
+  return el;
+};
+var setSolidFill = (props, color, followers) => {
+  for (const old of children2(props, FILLS))
+    props.removeChild(old);
+  const fill = props.ownerDocument.createElementNS(NS_A, "a:solidFill");
+  fill.appendChild(colorElement(props.ownerDocument, color));
+  insertOrdered(props, fill, followers);
+};
+var shapeProps = (shape) => children2(shape, ["p:spPr", "p:grpSpPr"])[0] ?? null;
+var transformOf = (shape) => shape.nodeName === "p:graphicFrame" ? children2(shape, ["p:xfrm"])[0] ?? null : children2(shapeProps(shape), ["a:xfrm"])[0] ?? null;
+var boxOf = (xfrm) => {
+  const off = children2(xfrm, ["a:off"])[0];
+  const ext = children2(xfrm, ["a:ext"])[0];
+  if (off === void 0 || ext === void 0)
+    return null;
+  const box = {
+    x: Number(off.getAttribute("x")),
+    y: Number(off.getAttribute("y")),
+    w: Number(ext.getAttribute("cx")),
+    h: Number(ext.getAttribute("cy"))
+  };
+  return Object.values(box).every(Number.isFinite) ? box : null;
+};
+var rowsOf = (tbl) => children2(tbl, ["a:tr"]);
+var cellsOf = (tr) => children2(tr, ["a:tc"]);
+var scaleTable = (tbl, axis, total) => {
+  const items = axis === "w" ? children2(children2(tbl, ["a:tblGrid"])[0] ?? null, ["a:gridCol"]) : rowsOf(tbl);
+  const attr = axis === "w" ? "w" : "h";
+  const sizes = items.map((el) => Number(el.getAttribute(attr) ?? "0") || 0);
+  const sum = sizes.reduce((a, b) => a + b, 0);
+  if (sum <= 0)
+    return total;
+  let written = 0;
+  items.forEach((el, i) => {
+    const size = Math.round(sizes[i] * total / sum);
+    el.setAttribute(attr, String(size));
+    written += size;
+  });
+  return written;
+};
+var tableHeight = (tbl) => rowsOf(tbl).reduce((sum, tr) => sum + (Number(tr.getAttribute("h") ?? "0") || 0), 0);
+var setFrame = (shape, frame) => {
+  const doc = shape.ownerDocument;
+  let xfrm = transformOf(shape);
+  if (xfrm === null) {
+    const props = shapeProps(shape);
+    if (props === null)
+      throw new PptcError("E_ENGINE", "element without shape properties");
+    xfrm = doc.createElementNS(NS_A, "a:xfrm");
+    props.insertBefore(xfrm, props.firstChild);
+  }
+  const off = ensureChild(xfrm, "a:off", ["a:ext", "a:chOff", "a:chExt"]);
+  const ext = ensureChild(xfrm, "a:ext", ["a:chOff", "a:chExt"]);
+  if (frame.x !== void 0)
+    off.setAttribute("x", String(inchToEmu(frame.x)));
+  if (frame.y !== void 0)
+    off.setAttribute("y", String(inchToEmu(frame.y)));
+  for (const [key, attr] of [["x", "x"], ["y", "y"]])
+    if (!off.hasAttribute(attr))
+      off.setAttribute(attr, String(inchToEmu(frame[key] ?? 0)));
+  const tbl = firstElement(shape, "a:tbl");
+  if (frame.w !== void 0)
+    ext.setAttribute("cx", String(tbl === null ? inchToEmu(frame.w) : scaleTable(tbl, "w", inchToEmu(frame.w))));
+  if (frame.h !== void 0)
+    ext.setAttribute("cy", String(tbl === null ? inchToEmu(frame.h) : scaleTable(tbl, "h", inchToEmu(frame.h))));
+  if (frame.rotation !== void 0) {
+    const rot = Math.round((frame.rotation % 360 + 360) % 360 * 6e4);
+    if (rot === 0)
+      xfrm.removeAttribute("rot");
+    else
+      xfrm.setAttribute("rot", String(rot));
+  }
+};
+var outlineOf = (shape) => {
+  const props = shapeProps(shape);
+  if (props === null)
+    throw new PptcError("E_ENGINE", "element without shape properties");
+  return ensureChild(props, "a:ln", ["a:effectLst", "a:effectDag", "a:scene3d", "a:sp3d", "a:extLst"]);
+};
+var runProps = (shape) => {
+  const txBody = children2(shape, ["p:txBody"])[0] ?? null;
+  const out = [];
+  for (const p of children2(txBody, ["a:p"])) {
+    for (const r of children2(p, ["a:r", "a:fld"])) {
+      let rPr = children2(r, ["a:rPr"])[0];
+      if (rPr === void 0) {
+        rPr = shape.ownerDocument.createElementNS(NS_A, "a:rPr");
+        r.insertBefore(rPr, r.firstChild);
+      }
+      out.push(rPr);
+    }
+    out.push(...children2(p, ["a:endParaRPr"]));
+  }
+  return out;
+};
+var setDescription = (shape, attr, value) => {
+  const cNvPr = firstElement(shape, "p:cNvPr");
+  if (cNvPr === null)
+    return;
+  if (value === "")
+    cNvPr.removeAttribute(attr);
+  else
+    cNvPr.setAttribute(attr, value);
+};
+var cellBody = (tc) => {
+  const found = children2(tc, ["a:txBody"])[0];
+  if (found !== void 0)
+    return found;
+  const doc = tc.ownerDocument;
+  const txBody = doc.createElementNS(NS_A, "a:txBody");
+  txBody.appendChild(doc.createElementNS(NS_A, "a:bodyPr"));
+  txBody.appendChild(doc.createElementNS(NS_A, "a:lstStyle"));
+  txBody.appendChild(doc.createElementNS(NS_A, "a:p"));
+  tc.insertBefore(txBody, tc.firstChild);
+  return txBody;
+};
+var cellText = (value) => typeof value === "number" || typeof value === "boolean" ? String(value) : value;
+var editTable = (shape, set2, lang) => {
+  const tbl = firstElement(shape, "a:tbl");
+  if (tbl === null)
+    throw new PptcError("E_ENGINE", "table element without a:tbl");
+  const before = tableHeight(tbl);
+  for (const row of [...new Set(set2.removeRows ?? [])].sort((a, b) => b - a)) {
+    const tr = rowsOf(tbl)[row];
+    if (tr !== void 0)
+      tbl.removeChild(tr);
+  }
+  if (set2.addRows !== void 0) {
+    const rows = rowsOf(tbl);
+    const at = set2.addRows.at ?? rows.length;
+    const model = rows[at > 0 ? at - 1 : 0];
+    if (model === void 0)
+      throw new PptcError("E_ENGINE", "table without rows");
+    const anchor2 = rows[at] ?? children2(tbl, ["a:extLst"])[0] ?? null;
+    for (const values of set2.addRows.rows) {
+      const tr = model.cloneNode(true);
+      for (const ext2 of children2(tr, ["a:extLst"]))
+        tr.removeChild(ext2);
+      cellsOf(tr).forEach((tc, i) => {
+        for (const attr of ["gridSpan", "rowSpan", "hMerge", "vMerge"])
+          tc.removeAttribute(attr);
+        setBodyText(cellBody(tc), cellText(values[i] ?? ""), false, lang, true);
+        for (const link of [...elements(tc, "a:hlinkClick"), ...elements(tc, "a:hlinkMouseOver")])
+          link.parentNode?.removeChild(link);
+      });
+      tbl.insertBefore(tr, anchor2);
+    }
+  }
+  for (const cell of set2.cells ?? []) {
+    const tc = cellsOf(rowsOf(tbl)[cell.row])[cell.col];
+    if (tc === void 0)
+      throw new PptcError("E_ENGINE", `table cell ${cell.row},${cell.col} not found`);
+    setBodyText(cellBody(tc), cell.text, false, lang, true);
+  }
+  const after = tableHeight(tbl);
+  const ext = children2(transformOf(shape), ["a:ext"])[0];
+  if (after !== before && ext !== void 0 && after > 0)
+    ext.setAttribute("cy", String(after));
+};
+var partDigest = async (pkg, part) => {
+  const file2 = part === null ? null : pkg.zip.file(part);
+  return file2 === null || file2 === void 0 ? null : digestBytes(await file2.async("nodebuffer"));
+};
+var replaceImage = async (pkg, slidePart, rels, shape, file2) => {
+  const doc = shape.ownerDocument;
+  const blipFill = children2(shape, ["p:blipFill"])[0] ?? null;
+  const blip = children2(blipFill, ["a:blip"])[0] ?? null;
+  if (blipFill === null || blip === null)
+    throw new PptcError("E_ADDR_NOTFOUND", `slide ${slidePart}: the picture has no image`);
+  const targets = new Map(pkg.targets(slidePart, rels).map((t) => [t.id, t.target]));
+  const svgBlips = elements(blip, "asvg:svgBlip");
+  const from = [];
+  for (const id of [blip.getAttributeNS(NS_R, "embed"), ...svgBlips.map((s) => s.getAttributeNS(NS_R, "embed"))]) {
+    const hash2 = await partDigest(pkg, targets.get(id ?? "") ?? null);
+    if (hash2 !== null)
+      from.push(hash2);
+  }
+  const bytes = readFileSync5(file2);
+  const ext = path5.extname(file2).slice(1).toLowerCase() || "png";
+  const media = pkg.alloc.part("ppt/media", "image", `.${ext}`);
+  pkg.write(media, bytes);
+  await pkg.typePart(media, "", media);
+  const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path5.posix.basename(media)}`);
+  blip.setAttributeNS(NS_R, "r:embed", rid);
+  blip.removeAttributeNS(NS_R, "link");
+  for (const svg of svgBlips) {
+    const extEl = svg.parentNode;
+    const extLst = extEl.parentNode;
+    extLst.removeChild(extEl);
+    if (children2(extLst, ["a:ext"]).length === 0)
+      extLst.parentNode?.removeChild(extLst);
+  }
+  if (ext === "svg") {
+    const extLst = ensureChild(blip, "a:extLst", []);
+    const extEl = doc.createElementNS(NS_A, "a:ext");
+    extEl.setAttribute("uri", SVG_EXT);
+    const svg = doc.createElementNS(NS_ASVG, "asvg:svgBlip");
+    svg.setAttributeNS(NS_R, "r:embed", rid);
+    extEl.appendChild(svg);
+    extLst.appendChild(extEl);
+  }
+  const srcRect = children2(blipFill, ["a:srcRect"])[0];
+  const cropped = srcRect !== void 0 && ["l", "t", "r", "b"].some((a) => Number(srcRect.getAttribute(a) ?? "0") !== 0);
+  const box = boxOf(transformOf(shape));
+  if (cropped && box !== null) {
+    const crop = fitImage(box, imageSize(bytes), "crop").crop;
+    for (const a of ["l", "t", "r", "b"])
+      srcRect.removeAttribute(a);
+    for (const [side, value] of Object.entries(crop ?? {}))
+      if (value !== 0)
+        srcRect.setAttribute(side, String(value));
+  }
+  return { from, to: digestBytes(bytes) };
+};
+var applyEdit = async (pkg, slidePart, rels, shape, edit, lang) => {
+  const { set: set2 } = edit;
+  if (set2.text !== void 0)
+    setShapeText(shape, set2.text, false, lang, true);
+  if (set2.fontColor !== void 0)
+    for (const rPr of runProps(shape))
+      setSolidFill(rPr, set2.fontColor, [
+        "a:effectLst",
+        "a:effectDag",
+        "a:highlight",
+        "a:uLnTx",
+        "a:uLn",
+        "a:uFillTx",
+        "a:uFill",
+        "a:latin",
+        "a:ea",
+        "a:cs",
+        "a:sym",
+        "a:hlinkClick",
+        "a:hlinkMouseOver",
+        "a:rtl",
+        "a:extLst"
+      ]);
+  const swap = set2.image === void 0 ? null : await replaceImage(pkg, slidePart, rels, shape, set2.image);
+  if (set2.frame !== void 0)
+    setFrame(shape, set2.frame);
+  if (set2.fill !== void 0) {
+    const props = shapeProps(shape);
+    if (props !== null)
+      setSolidFill(props, set2.fill, ["a:ln", "a:effectLst", "a:effectDag", "a:scene3d", "a:sp3d", "a:extLst"]);
+  }
+  if (set2.border !== void 0)
+    setSolidFill(outlineOf(shape), set2.border, [
+      "a:prstDash",
+      "a:custDash",
+      "a:round",
+      "a:bevel",
+      "a:miter",
+      "a:headEnd",
+      "a:tailEnd",
+      "a:extLst"
+    ]);
+  if (set2.borderPt !== void 0)
+    outlineOf(shape).setAttribute("w", String(Math.round(set2.borderPt * 12700)));
+  if (set2.altText !== void 0)
+    setDescription(shape, "descr", set2.altText);
+  if (set2.title !== void 0)
+    setDescription(shape, "title", set2.title);
+  if (set2.cells !== void 0 || set2.addRows !== void 0 || set2.removeRows !== void 0)
+    editTable(shape, set2, lang);
+  return swap;
+};
+var replaceExisting = (slide, replace) => {
+  const spTree = firstElement(slide, "p:spTree");
+  let count = 0;
+  const refs = [];
+  const take = (done) => {
+    count += done.count;
+    for (const run of done.dropped)
+      refs.push(...relRefs(run).map((ref) => ref.attr.value));
+  };
+  for (let n = spTree?.firstChild ?? null; n !== null; n = n.nextSibling) {
+    if (n.nodeType !== 1)
+      continue;
+    const shape = n;
+    const name = firstElement(shape, "p:cNvPr")?.getAttribute("name") ?? "";
+    const phType = shape.nodeName === "p:sp" ? firstElement(shape, "p:ph")?.getAttribute("type") ?? null : null;
+    if (replace.skip.includes(name) || phType !== null && replace.skip.includes(`@${phType}`))
+      continue;
+    for (const txBody of elements(shape, "p:txBody"))
+      take(replaceInBody(txBody, replace));
+    for (const tbl of elements(shape, "a:tbl"))
+      rowsOf(tbl).forEach((tr, row) => {
+        cellsOf(tr).forEach((tc, col) => {
+          const body = children2(tc, ["a:txBody"])[0];
+          if (body !== void 0 && !replace.skipCells.some((c) => c.name === name && c.row === row && (c.col === col || c.col === -1)))
+            take(replaceInBody(body, replace));
+        });
+      });
+  }
+  return { count, refs };
+};
+var replaceNotes = (notes, replace) => {
+  let count = 0;
+  for (const sp of elements(notes, "p:sp"))
+    if (firstElement(sp, "p:ph")?.getAttribute("type") === "body")
+      for (const txBody of elements(sp, "p:txBody"))
+        count += replaceInBody(txBody, replace).count;
+  return count;
 };
 
 // src/engine/inplace/slides.ts
@@ -40150,20 +41179,47 @@ var setBackground = (slide, color) => {
   bg.appendChild(bgPr);
   cSld.insertBefore(bg, cSld.firstChild);
 };
-var setFooter = (slide, layout, text, nextId, lang) => {
+var adoptLayoutRels = async (pkg, part, rels, layoutPart, scope) => {
+  const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [t.id, t]));
+  const ids = /* @__PURE__ */ new Map();
+  const images = [];
+  for (const { el, attr } of relRefs(scope)) {
+    const rel = layoutRels.get(attr.value);
+    if (rel !== void 0 && !ids.has(attr.value)) {
+      ids.set(attr.value, pkg.addRel(
+        rels,
+        rel.type,
+        rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, rel.target),
+        rel.target === null
+      ));
+      if (rel.kind === "image" && rel.target !== null)
+        images.push(rel.target);
+    }
+    const id = ids.get(attr.value);
+    if (id !== void 0)
+      el.setAttributeNS(NS_R, attr.name, id);
+  }
+  return images;
+};
+var setBandPlaceholder = async (pkg, part, slide, rels, layoutPart, type, content, lang) => {
+  const refs = [];
   const spTree = firstElement(slide, "p:spTree");
   if (spTree === null)
-    return;
+    return { images: [], refs };
   for (const sp of elements(slide, "p:sp"))
-    if (firstElement(sp, "p:ph")?.getAttribute("type") === "ftr")
+    if (firstElement(sp, "p:ph")?.getAttribute("type") === type) {
+      refs.push(...relRefs(sp).map((ref) => ref.attr.value));
       sp.parentNode?.removeChild(sp);
-  const ftr = layout === null ? void 0 : elements(layout, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === "ftr");
-  if (ftr === void 0)
-    return;
-  const clone2 = slide.importNode(ftr, true);
-  firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(nextId()));
+    }
+  if (content === false || layoutPart === null || !pkg.has(layoutPart))
+    return { images: [], refs };
+  const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type);
+  if (source === void 0)
+    return { images: [], refs };
+  const clone2 = slide.importNode(source, true);
+  firstElement(clone2, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()));
   const txBody = firstElement(clone2, "p:txBody");
-  if (txBody !== null) {
+  if (typeof content === "string" && txBody !== null) {
     for (const p2 of elements(txBody, "a:p"))
       txBody.removeChild(p2);
     const p = slide.createElementNS(NS_A, "a:p");
@@ -40172,12 +41228,14 @@ var setFooter = (slide, layout, text, nextId, lang) => {
     rPr.setAttribute("lang", lang);
     r.appendChild(rPr);
     const t = slide.createElementNS(NS_A, "a:t");
-    t.appendChild(slide.createTextNode(text));
+    t.appendChild(slide.createTextNode(content));
     r.appendChild(t);
     p.appendChild(r);
     txBody.appendChild(p);
   }
-  spTree.appendChild(clone2);
+  const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone2);
+  spTree.insertBefore(clone2, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
+  return { images, refs };
 };
 var xfrmBox = (xfrm) => {
   const off = xfrm === null ? null : firstElement(xfrm, "a:off");
@@ -40263,19 +41321,19 @@ var setNotes = async (pkg, slidePart, slideRels, text, notesMaster, lang) => {
   pkg.write(
     relsPartOf(notesPart),
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${xmlEscape(relTarget(notesPart, notesMaster), true)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path5.posix.basename(slidePart)}"/></Relationships>`
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/notesMaster" Target="${xmlEscape(relTarget(notesPart, notesMaster), true)}"/><Relationship Id="rId2" Type="${REL}/slide" Target="../slides/${path6.posix.basename(slidePart)}"/></Relationships>`
   );
   await pkg.typeAs(notesPart, "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml");
   for (const rel of pkg.targets(slidePart, slideRels))
     if (rel.kind === "notesSlide")
       rel.el.parentNode?.removeChild(rel.el);
-  pkg.addRel(slideRels, `${REL}/notesSlide`, `../notesSlides/${path5.posix.basename(notesPart)}`);
+  pkg.addRel(slideRels, `${REL}/notesSlide`, `../notesSlides/${path6.posix.basename(notesPart)}`);
 };
 var unshareNotes = async (pkg, slidePart, slideRels) => {
   const rel = pkg.targets(slidePart, slideRels).find((t) => t.kind === "notesSlide");
   const notesPart = rel?.target ?? null;
   if (rel === void 0 || notesPart === null || !pkg.has(notesPart))
-    return;
+    return null;
   const owner = notesOwner({ part: notesPart, doc: await pkg.xml(notesPart), rels: pkg.targets(notesPart, await pkg.rels(notesPart)) });
   const copy = await pkg.clonePart(pkg, notesPart, /* @__PURE__ */ new Map([[owner ?? slidePart, slidePart]]));
   if (owner === null) {
@@ -40284,6 +41342,7 @@ var unshareNotes = async (pkg, slidePart, slideRels) => {
     pkg.writeRels(copy, copyRels);
   }
   rel.el.setAttribute("Target", relTarget(slidePart, copy));
+  return copy;
 };
 var wireHyperlinks = (pkg, slide, slideRels) => {
   for (const hlink of elements(slide, "a:hlinkClick")) {
@@ -40316,21 +41375,8 @@ var createSlide = async (pkg, layoutPart) => {
   const slide = parseXml(slideFromLayout(await pkg.text(layoutPart)));
   const rels = parseXml(EMPTY_RELS);
   pkg.addRel(rels, `${REL}/slideLayout`, relTarget(part, layoutPart));
-  const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [t.id, t]));
-  const ids = /* @__PURE__ */ new Map();
-  for (const { el, attr } of slide.documentElement === null ? [] : relRefs(slide.documentElement)) {
-    const rel = layoutRels.get(attr.value);
-    if (rel !== void 0 && !ids.has(attr.value))
-      ids.set(attr.value, pkg.addRel(
-        rels,
-        rel.type,
-        rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, rel.target),
-        rel.target === null
-      ));
-    const id = ids.get(attr.value);
-    if (id !== void 0)
-      el.setAttributeNS(NS_R, attr.name, id);
-  }
+  if (slide.documentElement !== null)
+    await adoptLayoutRels(pkg, part, rels, layoutPart, slide.documentElement);
   pkg.write(part, slide);
   pkg.writeRels(part, rels);
   await pkg.typeAs(part, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml");
@@ -40350,10 +41396,6 @@ var editSlide = async (pkg, work) => {
     fill: f,
     shape: need(findShape(slide, f.phName, isPlaceholder(f.phIdx)), `placeholder '${f.phName}'`)
   }));
-  const texts = entry.setTexts.map((t) => ({
-    text: t.text,
-    shape: need(findShape(slide, t.name, isTopLevel), `element '${t.name}'`)
-  }));
   const doomed = /* @__PURE__ */ new Set();
   for (const name of entry.removeNames) {
     const shape = elements(slide, "p:cNvPr").map(shapeOf).find((s) => !doomed.has(s) && isTopLevel(s) && firstElement(s, "p:cNvPr")?.getAttribute("name") === name);
@@ -40361,7 +41403,14 @@ var editSlide = async (pkg, work) => {
       doomed.add(shape);
   }
   const unused = /* @__PURE__ */ new Set();
-  for (const shape of [...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape), ...texts.map((t) => t.shape)])
+  const replaced = [];
+  for (const replace of entry.replaces) {
+    const done = replaceExisting(slide, replace);
+    replaced.push({ op: replace.op, count: done.count });
+    for (const id of done.refs)
+      unused.add(id);
+  }
+  for (const shape of [...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape)])
     for (const ref of relRefs(shape))
       unused.add(ref.attr.value);
   const forced = /* @__PURE__ */ new Set();
@@ -40377,29 +41426,53 @@ var editSlide = async (pkg, work) => {
     removeShape(shape);
   for (const { fill, shape } of fills)
     setShapeText(shape, fill.text, fill.append, work.lang);
-  for (const { text, shape } of texts)
-    setShapeText(shape, text, false, work.lang);
   for (const fill of entry.fills.filter((f) => f.image !== void 0)) {
     const file2 = fill.image;
-    const ext = path5.extname(file2).slice(1).toLowerCase() || "png";
+    const ext = path6.extname(file2).slice(1).toLowerCase() || "png";
     const media = pkg.alloc.part("ppt/media", "image", `.${ext}`);
-    const bytes = readFileSync5(file2);
+    const bytes = readFileSync6(file2);
     pkg.write(media, bytes);
     await pkg.typePart(media, "", media);
-    const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path5.posix.basename(media)}`);
+    const rid = pkg.addRel(rels, `${REL}/image`, `../media/${path6.posix.basename(media)}`);
     if (!fillPicturePlaceholder(slide, rid, fill.phIdx, fill.frame, imageSize(bytes), fill.fit ?? "crop"))
       throw missing(`empty picture placeholder idx ${fill.phIdx}`);
   }
+  const swaps = [];
+  for (const edit of entry.edits) {
+    const shape = need(findShape(slide, edit.name, isTopLevel), `element '${edit.name}'`);
+    for (const ref of relRefs(shape))
+      unused.add(ref.attr.value);
+    const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang);
+    const again = swap === null ? void 0 : swaps.find((s) => swap.from.includes(s.to));
+    if (swap !== null && again !== void 0) {
+      again.from.push(...swap.from.filter((f) => f !== again.to));
+      again.to = swap.to;
+    } else if (swap !== null)
+      swaps.push(swap);
+  }
   if (entry.background !== null)
     setBackground(slide, entry.background);
-  if (entry.footer !== null) {
-    const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null;
-    setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide), work.lang);
-  }
+  const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null;
+  const adoptedParts = [];
+  for (const [type, content] of [["ftr", entry.footer], ["sldNum", entry.slideNumber], ["dt", entry.date]])
+    if (content !== null) {
+      const band = await setBandPlaceholder(pkg, part, slide, rels, layout, type, content, work.lang);
+      adoptedParts.push(...band.images);
+      for (const id of band.refs)
+        unused.add(id);
+    }
+  const notesReplaces = entry.notes === null ? entry.replaces.filter((r) => r.notes) : [];
   if (entry.notes !== null)
     await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang);
-  else if (work.sharedNotes)
-    await unshareNotes(pkg, part, rels);
+  else if (work.sharedNotes || notesReplaces.length > 0) {
+    const copy = await unshareNotes(pkg, part, rels);
+    if (copy !== null && notesReplaces.length > 0) {
+      const notes = await pkg.xml(copy);
+      for (const replace of notesReplaces)
+        replaced.push({ op: replace.op, count: replaceNotes(notes, replace) });
+      pkg.write(copy, notes);
+    }
+  }
   if (work.generated !== null)
     await work.generated.transplant(pkg, entry, slide, rels, part);
   wireHyperlinks(pkg, slide, rels);
@@ -40411,7 +41484,13 @@ var editSlide = async (pkg, work) => {
     repaired.actions.unshift(`dropped relationships ${dropped.join(",")}`);
   pkg.write(part, slide);
   pkg.writeRels(part, rels);
-  return repaired;
+  const adopted = [];
+  for (const image of adoptedParts) {
+    const file2 = pkg.zip.file(image);
+    if (file2 !== null)
+      adopted.push(digestBytes(await file2.async("nodebuffer")));
+  }
+  return { ...repaired, swaps, adopted, replaced };
 };
 
 // node_modules/pptxgenjs/dist/pptxgen.es.js
@@ -44775,43 +45854,43 @@ function genXmlParagraphProperties(textObj, isDefault) {
 }
 function genXmlTextRunProperties(opts, isDefault) {
   var _a3;
-  let runProps = "";
+  let runProps2 = "";
   const runPropsTag = isDefault ? "a:defRPr" : "a:rPr";
-  runProps += "<" + runPropsTag + ' lang="' + (opts.lang ? opts.lang : "en-US") + '"' + (opts.lang ? ' altLang="en-US"' : "");
-  runProps += opts.fontSize ? ` sz="${Math.round(opts.fontSize * 100)}"` : "";
-  runProps += (opts === null || opts === void 0 ? void 0 : opts.bold) ? ` b="${opts.bold ? "1" : "0"}"` : "";
-  runProps += (opts === null || opts === void 0 ? void 0 : opts.italic) ? ` i="${opts.italic ? "1" : "0"}"` : "";
-  runProps += (opts === null || opts === void 0 ? void 0 : opts.strike) ? ` strike="${typeof opts.strike === "string" ? opts.strike : "sngStrike"}"` : "";
+  runProps2 += "<" + runPropsTag + ' lang="' + (opts.lang ? opts.lang : "en-US") + '"' + (opts.lang ? ' altLang="en-US"' : "");
+  runProps2 += opts.fontSize ? ` sz="${Math.round(opts.fontSize * 100)}"` : "";
+  runProps2 += (opts === null || opts === void 0 ? void 0 : opts.bold) ? ` b="${opts.bold ? "1" : "0"}"` : "";
+  runProps2 += (opts === null || opts === void 0 ? void 0 : opts.italic) ? ` i="${opts.italic ? "1" : "0"}"` : "";
+  runProps2 += (opts === null || opts === void 0 ? void 0 : opts.strike) ? ` strike="${typeof opts.strike === "string" ? opts.strike : "sngStrike"}"` : "";
   if (typeof opts.underline === "object" && ((_a3 = opts.underline) === null || _a3 === void 0 ? void 0 : _a3.style)) {
-    runProps += ` u="${opts.underline.style}"`;
+    runProps2 += ` u="${opts.underline.style}"`;
   } else if (typeof opts.underline === "string") {
-    runProps += ` u="${String(opts.underline)}"`;
+    runProps2 += ` u="${String(opts.underline)}"`;
   } else if (opts.hyperlink) {
-    runProps += ' u="sng"';
+    runProps2 += ' u="sng"';
   }
   if (opts.baseline) {
-    runProps += ` baseline="${Math.round(opts.baseline * 50)}"`;
+    runProps2 += ` baseline="${Math.round(opts.baseline * 50)}"`;
   } else if (opts.subscript) {
-    runProps += ' baseline="-40000"';
+    runProps2 += ' baseline="-40000"';
   } else if (opts.superscript) {
-    runProps += ' baseline="30000"';
+    runProps2 += ' baseline="30000"';
   }
-  runProps += opts.charSpacing ? ` spc="${Math.round(opts.charSpacing * 100)}" kern="0"` : "";
-  runProps += ' dirty="0">';
+  runProps2 += opts.charSpacing ? ` spc="${Math.round(opts.charSpacing * 100)}" kern="0"` : "";
+  runProps2 += ' dirty="0">';
   if (opts.color || opts.fontFace || opts.outline || typeof opts.underline === "object" && opts.underline.color) {
     if (opts.outline && typeof opts.outline === "object") {
-      runProps += `<a:ln w="${valToPts(opts.outline.size || 0.75)}">${genXmlColorSelection(opts.outline.color || "FFFFFF")}</a:ln>`;
+      runProps2 += `<a:ln w="${valToPts(opts.outline.size || 0.75)}">${genXmlColorSelection(opts.outline.color || "FFFFFF")}</a:ln>`;
     }
     if (opts.color)
-      runProps += genXmlColorSelection({ color: opts.color, transparency: opts.transparency });
+      runProps2 += genXmlColorSelection({ color: opts.color, transparency: opts.transparency });
     if (opts.highlight)
-      runProps += `<a:highlight>${createColorElement(opts.highlight)}</a:highlight>`;
+      runProps2 += `<a:highlight>${createColorElement(opts.highlight)}</a:highlight>`;
     if (typeof opts.underline === "object" && opts.underline.color)
-      runProps += `<a:uFill>${genXmlColorSelection(opts.underline.color)}</a:uFill>`;
+      runProps2 += `<a:uFill>${genXmlColorSelection(opts.underline.color)}</a:uFill>`;
     if (opts.glow)
-      runProps += `<a:effectLst>${createGlowElement(opts.glow, DEF_TEXT_GLOW)}</a:effectLst>`;
+      runProps2 += `<a:effectLst>${createGlowElement(opts.glow, DEF_TEXT_GLOW)}</a:effectLst>`;
     if (opts.fontFace) {
-      runProps += `<a:latin typeface="${opts.fontFace}" pitchFamily="34" charset="0"/><a:ea typeface="${opts.fontFace}" pitchFamily="34" charset="-122"/><a:cs typeface="${opts.fontFace}" pitchFamily="34" charset="-120"/>`;
+      runProps2 += `<a:latin typeface="${opts.fontFace}" pitchFamily="34" charset="0"/><a:ea typeface="${opts.fontFace}" pitchFamily="34" charset="-122"/><a:cs typeface="${opts.fontFace}" pitchFamily="34" charset="-120"/>`;
     }
   }
   if (opts.hyperlink) {
@@ -44820,21 +45899,21 @@ function genXmlTextRunProperties(opts, isDefault) {
     else if (!opts.hyperlink.url && !opts.hyperlink.slide)
       throw new Error("ERROR: 'hyperlink requires either `url` or `slide`'");
     else if (opts.hyperlink.url) {
-      runProps += `<a:hlinkClick r:id="rId${opts.hyperlink._rId}" invalidUrl="" action="" tgtFrame="" tooltip="${opts.hyperlink.tooltip ? encodeXmlEntities(opts.hyperlink.tooltip) : ""}" history="1" highlightClick="0" endSnd="0"${opts.color ? ">" : "/>"}`;
+      runProps2 += `<a:hlinkClick r:id="rId${opts.hyperlink._rId}" invalidUrl="" action="" tgtFrame="" tooltip="${opts.hyperlink.tooltip ? encodeXmlEntities(opts.hyperlink.tooltip) : ""}" history="1" highlightClick="0" endSnd="0"${opts.color ? ">" : "/>"}`;
     } else if (opts.hyperlink.slide) {
-      runProps += `<a:hlinkClick r:id="rId${opts.hyperlink._rId}" action="ppaction://hlinksldjump" tooltip="${opts.hyperlink.tooltip ? encodeXmlEntities(opts.hyperlink.tooltip) : ""}"${opts.color ? ">" : "/>"}`;
+      runProps2 += `<a:hlinkClick r:id="rId${opts.hyperlink._rId}" action="ppaction://hlinksldjump" tooltip="${opts.hyperlink.tooltip ? encodeXmlEntities(opts.hyperlink.tooltip) : ""}"${opts.color ? ">" : "/>"}`;
     }
     if (opts.color) {
-      runProps += " <a:extLst>";
-      runProps += '  <a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}">';
-      runProps += '   <ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/>';
-      runProps += "  </a:ext>";
-      runProps += " </a:extLst>";
-      runProps += "</a:hlinkClick>";
+      runProps2 += " <a:extLst>";
+      runProps2 += '  <a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}">';
+      runProps2 += '   <ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/>';
+      runProps2 += "  </a:ext>";
+      runProps2 += " </a:extLst>";
+      runProps2 += "</a:hlinkClick>";
     }
   }
-  runProps += `</${runPropsTag}>`;
-  return runProps;
+  runProps2 += `</${runPropsTag}>`;
+  return runProps2;
 }
 function genXmlTextRun(textObj) {
   return textObj.text ? `<a:r>${genXmlTextRunProperties(textObj.options, false)}<a:t>${encodeXmlEntities(textObj.text)}</a:t></a:r>` : "";
@@ -45738,7 +46817,7 @@ var PptxGenJS = class {
 import { randomUUID } from "node:crypto";
 
 // src/engine/elements.ts
-import { readFileSync as readFileSync6 } from "node:fs";
+import { readFileSync as readFileSync7 } from "node:fs";
 var TEXT_DIRECTION_VERT = {
   horizontal: "horz",
   rotate90: "vert",
@@ -45974,13 +47053,19 @@ var finishChart = (doc, chart) => {
 };
 var fileImageSize = (file2) => {
   try {
-    return imageSize(readFileSync6(file2));
+    return imageSize(readFileSync7(file2));
   } catch {
     return null;
   }
 };
 var imageBox = (el) => el.frame.w === void 0 || el.frame.h === void 0 ? null : { x: inchToEmu(el.frame.x), y: inchToEmu(el.frame.y), w: inchToEmu(el.frame.w), h: inchToEmu(el.frame.h) };
 var finishShape = (shape, el) => {
+  const cNvPr = firstElement(shape, "p:cNvPr");
+  for (const [attr, value] of [["descr", el.altText], ["title", el.title]])
+    if (value !== void 0 && value !== "")
+      cNvPr?.setAttribute(attr, value);
+    else
+      cNvPr?.removeAttribute(attr);
   if (el.type !== "image" || el.fit !== "crop")
     return;
   const box = imageBox(el);
@@ -46247,7 +47332,13 @@ var withStdoutShield = async (fn) => {
     console.warn = original.warn;
   }
 };
-var hasEdits = (e) => e.fills.length > 0 || e.setTexts.length > 0 || e.removeNames.length > 0 || e.elements.length > 0 || e.notes !== null || e.footer !== null || e.background !== null;
+var hasEdits = (e) => e.fills.length > 0 || e.edits.length > 0 || e.removeNames.length > 0 || e.elements.length > 0 || e.notes !== null || e.footer !== null || e.background !== null || e.slideNumber !== null || e.date !== null;
+var replacesMatch = (e, slide, notes) => {
+  const text = (doc) => doc === null ? "" : elements(doc, "a:t").map((t) => t.textContent ?? "").join("");
+  const slideText = e.replaces.length > 0 ? text(slide) : "";
+  const notesText2 = e.replaces.some((r) => r.notes) ? text(notes) : "";
+  return e.replaces.some((r) => mayMatch(slideText, r) || r.notes && mayMatch(notesText2, r));
+};
 var viewOf = async (pkg, part) => {
   let doc = null;
   if (/\.xml$/.test(part) && pkg.has(part))
@@ -46408,11 +47499,24 @@ var classifySlides = async (pkg, plan, parts, removed) => {
       defects.push({ rule: "notes-owner", part, text: `${part}: its notes part ${notes ?? ""} belongs to another slide or none` });
     const show = slide.doc?.documentElement?.getAttribute("show") ?? "";
     const links = views.some((v) => v.rels.some((r) => r.kind === "slide" && r.target !== null && removed.has(r.target)));
-    const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden || defects.length > 0 || links;
+    const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden || defects.length > 0 || links || replacesMatch(entry, slide.doc, notesView?.doc ?? null);
     let sourceRepairs = repairs;
     if (entry.virtualId <= 0 && entry.source.kind === "self" && repairs.length > 0)
       sourceRepairs = (await closure(pkg, entry.source.part)).slice(1).filter((v) => partDefects(v, exists).length > 0).map((v) => v.part);
-    states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [] });
+    states.push({
+      entry,
+      part,
+      closure: views,
+      touched,
+      sharedNotes,
+      repairs,
+      sourceRepairs,
+      defects,
+      released: [],
+      partReleased: [],
+      replacedImages: [],
+      replaced: []
+    });
   }
   return states;
 };
@@ -46457,17 +47561,18 @@ var removeSlides = async (pkg, removed) => {
     }
   }
 };
-var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased }, i) => ({
+var expectations = (states) => states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages }, i) => ({
   source: entry.source.kind === "self" && touched ? entry.source.part : null,
   label: `#${i} '${entry.title ?? ""}'`,
-  notes: entry.notes !== null,
+  notes: entry.notes !== null || entry.replaces.some((r) => r.notes),
   assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== void 0) ? "any" : entry.elements.length > 0 ? "grow" : "same",
   grow: {
-    images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync7(e.spec.path))] : []),
+    images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync8(e.spec.path))] : []),
     fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
     charts: entry.elements.filter((e) => e.spec.type === "chart").length
   },
-  textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== void 0 && !f.append),
+  textReplaced: entry.edits.some((e) => e.set.text !== void 0 || e.set.cells !== void 0 || e.set.addRows !== void 0 || e.set.removeRows !== void 0) || entry.fills.some((f) => f.text !== void 0 && !f.append) || entry.replaces.length > 0,
+  replaced: replacedImages,
   released,
   repaired: { before: sourceRepairs, after: repairs, released: partReleased }
 }));
@@ -46503,6 +47608,8 @@ var editSlides = async (pkg, plan, deck, states, removed, warnings) => {
       lang
     });
     actions.push(...own2.actions);
+    s.replacedImages = [...own2.swaps, ...own2.adopted.map((to) => ({ from: [], to }))];
+    s.replaced = own2.replaced;
     s.released = [.../* @__PURE__ */ new Set([...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own2.released])];
     if (s.sharedNotes)
       actions.push("gave the slide its own notes part");
@@ -46573,11 +47680,12 @@ var executePlan = async (outFile, plan, archive) => {
       `the engine produced ${findings.length} integrity violation(s); deck not written`,
       { findings }
     );
-  atomicWrite(path6.resolve(outFile), finalBytes);
+  atomicWrite(path7.resolve(outFile), finalBytes);
   const refIndexes = {};
   for (const [name, entry] of plan.refs)
     refIndexes[name] = plan.entries.indexOf(entry);
-  return { slideCount: plan.entries.length, refIndexes, warnings };
+  const replaced = states.flatMap((s, index) => s.replaced.map((r) => ({ index, ...r })));
+  return { slideCount: plan.entries.length, refIndexes, warnings, replaced };
 };
 var runSession = async (outFile, plan, archive) => {
   try {
@@ -46676,7 +47784,7 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     for (const fill of entry.fills)
       if (fill.image !== void 0) {
         requireFile(fill.image, "image");
-        const ext = path7.extname(fill.image).slice(1).toLowerCase();
+        const ext = path8.extname(fill.image).slice(1).toLowerCase();
         if (ext !== "" && IMAGE_TYPES[ext] === void 0)
           throw new PptcError(
             "E_SCHEMA",
@@ -46687,6 +47795,17 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     for (const el of entry.elements)
       if (el.spec.type === "image")
         requireFile(el.spec.path, "image");
+    for (const { set: set2 } of entry.edits)
+      if (set2.image !== void 0) {
+        requireFile(set2.image, "image");
+        const ext = path8.extname(set2.image).slice(1).toLowerCase();
+        if (ext !== "" && IMAGE_TYPES[ext] === void 0)
+          throw new PptcError(
+            "E_SCHEMA",
+            `unsupported image type '.${ext}' for a picture`,
+            { supported: Object.keys(IMAGE_TYPES) }
+          );
+      }
   }
   if (opts.strict && plan.warnings.length > 0)
     throw new PptcError(
@@ -46712,10 +47831,37 @@ var executeOps = async (deckFile, rawDoc, opts) => {
     if (slide !== void 0)
       slides[ref] = { id: slide.id, index: slide.index };
   }
+  const replaceOps = doc.ops.flatMap((op, i) => op.op === "text.replace" ? [i] : []);
+  const replacements = replaceOps.map((op) => {
+    const perSlide = /* @__PURE__ */ new Map();
+    const add = (index, count) => {
+      perSlide.set(index, (perSlide.get(index) ?? 0) + count);
+    };
+    plan.entries.forEach((entry, index) => {
+      for (const r of entry.replaced)
+        if (r.op === op)
+          add(index, r.count);
+    });
+    for (const r of session.replaced)
+      if (r.op === op)
+        add(r.index, r.count);
+    const hits = [...perSlide].filter(([, count]) => count > 0).sort((a, b) => a[0] - b[0]);
+    return {
+      op,
+      count: hits.reduce((sum, [, count]) => sum + count, 0),
+      slides: hits.map(([index, count]) => ({ id: finalState.slides[index]?.id ?? 0, index, count }))
+    };
+  });
   return {
     file: finalState.file,
     rev: { before: deck.rev, after: finalState.rev },
-    result: { applied: doc.ops.length, slideCount: session.slideCount, dryRun: false, slides },
+    result: {
+      applied: doc.ops.length,
+      slideCount: session.slideCount,
+      dryRun: false,
+      slides,
+      ...replacements.length > 0 && { replacements }
+    },
     warnings: [...plan.warnings, ...session.warnings]
   };
 };
@@ -46748,7 +47894,7 @@ var cmdApply = async (argv) => {
 
 // src/commands/new.ts
 import { existsSync as existsSync2, rmSync as rmSync2 } from "node:fs";
-import path8 from "node:path";
+import path9 from "node:path";
 var cmdNew = async (argv) => {
   const args = parse3(argv, {
     "template": { type: "string" },
@@ -46764,12 +47910,12 @@ var cmdNew = async (argv) => {
     throw new PptcError("E_FILE", `'${deckFile}' already exists -- use --force to overwrite`);
   const opsArg = args.str("ops");
   if (opsArg === null) {
-    atomicWrite(path8.resolve(deckFile), await buildEmptyDeck(templatePath));
-    return { file: path8.resolve(deckFile), result: { created: true, slideCount: 0 } };
+    atomicWrite(path9.resolve(deckFile), await buildEmptyDeck(templatePath));
+    return { file: path9.resolve(deckFile), result: { created: true, slideCount: 0 } };
   }
   const rawDoc = parseJson(resolvePayload(opsArg));
   const doc = Array.isArray(rawDoc) ? { ops: rawDoc } : rawDoc;
-  const stage = path8.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
+  const stage = path9.join(cacheDir(), `pptc-new-${process.pid}.pptx`);
   try {
     atomicWrite(stage, await buildEmptyDeck(templatePath));
     const result = await executeOps(stage, doc, {
@@ -46777,7 +47923,7 @@ var cmdNew = async (argv) => {
       dryRun: false,
       strict: args.flag("strict"),
       expectRev: null,
-      outFile: path8.resolve(deckFile),
+      outFile: path9.resolve(deckFile),
       minFontPt: minFontPtArg(args)
     });
     return { ...result, result: { ...result.result, created: true } };
@@ -46798,6 +47944,7 @@ var SCHEMAS = {
   "el.set": ElSetSchema,
   "img.prompts": ImgPromptsSchema,
   "meta.props": MetaPropsSchema,
+  "text.replace": TextReplaceSchema,
   "document": OpsDocumentSchema
 };
 var cmdSchema = (argv) => {
@@ -46931,15 +48078,27 @@ var cmdNote = async (argv) => {
   });
 };
 var cmdFooter = async (argv) => {
-  const args = parse3(argv, COMMON, ["deck", "text"]);
+  const args = parse3(
+    argv,
+    { ...COMMON, "number": { type: "boolean" }, "date": { type: "boolean" } },
+    ["deck", "text"],
+    1
+  );
   const deck = args.positionals[0];
   const text = args.positionals[1];
+  if (text === void 0 && !args.flag("number") && !args.flag("date"))
+    throw new PptcError("E_USAGE", "missing argument <text> (or --number / --date)", { expected: ["deck", "text"] });
+  const fill = {
+    ...text !== void 0 && { footer: text },
+    ...args.flag("number") && { slideNumber: true },
+    ...args.flag("date") && { date: true }
+  };
   const selector = args.str("slide");
-  const ops = selector !== null ? [{ op: "slide.fill", slide: selector, footer: text }] : [];
+  const ops = selector !== null ? [{ op: "slide.fill", slide: selector, ...fill }] : [];
   if (selector === null) {
     const deckState = await readDeckState(await DeckArchive.open(deck));
     for (const slide of deckState.slides)
-      ops.push({ op: "slide.fill", slide: `id:${slide.id}`, footer: text });
+      ops.push({ op: "slide.fill", slide: `id:${slide.id}`, ...fill });
     if (ops.length === 0)
       throw new PptcError("E_ADDR_NOTFOUND", "deck has no slides");
   }
@@ -46966,8 +48125,8 @@ var cmdMove = async (argv) => {
 };
 
 // src/commands/tpl.ts
-import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync8 } from "node:fs";
-import path9 from "node:path";
+import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync9 } from "node:fs";
+import path10 from "node:path";
 
 // src/core/describe/minimap.ts
 var MAP_W = 40;
@@ -47086,7 +48245,7 @@ var narrateTemplate = (info, source, sidecar) => {
 var loadTemplate = async (file2) => {
   const info = await readTemplateInfo(await DeckArchive.open(file2));
   const sidecarPath = file2.replace(/\.(potx|pptx)$/i, ".md");
-  const sidecar = sidecarPath !== file2 && existsSync3(sidecarPath) ? readFileSync8(sidecarPath, "utf8") : null;
+  const sidecar = sidecarPath !== file2 && existsSync3(sidecarPath) ? readFileSync9(sidecarPath, "utf8") : null;
   return { info, sidecar };
 };
 var filterLayouts = (info, selector) => {
@@ -47107,12 +48266,12 @@ var cmdTplList = (argv) => {
   if (!existsSync3(dir))
     throw new PptcError("E_FILE", `directory not found: '${dir}'`);
   const templates = readdirSync(dir).filter((f) => /\.(potx|pptx)$/i.test(f)).sort().map((f) => ({
-    file: path9.join(dir, f),
-    sidecar: existsSync3(path9.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
+    file: path10.join(dir, f),
+    sidecar: existsSync3(path10.join(dir, f.replace(/\.(potx|pptx)$/i, ".md")))
   }));
   if (args.flag("plain"))
-    return { plain: templates.length === 0 ? `(no templates in ${path9.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
-  return { result: { dir: path9.resolve(dir), templates } };
+    return { plain: templates.length === 0 ? `(no templates in ${path10.resolve(dir)})` : templates.map((t) => `${t.file}${t.sidecar ? "  [+ sidecar]" : ""}`).join("\n") };
+  return { result: { dir: path10.resolve(dir), templates } };
 };
 var cmdTplDescribe = async (argv) => {
   const args = parse3(argv, {
@@ -47124,19 +48283,19 @@ var cmdTplDescribe = async (argv) => {
   const { info, sidecar } = await loadTemplate(file2);
   const filtered = filterLayouts(info, args.str("layout"));
   if (args.flag("plain"))
-    return { plain: narrateTemplate(filtered, path9.basename(file2), sidecar) };
+    return { plain: narrateTemplate(filtered, path10.basename(file2), sidecar) };
   if ((args.str("format") ?? "text") === "json")
-    return { file: path9.resolve(file2), result: filtered };
+    return { file: path10.resolve(file2), result: filtered };
   return {
-    file: path9.resolve(file2),
-    result: { description: narrateTemplate(filtered, path9.basename(file2), sidecar) }
+    file: path10.resolve(file2),
+    result: { description: narrateTemplate(filtered, path10.basename(file2), sidecar) }
   };
 };
 var cmdTplInspect = async (argv) => {
   const args = parse3(argv, { "layout": { type: "string" } }, ["template"]);
   const file2 = args.positionals[0];
   const { info } = await loadTemplate(file2);
-  return { file: path9.resolve(file2), result: filterLayouts(info, args.str("layout")) };
+  return { file: path10.resolve(file2), result: filterLayouts(info, args.str("layout")) };
 };
 var validate2 = (info, hasNotesMaster) => {
   const issues = [];
@@ -47170,11 +48329,11 @@ var cmdTplValidate = async (argv) => {
     throw new PptcError("E_LINT", "template validation failed", { issues });
   if (args.flag("plain"))
     return { plain: [
-      `${path9.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
+      `${path10.resolve(file2)}: ${issues.length === 0 ? "ok" : "warn"} (${info.layouts.length} layouts)`,
       ...issues.map((i) => `  ${i.severity}: ${i.message}`)
     ].join("\n") };
   return {
-    file: path9.resolve(file2),
+    file: path10.resolve(file2),
     result: {
       status: issues.length === 0 ? "ok" : "warn",
       layouts: info.layouts.map((l) => ({ index: l.index, name: l.name })),

@@ -4,14 +4,15 @@
 **  Licensed under MIT license <https://spdx.org/licenses/MIT>
 **
 **  core/ops/elements: plan transformers for the element-level ops --
-**  el.add (generate new elements), el.set (retext) and el.rm (remove),
-**  plus img.prompts (prompt-box overlays on picture placeholders).
+**  el.add (generate new elements) and el.rm (remove), plus img.prompts
+**  (prompt-box overlays on picture placeholders) and meta.props; the
+**  shared element lookup and overlap obstacles (el.set: core/ops/el-set).
 */
 
 import { PptcError } from "../../infra/errors.js"
 import type { Op } from "../../schema/ops.js"
 import type { ElementSpec } from "../../schema/payloads.js"
-import type { Frame, ShapeInfo } from "../model.js"
+import { seedPlaceholderName, type Frame, type ShapeInfo } from "../model.js"
 import { slideAddrOf, type OpHandler, type PlanContext, type SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
 import { lintElementOverlap, lintFontSize, richTextSizes, type Obstacle } from "../lint.js"
@@ -25,10 +26,18 @@ export const PROMPT_BOX_PREFIX = "PptcPromptBox"
      box it covers (90/270 degrees swap width and height); null for
      connectors (line geometry) and for boxes without explicit extent
      (auto-height tables)  */
-const specFrame = (spec: ElementSpec): Frame | null => {
-    if (spec.type === "connector")
-        return null
-    const f = spec.frame
+export const specFrame = (spec: ElementSpec): Frame | null =>
+    spec.type === "connector" ? null : rotatedBox(spec.frame)
+
+/**
+ *  The axis-aligned box a rotated frame covers (90/270 degrees swap width
+ *  and height).
+ *
+ *  @param f - the frame with its rotation in degrees
+ *  @returns the covered box, null without explicit extent
+ */
+export const rotatedBox = (f: { x: number, y: number, w?: number | undefined, h?: number | undefined,
+    rotation?: number | undefined }): Frame | null => {
     if (f.w === undefined || f.h === undefined)
         return null
     const rad = (f.rotation ?? 0) * Math.PI / 180
@@ -42,7 +51,7 @@ const specFrame = (spec: ElementSpec): Frame | null => {
 /**  check a table's merged cells and its per-column fields against its
      grid (E_SCHEMA): every row fills the columns of the first row, spans
      stay inside the table, `colWidths`/`colAlign` give one value per column  */
-const checkTable = (spec: Extract<ElementSpec, { type: "table" }>, name: string): void => {
+export const checkTable = (spec: Extract<ElementSpec, { type: "table" }>, name: string): void => {
     const rows: unknown[][] = [ ...(spec.data.headers !== undefined ? [ spec.data.headers ] : []), ...spec.data.rows ]
     const grid = layoutTable(rows)
     if (typeof grid === "string")
@@ -71,32 +80,58 @@ const collectElementSizes = (spec: ElementSpec): number[] => {
     }
 }
 
+/**
+ *  The frame an existing shape has after the frame edits planned for it so
+ *  far (el.set), null when neither the shape nor an edit gives one.
+ *
+ *  @param entry - the plan entry
+ *  @param name - the full shape name
+ *  @param frame - the shape's frame before the apply
+ *  @returns the planned frame (rotated: its axis-aligned box)
+ */
+export const plannedFrame = (entry: SlidePlanEntry, name: string, frame: Frame | null): Frame | null => {
+    let f: { x: number, y: number, w: number, h: number, rotation?: number } | null = frame
+    for (const edit of entry.edits)
+        if (edit.name === name && edit.set.frame !== undefined) {
+            const patch = edit.set.frame
+            const base = f ?? { x: patch.x ?? 0, y: patch.y ?? 0, w: patch.w ?? 0, h: patch.h ?? 0 }
+            f = { x: patch.x ?? base.x, y: patch.y ?? base.y, w: patch.w ?? base.w, h: patch.h ?? base.h,
+                ...(patch.rotation ?? base.rotation) !== undefined && { rotation: patch.rotation ?? base.rotation } }
+        }
+    return f === null || f.w === 0 || f.h === 0 ? null : f.rotation === undefined ? f : rotatedBox(f)
+}
+
 /**  text-bearing obstacles a new element must not cover: text placeholders
      (incl. footer/slide-number/date), existing text shapes and elements
-     planned earlier -- picture placeholders and prompt boxes are exempt  */
-const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry): Obstacle[] => {
+     planned earlier -- picture placeholders and prompt boxes are exempt.
+     Frames planned by el.set count; `self` (a shape name) is left out.  */
+export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: string | null = null): Obstacle[] => {
     const obstacles: Obstacle[] = []
     const layout = entryLayout(ctx, entry)
+    const shapes = existingShapes(ctx, entry)
     if (layout !== null) {
-        for (const ph of layout.placeholders)
-            if (ph.kind !== "picture" && ph.frame !== null)
-                obstacles.push({ name: ph.name, frame: ph.frame })
+        for (const ph of layout.placeholders) {
+            const name = entry.source.kind === "seed" ? seedPlaceholderName(ph.idx)
+                : shapes.find((sh) => sh.placeholderIdx === ph.idx)?.name ?? null
+            const frame = name === null ? ph.frame : plannedFrame(entry, name, ph.frame)
+            if (ph.kind !== "picture" && frame !== null && (name === null || name !== self))
+                obstacles.push({ name: ph.name, frame })
+        }
         for (const frame of layout.reserved)
             obstacles.push({ name: "footer/slide-number/date area", frame })
     }
-    if (entry.source.kind === "self") {
-        const part = entry.source.part
-        for (const sh of ctx.deck.slides.find((s) => s.part === part)?.shapes ?? [])
-            if (sh.frame !== null && !sh.name.startsWith(PROMPT_BOX_PREFIX)
-                && sh.placeholderKind !== "picture" && sh.type !== "picture"
-                && sh.type !== "connector"
-                /*  shapes removed earlier in the same document are gone  */
-                && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
-                obstacles.push({ name: sh.name, frame: sh.frame })
+    for (const sh of shapes) {
+        const frame = plannedFrame(entry, sh.name, sh.frame)
+        if (frame !== null && sh.name !== self && !sh.name.startsWith(PROMPT_BOX_PREFIX)
+            && sh.placeholderKind !== "picture" && sh.type !== "picture"
+            && sh.type !== "connector"
+            /*  shapes removed earlier in the same document are gone  */
+            && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
+            obstacles.push({ name: sh.name, frame })
     }
     for (const planned of entry.elements) {
         const frame = specFrame(planned.spec)
-        if (frame !== null && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX)))
+        if (frame !== null && (planned.name === null || (!planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self)))
             obstacles.push({ name: planned.name ?? planned.spec.type, frame })
     }
     return obstacles
@@ -141,69 +176,15 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
  *  @param address - element name given in the op
  *  @returns true when the shape is addressed by the name
  */
-const nameMatches = (shapeName: string, address: string): boolean =>
+export const nameMatches = (shapeName: string, address: string): boolean =>
     shapeName === address || shapeName.startsWith(`${address}-`)
 
-/**  the existing shape types el.set can retext  */
-const TEXT_TYPES: ShapeInfo["type"][] = [ "placeholder", "textbox", "shape" ]
-
-/**  preset geometries of lines and connectors  */
-const LINE_GEOMETRY = /^(line|straightConnector\d|bentConnector\d|curvedConnector\d)$/
-
 /**  existing shapes of a kept slide, empty for new (seed) slides  */
-const existingShapes = (ctx: PlanContext, entry: SlidePlanEntry): ShapeInfo[] => {
+export const existingShapes = (ctx: PlanContext, entry: SlidePlanEntry): ShapeInfo[] => {
     if (entry.source.kind !== "self")
         return []
     const part = entry.source.part
     return ctx.deck.slides.find((s) => s.part === part)?.shapes ?? []
-}
-
-/**  op handler: el.set  */
-export const elSet: OpHandler<Extract<Op, { op: "el.set" }>> = {
-    name: "el.set",
-    plan(ctx, op): void {
-        const entry = resolveEntry(ctx, op.slide)
-
-        /*  the new text is rendered verbatim on both paths below, so it gets
-            the same readability lint as el.add (prompt boxes stay exempt)  */
-        if (!op.name.startsWith(PROMPT_BOX_PREFIX)) {
-            const tooSmall = lintFontSize({ element: op.name }, richTextSizes(op.text),
-                ctx.minFontPt, slideAddrOf(ctx, entry))
-            if (tooSmall !== null)
-                ctx.plan.warnings.push(tooSmall)
-        }
-
-        /*  an element generated earlier in the same run: patch its spec  */
-        const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name))
-        if (planned !== undefined) {
-            if (planned.spec.type === "textbox" || planned.spec.type === "shape")
-                planned.spec.text = op.text
-            else
-                throw new PptcError("E_SCHEMA",
-                    `element '${op.name}' is a ${planned.spec.type} -- only textbox and shape text can be set`)
-            return
-        }
-        /*  otherwise the element must already exist on the slide  */
-        const matches = existingShapes(ctx, entry).filter((sh) => nameMatches(sh.name, op.name))
-        if (matches.length === 0)
-            throw new PptcError("E_ADDR_NOTFOUND",
-                `slide has no element named '${op.name}'`,
-                { available: existingShapes(ctx, entry).map((sh) => sh.name) })
-        if (matches.length > 1)
-            throw new PptcError("E_ADDR_AMBIGUOUS",
-                `'${op.name}' matches ${matches.length} elements`,
-                { candidates: matches.map((sh) => sh.name) })
-        /*  only shapes with a text body of their own take text: a table,
-            chart, picture, connector or group would be left unchanged (or a
-            group's first child retexted); el.add draws a connector as a line
-            autoshape  */
-        const target = matches[0] as ShapeInfo
-        const type = target.type === "shape" && LINE_GEOMETRY.test(target.shape ?? "") ? "connector" : target.type
-        if (!TEXT_TYPES.includes(type))
-            throw new PptcError("E_SCHEMA",
-                `element '${target.name}' is a ${type} -- only placeholder, textbox and shape text can be set`)
-        entry.setTexts.push({ name: target.name, text: op.text })
-    }
 }
 
 /**  op handler: el.rm  */

@@ -10,7 +10,7 @@
 */
 
 import { z } from "zod"
-import { ColorSchema, ElementSchema, RichTextSchema } from "./payloads.js"
+import { ColorSchema, ElementSchema, FramePatchSchema, RichTextSchema } from "./payloads.js"
 
 /**
  *  Slide selector grammar:
@@ -57,7 +57,13 @@ const fillProps = {
     background: z.object({ color: ColorSchema }).strict().optional(),
     /**  hide ("Hide Slide", `show="0"`) or show the slide; omitted leaves the
          current visibility untouched (kept slides keep their hidden state)  */
-    hidden: z.boolean().optional()
+    hidden: z.boolean().optional(),
+    /**  show the slide number (`true`: the layout's slide-number placeholder
+         with its field) or remove it (`false`); omitted leaves it as it is  */
+    slideNumber: z.boolean().optional(),
+    /**  show the date (`true`: the layout's date placeholder with its field)
+         or remove it (`false`); omitted leaves it as it is  */
+    date: z.boolean().optional()
 }
 
 /**  Op: add a new slide based on a template layout.  */
@@ -113,12 +119,71 @@ export const ElRmSchema = z.object({
     name: z.string().min(1)
 }).strict()
 
-/**  Op: replace the text of a named element on a slide.  */
+/**  A table cell value of `el.set` rows: rich text or a plain value.  */
+const RowCellSchema = z.union([RichTextSchema, z.number(), z.boolean()])
+
+/**  the fields of `el.set` that change something  */
+const EL_SET_FIELDS = [ "text", "frame", "fill", "border", "borderPt", "fontColor", "altText", "title",
+    "image", "cells", "addRows", "removeRows" ] as const
+
+/**  Op: change a named element on a slide in place -- its text, frame,
+     style, alt text, picture or table cells/rows; each field is checked
+     against the element's type.  */
 export const ElSetSchema = z.object({
     op: z.literal("el.set"),
     slide: SlideSelectorSchema,
     name: z.string().min(1),
-    text: RichTextSchema
+    /**  new text (placeholders, textboxes, shapes); keeps the first
+         paragraph's and run's format where the new text sets none  */
+    text: RichTextSchema.optional(),
+    /**  move, resize or rotate: the given keys change, the others stay  */
+    frame: FramePatchSchema.optional(),
+    /**  solid fill (placeholders, textboxes, shapes)  */
+    fill: ColorSchema.optional(),
+    /**  outline color and width in pt (also pictures and connectors)  */
+    border: ColorSchema.optional(),
+    borderPt: z.number().positive().optional(),
+    /**  color of every text run (placeholders, textboxes, shapes)  */
+    fontColor: ColorSchema.optional(),
+    /**  alt text (`cNvPr@descr`) and title (`cNvPr@title`) of any element;
+         an empty string removes them  */
+    altText: z.string().optional(),
+    title: z.string().optional(),
+    /**  replace the image of a picture or a filled picture placeholder; the
+         frame, a crop (re-cropped to the new aspect) and animations stay  */
+    image: z.string().min(1).optional(),
+    /**  table: set cell texts by 0-based grid position (header row 0)  */
+    cells: z.array(z.object({
+        row: z.number().int().min(0),
+        col: z.number().int().min(0),
+        text: RichTextSchema
+    }).strict()).min(1).optional(),
+    /**  table: insert rows at a 0-based row position (default: append);
+         they take the format of the row above (the first row at 0)  */
+    addRows: z.object({
+        at: z.number().int().min(0).optional(),
+        rows: z.array(z.array(RowCellSchema).min(1)).min(1)
+    }).strict().optional(),
+    /**  table: remove rows by 0-based index (before addRows and cells)  */
+    removeRows: z.array(z.number().int().min(0)).min(1).optional()
+}).strict().refine((op) => EL_SET_FIELDS.some((f) => op[f] !== undefined),
+    `el.set needs at least one of ${EL_SET_FIELDS.join(", ")}`)
+
+/**  Op: find and replace plain text across the deck or on one slide --
+     shapes, placeholders and table cells, the speaker notes on request;
+     fields (slide number, date) never.  */
+export const TextReplaceSchema = z.object({
+    op: z.literal("text.replace"),
+    find: z.string().min(1),
+    replace: z.string(),
+    /**  only this slide; the whole deck when omitted  */
+    slide: SlideSelectorSchema.optional(),
+    /**  match upper/lower case exactly (default false)  */
+    matchCase: z.boolean().optional(),
+    /**  match whole words only (default false)  */
+    wholeWord: z.boolean().optional(),
+    /**  also replace in the speaker notes (default false)  */
+    notes: z.boolean().optional()
 }).strict()
 
 /**  Op: overlay picture placeholders with visible image-prompt boxes.  */
@@ -151,7 +216,7 @@ export const MetaPropsSchema = z.object({
 export const OpSchema = z.discriminatedUnion("op", [
     SlideAddSchema, SlideFillSchema, SlideRmSchema, SlideMoveSchema,
     SlideCopySchema, ElAddSchema, ElRmSchema, ElSetSchema,
-    ImgPromptsSchema, MetaPropsSchema
+    ImgPromptsSchema, MetaPropsSchema, TextReplaceSchema
 ])
 
 /**  The ops document: optional revision lock plus the ordered op list.  */
@@ -167,9 +232,11 @@ export type OpsDocument = z.infer<typeof OpsDocumentSchema>
 export type SlideAddOp = z.infer<typeof SlideAddSchema>
 export type SlideFillOp = z.infer<typeof SlideFillSchema>
 export type PlaceholderFill = z.infer<typeof PlaceholderFillSchema>
+export type ElSetOp = z.infer<typeof ElSetSchema>
+export type TextReplaceOp = z.infer<typeof TextReplaceSchema>
 
 /**  All op names, used by `pptc schema` for enumeration.  */
 export const OP_NAMES = [
     "slide.add", "slide.fill", "slide.rm", "slide.move", "slide.copy",
-    "el.add", "el.rm", "el.set", "img.prompts", "meta.props"
+    "el.add", "el.rm", "el.set", "img.prompts", "meta.props", "text.replace"
 ] as const

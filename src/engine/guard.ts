@@ -38,6 +38,10 @@ export interface SlideExpect {
     /**  whether an op replaces text on the slide (which may drop an inline
          picture, e.g. a picture bullet, legitimately)  */
     textReplaced?: boolean
+    /**  images an op put in place of others (el.set image) or brought in
+         with layout content (footer, slide number, date): the new image
+         (`to`, content hash) must come, the old ones (`from`) may go  */
+    replaced?: { from: string[], to: string }[]
     /**  relationship ids of the source slide whose content a named repair
          removed (W_REPAIRED) -- left out of its fingerprint  */
     released?: string[]
@@ -235,6 +239,26 @@ export const verifyContent = async (before: JSZip, after: JSZip, expects: SlideE
             lost some of its own children (e.g. a picture inside SmartArt)  */
         const gone = minus(was.assets, now.assets)
         const added = minus(now.assets, was.assets)
+
+        /*  a replaced image: exactly the new one comes, the old may go  */
+        for (const swap of exp.replaced ?? []) {
+            const k = added.indexOf(`image:${swap.to}[]`)
+
+            /*  an image put in place of one with the same content changes
+                nothing the fingerprint sees  */
+            if (k < 0 && swap.from.includes(swap.to))
+                continue
+            if (k < 0) {
+                blocked.push(`slide ${exp.label}: the image an op put in place (${swap.to}) is missing`)
+                continue
+            }
+            added.splice(k, 1)
+            for (const from of swap.from) {
+                const g = gone.indexOf(`image:${from}[]`)
+                if (g >= 0)
+                    gone.splice(g, 1)
+            }
+        }
 
         /*  "grow": the planned elements account for their images (by
             content), SVG fallbacks and charts; anything beyond is foreign  */

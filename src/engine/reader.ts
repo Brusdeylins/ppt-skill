@@ -530,6 +530,37 @@ const shapeStyle = (sp: Element, colors: Record<string, string>): Partial<ShapeI
     return out
 }
 
+/**  rotation, alt text and title of a shape (cNvPr, its transform)  */
+const description = (node: Element): Pick<ShapeInfo, "rotation" | "altText" | "title"> => {
+    const cNvPr = firstElement(node, "p:cNvPr")
+    const descr = cNvPr?.getAttribute("descr") ?? ""
+    const title = cNvPr?.getAttribute("title") ?? ""
+    const rot = Number((firstElement(node, "a:xfrm") ?? firstElement(node, "p:xfrm"))?.getAttribute("rot") ?? "0")
+    const rotation = Number.isFinite(rot) ? Math.round(rot / 600) / 100 : 0
+    return {
+        ...(rotation !== 0 && { rotation }),
+        ...(descr !== "" && { altText: descr }),
+        ...(title !== "" && { title })
+    }
+}
+
+/**  the anchoring and inner margin a text body sets (`a:bodyPr`)  */
+const bodyLayout = (bodyPr: Element | null): Pick<ShapeInfo, "valign" | "margin"> => {
+    if (bodyPr === null)
+        return {}
+    const valign = ({ t: "top", ctr: "middle", b: "bottom" } as const)[bodyPr.getAttribute("anchor") as "t" | "ctr" | "b"]
+    const sides = [ [ "lIns", 91440 ], [ "tIns", 45720 ], [ "rIns", 91440 ], [ "bIns", 45720 ] ] as const
+    const set = sides.some(([ attr ]) => (bodyPr.getAttribute(attr) ?? "") !== "")
+    const margin = sides.map(([ attr, def ]) => {
+        const v = Number(bodyPr.getAttribute(attr) ?? "")
+        return emuToInch((bodyPr.getAttribute(attr) ?? "") !== "" && Number.isFinite(v) ? v : def)
+    }) as [ number, number, number, number ]
+    return {
+        ...(valign !== undefined && { valign }),
+        ...(set && { margin: margin.every((m) => m === margin[0]) ? margin[0] : margin })
+    }
+}
+
 /**  read one `a:r` run into the RunInfo shape (mirrors a slide.fill run)  */
 const runStyle = (r: Element, colors: Record<string, string>): RunInfo => {
     const out: RunInfo = { text: firstElement(r, "a:t")?.textContent ?? "" }
@@ -684,6 +715,7 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                     frame: shapeFrame(node),
                     text
                 }
+                Object.assign(shape, description(node))
                 if (node.nodeName === "p:sp")
                     Object.assign(shape, shapeStyle(node, info.colors))
                 if (node.nodeName === "p:sp" || node.nodeName === "p:cxnSp")
@@ -692,6 +724,8 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                     : textDirectionOf(directChild(txBody, ["a:bodyPr"])?.getAttribute("vert"))
                 if (textDirection !== undefined)
                     shape.textDirection = textDirection
+                if (txBody !== null)
+                    Object.assign(shape, bodyLayout(directChild(txBody, ["a:bodyPr"])))
                 if (node.nodeName === "p:sp" || shape.type === "table") {
                     const lang = firstElement(node, "a:rPr")?.getAttribute("lang")
                     if (lang !== null && lang !== undefined && lang !== "")

@@ -161,6 +161,13 @@ export interface ShapeInfo {
     placeholderKind: PlaceholderKind | null
     /**  geometry in inches, null when inherited from the layout  */
     frame: Frame | null
+    /**  rotation in degrees (clockwise) when the shape is rotated; mirrors
+         el.add / el.set `frame.rotation`  */
+    rotation?: number
+    /**  alt text (`cNvPr@descr`) and title (`cNvPr@title`) when set;
+         mirror el.add / el.set `altText` and `title`  */
+    altText?: string
+    title?: string
     /**  plain text content, paragraphs joined by newlines, null if none  */
     text: string | null
     /**  table cell texts (rows x cols) when the shape is a table  */
@@ -178,6 +185,13 @@ export interface ShapeInfo {
     /**  text direction of a shape's body when not horizontal; mirrors
          el.add `textDirection`  */
     textDirection?: TextDirectionInfo
+    /**  vertical anchoring of a shape's text when set; mirrors el.add
+         `valign`  */
+    valign?: "top" | "middle" | "bottom"
+    /**  inner text margin in inches when set: one value for all sides or
+         [l, t, r, b] (unset sides at PowerPoint's default); mirrors el.add
+         `margin`  */
+    margin?: number | [ number, number, number, number ]
     /**  line end decorations of a line or connector (headEnd/tailEnd) when
          set; mirror el.add connector `startArrow`/`endArrow`  */
     startArrow?: string

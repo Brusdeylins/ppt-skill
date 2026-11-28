@@ -53,7 +53,9 @@ Language and footer
     written/translated into the deck language. Image prompts stay
     English.
 -   **Footer on every slide**: the template's footer pattern (see
-    template sidecar) with the actual deck title and the CURRENT year.
+    template sidecar) with the actual deck title and the CURRENT year;
+    slide number and date (`slideNumber`/`date`, `pptc footer --number
+    --date`) only where the pattern shows them.
     Never ship the template's placeholder title (e.g. "Insert title") or
     a stale year; when the title cannot be derived it is asked at the
     STEP 3 gate (Asking the User procedure).
@@ -115,13 +117,17 @@ Elements (tables, charts, free shapes)
     number column, a wide text column) and `colAlign` to right-align
     number columns; merge cells (`colspan`/`rowspan`) only for real group
     headers.
+-   **Alt text.** Every image and chart carries an `altText` in the deck
+    language that says what it shows (screen readers, accessibility
+    checks); decorative shapes need none.
 -   **Never cover existing text fields** (placeholders incl. the
     footer/slide-number area, textboxes, tables, charts) with a new
     element -- prompt boxes and the AI-note textbox (where no footer
     placeholder exists) are the only sanctioned overlays, and even the
     AI note must not sit on text. pptc enforces this: `W_ELEMENT_OVERLAP`
-    names the covered shape; under `--strict` the apply fails (exit 7).
-    On a finding, REPOSITION the element, never ignore it.
+    names the covered shape (also for an element `el.set` moves); under
+    `--strict` the apply fails (exit 7). On a finding, REPOSITION the
+    element, never ignore it.
 -   **Element font sizes -- from the template, readable, few.** Free
     `el.add` elements (chips, cards, captions, diagram labels,
     annotations) carry no template size of their own -- NEVER invent one.

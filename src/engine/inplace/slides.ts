@@ -20,11 +20,13 @@ import { notesOwner } from "../defects.js"
 import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.js"
 import { fitImage, imageSize, type Box, type ImageFit, type ImageSize } from "../image-size.js"
 import { slideFromLayout } from "../seed.js"
+import { digestBytes } from "../guard.js"
 import { HLINK_ATTR, setShapeText } from "../text.js"
 import { NS_A, NS_P, NS_R, colorElement, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
 import type { Package } from "./package.js"
 import { removeShape, repairContent, repairRels, type Repair } from "./repair.js"
 import type { Generated } from "./transplant.js"
+import { applyEdit, replaceExisting, replaceNotes, type ImageSwap } from "./edits.js"
 
 /**  is the shape the placeholder with the given idx  */
 const isPlaceholder = (idx: number) => (shape: Element): boolean => {
@@ -75,22 +77,79 @@ const setBackground = (slide: Document, color: string): void => {
     cSld.insertBefore(bg, cSld.firstChild)
 }
 
-/**  clone the footer placeholder from the slide's layout and set its text  */
-const setFooter = (slide: Document, layout: Document | null, text: string, nextId: () => number, lang: string): void => {
+/**
+ *  Give a slide relationships of its own for the references a content
+ *  cloned from its layout carries (a picture fill, a hyperlink): the
+ *  layout's ids mean nothing on the slide.
+ *
+ *  @param pkg - the deck package
+ *  @param part - the slide part
+ *  @param rels - the slide's relationships (edited in place)
+ *  @param layoutPart - the layout part the content comes from
+ *  @param scope - the cloned content (changed in place)
+ *  @returns the image parts the slide now relates to
+ */
+const adoptLayoutRels = async (pkg: Package, part: string, rels: Document, layoutPart: string, scope: Element): Promise<string[]> => {
+    const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [ t.id, t ]))
+    const ids = new Map<string, string>()
+    const images: string[] = []
+    for (const { el, attr } of relRefs(scope)) {
+        const rel = layoutRels.get(attr.value)
+        if (rel !== undefined && !ids.has(attr.value)) {
+            ids.set(attr.value, pkg.addRel(rels, rel.type,
+                rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, rel.target),
+                rel.target === null))
+            if (rel.kind === "image" && rel.target !== null)
+                images.push(rel.target)
+        }
+        const id = ids.get(attr.value)
+        if (id !== undefined)
+            el.setAttributeNS(NS_R, attr.name, id)
+    }
+    return images
+}
+
+/**  the footer-band placeholders: footer, slide number and date  */
+type BandType = "ftr" | "sldNum" | "dt"
+
+/**
+ *  Set a footer-band placeholder of a slide: remove the slide's own, then
+ *  (unless `content` is false) clone the layout's with its relationships --
+ *  the footer with the given text, the slide number and date with their
+ *  field -- in front of the shape tree's extension list.
+ *
+ *  @param pkg - the deck package
+ *  @param part - the slide part
+ *  @param slide - the slide DOM
+ *  @param rels - the slide's relationships
+ *  @param layoutPart - the slide's layout part, null when unknown
+ *  @param type - the placeholder type
+ *  @param content - the footer text, true to show the layout's content,
+ *                   false to remove the placeholder
+ *  @param lang - the language of the footer text
+ *  @returns the image parts the slide now relates to (layout content) and
+ *           the relationship ids the removed placeholder referenced
+ */
+const setBandPlaceholder = async (pkg: Package, part: string, slide: Document, rels: Document, layoutPart: string | null,
+    type: BandType, content: string | boolean, lang: string): Promise<{ images: string[], refs: string[] }> => {
+    const refs: string[] = []
     const spTree = firstElement(slide, "p:spTree")
     if (spTree === null)
-        return
+        return { images: [], refs }
     for (const sp of elements(slide, "p:sp"))
-        if (firstElement(sp, "p:ph")?.getAttribute("type") === "ftr")
+        if (firstElement(sp, "p:ph")?.getAttribute("type") === type) {
+            refs.push(...relRefs(sp).map((ref) => ref.attr.value))
             sp.parentNode?.removeChild(sp)
-    const ftr = layout === null ? undefined
-        : elements(layout, "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === "ftr")
-    if (ftr === undefined)
-        return
-    const clone = slide.importNode(ftr, true) as Element
-    firstElement(clone, "p:cNvPr")?.setAttribute("id", String(nextId()))
+        }
+    if (content === false || layoutPart === null || !pkg.has(layoutPart))
+        return { images: [], refs }
+    const source = elements(await pkg.xml(layoutPart), "p:sp").find((sp) => firstElement(sp, "p:ph")?.getAttribute("type") === type)
+    if (source === undefined)
+        return { images: [], refs }
+    const clone = slide.importNode(source, true) as Element
+    firstElement(clone, "p:cNvPr")?.setAttribute("id", String(PartAllocator.shapeIds(slide)()))
     const txBody = firstElement(clone, "p:txBody")
-    if (txBody !== null) {
+    if (typeof content === "string" && txBody !== null) {
         for (const p of elements(txBody, "a:p"))
             txBody.removeChild(p)
         const p = slide.createElementNS(NS_A, "a:p")
@@ -99,12 +158,14 @@ const setFooter = (slide: Document, layout: Document | null, text: string, nextI
         rPr.setAttribute("lang", lang)
         r.appendChild(rPr)
         const t = slide.createElementNS(NS_A, "a:t")
-        t.appendChild(slide.createTextNode(text))
+        t.appendChild(slide.createTextNode(content))
         r.appendChild(t)
         p.appendChild(r)
         txBody.appendChild(p)
     }
-    spTree.appendChild(clone)
+    const images = await adoptLayoutRels(pkg, part, rels, layoutPart, clone)
+    spTree.insertBefore(clone, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
+    return { images, refs }
 }
 
 /**  the frame of a shape's own `a:xfrm` in EMU, null when it has none  */
@@ -234,13 +295,14 @@ const setNotes = async (pkg: Package, slidePart: string, slideRels: Document, te
     pkg.addRel(slideRels, `${REL}/notesSlide`, `../notesSlides/${path.posix.basename(notesPart)}`)
 }
 
-/**  give a slide its own copy of a notes part that belongs to another
-     slide (or to none), with the back-reference pointing at this slide  */
-const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document): Promise<void> => {
+/**  give a slide its own copy of its notes part (one that may belong to
+     another slide, or to none), with the back-reference pointing at this
+     slide; returns the copy, null when the slide has no notes  */
+const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document): Promise<string | null> => {
     const rel = pkg.targets(slidePart, slideRels).find((t) => t.kind === "notesSlide")
     const notesPart = rel?.target ?? null
     if (rel === undefined || notesPart === null || !pkg.has(notesPart))
-        return
+        return null
     const owner = notesOwner({ part: notesPart, doc: await pkg.xml(notesPart), rels: pkg.targets(notesPart, await pkg.rels(notesPart)) })
     const copy = await pkg.clonePart(pkg, notesPart, new Map([ [ owner ?? slidePart, slidePart ] ]))
     if (owner === null) {
@@ -249,6 +311,7 @@ const unshareNotes = async (pkg: Package, slidePart: string, slideRels: Document
         pkg.writeRels(copy, copyRels)
     }
     rel.el.setAttribute("Target", relTarget(slidePart, copy))
+    return copy
 }
 
 /**  replace the `pptc-hlink` markers of the text writer by external
@@ -298,18 +361,8 @@ export const createSlide = async (pkg: Package, layoutPart: string): Promise<str
     /*  cloned placeholders may reference layout relationships (a picture
         fill, a hyperlink): the slide gets its own relationship to the same
         target, as the layout's ids mean nothing on the slide  */
-    const layoutRels = new Map(pkg.targets(layoutPart, await pkg.rels(layoutPart)).map((t) => [ t.id, t ]))
-    const ids = new Map<string, string>()
-    for (const { el, attr } of slide.documentElement === null ? [] : relRefs(slide.documentElement)) {
-        const rel = layoutRels.get(attr.value)
-        if (rel !== undefined && !ids.has(attr.value))
-            ids.set(attr.value, pkg.addRel(rels, rel.type,
-                rel.target === null ? rel.el.getAttribute("Target") ?? "" : relTarget(part, rel.target),
-                rel.target === null))
-        const id = ids.get(attr.value)
-        if (id !== undefined)
-            el.setAttributeNS(NS_R, attr.name, id)
-    }
+    if (slide.documentElement !== null)
+        await adoptLayoutRels(pkg, part, rels, layoutPart, slide.documentElement)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
     await pkg.typeAs(part, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")
@@ -334,15 +387,25 @@ export interface SlideWork {
     lang: string
 }
 
+/**  what one slide pass did beyond its repairs: the images el.set
+     replaced, the images layout content brought in, and the replacements
+     of each text.replace in the slide's existing content  */
+export interface SlideEdited extends Repair {
+    swaps: ImageSwap[]
+    adopted: string[]
+    replaced: { op: number, count: number }[]
+}
+
 /**
  *  Apply every planned edit of one slide in a single parse/serialize pass.
  *
  *  @param pkg - the deck package
  *  @param work - the slide and its plan entry
- *  @returns what was repaired on the slide (input defects)
+ *  @returns what was repaired on the slide (input defects), the images
+ *           replaced or adopted and the text replacements
  *  @throws PptcError E_ADDR_NOTFOUND when an addressed shape is missing
  */
-export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> => {
+export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdited> => {
     const { part, entry } = work
     const slide = await pkg.xml(part)
     const rels = await pkg.rels(part)
@@ -358,9 +421,6 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
     const fills = entry.fills.filter((f) => f.text !== undefined).map((f) => ({
         fill: f, shape: need(findShape(slide, f.phName, isPlaceholder(f.phIdx)), `placeholder '${f.phName}'`)
     }))
-    const texts = entry.setTexts.map((t) => ({
-        text: t.text, shape: need(findShape(slide, t.name, isTopLevel), `element '${t.name}'`)
-    }))
     const doomed = new Set<Element>()
     for (const name of entry.removeNames) {
         const shape = elements(slide, "p:cNvPr").map(shapeOf).find((s) =>
@@ -369,10 +429,20 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
             doomed.add(shape)
     }
 
+    /*  text.replace on the content the slide carried before the apply,
+        before any other op changes it (earlier ops' changes are left out)  */
+    const unused = new Set<string>()
+    const replaced: { op: number, count: number }[] = []
+    for (const replace of entry.replaces) {
+        const done = replaceExisting(slide, replace)
+        replaced.push({ op: replace.op, count: done.count })
+        for (const id of done.refs)
+            unused.add(id)
+    }
+
     /*  removals, then text; relationships only removed shapes or replaced
         text used (hyperlinks) are dropped below  */
-    const unused = new Set<string>()
-    for (const shape of [ ...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape), ...texts.map((t) => t.shape) ])
+    for (const shape of [ ...doomed, ...fills.filter((f) => !f.fill.append).map((f) => f.shape) ])
         for (const ref of relRefs(shape))
             unused.add(ref.attr.value)
 
@@ -391,8 +461,6 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
         removeShape(shape)
     for (const { fill, shape } of fills)
         setShapeText(shape, fill.text as NonNullable<typeof fill.text>, fill.append, work.lang)
-    for (const { text, shape } of texts)
-        setShapeText(shape, text, false, work.lang)
 
     /*  pictures into picture placeholders  */
     for (const fill of entry.fills.filter((f) => f.image !== undefined)) {
@@ -407,17 +475,49 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
             throw missing(`empty picture placeholder idx ${fill.phIdx}`)
     }
 
-    /*  background, footer, notes  */
+    /*  el.set changes of existing elements, in op order; what the changed
+        elements referenced before may become unused (links, images)  */
+    const swaps: ImageSwap[] = []
+    for (const edit of entry.edits) {
+        const shape = need(findShape(slide, edit.name, isTopLevel), `element '${edit.name}'`)
+        for (const ref of relRefs(shape))
+            unused.add(ref.attr.value)
+        const swap = await applyEdit(pkg, part, rels, shape, edit, work.lang)
+
+        /*  an image swapped again in the same apply: only the last stays  */
+        const again = swap === null ? undefined : swaps.find((s) => swap.from.includes(s.to))
+        if (swap !== null && again !== undefined) {
+            again.from.push(...swap.from.filter((f) => f !== again.to))
+            again.to = swap.to
+        }
+        else if (swap !== null)
+            swaps.push(swap)
+    }
+
+    /*  background, footer, slide number, date, notes  */
     if (entry.background !== null)
         setBackground(slide, entry.background)
-    if (entry.footer !== null) {
-        const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null
-        setFooter(slide, layout !== null && pkg.has(layout) ? await pkg.xml(layout) : null, entry.footer, PartAllocator.shapeIds(slide), work.lang)
-    }
+    const layout = pkg.targets(part, rels).find((t) => t.kind === "slideLayout")?.target ?? null
+    const adoptedParts: string[] = []
+    for (const [ type, content ] of [ [ "ftr", entry.footer ], [ "sldNum", entry.slideNumber ], [ "dt", entry.date ] ] as const)
+        if (content !== null) {
+            const band = await setBandPlaceholder(pkg, part, slide, rels, layout, type, content, work.lang)
+            adoptedParts.push(...band.images)
+            for (const id of band.refs)
+                unused.add(id)
+        }
+    const notesReplaces = entry.notes === null ? entry.replaces.filter((r) => r.notes) : []
     if (entry.notes !== null)
         await setNotes(pkg, part, rels, entry.notes, work.notesMaster, work.lang)
-    else if (work.sharedNotes)
-        await unshareNotes(pkg, part, rels)
+    else if (work.sharedNotes || notesReplaces.length > 0) {
+        const copy = await unshareNotes(pkg, part, rels)
+        if (copy !== null && notesReplaces.length > 0) {
+            const notes = await pkg.xml(copy)
+            for (const replace of notesReplaces)
+                replaced.push({ op: replace.op, count: replaceNotes(notes, replace) })
+            pkg.write(copy, notes)
+        }
+    }
 
     /*  generated elements, hyperlinks, visibility, links, repairs  */
     if (work.generated !== null)
@@ -431,5 +531,11 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<Repair> 
         repaired.actions.unshift(`dropped relationships ${dropped.join(",")}`)
     pkg.write(part, slide)
     pkg.writeRels(part, rels)
-    return repaired
+    const adopted: string[] = []
+    for (const image of adoptedParts) {
+        const file = pkg.zip.file(image)
+        if (file !== null)
+            adopted.push(digestBytes(await file.async("nodebuffer")))
+    }
+    return { ...repaired, swaps, adopted, replaced }
 }

@@ -234,7 +234,8 @@ The deck read model and the **`rev` token** for optimistic locking.
   name, `frame`, text, table cells + column widths (`colWidths`), merged
   cells (`merges`: row, col, rowspan, colspan; covered cells read as `""`)
   and vertical cell text (`cellTextDirections`), autoshape
-  preset/fill/border/font, the `textDirection` of a text body, connector
+  preset/fill/border/font, the `textDirection`, `valign` and `margin` of a
+  text body, the `rotation`, `altText` and `title` of a shape, connector
   `startArrow`/`endArrow`, the text language (`lang`), a picture's media
   file name (`image`), and --
   for a body with explicit run formatting -- its `paragraphs`/`runs`
@@ -323,11 +324,14 @@ Set placeholder text. `--ph` takes a placeholder key (default `title`);
 
 Set the slide's speaker notes.
 
-#### `pptc footer <deck> [--slide SEL] "footer text"`
+#### `pptc footer <deck> [--slide SEL] ["footer text"] [--number] [--date]`
 
 Set the footer of one slide -- or, without `--slide`, of **every** slide.
 Works by cloning the layout's footer placeholder; layouts without one
-(typically title/closing layouts) are skipped silently.
+(typically title/closing layouts) are skipped silently. `--number` and
+`--date` show the slide number and the date as well (the layout's
+slide-number and date placeholders with their fields); with one of them
+the text may be omitted.
 
 #### `pptc rm <deck> --slide SEL`
 
@@ -394,7 +398,10 @@ Anatomy:
   sizes are read from PNG, JPEG, GIF, WebP, BMP and SVG; an unknown size
   stretches). Plus optional `notes`, `footer`,
   `background` and `hidden` (`true` hides the slide -- "Hide Slide" --,
-  `false` shows it; omitted keeps the current state). Text accepts plain
+  `false` shows it; omitted keeps the current state), `slideNumber` and
+  `date` (`true` clones the layout's slide-number / date placeholder with
+  its field -- nothing when the layout has none --, `false` removes it;
+  omitted keeps it as it is). Text accepts plain
   strings (`\n` = new paragraph) or rich text (runs with
   bold/italic/color/size, bullet levels).
 - **Rich text**: a paragraph is `{ "text": ... }` or `{ "runs": [...] }`
@@ -432,10 +439,11 @@ Recommended agent loop:
 | Op | Purpose |
 |---|---|
 | `slide.add` | add a slide from a template layout (`layout`: index or name; optional `ref`, `at`, inline fill) |
-| `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `background`, `hidden` (hide/show) of a slide |
+| `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `slideNumber`, `date`, `background`, `hidden` (hide/show) of a slide |
 | `slide.rm` / `slide.move` / `slide.copy` | structure edits |
 | `el.add` | add free elements: `textbox`, `table`, `chart`, `shape`, `image`, `connector` -- all share `frame: {x,y,w,h}` in inches (see below) |
-| `el.set` / `el.rm` | retext / remove an element by shape name; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document; `el.set` text goes to placeholders, textboxes and shapes only (a table, chart, picture, connector or group fails with `E_SCHEMA`) |
+| `el.set` / `el.rm` | change / remove an element by shape name in place; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document and the placeholders of slides added in it (`PptcPh-<idx>`); `el.set` takes text, frame, style, alt text, image and table cells/rows -- see below |
+| `text.replace` | find and replace plain text in the whole deck or on one `slide` -- see below |
 | `img.prompts` | overlay picture placeholders with visible image-prompt boxes (removable via `el.rm`) |
 | `meta.props` | document properties: core fields (title, author, subject, keywords, category, comments) and/or arbitrary `custom` name/value pairs stored in the `.pptx` (read back by `state` -- the deck's self-describing memory) |
 
@@ -445,8 +453,8 @@ Run `pptc schema <op>` for the authoritative JSON Schema with all fields, or
 ### `el.add` elements
 
 Every element has a `type`, an optional `name` (addresses it in later
-`el.set`/`el.rm`) and -- except connectors -- a `frame: {x, y, w, h,
-rotation}` in inches.
+`el.set`/`el.rm`), optional `altText` and `title` (accessibility) and --
+except connectors -- a `frame: {x, y, w, h, rotation}` in inches.
 
 - **`textbox`**: `text` (rich text), `fill`, `border`, `borderPt`, `lang`,
   and the text box layout shared with `shape`: `valign`
@@ -497,6 +505,50 @@ The overlap lint (`W_ELEMENT_OVERLAP`) takes the box a rotated element
 covers; the capacity of a placeholder with vertical text (rotated by 90 or
 270 degrees in the layout) swaps its width and height.
 
+### `el.set` fields
+
+`el.set` changes a top-level element in place and needs at least one
+field; each is checked against the element's type (`E_SCHEMA` otherwise):
+
+| Field | Elements | Effect |
+|---|---|---|
+| `text` | placeholder, textbox, shape | new rich text; a paragraph or run that sets no format keeps the first paragraph's and run's format (alignment, bullets, font, size, color, language) |
+| `frame` | every element (rotation: not table/chart) | `{x, y, w, h, rotation}` -- the given keys move, resize or rotate it, the others stay; a placeholder that inherits its frame gets the layout's frame written into the slide; a group keeps its children's coordinates (they scale with it); a table's columns and rows scale to the new size |
+| `fill` | placeholder, textbox, shape | solid fill |
+| `border`, `borderPt` | placeholder, textbox, shape, picture, connector | outline color and width in pt |
+| `fontColor` | placeholder, textbox, shape | color of every run |
+| `altText`, `title` | every element | alt text (`cNvPr@descr`) and title; `""` removes them |
+| `image` | picture, filled picture placeholder | another image in place: frame, a crop (re-cut centered to the new aspect) and animations stay; an SVG shows through PowerPoint's SVG extension |
+| `cells` | table | `[{row, col, text}]` -- 0-based grid position, header row 0; a cell covered by a merge fails |
+| `addRows` | table | `{at?, rows}` -- rows inserted at `at` (default: appended) in the format of the row above (of the first row at 0); one value per column |
+| `removeRows` | table | `[indices]` -- rows taken out; a row of a vertical merge fails |
+
+Table fields apply in the order `removeRows`, `addRows`, `cells`, each seeing
+the result of the one before; the table style and the cell formatting
+stay, and the frame's height follows the rows. An element generated or a
+picture placeholder filled earlier in the same document is changed in its
+plan instead (the `el.add` vocabulary: a planned connector takes `border`/
+`borderPt` as its `color`/`widthPt`, a planned textbox `fontColor` on its
+runs). Every `el.add` element also takes `altText` and `title`; a picture
+is never described by its file path. Replacing an image destroys the old
+one in the deck -- the skill does it only on the user's explicit request.
+
+### `text.replace`
+
+`{ "op": "text.replace", "find": "2025", "replace": "2026", "slide": SEL,
+"matchCase": false, "wholeWord": false, "notes": false }` replaces plain
+text in every shape, placeholder and table cell of the deck -- or of
+`slide` only --, in the speaker notes with `notes: true`, never in fields
+(slide number, date). A match may span runs (text split by formatting):
+the first touched run takes the replacement and keeps its format. The op
+sees the deck after every earlier op of the document (text set or
+elements added before it are replaced, later ones are not), and slide
+`title:` selectors after it see the new titles. Zero matches is no error.
+The apply result reports every `text.replace` in `result.replacements`
+(not under `--dry-run`): `{ "op": 2, "count": 5, "slides": [ { "id": 257,
+"index": 1, "count": 5 } ] }` -- `op` is its position in the document,
+the counts are per output slide (a copy made after the op counts its own).
+
 ### Ops document semantics
 
 - The **whole document is validated and planned first** (schema, every
@@ -514,7 +566,8 @@ Exactly one JSON document on stdout; logs (if any) on stderr.
 
 ```json
 { "ok": true,  "cmd": "apply", "file": "...", "rev": { "before": "...", "after": "..." },
-  "result": { "applied": 6, "slides": { "intro": { "id": 263, "index": 0 } } },
+  "result": { "applied": 6, "slides": { "intro": { "id": 263, "index": 0 } },
+              "replacements": [ { "op": 5, "count": 2, "slides": [ { "id": 263, "index": 0, "count": 2 } ] } ] },
   "warnings": [ { "code": "W_TEXT_OVERFLOW", "placeholder": 13, "estimatedLines": 14, "maxLines": 12 } ] }
 ```
 

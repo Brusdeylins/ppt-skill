@@ -30,9 +30,10 @@ import type { DeckArchive } from "../reader.js"
 import { findDefects } from "../verify.js"
 import { NS_P, NS_R, elements, firstElement } from "../xml.js"
 import { Package } from "./package.js"
-import { repairPart, type Repair } from "./repair.js"
+import { repairPart } from "./repair.js"
 import { createSlide, dropLinksToRemoved, editSlide } from "./slides.js"
 import { generateElements } from "./transplant.js"
+import { mayMatch } from "../../core/text-replace.js"
 
 /**  is a part outside every slide's own content (presentation, masters,
      layouts, themes, document properties, custom XML, ...)  */
@@ -48,6 +49,9 @@ export interface SessionResult {
     /**  repairs of PowerPoint repair triggers the input deck carried
          (W_REPAIRED), and triggers left as they were (W_INPUT_DEFECT)  */
     warnings: LintWarning[]
+    /**  replacements of each text.replace op in the content the output
+         slides carried before the apply, by plan-order slide position  */
+    replaced: { index: number, op: number, count: number }[]
 }
 
 /**  one entry of the input slide list  */
@@ -97,6 +101,11 @@ interface SlideState {
     released: string[]
     /**  the same, released inside the repaired parts of its content  */
     partReleased: string[]
+    /**  images the slide pass put in place of others or adopted from the
+         layout (content guard)  */
+    replacedImages: { from: string[], to: string }[]
+    /**  replacements of each text.replace op in its existing content  */
+    replaced: { op: number, count: number }[]
 }
 
 /**
@@ -124,8 +133,20 @@ const withStdoutShield = async <T>(fn: () => Promise<T>): Promise<T> => {
 
 /**  does the plan change the content of the slide (not only its position)  */
 const hasEdits = (e: SlidePlanEntry): boolean =>
-    e.fills.length > 0 || e.setTexts.length > 0 || e.removeNames.length > 0 || e.elements.length > 0
-        || e.notes !== null || e.footer !== null || e.background !== null
+    e.fills.length > 0 || e.edits.length > 0 || e.removeNames.length > 0 || e.elements.length > 0
+        || e.notes !== null || e.footer !== null || e.background !== null || e.slideNumber !== null
+        || e.date !== null
+
+/**  whether a text.replace of the plan may find something on a slide (in
+     its notes too, when it replaces there): a slide whose text holds no
+     possible match stays untouched  */
+const replacesMatch = (e: SlidePlanEntry, slide: Document | null, notes: Document | null): boolean => {
+    const text = (doc: Document | null): string =>
+        doc === null ? "" : elements(doc, "a:t").map((t) => t.textContent ?? "").join("")
+    const slideText = e.replaces.length > 0 ? text(slide) : ""
+    const notesText = e.replaces.some((r) => r.notes) ? text(notes) : ""
+    return e.replaces.some((r) => mayMatch(slideText, r) || (r.notes && mayMatch(notesText, r)))
+}
 
 /**  a part with its DOM and relationships, as engine/defects reads it; a
      malformed part has no DOM (verify reports it)  */
@@ -336,12 +357,13 @@ const classifySlides = async (pkg: Package, plan: MutationPlan, parts: string[],
         const show = slide.doc?.documentElement?.getAttribute("show") ?? ""
         const links = views.some((v) => v.rels.some((r) => r.kind === "slide" && r.target !== null && removed.has(r.target)))
         const touched = entry.virtualId <= 0 || hasEdits(entry) || (show === "0" || show === "false") !== entry.hidden
-            || defects.length > 0 || links
+            || defects.length > 0 || links || replacesMatch(entry, slide.doc, notesView?.doc ?? null)
         let sourceRepairs = repairs
         if (entry.virtualId <= 0 && entry.source.kind === "self" && repairs.length > 0)
             sourceRepairs = (await closure(pkg, entry.source.part)).slice(1)
                 .filter((v) => partDefects(v, exists).length > 0).map((v) => v.part)
-        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [] })
+        states.push({ entry, part, closure: views, touched, sharedNotes, repairs, sourceRepairs, defects, released: [], partReleased: [],
+            replacedImages: [], replaced: [] })
     }
     return states
 }
@@ -397,10 +419,10 @@ const removeSlides = async (pkg: Package, removed: Set<string>): Promise<void> =
 
 /**  what the content guard allows to change on each output slide  */
 const expectations = (states: SlideState[]): SlideExpect[] =>
-    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased }, i) => ({
+    states.map(({ entry, touched, released, repairs, sourceRepairs, partReleased, replacedImages }, i) => ({
         source: entry.source.kind === "self" && touched ? entry.source.part : null,
         label: `#${i} '${entry.title ?? ""}'`,
-        notes: entry.notes !== null,
+        notes: entry.notes !== null || entry.replaces.some((r) => r.notes),
         assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== undefined)
             ? "any" : entry.elements.length > 0 ? "grow" : "same",
         grow: {
@@ -408,7 +430,10 @@ const expectations = (states: SlideState[]): SlideExpect[] =>
             fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
             charts: entry.elements.filter((e) => e.spec.type === "chart").length
         },
-        textReplaced: entry.setTexts.length > 0 || entry.fills.some((f) => f.text !== undefined && !f.append),
+        textReplaced: entry.edits.some((e) => e.set.text !== undefined || e.set.cells !== undefined
+            || e.set.addRows !== undefined || e.set.removeRows !== undefined)
+            || entry.fills.some((f) => f.text !== undefined && !f.append) || entry.replaces.length > 0,
+        replaced: replacedImages,
         released,
         repaired: { before: sourceRepairs, after: repairs, released: partReleased }
     }))
@@ -442,10 +467,12 @@ const editSlides = async (pkg: Package, plan: MutationPlan, deck: Deck, states: 
             actions.push(...repair.actions.map((a) => `${a} in ${owner}`))
             s.partReleased.push(...repair.released)
         }
-        const own: Repair = await editSlide(pkg, {
+        const own = await editSlide(pkg, {
             part: s.part, entry: s.entry, removed, notesMaster: deck.notesMaster ?? "", generated, sharedNotes: s.sharedNotes, lang
         })
         actions.push(...own.actions)
+        s.replacedImages = [ ...own.swaps, ...own.adopted.map((to) => ({ from: [], to })) ]
+        s.replaced = own.replaced
 
         /*  a slide listed twice is edited twice: the first pass released  */
         s.released = [ ...new Set([ ...states.filter((o) => o.part === s.part).flatMap((o) => o.released), ...own.released ]) ]
@@ -535,7 +562,8 @@ const executePlan = async (outFile: string, plan: MutationPlan, archive: DeckArc
     const refIndexes: Record<string, number> = {}
     for (const [ name, entry ] of plan.refs)
         refIndexes[name] = plan.entries.indexOf(entry)
-    return { slideCount: plan.entries.length, refIndexes, warnings }
+    const replaced = states.flatMap((s, index) => s.replaced.map((r) => ({ index, ...r })))
+    return { slideCount: plan.entries.length, refIndexes, warnings, replaced }
 }
 
 /**

@@ -12,7 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import JSZip from "jszip"
-import type { Element } from "@xmldom/xmldom"
+import type { Document, Element } from "@xmldom/xmldom"
 import { buildEmptyDeck } from "../../src/engine/seed.js"
 import { DeckArchive, readDeckState } from "../../src/engine/reader.js"
 import { executeOps, type ExecuteOptions } from "../../src/commands/apply.js"
@@ -57,6 +57,19 @@ export const apply = async (deck: string, ops: unknown[]): Promise<unknown[]> =>
     const result = await executeOps(deck, { ops } as never, OPTS) as unknown as { warnings?: unknown[] }
     await expectIntact(deck)
     return result.warnings ?? []
+}
+
+/**
+ *  Apply ops and check the written deck, returning the whole result.
+ *
+ *  @param deck - the deck path
+ *  @param ops - the ops of the document
+ *  @returns the apply result payload
+ */
+export const applyResult = async (deck: string, ops: unknown[]): Promise<Awaited<ReturnType<typeof executeOps>>> => {
+    const result = await executeOps(deck, { ops } as never, OPTS)
+    await expectIntact(deck)
+    return result
 }
 
 /**
@@ -144,4 +157,46 @@ export const png = (w: number, h: number): Buffer => {
     b.writeUInt32BE(w, 16)
     b.writeUInt32BE(h, 20)
     return b
+}
+
+/**
+ *  The slide XML of a slide.
+ *
+ *  @param deck - the deck path
+ *  @param index - the slide position
+ *  @returns the slide DOM
+ */
+export const slideDoc = async (deck: string, index: number): Promise<Document> => {
+    const part = ((await stateOf(deck)).slides[index] as { part: string }).part
+    const zip = await JSZip.loadAsync(readFileSync(deck))
+    return parseXml(await (zip.file(part) as JSZip.JSZipObject).async("string"))
+}
+
+/**
+ *  Rewrite the XML of a slide (crafted input the generator cannot make).
+ *
+ *  @param deck - the deck path
+ *  @param index - the slide position
+ *  @param edit - the text transformation of the slide XML
+ */
+export const craftSlide = async (deck: string, index: number, edit: (xml: string) => string): Promise<void> => {
+    const part = ((await stateOf(deck)).slides[index] as { part: string }).part
+    const zip = await JSZip.loadAsync(readFileSync(deck))
+    zip.file(part, edit(await (zip.file(part) as JSZip.JSZipObject).async("string")))
+    writeFileSync(deck, await zip.generateAsync({ type: "nodebuffer" }))
+}
+
+/**
+ *  The shape of a slide by its name or name prefix (generated suffix).
+ *
+ *  @param doc - the slide DOM
+ *  @param name - the name
+ *  @returns the shape element
+ */
+export const shapeNamed = (doc: Document, name: string): Element => {
+    const cNvPr = elements(doc, "p:cNvPr").find((el) => el.getAttribute("name") === name
+        || (el.getAttribute("name") ?? "").startsWith(`${name}-`))
+    if (cNvPr === undefined)
+        throw new Error(`no shape '${name}'`)
+    return cNvPr.parentNode?.parentNode as Element
 }

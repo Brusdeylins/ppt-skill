@@ -105,6 +105,8 @@ export interface FillProps {
     footer?: string | undefined
     background?: { color: string } | undefined
     hidden?: boolean | undefined
+    slideNumber?: boolean | undefined
+    date?: boolean | undefined
 }
 
 /**
@@ -189,4 +191,8 @@ export const planFill = (ctx: PlanContext, entry: SlidePlanEntry, fill: FillProp
         entry.background = fill.background.color
     if (fill.hidden !== undefined)
         entry.hidden = fill.hidden
+    if (fill.slideNumber !== undefined)
+        entry.slideNumber = fill.slideNumber
+    if (fill.date !== undefined)
+        entry.date = fill.date
 }

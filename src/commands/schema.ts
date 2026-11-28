@@ -14,7 +14,7 @@ import { parse } from "../infra/args.js"
 import {
     ElAddSchema, ElRmSchema, ElSetSchema, ImgPromptsSchema, MetaPropsSchema,
     OpsDocumentSchema, OP_NAMES, SlideAddSchema, SlideCopySchema,
-    SlideFillSchema, SlideMoveSchema, SlideRmSchema
+    SlideFillSchema, SlideMoveSchema, SlideRmSchema, TextReplaceSchema
 } from "../schema/ops.js"
 
 /**  op name to schema mapping  */
@@ -29,6 +29,7 @@ const SCHEMAS: Record<string, ZodType> = {
     "el.set": ElSetSchema,
     "img.prompts": ImgPromptsSchema,
     "meta.props": MetaPropsSchema,
+    "text.replace": TextReplaceSchema,
     "document": OpsDocumentSchema
 }
 

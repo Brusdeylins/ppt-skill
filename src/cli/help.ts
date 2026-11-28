@@ -29,9 +29,11 @@ Options:
                    type, name, frame, text, table cells + column widths
                    (colWidths) + merged cells (merges) + vertical cell
                    text (cellTextDirections), autoshape preset/fill/
-                   border/font, textDirection, connector startArrow/
-                   endArrow, the text language (lang), a picture's media
-                   file name (image), and -- for a body with explicit run
+                   border/font, textDirection, valign and margin of a
+                   text body, rotation, altText and title, connector
+                   startArrow/endArrow, the text language (lang), a
+                   picture's media file name (image), and -- for a body
+                   with explicit run
                    formatting -- its paragraphs/runs (per-run font, size,
                    bold, italic, strike, super-/subscript, color,
                    highlight; per paragraph bullet, spacing), which pass
@@ -142,15 +144,17 @@ Options: --slide SEL, --rev R, --strict, --dry-run (as in 'apply').
 Example:
   pptc note deck.pptx --slide id:257 "Key message, figures, transition."`,
 
-    "footer": `pptc footer <deck> [--slide SEL] "footer text"
+    "footer": `pptc footer <deck> [--slide SEL] ["footer text"] [--number] [--date]
 
 Set the footer of one slide -- or, without --slide, of EVERY slide.
 Clones the layout's footer placeholder; layouts without one (typically
-title/closing layouts) are skipped silently.
-Options: --slide SEL, --rev R, --strict, --dry-run (as in 'apply').
+title/closing layouts) are skipped silently. --number and --date show
+the slide number and the date as well (the layout's placeholders with
+their fields); with one of them the text may be omitted.
+Options: --slide SEL, --number, --date, --rev R, --strict, --dry-run.
 
 Example:
-  pptc footer deck.pptx "© Acme Corp | My Talk | 2026"`,
+  pptc footer deck.pptx "© Acme Corp | My Talk | 2026" --number`,
 
     "rm": `pptc rm <deck> --slide SEL
 
@@ -251,6 +255,7 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                                    "image": { "image": "photo.png",
                                               "fit": "crop" } },  // crop|contain|stretch
                  "notes": "...", "footer": "...",
+                 "slideNumber": true, "date": false,  // show/remove
                  "background": { "color": "1F4E79" },
                  "hidden": true }           // optional: hide/show the slide
   slide.fill   same fill payload, on an existing slide ("slide": SEL)
@@ -279,9 +284,23 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  "dash": solid|dash|dot|dashDot|longDash,
                  "startArrow"/"endArrow": none|arrow|triangle|stealth|
                  diamond|oval
-  el.set       retext an element:  { "op": "el.set", "slide": SEL,
-                 "name": "Box1", "text": "new text" } -- placeholders,
-               textboxes and shapes only
+               every element also takes "altText" and "title"
+  el.set       change an element in place (at least one field, each
+               checked against the element's type):
+               { "op": "el.set", "slide": SEL, "name": "Box1", ... }
+                 "text" (placeholder/textbox/shape; text without format
+                   keeps the first paragraph's and run's format),
+                 "frame": { "x", "y", "w", "h", "rotation" } (given keys
+                   change; not rotation on table/chart),
+                 "fill", "fontColor" (placeholder/textbox/shape),
+                 "border", "borderPt" (also picture/connector),
+                 "altText", "title" (any element; "" removes),
+                 "image" (picture or filled picture placeholder: frame,
+                   crop and animations stay -- only on explicit request),
+                 table: "cells": [{ "row", "col", "text" }] (0-based,
+                   header row 0), "addRows": { "at", "rows" } (format of
+                   the row above), "removeRows": [ 2 ]
+               -- also on elements planned earlier in the document
   el.rm        remove an element by name
   img.prompts  overlay picture placeholders with visible prompt boxes
                { "op": "img.prompts", "slide": SEL, "prompts": "..." }
@@ -291,6 +310,14 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                so they travel with the file and 'state' reads them back
                { "op": "meta.props", "set": { "title": "Q3",
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
+  text.replace find/replace plain text in shapes, placeholders and table
+               cells of the deck (or of "slide"), notes only on request,
+               fields never; a match may span runs (the first keeps its
+               format); sees every earlier op of the document
+               { "op": "text.replace", "find": "2025", "replace": "2026",
+                 "slide": SEL, "matchCase": false, "wholeWord": false,
+                 "notes": false }
+               -> result.replacements: [{ "op", "count", "slides" }]
 
 Text values accept plain strings (\\n = new paragraph) or rich text:
 paragraphs { "text" | "runs", "level", "alignment", "bullet": true|

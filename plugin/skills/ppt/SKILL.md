@@ -91,8 +91,11 @@ Execution Rules
   change set names. NEVER delete or overwrite a generated image, a
   user-added shape, or a filled placeholder you were not asked to change --
   a generated image is the user's finished deliverable; removing or
-  replacing one needs an explicit request, never a side effect. A picture
-  placeholder that already holds an image counts as DONE (see STEP 7).
+  replacing one (`el.rm`, `el.set` `image`) needs an explicit request,
+  never a side effect. A picture placeholder that already holds an image
+  counts as DONE (see STEP 7). `text.replace` without `slide` changes the
+  WHOLE deck -- scope it (`slide`, `wholeWord`, `matchCase`) to what the
+  user asked for.
 - Three languages are independent of each other: respond to the user in
   the USER'S language; ALL deck content (titles, bullets, notes, footer,
   AI note) is in the DECK language <deck-lang/> fixed in STEP 3 --
@@ -115,18 +118,24 @@ tpl inspect <tpl>     # precise JSON: colors, layouts, placeholders, capacity
 tpl validate <tpl>    # check template against pptc's expectations (exit 7 on fail)
 new <deck> --template <tpl>
 state <deck> [--slide SEL] [--level summary|text|full]   # slides + rev; full = shape geometry
-                      #   + table cells/colWidths/merges + autoshape styling, textDirection,
-                      #   arrows, styled paragraphs/runs (round-trip; colors as RRGGBB)
+                      #   + rotation, altText/title, table cells/colWidths/merges, autoshape
+                      #   styling, textDirection/valign/margin, arrows, styled paragraphs/runs
+                      #   (round-trip; colors as RRGGBB)
 apply <deck> --ops @<ops.json> --rev <rev> [--dry-run] [--strict] [--template <tpl>]
 verify <deck> [--strict]   # PowerPoint repair-trigger check (exit 8 on --strict)
 schema                # ops JSON schema
 text|note|footer|rm|move <deck> --slide SEL ...   # quick edits, no ops doc
+footer <deck> ["text"] [--number] [--date]        # footer (+ slide number/date) on every slide
 ```
 
 Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 `slide.rm`, `slide.move`, `slide.copy`, `el.add`, `el.rm`, `el.set`,
-`img.prompts`, `meta.props`. Slides are addressed by `id:<sldId>`,
-`title:<exact>`, `$ref` (doc-local), or `index:N` (escape hatch only).
+`img.prompts`, `meta.props`, `text.replace`. Slides are addressed by
+`id:<sldId>`, `title:<exact>`, `$ref` (doc-local), or `index:N` (escape
+hatch only). The fill payload of `slide.add`/`slide.fill` takes
+`placeholders`, `notes`, `footer`, `slideNumber` and `date` (`true` shows
+the layout's slide-number / date field, `false` removes it), `background`
+and `hidden`.
 
 Text and colors (every op that writes text or color): rich text paragraphs
 take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
@@ -157,7 +166,35 @@ chart     frame, data {type, categories, series, title, colors, fontSize,
 image     frame, path, fit stretch|crop|contain, hyperlink
 connector from, to, color, widthPt, dash solid|dash|dot|dashDot|longDash,
           startArrow/endArrow none|arrow|triangle|stealth|diamond|oval
+every     name, altText, title (accessibility: give images and charts an
+          altText in <deck-lang/>)
 ```
+
+`el.set` changes an element IN PLACE (keeps its id, animations and links --
+prefer it over `el.rm` + `el.add`); at least one field, each checked
+against the element's type (authoritative: `schema el.set`):
+
+```text
+text         placeholder, textbox, shape -- text without format keeps the
+             first paragraph's and run's format
+frame        {x, y, w, h, rotation}: given keys change (any element; no
+             rotation on table/chart); inherited placeholder frames work
+fill, fontColor              placeholder, textbox, shape
+border, borderPt             + picture, connector
+altText, title               any element ("" removes)
+image        picture / filled picture placeholder -- ONLY on the user's
+             explicit request; frame, crop and animations stay
+cells        table: [{row, col, text}] (0-based, header row 0)
+addRows      table: {at?, rows} (format of the row above)
+removeRows   table: [indices] (applied first, then addRows, then cells)
+```
+
+It also patches elements and picture fills planned earlier in the SAME
+ops document. `text.replace {find, replace, slide?, matchCase?, wholeWord?,
+notes?}` replaces plain text in shapes, placeholders and table cells (notes
+only with `notes: true`, fields never), across formatted runs, and sees
+every earlier op of the document; report `result.replacements` (count and
+slides per op) to the user -- zero matches is no error, say so.
 
 Unsupported combinations (a label position the chart type does not take,
 axes on a pie, a ragged table grid) fail with `E_SCHEMA` -- fix the field
@@ -466,7 +503,13 @@ with `E_TEMPLATE`; then drop `--template`.
         agenda updated in the SAME ops document when chapters change, and
         the footer pattern + AI-image note on every slide -- set via the
         `footer` field, in <deck-lang/>, with <deck-title/> and the
-        current year.
+        current year; slide number and date via `slideNumber`/`date`
+        where the template's footer pattern shows them.
+    -   **Edit in place.** On an existing deck change what is there with
+        `el.set` (text, frame, style, table cells/rows, alt text) instead
+        of removing and re-adding it; use `text.replace` for wording that
+        repeats across slides (a renamed product, a year) -- scoped as the
+        user asked.
     -   **Quantitative data → a native chart, not a drawn SVG.** Trends,
         magnitude comparisons or parts of a whole go into an `el.add` chart
         (bar/column/line/pie/doughnut/area -- data-bound and editable in

@@ -15,12 +15,14 @@ import type { DeckState, Layout, TemplateInfo } from "../model.js"
 import { newPlanEntry, type MutationPlan, type OpHandler, type PlanContext, type SlidePlanEntry } from "./registry.js"
 import { slideAdd } from "./slide-add.js"
 import { slideCopy, slideFill, slideMove, slideRm } from "./slide-edit.js"
-import { elAdd, elRm, elSet, imgPrompts, metaProps } from "./elements.js"
+import { elAdd, elRm, imgPrompts, metaProps } from "./elements.js"
+import { elSet } from "./el-set.js"
+import { textReplace } from "./replace.js"
 
 /**  the op registry: one handler per op name  */
 const HANDLERS: ReadonlyMap<string, OpHandler> = new Map(
     ([slideAdd, slideFill, slideRm, slideMove, slideCopy,
-        elAdd, elSet, elRm, imgPrompts, metaProps] as OpHandler[])
+        elAdd, elSet, elRm, imgPrompts, metaProps, textReplace] as OpHandler[])
         .map((h) => [h.name, h]))
 
 /**
@@ -56,7 +58,8 @@ export const planOps = (
         deckLayouts,
         template,
         nextVirtualId: -1,
-        minFontPt
+        minFontPt,
+        opIndex: 0
     }
 
     doc.ops.forEach((op: Op, i: number) => {
@@ -64,6 +67,7 @@ export const planOps = (
         if (handler === undefined)
             throw new PptcError("E_SCHEMA", `unknown op '${op.op}'`)
         try {
+            ctx.opIndex = i
             handler.plan(ctx, op)
         }
         catch (err) {

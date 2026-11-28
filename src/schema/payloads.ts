@@ -48,6 +48,16 @@ export const FrameSchema = z.object({
     rotation: z.number().min(-360).max(360).optional()
 }).strict()
 
+/**  A partial frame for `el.set`: the given keys move, resize or rotate
+     the element, the others keep their value (inches, degrees).  */
+export const FramePatchSchema = z.object({
+    x: z.number().min(0).optional(),
+    y: z.number().min(0).optional(),
+    w: z.number().positive().optional(),
+    h: z.number().positive().optional(),
+    rotation: z.number().min(-360).max(360).optional()
+}).strict().refine((f) => Object.values(f).some((v) => v !== undefined), "a frame needs at least one of x, y, w, h, rotation")
+
 /**  Text language as a BCP 47 tag ("de-DE", "en-US") -- PowerPoint's
      proofing and hyphenation language of the text.  */
 export const LangSchema = z
@@ -292,6 +302,13 @@ const boxTextProps = {
     textDirection: TextDirectionSchema.optional()
 }
 
+/**  Accessibility description of an element: `altText` (screen readers,
+     `cNvPr@descr`) and `title` (`cNvPr@title`).  */
+const describedProps = {
+    altText: z.string().optional(),
+    title: z.string().optional()
+}
+
 /**  A free element placed by `el.add`, discriminated by `type`.  */
 export const ElementSchema = z.discriminatedUnion("type", [
     z.object({
@@ -304,6 +321,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         ...boxTextProps,
         /**  text language of the element (paragraphs and runs may override)  */
         lang: LangSchema.optional(),
+        ...describedProps,
         name: z.string().optional()
     }).strict(),
     z.object({
@@ -319,12 +337,14 @@ export const ElementSchema = z.discriminatedUnion("type", [
         textDirection: TextDirectionSchema.optional(),
         /**  text language of every cell  */
         lang: LangSchema.optional(),
+        ...describedProps,
         name: z.string().optional()
     }).strict(),
     z.object({
         type: z.literal("chart"),
         frame: FrameSchema,
         data: ChartSchema,
+        ...describedProps,
         name: z.string().optional()
     }).strict(),
     z.object({
@@ -340,6 +360,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         ...boxTextProps,
         /**  text language of the shape's text  */
         lang: LangSchema.optional(),
+        ...describedProps,
         name: z.string().optional()
     }).strict(),
     z.object({
@@ -352,6 +373,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         fit: z.enum(["crop", "contain", "stretch"]).optional(),
         /**  click target of the picture  */
         hyperlink: HyperlinkSchema.optional(),
+        ...describedProps,
         name: z.string().optional()
     }).strict(),
     z.object({
@@ -364,6 +386,7 @@ export const ElementSchema = z.discriminatedUnion("type", [
         /**  decoration at the `from` / `to` end  */
         startArrow: ArrowSchema.optional(),
         endArrow: ArrowSchema.optional(),
+        ...describedProps,
         name: z.string().optional()
     }).strict()
 ])

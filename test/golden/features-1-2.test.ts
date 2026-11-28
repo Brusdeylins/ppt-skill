@@ -10,7 +10,9 @@
 **  language of every text run and -- on the "Phase 3" slides -- the XML
 **  facts of the el.add options (arrows, table grid and cells, text
 **  direction and layout, theme colors, image fit and link, chart labels
-**  and axes). Later phases of 1.2 extend the sequence.
+**  and axes), on the "Phase 4" slide those of the in-place edits (el.set
+**  frame, style, alt text, image and table, text.replace, slide number
+**  and date). Later phases of 1.2 extend the sequence.
 */
 
 import { describe, expect, it } from "vitest"
@@ -94,6 +96,23 @@ const shapeFacts = (shape: Element): string[] => {
     return out
 }
 
+/**  the XML facts of the in-place edits of 1.2 phase 4 in one shape:
+     alt text, transform, fill and outline  */
+const editFacts = (shape: Element): string[] => {
+    const xfrm = firstElement(shape, "a:xfrm") ?? firstElement(shape, "p:xfrm")
+    const spPr = firstElement(shape, "p:spPr")
+    const direct = (parent: Element | null, tag: string): Element | null =>
+        parent === null ? null : elements(parent, tag).find((el) => el.parentNode === parent) ?? null
+    const color = (el: Element | null): string => el === null ? "-"
+        : (firstElement(el, "a:srgbClr") ?? firstElement(el, "a:schemeClr"))?.getAttribute("val") ?? "?"
+    const ln = direct(spPr, "a:ln")
+    return [
+        `cNvPr:${attrList(firstElement(shape, "p:cNvPr"), [ "descr", "title" ])}`,
+        `xfrm:${attrList(xfrm, [ "rot" ])}|${attrList(firstElement(xfrm ?? shape, "a:off"), [ "x", "y" ])}|${attrList(firstElement(xfrm ?? shape, "a:ext"), [ "cx", "cy" ])}`,
+        `fill:${color(direct(spPr, "a:solidFill"))} ln:${color(direct(ln, "a:solidFill"))}/${ln?.getAttribute("w") ?? "-"}`
+    ]
+}
+
 /**  the facts of a chart part: grouping, labels, legend, axes, colors  */
 const chartFacts = (chart: Element): string[] => {
     const vals = (tag: string): string => [ ...new Set(elements(chart, tag).map((el) => el.getAttribute("val"))) ].join(",")
@@ -129,7 +148,7 @@ const featurePrint = async (deck: string): Promise<unknown[]> => {
             return elements(shape, "a:r").map((r) =>
                 `${name}: ${firstElement(r, "a:t")?.textContent ?? ""}=${firstElement(r, "a:rPr")?.getAttribute("lang") ?? "-"}`)
         })
-        if (slide.title !== "Phase 3") {
+        if (slide.title !== "Phase 3" && slide.title !== "Phase 4") {
             out.push({ pictures, runs })
             continue
         }
@@ -142,6 +161,8 @@ const featurePrint = async (deck: string): Promise<unknown[]> => {
             const target = rels.find((r) => r.id === rid)?.target ?? null
             facts[name] = target === null ? shapeFacts(shape)
                 : chartFacts(parseXml(await (zip.file(target) as JSZip.JSZipObject).async("string")).documentElement as Element)
+            if (slide.title === "Phase 4")
+                facts[name] = [ ...facts[name] ?? [], ...editFacts(shape) ]
         }
         out.push({ pictures, runs, facts })
     }
@@ -234,7 +255,27 @@ describe("golden 1.2 features", () => {
                         bullet: "number", spaceBefore: 6, lineSpacing: 1.5 } ] } } }
             ] },
             { ops: [ { op: "el.set", slide: "7", name: "PptcPh-1", text: [ { text: "neu", subscript: true, color: "accent2", spaceAfter: 12 },
-                { text: "zwei", bullet: "number" } ] } ] }
+                { text: "zwei", bullet: "number" } ] } ] },
+            /*  phase 4: in-place edits (B2, B6, B4, B5, B7, C1)  */
+            { ops: [
+                { op: "slide.add", layout: "Title Only", ref: "p4", slideNumber: false, date: false, placeholders: { title: { text: "Phase 4" } } },
+                { op: "el.add", slide: "$p4", elements: [
+                    { type: "textbox", name: "G-Box", frame: { x: 0.5, y: 1.7, w: 3, h: 1 }, altText: "Kasten", title: "Box",
+                        text: [ { runs: [ { text: "alpha beta", bold: true } ], alignment: "center" } ] },
+                    { type: "image", name: "G-Pic", frame: { x: 4, y: 1.7, w: 3, h: 2 }, path: landscape, fit: "crop" },
+                    { type: "table", name: "G-Tab", frame: { x: 0.5, y: 4.2, w: 6 },
+                        data: { headers: [ "K", "V" ], rows: [ [ "alpha", "1" ], [ "beta", { text: "2", fill: "accent6" } ] ] } },
+                    { type: "shape", name: "G-Shape", shape: "rect", frame: { x: 7.5, y: 1.7, w: 2, h: 1 }, text: "alpha" } ] }
+            ] },
+            { ops: [
+                { op: "el.set", slide: "title:Phase 4", name: "G-Box", frame: { x: 1, rotation: 15 }, fill: "accent3", border: "dk2",
+                    borderPt: 1.5, fontColor: "C00000", text: "gamma alpha" },
+                { op: "el.set", slide: "title:Phase 4", name: "G-Pic", image: portrait, altText: "Hochformat" },
+                { op: "el.set", slide: "title:Phase 4", name: "G-Tab", cells: [ { row: 1, col: 1, text: "10" } ],
+                    addRows: { rows: [ [ "gamma", 3 ] ] }, removeRows: [ 2 ] },
+                { op: "text.replace", find: "alpha", replace: "omega", slide: "title:Phase 4" },
+                { op: "slide.fill", slide: "title:Phase 4", slideNumber: true, date: true }
+            ] }
         ]
 
         const prints: unknown[] = []
