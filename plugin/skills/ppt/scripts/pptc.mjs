@@ -16727,7 +16727,7 @@ var toPptcError = (err) => {
 };
 
 // src/infra/version.ts
-var VERSION = true ? "1.1.0" : "0.0.0-dev";
+var VERSION = true ? "1.2.0" : "0.0.0-dev";
 
 // src/commands/apply.ts
 import path8 from "node:path";
