@@ -291,8 +291,8 @@ atomic write -- or nothing (`failedAt` in the error tells which op failed).
 - `--strict` -- lint warnings become exit 7: `W_TEXT_OVERFLOW` (planned
   text exceeds the placeholder capacity -- shorten or split),
   `W_ELEMENT_OVERLAP` (an `el.add` element covers a text-bearing shape,
-  incl. the footer/slide-number area -- reposition it; prompt boxes are
-  exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
+  incl. the footer/slide-number area -- reposition it; prompt boxes and
+  elements placed or moved to the back are exempt) and `W_FONT_TOO_SMALL` (an explicit run/element font is below the
   readable minimum -- enlarge it). Not escalated, since it is found during
   the write: `W_REPAIRED` (the input deck carried PowerPoint repair
   triggers on a slide or a layout -- duplicate shape ids, dead or duplicate
@@ -436,7 +436,9 @@ Anatomy:
   naming the field. Text without a `color` takes the template's color
   (`el.add` included) -- on an `el.add` fill (textbox, shape, table cell,
   header or alternating row) the theme's `dk1` or `lt1`, whichever
-  contrasts more with the fill. There is no shrink-to-fit: text that overflows is
+  contrasts more with the fill (a transparent fill as it shows over the
+  background `bg1`). An `el.set` `fill` keeps the text's color: give
+  `fontColor` with a new fill the text must contrast with. There is no shrink-to-fit: text that overflows is
   shortened or split (`W_TEXT_OVERFLOW`); replaced text drops the shrink
   scale PowerPoint had computed for the old one.
 - **Links**: `hyperlink` -- on a run, and on a `textbox`, `shape` or
@@ -565,8 +567,10 @@ then one shape up/down) and -- except connectors -- a
   `from`/`to` end.
 
 The overlap lint (`W_ELEMENT_OVERLAP`) takes the box a rotated element
-covers, and leaves out an element sent to the back (`zOrder: "back"`),
-which lies behind every shape; the capacity of a placeholder with vertical text (rotated by 90 or
+covers, and leaves out an element sent to the back (`zOrder: "back"`,
+by `el.add` or `el.set`), which lies behind every shape: it is not
+checked, and the elements after it may cover it (text on a background
+panel) -- until a later move takes it out of the back; the capacity of a placeholder with vertical text (rotated by 90 or
 270 degrees in the layout) swaps its width and height, and a `\v` line
 break counts as a line.
 
@@ -579,7 +583,7 @@ field; each is checked against the element's type (`E_SCHEMA` otherwise):
 |---|---|---|
 | `text` | placeholder, textbox, shape | new rich text in the first paragraph's and run's format (alignment, bullets, font, size, color, language): a paragraph or run that sets fields of its own changes only those |
 | `frame` | every element (rotation: not table/chart) | `{x, y, w, h, rotation}` -- the given keys move, resize or rotate it, the others stay; a placeholder that inherits its frame gets the layout's frame written into the slide; a group keeps its children's coordinates (they scale with it); a table's columns and rows scale to the new size |
-| `fill` | placeholder, textbox, shape | solid fill; keeps the element's transparency |
+| `fill` | placeholder, textbox, shape | solid fill; keeps the element's transparency and its text color -- give `fontColor` with a fill the text must contrast with |
 | `transparency` | placeholder, textbox, shape | transparency of the solid fill in percent (`0` opaque - `100` invisible): of the new `fill`, else of the element's own (one without a solid fill of its own needs `fill`: `E_SCHEMA`) |
 | `border`, `borderPt` | placeholder, textbox, shape, picture, connector | outline color and width in pt |
 | `fontColor` | placeholder, textbox, shape | color of every run |

@@ -62,14 +62,17 @@ const named = (slide: GenSlide, objectName: string): GenSlide => ({
 /**  the generated elements of one apply, ready to be moved into place  */
 export interface Generated {
     /**
-     *  Move the generated elements of a plan entry into its slide.
+     *  Move the generated elements of a plan entry into its slide: their
+     *  parts and relationships come along, the shapes are imported into
+     *  the slide DOM but not yet into its shape tree -- each goes in when
+     *  its `el.add` comes in the stacking order (in op order).
      *
      *  @param pkg - the deck package
      *  @param entry - the plan entry the elements belong to
      *  @param slide - the target slide DOM
      *  @param rels - the target slide's relationships
      *  @param part - the target slide part
-     *  @returns the shape each planned element became on the slide
+     *  @returns the shape each planned element became for the slide
      */
     transplant(pkg: Package, entry: SlidePlanEntry, slide: Document, rels: Document, part: string): Promise<Map<PlannedElement, Element>>
 }
@@ -152,11 +155,6 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string,
             const genRels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [ t.id, t ]))
             const nextId = PartAllocator.shapeIds(slide)
             const copies = new Map<string, string>()
-
-            /*  generated shapes go in front of the existing ones (later in
-                the tree = higher in z-order), but before the tree's own
-                extension list  */
-            const anchor = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null
             for (const name of info.names) {
                 const cNvPr = elements(genSlide, "p:cNvPr").find((el) => el.getAttribute("name") === name)
                 if (cNvPr === undefined)
@@ -187,7 +185,6 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string,
                 firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()))
                 const planned = entry.elements[info.names.indexOf(name)] as PlannedElement
                 finishShape(shape, planned.spec)
-                spTree.insertBefore(shape, anchor)
                 shapes.set(planned, shape)
             }
             return shapes

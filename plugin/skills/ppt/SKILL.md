@@ -156,7 +156,9 @@ takes the theme fonts `+mj-lt` (heading font) and `+mn-lt` (body font) --
 prefer them over a typeface name, so the text follows the template. `\n` starts a
 paragraph, `\v` is a line break inside one (`state` reads it back as
 `\v`). Text without `color` takes the template's (on an `el.add` fill:
-`dk1` or `lt1`, whichever contrasts with the fill); `el.set` text keeps the
+`dk1` or `lt1`, whichever contrasts with the fill -- a transparent one as
+it shows over `bg1`); an `el.set` `fill` keeps the text color -- give
+`fontColor` with it; `el.set` text keeps the
 first paragraph's and run's format and changes only the fields given. A
 color is hex or a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`,
 `bg2`, `dk1`, `lt1`, `dk2`, `lt2`, `hlink`, `folHlink`) -- prefer the slot over the hex it
@@ -200,7 +202,8 @@ connector from, to, color, widthPt, dash solid|dash|dot|dashDot|longDash,
           startArrow/endArrow none|arrow|triangle|stealth|diamond|oval
 every     name, altText, title (accessibility: give images and charts an
           altText in <deck-lang/>), zOrder front (default)|back|forward|
-          backward (a background panel: back -- it covers nothing)
+          backward (a background panel: back -- it covers nothing,
+          and text on it raises no overlap)
 ```
 
 `el.set` changes an element IN PLACE (keeps its id, animations and links --
@@ -212,7 +215,8 @@ text         placeholder, textbox, shape -- in the first paragraph's and
              run's format; fields a paragraph or run sets change only those
 frame        {x, y, w, h, rotation}: given keys change (any element; no
              rotation on table/chart); inherited placeholder frames work
-fill, fontColor              placeholder, textbox, shape
+fill, fontColor              placeholder, textbox, shape (a new fill
+                             keeps the text color: give fontColor too)
 transparency                 placeholder, textbox, shape: 0-100 % of the
                              new fill, else of the element's own solid
                              fill (a new fill keeps it)

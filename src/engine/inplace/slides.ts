@@ -684,14 +684,26 @@ export const editSlide = async (pkg: Package, work: SlideWork): Promise<SlideEdi
         links, repairs  */
     const placed = work.generated === null ? new Map<PlannedElement, Element>()
         : await work.generated.transplant(pkg, entry, slide, rels, part)
+
+    /*  a generated element enters the shape tree in front when its el.add
+        comes, so a move counts only the shapes there at that point  */
+    const spTree = firstElement(slide, "p:spTree")
+    const enter = (shape: Element): void => {
+        if (shape.parentNode === null && spTree !== null)
+            spTree.insertBefore(shape, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null)
+    }
     for (const z of entry.zOrder) {
         const shape = typeof z.target === "string" ? findShape(slide, z.target, isTopLevel) : placed.get(z.target) ?? null
         if (shape === null)
             continue
-        if (z.add)
+        if (z.add) {
+            enter(shape)
             moveShape(shape, "front")
+        }
         moveShape(shape, z.zOrder)
     }
+    for (const shape of placed.values())
+        enter(shape)
     wireHyperlinks(pkg, part, slide, rels, work.links)
     setSlideVisibility(slide, entry.hidden)
     dropLinksToRemoved(pkg, part, slide, rels, work.removed)

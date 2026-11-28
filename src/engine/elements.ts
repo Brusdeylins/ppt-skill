@@ -114,19 +114,31 @@ export class GenColors {
      *  The color of text without one of its own on a fill: the theme's
      *  dark or light slot (`dk1`, `lt1` -- absolute, not mapped), whichever
      *  contrasts more with the fill (a theme fill resolved by the palette).
+     *  A transparent fill is judged as it shows: blended over the
+     *  background (`bg1`) by its transparency.
      *
      *  @param fill - a validated fill color (RRGGBB or theme slot)
+     *  @param transparency - the fill's transparency in percent (0-100)
      *  @returns the color to hand to PptxGenJS (a token)
      */
-    onFill(fill: string): string {
+    onFill(fill: string, transparency?: number): string {
         const hex = (isSchemeColor(fill) ? this.palette[fill] : fill) ?? null
         const dark = this.palette.dk1 ?? "000000"
         const light = this.palette.lt1 ?? "FFFFFF"
         if (hex === null)
             return this.gen("dk1")
-        return this.gen(contrast(hex, dark) >= contrast(hex, light) ? "dk1" : "lt1")
+        const shown = transparency === undefined || transparency <= 0 ? hex
+            : blend(hex, this.palette.bg1 ?? light, Math.min(transparency, 100) / 100)
+        return this.gen(contrast(shown, dark) >= contrast(shown, light) ? "dk1" : "lt1")
     }
 }
+
+/**  an RRGGBB color shown over another with the given transparency (0-1)  */
+const blend = (top: string, under: string, transparency: number): string =>
+    [ 0, 2, 4 ].map((i) => {
+        const c = parseInt(top.slice(i, i + 2), 16) * (1 - transparency) + parseInt(under.slice(i, i + 2), 16) * transparency
+        return Math.round(c).toString(16).toUpperCase().padStart(2, "0")
+    }).join("")
 
 /**  the relative luminance of an RRGGBB color (WCAG)  */
 const luminance = (hex: string): number => {
@@ -186,7 +198,9 @@ export const readPalette = async (zip: JSZip): Promise<Partial<Record<SchemeColo
 /**
  *  Finish a generated slide or chart part: color tokens become their
  *  `a:schemeClr`, the fill of text without a color of its own goes (it
- *  inherits), and every paragraph keeps only its first `a:pPr` --
+ *  inherits), a theme font (`+mj-lt`, `+mn-lt`) takes the theme's East
+ *  Asian and complex-script font of its own (PptxGenJS copies the latin
+ *  token there), and every paragraph keeps only its first `a:pPr` --
  *  PptxGenJS writes one per run, which is invalid after the first run.
  *
  *  @param doc - the part DOM (changed in place)
@@ -214,6 +228,14 @@ export const finishGenerated = (doc: Document, tokens: Map<string, SchemeColor>,
         clr.parentNode?.replaceChild(scheme, clr)
         changed = true
     }
+    for (const [ tag, script ] of [ [ "a:ea", "ea" ], [ "a:cs", "cs" ] ] as const)
+        for (const font of elements(doc, tag)) {
+            const token = /^\+(mj|mn)-lt$/.exec(font.getAttribute("typeface") ?? "")
+            if (token !== null) {
+                font.setAttribute("typeface", `+${token[1] as string}-${script}`)
+                changed = true
+            }
+        }
     for (const p of elements(doc, "a:p"))
         for (const pPr of elements(p, "a:pPr").filter((el) => el.parentNode === p).slice(1)) {
             p.removeChild(pPr)
@@ -336,13 +358,13 @@ const genTableRows = (el: Extract<ElementSpec, { type: "table" }>, lang: string,
             fill = data.style.altRowBg
         if (styled?.fill !== undefined)
             fill = styled.fill
+        const transparency = styled?.fill !== undefined ? styled.transparency : undefined
         if (fill !== null)
-            options.fill = { color: colors.gen(fill), ...(styled?.transparency !== undefined && styled.fill !== undefined
-                && { transparency: styled.transparency }) }
+            options.fill = { color: colors.gen(fill), ...(transparency !== undefined && { transparency }) }
         if (r >= header && fill !== null)
-            options.color = colors.onFill(fill)
+            options.color = colors.onFill(fill, transparency)
         else if (r < header && styled?.fill !== undefined && data.style?.headerFg === undefined)
-            options.color = colors.onFill(styled.fill)
+            options.color = colors.onFill(styled.fill, transparency)
         const col = typeof grid === "string" ? k : grid.cells[r]?.[k]?.col ?? k
         const align = styled?.align ?? el.colAlign?.[col]
         if (align !== undefined)
@@ -562,7 +584,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
                 ...frame,
                 lang: el.lang ?? lang,
                 /*  text on a fill contrasts with it, else it inherits  */
-                color: el.fill !== undefined ? colors.onFill(el.fill) : colors.inherit,
+                color: el.fill !== undefined ? colors.onFill(el.fill, el.transparency) : colors.inherit,
                 valign: "top",
                 ...boxTextOptions(el),
                 ...(el.fill !== undefined && { fill: { color: colors.gen(el.fill),
@@ -639,7 +661,7 @@ export const addElement = (slide: GenSlide, gen: GenRoot, el: ElementSpec, lang:
                     ...(el.transparency !== undefined && { transparency: el.transparency }) } }),
                 ...(el.border !== undefined && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } }),
                 color: el.fontColor !== undefined ? colors.gen(el.fontColor)
-                    : el.fill !== undefined ? colors.onFill(el.fill) : colors.inherit,
+                    : el.fill !== undefined ? colors.onFill(el.fill, el.transparency) : colors.inherit,
                 ...(el.fontSize !== undefined && { fontSize: el.fontSize })
             })
             break

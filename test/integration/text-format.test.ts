@@ -7,7 +7,9 @@
 **  takes the template's (no run fill; table headers keep their documented
 **  white); el.set merges the given run and paragraph fields onto the kept
 **  format; `bullet: true` writes a bullet character where no list style
-**  brings one; replaced text drops the old shrink-on-overflow scale;
+**  brings one, a bullet or number over a kept paragraph without a hanging
+**  indent gets the list style's or its own; replaced text drops the old
+**  shrink-on-overflow scale;
 **  cloned slide-number and date fields take the deck language.
 */
 
@@ -105,7 +107,7 @@ describe("bullets outside list styles", () => {
         const doc = await slideDoc(deck, 0)
         expect(bullets(shapeNamed(doc, "Listed"))).toEqual([ listed[0], listed[0] ])
         expect(bullets(shapeNamed(doc, "Plain"))).toEqual([ "a:buChar:342900:-342900", "a:buChar:685800:-342900",
-            "a:buAutoNum:0:0", "a:buNone:0:0" ])
+            "a:buAutoNum:342900:-342900", "a:buNone:0:0" ])
         expect(bullets(shapeNamed(doc, "Form"))[0]).toBe("a:buChar:342900:-342900")
         expect(bullets(shapeNamed(doc, "Tab"))).toEqual([ "a:buChar:342900:-342900" ])
         expect(firstElement(shapeNamed(doc, "Tab"), "a:buChar")?.getAttribute("char")).toBe("•")
@@ -128,6 +130,29 @@ describe("bullets in placeholders whose list style shows none", () => {
         await apply(deck, [ { op: "el.set", slide: "0", name: "PptcPh-1", text: [ { text: "neu", bullet: true, level: 1 } ] } ])
         expect(bullets(shapeNamed(await slideDoc(deck, 0), "PptcPh-1"))).toEqual([ "a:buChar:685800:-342900" ])
         expect(bullets(shapeNamed(await slideDoc(deck, 1), "PptcPh-1"))).toEqual([ "-::" ])
+    })
+})
+
+describe("bullets over a kept paragraph without a hanging indent", () => {
+    it("drops the kept zero indent in a placeholder, so the list style's hanging indent applies", async () => {
+        const deck = await freshDeck("format-bullet-off.pptx")
+        await apply(deck, [ { op: "slide.add", layout: "CONTENT", placeholders: { body: { text: "aus" } } },
+            { op: "slide.add", layout: "CONTENT", placeholders: { body: { text: "aus" } } },
+            { op: "el.add", slide: "0", elements: [ { type: "textbox", name: "Box", frame: { x: 1, y: 5, w: 5, h: 1 }, text: "plain" } ] } ])
+
+        /*  bullets switched off in PowerPoint: marL="0" indent="0" with buNone  */
+        const off = (xml: string): string => xml.replace(/<a:p>(<a:r>.*?<a:t>aus<\/a:t>)/, "<a:p><a:pPr marL=\"0\" indent=\"0\"><a:buNone/></a:pPr>$1")
+        await craftSlide(deck, 0, off)
+        await craftSlide(deck, 1, off)
+        expect(bullets(shapeNamed(await slideDoc(deck, 0), "PptcPh-1"))).toEqual([ "a:buNone:0:0" ])
+        await apply(deck, [ { op: "el.set", slide: "0", name: "PptcPh-1", text: [ { text: "eins", bullet: true }, { text: "zwei", bullet: true } ] },
+            { op: "el.set", slide: "1", name: "PptcPh-1", text: [ { text: "eins", bullet: "number" } ] },
+            { op: "el.set", slide: "0", name: "Box", text: [ { text: "eins", bullet: "number" } ] } ])
+        expect(bullets(shapeNamed(await slideDoc(deck, 0), "PptcPh-1"))).toEqual([ "-::", "-::" ])
+        expect(bullets(shapeNamed(await slideDoc(deck, 1), "PptcPh-1"))).toEqual([ "a:buAutoNum::" ])
+
+        /*  outside a list style the bullet's own hanging indent  */
+        expect(bullets(shapeNamed(await slideDoc(deck, 0), "Box"))).toEqual([ "a:buAutoNum:342900:-342900" ])
     })
 })
 

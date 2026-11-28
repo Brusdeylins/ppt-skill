@@ -87,13 +87,18 @@
   existing or planned element of any type. The moves follow the op order
   and come after the document's new elements are in place; `state --level
   full` lists the shapes back to front. An element sent to the back
-  covers nothing, so the overlap lint leaves it out.
+  covers nothing, so the overlap lint leaves it out -- also as an
+  obstacle of the elements after it (text on a background panel). A
+  `forward`/`backward` step of a new element counts only the shapes there
+  at its op, not those later ops add.
 - **Text layout.** Textboxes and shapes take `valign` and `margin`;
   paragraphs `spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple) and
   `bullet: "number"`; runs `strike`, `superscript`, `subscript` and
   `highlight` -- in `el.add` as well as in `slide.fill` and `el.set`. Shape
   text takes rich text. A run's `font` also takes the theme fonts `+mj-lt`
-  (heading) and `+mn-lt` (body), so text follows the template's fonts. A paragraph of several runs in an `el.add` textbox
+  (heading) and `+mn-lt` (body), so text follows the template's fonts
+  (`el.add` writes the theme's East Asian and complex-script fonts
+  `+mj-ea`/`+mj-cs`, `+mn-ea`/`+mn-cs` beside them). A paragraph of several runs in an `el.add` textbox
   got one paragraph property set per run from PptxGenJS (invalid after the
   first run, and a bulleted run started a new paragraph); it now keeps one.
   There is deliberately no shrink-to-fit: overflowing text stays a
@@ -220,8 +225,10 @@
   On a fill -- of a textbox, shape, table cell, a `headerBg` without
   `headerFg`, an `altRowBg` row -- it takes the theme's `dk1` or `lt1`,
   whichever contrasts more with the fill (a theme fill resolved through
-  the first master's theme and color map), so a light fill on a dark
-  template is no white on white.
+  the first master's theme and color map; a transparent fill judged as it
+  shows, blended over `bg1`), so a light fill on a dark template is no
+  white on white. An `el.set` `fill` keeps the text color -- the skill
+  gives `fontColor` with it.
 - **Fix: `el.set` text with formatting dropped the kept format.** A
   paragraph or run that set any field of its own was written from scratch;
   the given fields are now merged onto the kept first paragraph's and
@@ -236,7 +243,11 @@
   --, so a subtitle, caption or section-header placeholder whose level has
   `buNone` gets a bullet character too. `el.set` text with another `level`
   than the kept paragraph drops the kept indent (a kept bullet takes the
-  new level's hanging indent), so the level takes effect.
+  new level's hanging indent), so the level takes effect. A bullet or
+  number over a kept paragraph without a hanging indent (PowerPoint's
+  `marL="0" indent="0"` of switched-off bullets) gets one: a placeholder
+  drops the kept indent for its list style's, elsewhere the bullet's own
+  is written -- for `"number"` too.
 - **Fix: replaced text kept the old shrink scale.** PowerPoint's computed
   `fontScale`/`lnSpcReduction` of the old text stayed with the new one;
   replaced text drops both (`normAutofit` stays).

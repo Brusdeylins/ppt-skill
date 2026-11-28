@@ -313,8 +313,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  diamond|oval
                every element also takes "altText", "title" and
                  "zOrder": front (default) | back | forward | backward
-                 (placed in front, then moved; "back" covers nothing,
-                 so no W_ELEMENT_OVERLAP)
+                 (placed in front, then moved; "back" lies behind every
+                 shape: no W_ELEMENT_OVERLAP for it or for the elements
+                 placed over it later)
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -395,7 +396,9 @@ shows RRGGBB). Text tx1/tx2, fills and backgrounds bg1/bg2 (they follow
 the master's color map); dk1/lt1/dk2/lt2 are absolute (contrast on
 images). Text without "color" takes the template's -- on an el.add fill
 (textbox, shape, cell, header, alternating row) dk1 or lt1, whichever
-contrasts more (el.add table headers: white on the default gray).
+contrasts more (a transparent fill as it shows over bg1; el.add table
+headers: white on the default gray). An el.set "fill" keeps the text
+color: give "fontColor" with it.
 Control characters but tab, line feed and carriage return (and \\v
 outside text) fail with E_SCHEMA naming the field.
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).

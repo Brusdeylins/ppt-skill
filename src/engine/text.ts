@@ -301,13 +301,26 @@ export const placeholderListStyle = (shape: Element, layout: Document | null, ma
 
 /**  apply a paragraph's bullet to its properties: `false` none, `"number"`
      a numbered list, `true` a bullet -- the list style's own where the
-     placeholder's style shows one at the level, else a bullet character
-     with its hanging indent (unless the style has one); a kept bullet
-     character or picture stays  */
+     placeholder's style shows one at the level, else a bullet character;
+     a kept bullet character or picture stays. A bullet or number without
+     a hanging indent (PptxGenJS and PowerPoint write a zero `marL` and
+     `indent` for text without bullets) gets one: the list style's where
+     it has one (the paragraph's own indent goes), else its own -- unless
+     the style's own bullets have none.  */
 const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", style: StyleLevel): void => {
     if (bullet === false) {
         place(pPr, doc.createElementNS(NS_A, "a:buNone"), PPR_ORDER, BULLETS)
         return
+    }
+    if (pPr.hasAttribute("indent") ? Number(pPr.getAttribute("indent")) >= 0 : !style.hanging) {
+        if (style.hanging) {
+            pPr.removeAttribute("marL")
+            pPr.removeAttribute("indent")
+        }
+        else if (!style.bullet) {
+            pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)))
+            pPr.setAttribute("indent", String(-BULLET_INDENT))
+        }
     }
     if (bullet === "number") {
         const num = doc.createElementNS(NS_A, "a:buAutoNum")
@@ -319,11 +332,6 @@ const applyBullet = (doc: Document, pPr: Element, bullet: boolean | "number", st
         pPr.removeChild(old)
     if (style.bullet)
         return
-    if (pPr.hasAttribute("indent") ? Number(pPr.getAttribute("indent")) >= 0 : !style.hanging) {
-        /*  no hanging indent yet (PptxGenJS writes 0/0 for text without bullets)  */
-        pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)))
-        pPr.setAttribute("indent", String(-BULLET_INDENT))
-    }
     if (children(pPr, [ "a:buChar", "a:buBlip" ]).length > 0)
         return
     if (children(pPr, [ "a:buSzTx", "a:buSzPct", "a:buSzPts" ]).length === 0) {

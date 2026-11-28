@@ -13,7 +13,7 @@ import { PptcError } from "../../infra/errors.js"
 import type { Op } from "../../schema/ops.js"
 import type { ElementSpec } from "../../schema/payloads.js"
 import { seedPlaceholderName, type Frame, type ShapeInfo } from "../model.js"
-import { slideAddrOf, type OpHandler, type PlanContext, type SlidePlanEntry } from "./registry.js"
+import { slideAddrOf, type OpHandler, type PlanContext, type PlannedElement, type SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
 import { lintElementOverlap, lintFontSize, richTextSizes, type Obstacle } from "../lint.js"
 import { nearestAspect } from "../describe/position.js"
@@ -101,10 +101,23 @@ export const plannedFrame = (entry: SlidePlanEntry, name: string, frame: Frame |
     return f === null || f.w === 0 || f.h === 0 ? null : f.rotation === undefined ? f : rotatedBox(f)
 }
 
+/**
+ *  Whether an element lies at the back after the stacking-order changes
+ *  planned for it so far: its last placement or move is `back`.
+ *
+ *  @param entry - the plan entry
+ *  @param target - a full shape name, or an element planned in the document
+ *  @returns true when it lies behind every shape
+ */
+export const plannedAtBack = (entry: SlidePlanEntry, target: string | PlannedElement): boolean =>
+    entry.zOrder.findLast((z) => z.target === target)?.zOrder === "back"
+
 /**  text-bearing obstacles a new element must not cover: text placeholders
      (incl. footer/slide-number/date), existing text shapes and elements
-     planned earlier -- picture placeholders and prompt boxes are exempt.
-     Frames planned by el.set count; `self` (a shape name) is left out.  */
+     planned earlier -- picture placeholders and prompt boxes are exempt,
+     and so is an element placed or moved to the back so far (a background
+     panel lies behind every shape, text on it covers nothing). Frames
+     planned by el.set count; `self` (a shape name) is left out.  */
 export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: string | null = null): Obstacle[] => {
     const obstacles: Obstacle[] = []
     const layout = entryLayout(ctx, entry)
@@ -114,7 +127,7 @@ export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: 
             const name = entry.source.kind === "seed" ? seedPlaceholderName(ph.idx)
                 : shapes.find((sh) => sh.placeholderIdx === ph.idx)?.name ?? null
             const frame = name === null ? ph.frame : plannedFrame(entry, name, ph.frame)
-            if (ph.kind !== "picture" && frame !== null && (name === null || name !== self))
+            if (ph.kind !== "picture" && frame !== null && (name === null || (name !== self && !plannedAtBack(entry, name))))
                 obstacles.push({ name: ph.name, frame })
         }
         for (const frame of layout.reserved)
@@ -124,14 +137,15 @@ export const overlapObstacles = (ctx: PlanContext, entry: SlidePlanEntry, self: 
         const frame = plannedFrame(entry, sh.name, sh.frame)
         if (frame !== null && sh.name !== self && !sh.name.startsWith(PROMPT_BOX_PREFIX)
             && sh.placeholderKind !== "picture" && sh.type !== "picture"
-            && sh.type !== "connector"
+            && sh.type !== "connector" && !plannedAtBack(entry, sh.name)
             /*  shapes removed earlier in the same document are gone  */
             && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
             obstacles.push({ name: sh.name, frame })
     }
     for (const planned of entry.elements) {
         const frame = specFrame(planned.spec)
-        if (frame !== null && (planned.name === null || (!planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self)))
+        if (frame !== null && !plannedAtBack(entry, planned)
+            && (planned.name === null || (!planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self)))
             obstacles.push({ name: planned.name ?? planned.spec.type, frame })
     }
     return obstacles

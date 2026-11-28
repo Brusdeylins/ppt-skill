@@ -6,9 +6,11 @@
 **  Integration: fills and shapes. A solid fill takes a `transparency`
 **  (the color's `a:alpha`) on el.add shapes, textboxes and table cells and
 **  on el.set (a new fill keeps it); text without a color on a fill takes
-**  the theme's dark or light slot that contrasts with it; the curated
-**  preset geometries come back from `state`; the theme fonts `+mj-lt` and
-**  `+mn-lt` are written as the run's latin typeface.
+**  the theme's dark or light slot that contrasts with it (a transparent
+**  fill as it shows over the background); the curated preset geometries
+**  come back from `state`; the theme fonts `+mj-lt` and `+mn-lt` are
+**  written as the run's latin typeface, with the theme's own East Asian
+**  and complex-script fonts.
 */
 
 import { describe, expect, it } from "vitest"
@@ -132,6 +134,22 @@ describe("text on a fill", () => {
         expect(cells).toEqual([ "FFFFFF", "dk1", "-", "lt1", "lt1", "lt1" ])
         expect(elements(shapeNamed(doc, "LightTab"), "a:tc").map(runColors).map((c) => c[0])).toEqual([ "dk1", "-" ])
     })
+
+    it("judges a transparent fill as it shows over the background", async () => {
+        const deck = await freshDeck("fill-text-alpha.pptx")
+        await apply(deck, [ { op: "slide.add", layout: "DEFAULT" }, { op: "el.add", slide: "0", elements: [
+            { type: "textbox", name: "Tint", frame: { x: 1, y: 1, w: 3, h: 1 }, fill: "1F4E79", transparency: 85, text: "a" },
+            { type: "textbox", name: "Solid", frame: { x: 5, y: 1, w: 3, h: 1 }, fill: "1F4E79", transparency: 20, text: "b" },
+            { type: "shape", name: "Shape", shape: "rect", frame: { x: 1, y: 2.5, w: 3, h: 1 }, fill: "dk1", transparency: 90, text: "c" },
+            { type: "table", name: "Tab", frame: { x: 1, y: 4, w: 6 }, data: { headers: [ { text: "H", fill: "000000", transparency: 95 }, "G" ],
+                rows: [ [ { text: "1", fill: "accent1", transparency: 90 }, { text: "2", fill: "000000", transparency: 10 } ] ] } }
+        ] } ])
+        const doc = await slideDoc(deck, 0)
+        expect(runColors(shapeNamed(doc, "Tint"))).toEqual([ "dk1" ])
+        expect(runColors(shapeNamed(doc, "Solid"))).toEqual([ "lt1" ])
+        expect(runColors(shapeNamed(doc, "Shape"))).toEqual([ "dk1" ])
+        expect(elements(shapeNamed(doc, "Tab"), "a:tc").map(runColors).map((c) => c[0])).toEqual([ "dk1", "FFFFFF", "dk1", "lt1" ])
+    })
 })
 
 describe("shape presets", () => {
@@ -164,5 +182,10 @@ describe("theme fonts", () => {
         expect(faces(shapeNamed(doc, "Box"))).toEqual([ "+mj-lt", "+mn-lt" ])
         expect(faces(shapeNamed(doc, "PptcPh-0"))).toEqual([ "+mj-lt" ])
         expect((await stateShape(deck, "Box")).fontFace).toBe("+mj-lt")
+
+        /*  the East Asian and complex-script fonts are the theme's own  */
+        const script = (tag: string): (string | null)[] => elements(shapeNamed(doc, "Box"), tag).map((l) => l.getAttribute("typeface"))
+        expect(script("a:ea")).toEqual([ "+mj-ea", "+mn-ea" ])
+        expect(script("a:cs")).toEqual([ "+mj-cs", "+mn-cs" ])
     })
 })

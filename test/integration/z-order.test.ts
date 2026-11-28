@@ -6,8 +6,9 @@
 **  Integration: the stacking order. el.add places a new element in front
 **  (default) or where its `zOrder` says, el.set moves an existing or
 **  planned element to the front or back or one step; the moves follow the
-**  op order, `state` lists the shapes back to front, an element sent to
-**  the back covers nothing (no overlap warning), the content guard
+**  op order (a step counts the shapes there at that op), `state` lists the
+**  shapes back to front, an element sent to the back covers nothing and
+**  is no obstacle of later ones (no overlap warning), the content guard
 **  accepts the reorder and untouched slides keep their bytes.
 */
 
@@ -84,6 +85,47 @@ describe("z-order", () => {
         expect(codes(await apply(deck, [ { op: "el.add", slide: "0", elements: [ { ...panel, zOrder: "back" } ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
         expect(codes(await apply(deck, [ { op: "el.add", slide: "0", elements: [ { ...panel, name: "Over" } ] } ]))).toContain("W_ELEMENT_OVERLAP")
         expect((await order(deck))[0]).toBe("Panel")
+    })
+
+    it("counts only the shapes present at an el.add's point for forward and backward", async () => {
+        const deck = await freshDeck("z-step.pptx")
+        await apply(deck, [ { op: "slide.add", layout: "DEFAULT" }, { op: "el.add", slide: "0", elements: [ box("P", 1) ] } ])
+        await apply(deck, [ { op: "el.add", slide: "0", elements: [ box("X", 2, { zOrder: "backward" }) ] },
+            { op: "el.add", slide: "0", elements: [ box("Y", 3) ] },
+            { op: "el.add", slide: "0", elements: [ box("V", 4, { zOrder: "forward" }) ] },
+            { op: "el.add", slide: "0", elements: [ box("W", 5) ] } ])
+        expect(await order(deck)).toEqual([ "X", "P", "Y", "V", "W" ])
+    })
+
+    it("leaves an element placed or moved to the back out as an obstacle of later elements", async () => {
+        const deck = await freshDeck("z-panel.pptx")
+        await apply(deck, [ { op: "slide.add", layout: "Title Only", placeholders: { title: { text: "Titel" } } } ])
+        const codes = (warnings: unknown[]): string[] => (warnings as { code: string }[]).map((w) => w.code)
+        const text = (name: string, x: number, y: number): Record<string, unknown> =>
+            ({ type: "textbox", name, frame: { x: x + 0.2, y: y + 0.2, w: 1.5, h: 0.6 }, text: name })
+        const panel = (name: string, x: number, y: number, extra: Record<string, unknown> = {}): Record<string, unknown> =>
+            ({ type: "shape", name, shape: "rect", frame: { x, y, w: 2.5, h: 1.5 }, fill: "lt2", ...extra })
+
+        /*  planned at the back in separate ops and in one op  */
+        expect(codes(await apply(deck, [ { op: "el.add", slide: "0", elements: [ panel("BG", 0.5, 2, { zOrder: "back" }) ] },
+            { op: "el.add", slide: "0", elements: [ text("Q", 0.5, 2) ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
+        expect(codes(await apply(deck, [ { op: "el.add", slide: "0",
+            elements: [ panel("BG2", 3.5, 2, { zOrder: "back" }), text("R", 3.5, 2) ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
+
+        /*  text still is an obstacle  */
+        expect(codes(await apply(deck, [ { op: "el.add", slide: "0", elements: [ text("S", 0.6, 2.1) ] } ]))).toContain("W_ELEMENT_OVERLAP")
+
+        /*  an existing element moved to the back, a planned one moved  */
+        await apply(deck, [ { op: "el.add", slide: "0", elements: [ panel("Card", 6.5, 2) ] } ])
+        expect(codes(await apply(deck, [ { op: "el.set", slide: "0", name: "Card", zOrder: "back" },
+            { op: "el.add", slide: "0", elements: [ text("T", 6.5, 2) ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
+        expect(codes(await apply(deck, [ { op: "el.add", slide: "0", elements: [ panel("Mid", 0.5, 4) ] },
+            { op: "el.set", slide: "0", name: "Mid", zOrder: "back" },
+            { op: "el.add", slide: "0", elements: [ text("U", 0.5, 4) ] } ]))).not.toContain("W_ELEMENT_OVERLAP")
+
+        /*  brought to the front again, it counts again  */
+        expect(codes(await apply(deck, [ { op: "el.set", slide: "0", name: "Card", zOrder: "front" },
+            { op: "el.add", slide: "0", elements: [ text("V", 7.5, 2.7) ] } ]))).toContain("W_ELEMENT_OVERLAP")
     })
 
     it("rejects wrong values and types at plan time", async () => {

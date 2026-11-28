@@ -16545,8 +16545,9 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                  diamond|oval
                every element also takes "altText", "title" and
                  "zOrder": front (default) | back | forward | backward
-                 (placed in front, then moved; "back" covers nothing,
-                 so no W_ELEMENT_OVERLAP)
+                 (placed in front, then moved; "back" lies behind every
+                 shape: no W_ELEMENT_OVERLAP for it or for the elements
+                 placed over it later)
   el.set       change an element in place (at least one field, each
                checked against the element's type):
                { "op": "el.set", "slide": SEL, "name": "Box1", ... }
@@ -16627,7 +16628,9 @@ shows RRGGBB). Text tx1/tx2, fills and backgrounds bg1/bg2 (they follow
 the master's color map); dk1/lt1/dk2/lt2 are absolute (contrast on
 images). Text without "color" takes the template's -- on an el.add fill
 (textbox, shape, cell, header, alternating row) dk1 or lt1, whichever
-contrasts more (el.add table headers: white on the default gray).
+contrasts more (a transparent fill as it shows over bg1; el.add table
+headers: white on the default gray). An el.set "fill" keeps the text
+color: give "fontColor" with it.
 Control characters but tab, line feed and carriage return (and \\v
 outside text) fail with E_SCHEMA naming the field.
 No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
@@ -17479,6 +17482,7 @@ var plannedFrame = (entry, name, frame) => {
     }
   return f === null || f.w === 0 || f.h === 0 ? null : f.rotation === void 0 ? f : rotatedBox(f);
 };
+var plannedAtBack = (entry, target) => entry.zOrder.findLast((z2) => z2.target === target)?.zOrder === "back";
 var overlapObstacles = (ctx, entry, self2 = null) => {
   const obstacles = [];
   const layout = entryLayout(ctx, entry);
@@ -17487,7 +17491,7 @@ var overlapObstacles = (ctx, entry, self2 = null) => {
     for (const ph of layout.placeholders) {
       const name = entry.source.kind === "seed" ? seedPlaceholderName(ph.idx) : shapes.find((sh) => sh.placeholderIdx === ph.idx)?.name ?? null;
       const frame = name === null ? ph.frame : plannedFrame(entry, name, ph.frame);
-      if (ph.kind !== "picture" && frame !== null && (name === null || name !== self2))
+      if (ph.kind !== "picture" && frame !== null && (name === null || name !== self2 && !plannedAtBack(entry, name)))
         obstacles.push({ name: ph.name, frame });
     }
     for (const frame of layout.reserved)
@@ -17495,12 +17499,12 @@ var overlapObstacles = (ctx, entry, self2 = null) => {
   }
   for (const sh of shapes) {
     const frame = plannedFrame(entry, sh.name, sh.frame);
-    if (frame !== null && sh.name !== self2 && !sh.name.startsWith(PROMPT_BOX_PREFIX) && sh.placeholderKind !== "picture" && sh.type !== "picture" && sh.type !== "connector" && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
+    if (frame !== null && sh.name !== self2 && !sh.name.startsWith(PROMPT_BOX_PREFIX) && sh.placeholderKind !== "picture" && sh.type !== "picture" && sh.type !== "connector" && !plannedAtBack(entry, sh.name) && !entry.removeNames.some((rm) => nameMatches(sh.name, rm)))
       obstacles.push({ name: sh.name, frame });
   }
   for (const planned of entry.elements) {
     const frame = specFrame(planned.spec);
-    if (frame !== null && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self2))
+    if (frame !== null && !plannedAtBack(entry, planned) && (planned.name === null || !planned.name.startsWith(PROMPT_BOX_PREFIX) && planned.name !== self2))
       obstacles.push({ name: planned.name ?? planned.spec.type, frame });
   }
   return obstacles;
@@ -41399,6 +41403,15 @@ var applyBullet = (doc, pPr, bullet, style) => {
     place(pPr, doc.createElementNS(NS_A, "a:buNone"), PPR_ORDER, BULLETS);
     return;
   }
+  if (pPr.hasAttribute("indent") ? Number(pPr.getAttribute("indent")) >= 0 : !style.hanging) {
+    if (style.hanging) {
+      pPr.removeAttribute("marL");
+      pPr.removeAttribute("indent");
+    } else if (!style.bullet) {
+      pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)));
+      pPr.setAttribute("indent", String(-BULLET_INDENT));
+    }
+  }
   if (bullet === "number") {
     const num = doc.createElementNS(NS_A, "a:buAutoNum");
     num.setAttribute("type", "arabicPeriod");
@@ -41409,10 +41422,6 @@ var applyBullet = (doc, pPr, bullet, style) => {
     pPr.removeChild(old);
   if (style.bullet)
     return;
-  if (pPr.hasAttribute("indent") ? Number(pPr.getAttribute("indent")) >= 0 : !style.hanging) {
-    pPr.setAttribute("marL", String(BULLET_INDENT * (Number(pPr.getAttribute("lvl") ?? "0") + 1)));
-    pPr.setAttribute("indent", String(-BULLET_INDENT));
-  }
   if (children(pPr, ["a:buChar", "a:buBlip"]).length > 0)
     return;
   if (children(pPr, ["a:buSzTx", "a:buSzPct", "a:buSzPts"]).length === 0) {
@@ -42304,14 +42313,23 @@ var editSlide = async (pkg, work) => {
     }
   }
   const placed = work.generated === null ? /* @__PURE__ */ new Map() : await work.generated.transplant(pkg, entry, slide, rels, part);
+  const spTree = firstElement(slide, "p:spTree");
+  const enter = (shape) => {
+    if (shape.parentNode === null && spTree !== null)
+      spTree.insertBefore(shape, elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null);
+  };
   for (const z2 of entry.zOrder) {
     const shape = typeof z2.target === "string" ? findShape(slide, z2.target, isTopLevel) : placed.get(z2.target) ?? null;
     if (shape === null)
       continue;
-    if (z2.add)
+    if (z2.add) {
+      enter(shape);
       moveShape(shape, "front");
+    }
     moveShape(shape, z2.zOrder);
   }
+  for (const shape of placed.values())
+    enter(shape);
   wireHyperlinks(pkg, part, slide, rels, work.links);
   setSlideVisibility(slide, entry.hidden);
   dropLinksToRemoved(pkg, part, slide, rels, work.removed);
@@ -47725,19 +47743,27 @@ var GenColors = class _GenColors {
    *  The color of text without one of its own on a fill: the theme's
    *  dark or light slot (`dk1`, `lt1` -- absolute, not mapped), whichever
    *  contrasts more with the fill (a theme fill resolved by the palette).
+   *  A transparent fill is judged as it shows: blended over the
+   *  background (`bg1`) by its transparency.
    *
    *  @param fill - a validated fill color (RRGGBB or theme slot)
+   *  @param transparency - the fill's transparency in percent (0-100)
    *  @returns the color to hand to PptxGenJS (a token)
    */
-  onFill(fill) {
+  onFill(fill, transparency) {
     const hex3 = (isSchemeColor(fill) ? this.palette[fill] : fill) ?? null;
     const dark = this.palette.dk1 ?? "000000";
     const light = this.palette.lt1 ?? "FFFFFF";
     if (hex3 === null)
       return this.gen("dk1");
-    return this.gen(contrast(hex3, dark) >= contrast(hex3, light) ? "dk1" : "lt1");
+    const shown = transparency === void 0 || transparency <= 0 ? hex3 : blend(hex3, this.palette.bg1 ?? light, Math.min(transparency, 100) / 100);
+    return this.gen(contrast(shown, dark) >= contrast(shown, light) ? "dk1" : "lt1");
   }
 };
+var blend = (top, under, transparency) => [0, 2, 4].map((i) => {
+  const c = parseInt(top.slice(i, i + 2), 16) * (1 - transparency) + parseInt(under.slice(i, i + 2), 16) * transparency;
+  return Math.round(c).toString(16).toUpperCase().padStart(2, "0");
+}).join("");
 var luminance = (hex3) => {
   const [r, g, b] = [0, 2, 4].map((i) => {
     const c = parseInt(hex3.slice(i, i + 2), 16) / 255;
@@ -47797,6 +47823,14 @@ var finishGenerated = (doc, tokens, inherit = null) => {
     clr.parentNode?.replaceChild(scheme, clr);
     changed = true;
   }
+  for (const [tag2, script] of [["a:ea", "ea"], ["a:cs", "cs"]])
+    for (const font of elements(doc, tag2)) {
+      const token = /^\+(mj|mn)-lt$/.exec(font.getAttribute("typeface") ?? "");
+      if (token !== null) {
+        font.setAttribute("typeface", `+${token[1]}-${script}`);
+        changed = true;
+      }
+    }
   for (const p of elements(doc, "a:p"))
     for (const pPr of elements(p, "a:pPr").filter((el) => el.parentNode === p).slice(1)) {
       p.removeChild(pPr);
@@ -47897,12 +47931,13 @@ var genTableRows = (el, lang, colors) => {
       fill = data.style.altRowBg;
     if (styled?.fill !== void 0)
       fill = styled.fill;
+    const transparency = styled?.fill !== void 0 ? styled.transparency : void 0;
     if (fill !== null)
-      options.fill = { color: colors.gen(fill), ...styled?.transparency !== void 0 && styled.fill !== void 0 && { transparency: styled.transparency } };
+      options.fill = { color: colors.gen(fill), ...transparency !== void 0 && { transparency } };
     if (r >= header && fill !== null)
-      options.color = colors.onFill(fill);
+      options.color = colors.onFill(fill, transparency);
     else if (r < header && styled?.fill !== void 0 && data.style?.headerFg === void 0)
-      options.color = colors.onFill(styled.fill);
+      options.color = colors.onFill(styled.fill, transparency);
     const col = typeof grid === "string" ? k : grid.cells[r]?.[k]?.col ?? k;
     const align = styled?.align ?? el.colAlign?.[col];
     if (align !== void 0)
@@ -48073,7 +48108,7 @@ var addElement = (slide, gen, el, lang, colors) => {
         ...frame,
         lang: el.lang ?? lang,
         /*  text on a fill contrasts with it, else it inherits  */
-        color: el.fill !== void 0 ? colors.onFill(el.fill) : colors.inherit,
+        color: el.fill !== void 0 ? colors.onFill(el.fill, el.transparency) : colors.inherit,
         valign: "top",
         ...boxTextOptions(el),
         ...el.fill !== void 0 && { fill: {
@@ -48148,7 +48183,7 @@ var addElement = (slide, gen, el, lang, colors) => {
           ...el.transparency !== void 0 && { transparency: el.transparency }
         } },
         ...el.border !== void 0 && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } },
-        color: el.fontColor !== void 0 ? colors.gen(el.fontColor) : el.fill !== void 0 ? colors.onFill(el.fill) : colors.inherit,
+        color: el.fontColor !== void 0 ? colors.gen(el.fontColor) : el.fill !== void 0 ? colors.onFill(el.fill, el.transparency) : colors.inherit,
         ...el.fontSize !== void 0 && { fontSize: el.fontSize }
       });
       break;
@@ -48250,7 +48285,6 @@ var generateElements = async (entries, lang, palette = {}) => {
       const genRels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [t.id, t]));
       const nextId = PartAllocator.shapeIds(slide);
       const copies = /* @__PURE__ */ new Map();
-      const anchor2 = elements(spTree, "p:extLst").find((el) => el.parentNode === spTree) ?? null;
       for (const name of info.names) {
         const cNvPr = elements(genSlide, "p:cNvPr").find((el) => el.getAttribute("name") === name);
         if (cNvPr === void 0)
@@ -48277,7 +48311,6 @@ var generateElements = async (entries, lang, palette = {}) => {
         firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()));
         const planned = entry.elements[info.names.indexOf(name)];
         finishShape(shape, planned.spec);
-        spTree.insertBefore(shape, anchor2);
         shapes.set(planned, shape);
       }
       return shapes;
