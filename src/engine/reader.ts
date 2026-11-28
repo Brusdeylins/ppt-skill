@@ -21,7 +21,7 @@ import { normalizeRelTargets, optText, relMap, relTargets, relsPartOf, slideList
 import { emuToInch, isFooterKind } from "../core/model.js"
 import type {
     DeckState, Frame, Layout, ParaInfo, Placeholder, PlaceholderKind,
-    RunInfo, ShapeInfo, SlideInfo, TemplateInfo
+    RunInfo, ShapeInfo, SlideInfo, TemplateInfo, TextDirectionInfo
 } from "../core/model.js"
 
 /**  An opened OOXML archive with cached XML parsing.  */
@@ -278,13 +278,17 @@ const readLayouts = async (archive: DeckArchive): Promise<Layout[]> => {
             }
             const frame = resolveFrame(sp, ph.kind, ph.idx)
             const fontSize = ph.kind === "title" ? sizes.title : sizes.body
+            /*  text rotated by 90 or 270 degrees runs along the height  */
+            const vert = firstElement(sp, "a:bodyPr")?.getAttribute("vert") ?? ""
+            const textFrame = frame !== null && (vert === "vert" || vert === "vert270")
+                ? { ...frame, w: frame.h, h: frame.w } : frame
             placeholders.push({
                 idx: ph.idx,
                 kind: ph.kind,
                 name: firstElement(sp, "p:cNvPr")?.getAttribute("name") ?? `Placeholder ${ph.idx}`,
                 frame,
-                capacity: frame !== null && ph.kind !== "picture"
-                    ? estimateCapacity(frame, fontSize)
+                capacity: textFrame !== null && ph.kind !== "picture"
+                    ? estimateCapacity(textFrame, fontSize)
                     : null
             })
         }
@@ -422,6 +426,51 @@ const shapeType = (el: Element): ShapeInfo["type"] => {
 const tableCells = (frame: Element): string[][] =>
     elements(frame, "a:tr").map((tr) => elements(tr, "a:tc").map((tc) => drawingText(tc)))
 
+/**  the text direction of an OOXML `vert` value, undefined when horizontal
+     (or a direction el.add does not write)  */
+const textDirectionOf = (vert: string | null | undefined): TextDirectionInfo | undefined =>
+    ({ vert: "rotate90", vert270: "rotate270", wordArtVert: "stacked" } as Record<string, TextDirectionInfo>)[vert ?? ""]
+
+/**  the merged cells and the cells with vertical text of a table, by grid
+     position (`gridSpan`/`rowSpan` on the top-left cell, `tcPr@vert`)  */
+const tableLayout = (frame: Element): Pick<ShapeInfo, "merges" | "cellTextDirections"> => {
+    const merges: NonNullable<ShapeInfo["merges"]> = []
+    const directions: NonNullable<ShapeInfo["cellTextDirections"]> = []
+    elements(frame, "a:tr").forEach((tr, row) => {
+        elements(tr, "a:tc").filter((tc) => tc.parentNode === tr).forEach((tc, col) => {
+            const colspan = Number(tc.getAttribute("gridSpan") ?? "1") || 1
+            const rowspan = Number(tc.getAttribute("rowSpan") ?? "1") || 1
+            if (colspan > 1 || rowspan > 1)
+                merges.push({ row, col, rowspan, colspan })
+            const textDirection = textDirectionOf(directChild(tc, ["a:tcPr"])?.getAttribute("vert"))
+            if (textDirection !== undefined)
+                directions.push({ row, col, textDirection })
+        })
+    })
+    return {
+        ...(merges.length > 0 && { merges }),
+        ...(directions.length > 0 && { cellTextDirections: directions })
+    }
+}
+
+/**  OOXML line end types and their el.add arrow names  */
+const ARROW_OF: Record<string, string> = {
+    arrow: "arrow", triangle: "triangle", stealth: "stealth", diamond: "diamond", oval: "oval"
+}
+
+/**  the line end decorations of a shape's outline  */
+const lineEnds = (node: Element): Pick<ShapeInfo, "startArrow" | "endArrow"> => {
+    const ln = directChild(firstElement(node, "p:spPr"), ["a:ln"])
+    if (ln === null)
+        return {}
+    const head = ARROW_OF[directChild(ln, ["a:headEnd"])?.getAttribute("type") ?? ""]
+    const tail = ARROW_OF[directChild(ln, ["a:tailEnd"])?.getAttribute("type") ?? ""]
+    return {
+        ...(head !== undefined && { startArrow: head }),
+        ...(tail !== undefined && { endArrow: tail })
+    }
+}
+
 /**  first DIRECT child element of `parent` whose tag is one of `names`  */
 const directChild = (parent: Element | null, names: string[]): Element | null => {
     if (parent === null || parent.childNodes === null)
@@ -497,10 +546,30 @@ const runStyle = (r: Element, colors: Record<string, string>): RunInfo => {
         out.bold = true
     if (rPr.getAttribute("i") === "1")
         out.italic = true
+    const strike = rPr.getAttribute("strike")
+    if (strike !== null && strike !== "" && strike !== "noStrike")
+        out.strike = true
+    const baseline = Number(rPr.getAttribute("baseline") ?? "0")
+    if (baseline > 0)
+        out.superscript = true
+    else if (baseline < 0)
+        out.subscript = true
     const color = colorOf(directChild(rPr, ["a:solidFill"]), colors)
     if (color !== undefined)
         out.color = color
+    const highlight = colorOf(directChild(rPr, ["a:highlight"]), colors)
+    if (highlight !== undefined)
+        out.highlight = highlight
     return out
+}
+
+/**  a paragraph spacing value: points (spcPts, 1/100 pt) or a multiple
+     (spcPct, 1/1000 %), undefined when set the other way or not at all  */
+const spacingOf = (pPr: Element, tag: string, unit: "a:spcPts" | "a:spcPct"): number | undefined => {
+    const val = directChild(directChild(pPr, [tag]), [unit])?.getAttribute("val")
+    if (val === null || val === undefined || val === "" || !Number.isFinite(Number(val)))
+        return undefined
+    return unit === "a:spcPts" ? Number(val) / 100 : Number(val) / 100000
 }
 
 /**  Break a text body into paragraphs and runs, but only when it carries
@@ -513,7 +582,8 @@ const richParagraphs = (txBody: Element, colors: Record<string, string>): ParaIn
     let formatted = false
     for (const p of elements(txBody, "a:p")) {
         const runs = elements(p, "a:r").map((r) => runStyle(r, colors))
-        if (runs.some((rn) => rn.font !== undefined || rn.bold === true || rn.italic === true))
+        if (runs.some((rn) => rn.font !== undefined || rn.bold === true || rn.italic === true
+            || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== undefined))
             formatted = true
         const para: ParaInfo = { runs }
         const pPr = firstElement(p, "a:pPr")
@@ -521,10 +591,21 @@ const richParagraphs = (txBody: Element, colors: Record<string, string>): ParaIn
             const lvl = pPr.getAttribute("lvl")
             if (lvl !== null && lvl !== "" && Number(lvl) > 0)
                 para.level = Number(lvl)
-            if (directChild(pPr, ["a:buChar", "a:buAutoNum"]) !== null)
+            if (directChild(pPr, ["a:buAutoNum"]) !== null)
+                para.bullet = "number"
+            else if (directChild(pPr, ["a:buChar"]) !== null)
                 para.bullet = true
             else if (directChild(pPr, ["a:buNone"]) !== null)
                 para.bullet = false
+            const spaceBefore = spacingOf(pPr, "a:spcBef", "a:spcPts")
+            const spaceAfter = spacingOf(pPr, "a:spcAft", "a:spcPts")
+            const lineSpacing = spacingOf(pPr, "a:lnSpc", "a:spcPct")
+            if (spaceBefore !== undefined)
+                para.spaceBefore = spaceBefore
+            if (spaceAfter !== undefined)
+                para.spaceAfter = spaceAfter
+            if (lineSpacing !== undefined)
+                para.lineSpacing = lineSpacing
         }
         paras.push(para)
     }
@@ -605,6 +686,12 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                 }
                 if (node.nodeName === "p:sp")
                     Object.assign(shape, shapeStyle(node, info.colors))
+                if (node.nodeName === "p:sp" || node.nodeName === "p:cxnSp")
+                    Object.assign(shape, lineEnds(node))
+                const textDirection = txBody === null ? undefined
+                    : textDirectionOf(directChild(txBody, ["a:bodyPr"])?.getAttribute("vert"))
+                if (textDirection !== undefined)
+                    shape.textDirection = textDirection
                 if (node.nodeName === "p:sp" || shape.type === "table") {
                     const lang = firstElement(node, "a:rPr")?.getAttribute("lang")
                     if (lang !== null && lang !== undefined && lang !== "")
@@ -627,6 +714,7 @@ export const readDeckState = async (archive: DeckArchive): Promise<DeckState> =>
                     if (grid !== null)
                         shape.colWidths = elements(grid, "a:gridCol")
                             .map((c) => emuToInch(Number(c.getAttribute("w"))))
+                    Object.assign(shape, tableLayout(node))
                 }
                 shapes.push(shape)
             }

@@ -625,5 +625,1815 @@ unodeux|null",
       },
     ],
   },
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Neu=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Arrow-*": [
+            "scheme:accent2",
+            "a:headEnd:diamond",
+            "a:tailEnd:stealth",
+            "a:prstDash:lgDash",
+          ],
+          "F-Contain-*": [],
+          "F-Crop-*": [
+            "hlinkClick",
+          ],
+          "F-Shape-*": [
+            "scheme:accent1,dk2,lt1,lt1",
+            "bodyPr:anchor=b",
+            "p[1]:algn=ctr a:buNone | b=1 ; ",
+          ],
+          "F-Stretch-*": [],
+          "F-Table-*": [
+            "scheme:bg1,accent1,bg1,accent1,accent6,dk2",
+            "grid:914400,1828800,2743200",
+            "tr0:gridSpan=2/anchor=ctr/l/Zwei | hMerge=1/// | /anchor=ctr/r/Drei",
+            "tr1:rowSpan=2/vert=vert,anchor=ctr/l/hoch | /anchor=ctr/ctr/b | /anchor=ctr/r/1",
+            "tr2:vMerge=1/// | /anchor=b/l/reich | /anchor=ctr/r/2",
+          ],
+          "F-Text-*": [
+            "scheme:bg2,tx1,accent4",
+            "bodyPr:anchor=ctr,lIns=91440,tIns=45720,rIns=91440,bIns=45720",
+            "p[1]: lnSpc=120000 spcBef=600 spcAft=200 a:buAutoNum |  ; baseline=-25000 ; strike=sngStrike+highlight ; baseline=30000",
+            "p[1]: a:buChar | ",
+          ],
+          "F-Vertical-*": [
+            "bodyPr:vert=vert270,anchor=t",
+            "p[1]: a:buNone | ",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [
+            "lt2",
+          ],
+        },
+        "pictures": [
+          "F-Crop-*|l=,t=7333,r=,b=7333|6400800,1554480,2286000,1097280",
+          "F-Contain-*|no-crop|7235190,2743200,617220,1097280",
+          "F-Stretch-*|no-crop|6400800,3931920,2286000,1097280",
+        ],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+          "F-Text-*: H=de-DE",
+          "F-Text-*: 2=de-DE",
+          "F-Text-*: O=de-DE",
+          "F-Text-*: x=de-DE",
+          "F-Text-*: Punkt=de-DE",
+          "F-Vertical-*: vertikal=de-DE",
+          "F-Shape-*: fett=de-DE",
+          "F-Shape-*:  normal=de-DE",
+          "F-Table-*: Zwei=de-DE",
+          "F-Table-*: Drei=de-DE",
+          "F-Table-*: hoch=de-DE",
+          "F-Table-*: b=de-DE",
+          "F-Table-*: 1=de-DE",
+          "F-Table-*: reich=de-DE",
+          "F-Table-*: 2=de-DE",
+        ],
+      },
+    ],
+    "ops": [
+      {
+        "background": {
+          "color": "lt2",
+        },
+        "layout": "Title Only",
+        "op": "slide.add",
+        "placeholders": {
+          "title": {
+            "text": "Phase 3",
+          },
+        },
+        "ref": "p3",
+      },
+      {
+        "elements": [
+          {
+            "color": "accent2",
+            "dash": "longDash",
+            "endArrow": "stealth",
+            "from": [
+              4,
+              2,
+            ],
+            "name": "F-Arrow",
+            "startArrow": "diamond",
+            "to": [
+              0.5,
+              1.8,
+            ],
+            "type": "connector",
+          },
+          {
+            "fill": "bg2",
+            "frame": {
+              "h": 2,
+              "w": 3,
+              "x": 0.5,
+              "y": 2,
+            },
+            "margin": [
+              0.1,
+              0.05,
+              0.1,
+              0.05,
+            ],
+            "name": "F-Text",
+            "text": [
+              {
+                "bullet": "number",
+                "lineSpacing": 1.2,
+                "runs": [
+                  {
+                    "color": "tx1",
+                    "text": "H",
+                  },
+                  {
+                    "subscript": true,
+                    "text": "2",
+                  },
+                  {
+                    "highlight": "accent4",
+                    "strike": true,
+                    "text": "O",
+                  },
+                  {
+                    "superscript": true,
+                    "text": "x",
+                  },
+                ],
+                "spaceAfter": 2,
+                "spaceBefore": 6,
+              },
+              {
+                "bullet": true,
+                "text": "Punkt",
+              },
+            ],
+            "type": "textbox",
+            "valign": "middle",
+          },
+          {
+            "frame": {
+              "h": 2,
+              "w": 0.6,
+              "x": 3.7,
+              "y": 2,
+            },
+            "name": "F-Vertical",
+            "text": "vertikal",
+            "textDirection": "rotate270",
+            "type": "textbox",
+          },
+          {
+            "border": "dk2",
+            "fill": "accent1",
+            "fontColor": "lt1",
+            "frame": {
+              "h": 1,
+              "w": 2,
+              "x": 4.5,
+              "y": 2,
+            },
+            "name": "F-Shape",
+            "shape": "roundRect",
+            "text": [
+              {
+                "runs": [
+                  {
+                    "bold": true,
+                    "text": "fett",
+                  },
+                  {
+                    "text": " normal",
+                  },
+                ],
+              },
+            ],
+            "type": "shape",
+            "valign": "bottom",
+          },
+          {
+            "colAlign": [
+              "left",
+              "center",
+              "right",
+            ],
+            "colWidths": [
+              1,
+              2,
+              3,
+            ],
+            "data": {
+              "headers": [
+                {
+                  "colspan": 2,
+                  "text": "Zwei",
+                },
+                "Drei",
+              ],
+              "rows": [
+                [
+                  {
+                    "fill": "accent6",
+                    "rowspan": 2,
+                    "text": "hoch",
+                    "textDirection": "rotate90",
+                  },
+                  "b",
+                  1,
+                ],
+                [
+                  {
+                    "align": "left",
+                    "color": "dk2",
+                    "text": [
+                      {
+                        "runs": [
+                          {
+                            "italic": true,
+                            "text": "reich",
+                          },
+                        ],
+                      },
+                    ],
+                    "valign": "bottom",
+                  },
+                  2,
+                ],
+              ],
+              "style": {
+                "headerBg": "accent1",
+                "headerFg": "bg1",
+              },
+            },
+            "frame": {
+              "w": 6,
+              "x": 0.5,
+              "y": 4.3,
+            },
+            "name": "F-Table",
+            "textDirection": "horizontal",
+            "type": "table",
+          },
+          {
+            "fit": "crop",
+            "frame": {
+              "h": 1.2,
+              "w": 2.5,
+              "x": 7,
+              "y": 1.7,
+            },
+            "hyperlink": "https://example.com",
+            "name": "F-Crop",
+            "path": "<tmp>/landscape.png",
+            "type": "image",
+          },
+          {
+            "fit": "contain",
+            "frame": {
+              "h": 1.2,
+              "w": 2.5,
+              "x": 7,
+              "y": 3,
+            },
+            "name": "F-Contain",
+            "path": "<tmp>/portrait.png",
+            "type": "image",
+          },
+          {
+            "fit": "stretch",
+            "frame": {
+              "h": 1.2,
+              "w": 2.5,
+              "x": 7,
+              "y": 4.3,
+            },
+            "name": "F-Stretch",
+            "path": "<tmp>/landscape.png",
+            "type": "image",
+          },
+        ],
+        "op": "el.add",
+        "slide": "$p3",
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Neu|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 261,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "hyperlink:ext:https://example.com",
+          "image:60d2823763",
+          "image:652e5d9ff0",
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Arrow-*|shape||{"x":0.5,"y":1.8,"w":3.5,"h":0.2}||null",
+          "F-Text-*|shape||{"x":0.5,"y":2,"w":3,"h":2}|H2Ox
+Punkt|null",
+          "F-Vertical-*|shape||{"x":3.7,"y":2,"w":0.6,"h":2}|vertikal|null",
+          "F-Shape-*|shape||{"x":4.5,"y":2,"w":2,"h":1}|fett normal|null",
+          "F-Table-*|table||{"x":0.5,"y":4.3,"w":6,"h":1}||[["Zwei","","Drei"],["hoch","b","1"],["","reich","2"]]",
+          "F-Crop-*|picture||{"x":7,"y":1.7,"w":2.5,"h":1.2}||null",
+          "F-Contain-*|picture||{"x":7.91,"y":3,"w":0.68,"h":1.2}||null",
+          "F-Stretch-*|picture||{"x":7,"y":4.3,"w":2.5,"h":1.2}||null",
+        ],
+        "title": "Phase 3",
+      },
+    ],
+  },
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Neu=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Arrow-*": [
+            "scheme:accent2",
+            "a:headEnd:diamond",
+            "a:tailEnd:stealth",
+            "a:prstDash:lgDash",
+          ],
+          "F-Contain-*": [],
+          "F-Crop-*": [
+            "hlinkClick",
+          ],
+          "F-Shape-*": [
+            "scheme:accent1,dk2,lt1,lt1",
+            "bodyPr:anchor=b",
+            "p[1]:algn=ctr a:buNone | b=1 ; ",
+          ],
+          "F-Stretch-*": [],
+          "F-Table-*": [
+            "scheme:bg1,accent1,bg1,accent1,accent6,dk2",
+            "grid:914400,1828800,2743200",
+            "tr0:gridSpan=2/anchor=ctr/l/Zwei | hMerge=1/// | /anchor=ctr/r/Drei",
+            "tr1:rowSpan=2/vert=vert,anchor=ctr/l/hoch | /anchor=ctr/ctr/b | /anchor=ctr/r/1",
+            "tr2:vMerge=1/// | /anchor=b/l/reich | /anchor=ctr/r/2",
+          ],
+          "F-Text-*": [
+            "scheme:bg2,tx1,accent4",
+            "bodyPr:anchor=ctr,lIns=91440,tIns=45720,rIns=91440,bIns=45720",
+            "p[1]: lnSpc=120000 spcBef=600 spcAft=200 a:buAutoNum |  ; baseline=-25000 ; strike=sngStrike+highlight ; baseline=30000",
+            "p[1]: a:buChar | ",
+          ],
+          "F-Vertical-*": [
+            "bodyPr:vert=vert270,anchor=t",
+            "p[1]: a:buNone | ",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [
+            "lt2",
+          ],
+        },
+        "pictures": [
+          "F-Crop-*|l=,t=7333,r=,b=7333|6400800,1554480,2286000,1097280",
+          "F-Contain-*|no-crop|7235190,2743200,617220,1097280",
+          "F-Stretch-*|no-crop|6400800,3931920,2286000,1097280",
+        ],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+          "F-Text-*: H=de-DE",
+          "F-Text-*: 2=de-DE",
+          "F-Text-*: O=de-DE",
+          "F-Text-*: x=de-DE",
+          "F-Text-*: Punkt=de-DE",
+          "F-Vertical-*: vertikal=de-DE",
+          "F-Shape-*: fett=de-DE",
+          "F-Shape-*:  normal=de-DE",
+          "F-Table-*: Zwei=de-DE",
+          "F-Table-*: Drei=de-DE",
+          "F-Table-*: hoch=de-DE",
+          "F-Table-*: b=de-DE",
+          "F-Table-*: 1=de-DE",
+          "F-Table-*: reich=de-DE",
+          "F-Table-*: 2=de-DE",
+        ],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Bars-*": [
+            "grouping=clustered dLblPos= showVal=1 showPercent=0",
+            "legendPos= holeSize= smooth= min= max=",
+            "numFmt=#,##0,General",
+            "axisTitles=,",
+            "scheme=",
+          ],
+          "F-Doughnut-*": [
+            "grouping= dLblPos= showVal=0 showPercent=1",
+            "legendPos=l holeSize=70 smooth= min= max=",
+            "numFmt=0%",
+            "axisTitles=",
+            "scheme=accent1",
+          ],
+          "F-Percent-*": [
+            "grouping=percentStacked dLblPos=ctr showVal=1 showPercent=0",
+            "legendPos=r holeSize= smooth= min= max=",
+            "numFmt=0.0,General,0%",
+            "axisTitles=Quartal,Anteil",
+            "scheme=accent1,dk2",
+          ],
+          "F-Scatter-*": [
+            "grouping= dLblPos=t showVal=1 showPercent=0",
+            "legendPos=b holeSize= smooth=0 min=0 max=4",
+            "numFmt=General,0.0",
+            "axisTitles=,",
+            "scheme=",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [],
+        },
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+        ],
+      },
+    ],
+    "ops": [
+      {
+        "layout": "Title Only",
+        "op": "slide.add",
+        "placeholders": {
+          "title": {
+            "text": "Phase 3",
+          },
+        },
+        "ref": "p3c",
+      },
+      {
+        "elements": [
+          {
+            "data": {
+              "axes": {
+                "x": {
+                  "title": "Quartal",
+                },
+                "y": {
+                  "title": "Anteil",
+                },
+              },
+              "categories": [
+                "Q1",
+                "Q2",
+              ],
+              "colors": [
+                "accent1",
+                "dk2",
+              ],
+              "labels": {
+                "format": "0.0",
+                "position": "center",
+              },
+              "legend": "right",
+              "series": [
+                {
+                  "name": "a",
+                  "values": [
+                    1,
+                    2,
+                  ],
+                },
+                {
+                  "name": "b",
+                  "values": [
+                    3,
+                    1,
+                  ],
+                },
+              ],
+              "stacked": "percent",
+              "type": "column",
+            },
+            "frame": {
+              "h": 2.5,
+              "w": 4.5,
+              "x": 0.5,
+              "y": 1.7,
+            },
+            "name": "F-Percent",
+            "type": "chart",
+          },
+          {
+            "data": {
+              "categories": [
+                "a",
+                "b",
+              ],
+              "holeSize": 70,
+              "labels": {
+                "percent": true,
+              },
+              "legend": "left",
+              "series": [
+                {
+                  "name": "s",
+                  "values": [
+                    1,
+                    3,
+                  ],
+                },
+              ],
+              "type": "doughnut",
+            },
+            "frame": {
+              "h": 2.5,
+              "w": 4.3,
+              "x": 5.2,
+              "y": 1.7,
+            },
+            "name": "F-Doughnut",
+            "type": "chart",
+          },
+          {
+            "data": {
+              "axes": {
+                "x": {
+                  "format": "0.0",
+                  "max": 4,
+                  "min": 0,
+                },
+                "y": {
+                  "max": 4,
+                  "min": 0,
+                },
+              },
+              "labels": {
+                "position": "above",
+              },
+              "series": [
+                {
+                  "name": "s",
+                  "x": [
+                    1,
+                    2,
+                    3,
+                  ],
+                  "y": [
+                    2,
+                    1,
+                    3,
+                  ],
+                },
+                {
+                  "name": "t",
+                  "x": [
+                    1,
+                    2,
+                    3,
+                  ],
+                  "y": [
+                    1,
+                    3,
+                    2,
+                  ],
+                },
+              ],
+              "type": "scatter",
+            },
+            "frame": {
+              "h": 2.4,
+              "w": 4.5,
+              "x": 0.5,
+              "y": 4.4,
+            },
+            "name": "F-Scatter",
+            "type": "chart",
+          },
+          {
+            "data": {
+              "categories": [
+                "a",
+                "b",
+              ],
+              "labels": {
+                "position": "outsideEnd",
+              },
+              "legend": false,
+              "series": [
+                {
+                  "name": "s",
+                  "values": [
+                    1,
+                    3,
+                  ],
+                },
+              ],
+              "type": "bar",
+            },
+            "frame": {
+              "h": 2.4,
+              "w": 4.3,
+              "x": 5.2,
+              "y": 4.4,
+            },
+            "name": "F-Bars",
+            "type": "chart",
+          },
+        ],
+        "op": "el.add",
+        "slide": "$p3c",
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Neu|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 261,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "hyperlink:ext:https://example.com",
+          "image:60d2823763",
+          "image:652e5d9ff0",
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Arrow-*|shape||{"x":0.5,"y":1.8,"w":3.5,"h":0.2}||null",
+          "F-Text-*|shape||{"x":0.5,"y":2,"w":3,"h":2}|H2Ox
+Punkt|null",
+          "F-Vertical-*|shape||{"x":3.7,"y":2,"w":0.6,"h":2}|vertikal|null",
+          "F-Shape-*|shape||{"x":4.5,"y":2,"w":2,"h":1}|fett normal|null",
+          "F-Table-*|table||{"x":0.5,"y":4.3,"w":6,"h":1}||[["Zwei","","Drei"],["hoch","b","1"],["","reich","2"]]",
+          "F-Crop-*|picture||{"x":7,"y":1.7,"w":2.5,"h":1.2}||null",
+          "F-Contain-*|picture||{"x":7.91,"y":3,"w":0.68,"h":1.2}||null",
+          "F-Stretch-*|picture||{"x":7,"y":4.3,"w":2.5,"h":1.2}||null",
+        ],
+        "title": "Phase 3",
+      },
+      {
+        "hidden": false,
+        "id": 262,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "  chart>package:pkg:71b2eb5884",
+          "  chart>package:pkg:c26e82a372",
+          "  chart>package:pkg:c26e82a372",
+          "  chart>package:pkg:cd95e60b15",
+          "chart:barChart:a|Q1|Q2|1|2|b|Q1|Q2|3|1",
+          "chart:barChart:s|a|b|1|3",
+          "chart:doughnutChart:s|a|b|1|3",
+          "chart:scatterChart:s|1|2|3|2|1|3|t|1|2|3|1|3|2",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Percent-*|chart||{"x":0.5,"y":1.7,"w":4.5,"h":2.5}||null",
+          "F-Doughnut-*|chart||{"x":5.2,"y":1.7,"w":4.3,"h":2.5}||null",
+          "F-Scatter-*|chart||{"x":0.5,"y":4.4,"w":4.5,"h":2.4}||null",
+          "F-Bars-*|chart||{"x":5.2,"y":4.4,"w":4.3,"h":2.4}||null",
+        ],
+        "title": "Phase 3",
+      },
+    ],
+  },
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Neu=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Arrow-*": [
+            "scheme:accent2",
+            "a:headEnd:diamond",
+            "a:tailEnd:stealth",
+            "a:prstDash:lgDash",
+          ],
+          "F-Contain-*": [],
+          "F-Crop-*": [
+            "hlinkClick",
+          ],
+          "F-Shape-*": [
+            "scheme:accent1,dk2,lt1,lt1",
+            "bodyPr:anchor=b",
+            "p[1]:algn=ctr a:buNone | b=1 ; ",
+          ],
+          "F-Stretch-*": [],
+          "F-Table-*": [
+            "scheme:bg1,accent1,bg1,accent1,accent6,dk2",
+            "grid:914400,1828800,2743200",
+            "tr0:gridSpan=2/anchor=ctr/l/Zwei | hMerge=1/// | /anchor=ctr/r/Drei",
+            "tr1:rowSpan=2/vert=vert,anchor=ctr/l/hoch | /anchor=ctr/ctr/b | /anchor=ctr/r/1",
+            "tr2:vMerge=1/// | /anchor=b/l/reich | /anchor=ctr/r/2",
+          ],
+          "F-Text-*": [
+            "scheme:bg2,tx1,accent4",
+            "bodyPr:anchor=ctr,lIns=91440,tIns=45720,rIns=91440,bIns=45720",
+            "p[1]: lnSpc=120000 spcBef=600 spcAft=200 a:buAutoNum |  ; baseline=-25000 ; strike=sngStrike+highlight ; baseline=30000",
+            "p[1]: a:buChar | ",
+          ],
+          "F-Vertical-*": [
+            "bodyPr:vert=vert270,anchor=t",
+            "p[1]: a:buNone | ",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [
+            "lt2",
+          ],
+        },
+        "pictures": [
+          "F-Crop-*|l=,t=7333,r=,b=7333|6400800,1554480,2286000,1097280",
+          "F-Contain-*|no-crop|7235190,2743200,617220,1097280",
+          "F-Stretch-*|no-crop|6400800,3931920,2286000,1097280",
+        ],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+          "F-Text-*: H=de-DE",
+          "F-Text-*: 2=de-DE",
+          "F-Text-*: O=de-DE",
+          "F-Text-*: x=de-DE",
+          "F-Text-*: Punkt=de-DE",
+          "F-Vertical-*: vertikal=de-DE",
+          "F-Shape-*: fett=de-DE",
+          "F-Shape-*:  normal=de-DE",
+          "F-Table-*: Zwei=de-DE",
+          "F-Table-*: Drei=de-DE",
+          "F-Table-*: hoch=de-DE",
+          "F-Table-*: b=de-DE",
+          "F-Table-*: 1=de-DE",
+          "F-Table-*: reich=de-DE",
+          "F-Table-*: 2=de-DE",
+        ],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Bars-*": [
+            "grouping=clustered dLblPos= showVal=1 showPercent=0",
+            "legendPos= holeSize= smooth= min= max=",
+            "numFmt=#,##0,General",
+            "axisTitles=,",
+            "scheme=",
+          ],
+          "F-Doughnut-*": [
+            "grouping= dLblPos= showVal=0 showPercent=1",
+            "legendPos=l holeSize=70 smooth= min= max=",
+            "numFmt=0%",
+            "axisTitles=",
+            "scheme=accent1",
+          ],
+          "F-Percent-*": [
+            "grouping=percentStacked dLblPos=ctr showVal=1 showPercent=0",
+            "legendPos=r holeSize= smooth= min= max=",
+            "numFmt=0.0,General,0%",
+            "axisTitles=Quartal,Anteil",
+            "scheme=accent1,dk2",
+          ],
+          "F-Scatter-*": [
+            "grouping= dLblPos=t showVal=1 showPercent=0",
+            "legendPos=b holeSize= smooth=0 min=0 max=4",
+            "numFmt=General,0.0",
+            "axisTitles=,",
+            "scheme=",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [],
+        },
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+        ],
+      },
+      {
+        "facts": {
+          "Date Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Footer Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-1": [
+            "bodyPr:",
+            "p[1]: lnSpc=150000 spcBef=600 a:buAutoNum |  ; baseline=30000 ; strike=sngStrike+highlight",
+          ],
+          "Slide Number Placeholder 5": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [],
+        },
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+          "PptcPh-1: x=de-DE",
+          "PptcPh-1: 2=de-DE",
+          "PptcPh-1: alt=de-DE",
+        ],
+      },
+    ],
+    "ops": [
+      {
+        "layout": "CONTENT",
+        "op": "slide.add",
+        "placeholders": {
+          "body": {
+            "text": [
+              {
+                "bullet": "number",
+                "lineSpacing": 1.5,
+                "runs": [
+                  {
+                    "text": "x",
+                  },
+                  {
+                    "superscript": true,
+                    "text": "2",
+                  },
+                  {
+                    "highlight": "FFFF00",
+                    "strike": true,
+                    "text": "alt",
+                  },
+                ],
+                "spaceBefore": 6,
+              },
+            ],
+          },
+          "title": {
+            "text": "Phase 3",
+          },
+        },
+        "ref": "p3t",
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Neu|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 261,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "hyperlink:ext:https://example.com",
+          "image:60d2823763",
+          "image:652e5d9ff0",
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Arrow-*|shape||{"x":0.5,"y":1.8,"w":3.5,"h":0.2}||null",
+          "F-Text-*|shape||{"x":0.5,"y":2,"w":3,"h":2}|H2Ox
+Punkt|null",
+          "F-Vertical-*|shape||{"x":3.7,"y":2,"w":0.6,"h":2}|vertikal|null",
+          "F-Shape-*|shape||{"x":4.5,"y":2,"w":2,"h":1}|fett normal|null",
+          "F-Table-*|table||{"x":0.5,"y":4.3,"w":6,"h":1}||[["Zwei","","Drei"],["hoch","b","1"],["","reich","2"]]",
+          "F-Crop-*|picture||{"x":7,"y":1.7,"w":2.5,"h":1.2}||null",
+          "F-Contain-*|picture||{"x":7.91,"y":3,"w":0.68,"h":1.2}||null",
+          "F-Stretch-*|picture||{"x":7,"y":4.3,"w":2.5,"h":1.2}||null",
+        ],
+        "title": "Phase 3",
+      },
+      {
+        "hidden": false,
+        "id": 262,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "  chart>package:pkg:71b2eb5884",
+          "  chart>package:pkg:c26e82a372",
+          "  chart>package:pkg:c26e82a372",
+          "  chart>package:pkg:cd95e60b15",
+          "chart:barChart:a|Q1|Q2|1|2|b|Q1|Q2|3|1",
+          "chart:barChart:s|a|b|1|3",
+          "chart:doughnutChart:s|a|b|1|3",
+          "chart:scatterChart:s|1|2|3|2|1|3|t|1|2|3|1|3|2",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Percent-*|chart||{"x":0.5,"y":1.7,"w":4.5,"h":2.5}||null",
+          "F-Doughnut-*|chart||{"x":5.2,"y":1.7,"w":4.3,"h":2.5}||null",
+          "F-Scatter-*|chart||{"x":0.5,"y":4.4,"w":4.5,"h":2.4}||null",
+          "F-Bars-*|chart||{"x":5.2,"y":4.4,"w":4.3,"h":2.4}||null",
+        ],
+        "title": "Phase 3",
+      },
+      {
+        "hidden": false,
+        "id": 263,
+        "layout": "CONTENT",
+        "notes": null,
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "PptcPh-1|placeholder|1|null|x2alt|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 4|placeholder|11|null||null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+        ],
+        "title": "Phase 3",
+      },
+    ],
+  },
+  {
+    "error": null,
+    "features": [
+      {
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Sprache=de-DE",
+          "PptcPh-1: deutsch=de-DE",
+          "PptcPh-1: english=en-GB",
+          "PptcPh-1: uno=it-IT",
+          "PptcPh-1: deux=fr-FR",
+          "Footer Placeholder 4: Fußzeile=de-DE",
+          "Box-*: Neu=de-DE",
+          "Form-*: Form=nl-NL",
+          "Tab-*: Kopf=de-DE",
+          "Tab-*: Zelle=de-DE",
+        ],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=12500,t=,r=12500,b=|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|l=,t=28906,r=,b=28906|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|3378137,612648,2314575,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "pictures": [
+          "PptcPh-1|no-crop|1792224,612648,5486400,4114800",
+        ],
+        "runs": [],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Arrow-*": [
+            "scheme:accent2",
+            "a:headEnd:diamond",
+            "a:tailEnd:stealth",
+            "a:prstDash:lgDash",
+          ],
+          "F-Contain-*": [],
+          "F-Crop-*": [
+            "hlinkClick",
+          ],
+          "F-Shape-*": [
+            "scheme:accent1,dk2,lt1,lt1",
+            "bodyPr:anchor=b",
+            "p[1]:algn=ctr a:buNone | b=1 ; ",
+          ],
+          "F-Stretch-*": [],
+          "F-Table-*": [
+            "scheme:bg1,accent1,bg1,accent1,accent6,dk2",
+            "grid:914400,1828800,2743200",
+            "tr0:gridSpan=2/anchor=ctr/l/Zwei | hMerge=1/// | /anchor=ctr/r/Drei",
+            "tr1:rowSpan=2/vert=vert,anchor=ctr/l/hoch | /anchor=ctr/ctr/b | /anchor=ctr/r/1",
+            "tr2:vMerge=1/// | /anchor=b/l/reich | /anchor=ctr/r/2",
+          ],
+          "F-Text-*": [
+            "scheme:bg2,tx1,accent4",
+            "bodyPr:anchor=ctr,lIns=91440,tIns=45720,rIns=91440,bIns=45720",
+            "p[1]: lnSpc=120000 spcBef=600 spcAft=200 a:buAutoNum |  ; baseline=-25000 ; strike=sngStrike+highlight ; baseline=30000",
+            "p[1]: a:buChar | ",
+          ],
+          "F-Vertical-*": [
+            "bodyPr:vert=vert270,anchor=t",
+            "p[1]: a:buNone | ",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [
+            "lt2",
+          ],
+        },
+        "pictures": [
+          "F-Crop-*|l=,t=7333,r=,b=7333|6400800,1554480,2286000,1097280",
+          "F-Contain-*|no-crop|7235190,2743200,617220,1097280",
+          "F-Stretch-*|no-crop|6400800,3931920,2286000,1097280",
+        ],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+          "F-Text-*: H=de-DE",
+          "F-Text-*: 2=de-DE",
+          "F-Text-*: O=de-DE",
+          "F-Text-*: x=de-DE",
+          "F-Text-*: Punkt=de-DE",
+          "F-Vertical-*: vertikal=de-DE",
+          "F-Shape-*: fett=de-DE",
+          "F-Shape-*:  normal=de-DE",
+          "F-Table-*: Zwei=de-DE",
+          "F-Table-*: Drei=de-DE",
+          "F-Table-*: hoch=de-DE",
+          "F-Table-*: b=de-DE",
+          "F-Table-*: 1=de-DE",
+          "F-Table-*: reich=de-DE",
+          "F-Table-*: 2=de-DE",
+        ],
+      },
+      {
+        "facts": {
+          "Date Placeholder 2": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "F-Bars-*": [
+            "grouping=clustered dLblPos= showVal=1 showPercent=0",
+            "legendPos= holeSize= smooth= min= max=",
+            "numFmt=#,##0,General",
+            "axisTitles=,",
+            "scheme=",
+          ],
+          "F-Doughnut-*": [
+            "grouping= dLblPos= showVal=0 showPercent=1",
+            "legendPos=l holeSize=70 smooth= min= max=",
+            "numFmt=0%",
+            "axisTitles=",
+            "scheme=accent1",
+          ],
+          "F-Percent-*": [
+            "grouping=percentStacked dLblPos=ctr showVal=1 showPercent=0",
+            "legendPos=r holeSize= smooth= min= max=",
+            "numFmt=0.0,General,0%",
+            "axisTitles=Quartal,Anteil",
+            "scheme=accent1,dk2",
+          ],
+          "F-Scatter-*": [
+            "grouping= dLblPos=t showVal=1 showPercent=0",
+            "legendPos=b holeSize= smooth=0 min=0 max=4",
+            "numFmt=General,0.0",
+            "axisTitles=,",
+            "scheme=",
+          ],
+          "Footer Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Slide Number Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [],
+        },
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+        ],
+      },
+      {
+        "facts": {
+          "Date Placeholder 3": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "Footer Placeholder 4": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-0": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "PptcPh-1": [
+            "scheme:accent2",
+            "bodyPr:",
+            "p[1]: spcAft=1200 | baseline=-25000",
+            "p[1]: a:buAutoNum | ",
+          ],
+          "Slide Number Placeholder 5": [
+            "bodyPr:",
+            "p[0]: | ",
+          ],
+          "background": [],
+        },
+        "pictures": [],
+        "runs": [
+          "PptcPh-0: Phase 3=de-DE",
+          "PptcPh-1: neu=de-DE",
+          "PptcPh-1: zwei=de-DE",
+        ],
+      },
+    ],
+    "ops": [
+      {
+        "name": "PptcPh-1",
+        "op": "el.set",
+        "slide": "7",
+        "text": [
+          {
+            "color": "accent2",
+            "spaceAfter": 12,
+            "subscript": true,
+            "text": "neu",
+          },
+          {
+            "bullet": "number",
+            "text": "zwei",
+          },
+        ],
+      },
+    ],
+    "slides": [
+      {
+        "hidden": false,
+        "id": 256,
+        "layout": "CONTENT",
+        "notes": "Notiz",
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Sprache|null",
+          "PptcPh-1|placeholder|1|null|deutsch
+english
+unodeux|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+          "Footer Placeholder 4|placeholder|11|null|Fußzeile|null",
+          "Box-*|shape||{"x":0.5,"y":5.5,"w":3,"h":0.6}|Neu|null",
+          "Form-*|shape||{"x":4,"y":5.5,"w":2,"h":0.6}|Form|null",
+          "Tab-*|table||{"x":6.5,"y":5.5,"w":4,"h":1}||[["Kopf"],["Zelle"]]",
+        ],
+        "title": "Sprache",
+      },
+      {
+        "hidden": false,
+        "id": 257,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 258,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 259,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:60d2823763",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":3.69,"y":0.67,"w":2.53,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 260,
+        "layout": "PICTURE",
+        "notes": null,
+        "related": [
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|{"x":1.96,"y":5.25,"w":6,"h":0.62}||null",
+          "PptcPh-1|picture|1|{"x":1.96,"y":0.67,"w":6,"h":4.5}||null",
+          "PptcPh-2|placeholder|2|{"x":1.96,"y":5.87,"w":6,"h":0.88}||null",
+          "Date Placeholder 4|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 5|placeholder|11|null||null",
+          "Slide Number Placeholder 6|placeholder|12|null|‹#›|null",
+        ],
+        "title": null,
+      },
+      {
+        "hidden": false,
+        "id": 261,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "hyperlink:ext:https://example.com",
+          "image:60d2823763",
+          "image:652e5d9ff0",
+          "image:652e5d9ff0",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Arrow-*|shape||{"x":0.5,"y":1.8,"w":3.5,"h":0.2}||null",
+          "F-Text-*|shape||{"x":0.5,"y":2,"w":3,"h":2}|H2Ox
+Punkt|null",
+          "F-Vertical-*|shape||{"x":3.7,"y":2,"w":0.6,"h":2}|vertikal|null",
+          "F-Shape-*|shape||{"x":4.5,"y":2,"w":2,"h":1}|fett normal|null",
+          "F-Table-*|table||{"x":0.5,"y":4.3,"w":6,"h":1}||[["Zwei","","Drei"],["hoch","b","1"],["","reich","2"]]",
+          "F-Crop-*|picture||{"x":7,"y":1.7,"w":2.5,"h":1.2}||null",
+          "F-Contain-*|picture||{"x":7.91,"y":3,"w":0.68,"h":1.2}||null",
+          "F-Stretch-*|picture||{"x":7,"y":4.3,"w":2.5,"h":1.2}||null",
+        ],
+        "title": "Phase 3",
+      },
+      {
+        "hidden": false,
+        "id": 262,
+        "layout": "Title Only",
+        "notes": null,
+        "related": [
+          "  chart>package:pkg:71b2eb5884",
+          "  chart>package:pkg:c26e82a372",
+          "  chart>package:pkg:c26e82a372",
+          "  chart>package:pkg:cd95e60b15",
+          "chart:barChart:a|Q1|Q2|1|2|b|Q1|Q2|3|1",
+          "chart:barChart:s|a|b|1|3",
+          "chart:doughnutChart:s|a|b|1|3",
+          "chart:scatterChart:s|1|2|3|2|1|3|t|1|2|3|1|3|2",
+        ],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "Date Placeholder 2|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 3|placeholder|11|null||null",
+          "Slide Number Placeholder 4|placeholder|12|null|‹#›|null",
+          "F-Percent-*|chart||{"x":0.5,"y":1.7,"w":4.5,"h":2.5}||null",
+          "F-Doughnut-*|chart||{"x":5.2,"y":1.7,"w":4.3,"h":2.5}||null",
+          "F-Scatter-*|chart||{"x":0.5,"y":4.4,"w":4.5,"h":2.4}||null",
+          "F-Bars-*|chart||{"x":5.2,"y":4.4,"w":4.3,"h":2.4}||null",
+        ],
+        "title": "Phase 3",
+      },
+      {
+        "hidden": false,
+        "id": 263,
+        "layout": "CONTENT",
+        "notes": null,
+        "related": [],
+        "section": null,
+        "shapes": [
+          "PptcPh-0|placeholder|0|null|Phase 3|null",
+          "PptcPh-1|placeholder|1|null|neu
+zwei|null",
+          "Date Placeholder 3|placeholder|10|null|1/27/13|null",
+          "Footer Placeholder 4|placeholder|11|null||null",
+          "Slide Number Placeholder 5|placeholder|12|null|‹#›|null",
+        ],
+        "title": "Phase 3",
+      },
+    ],
+  },
 ]
 `;

@@ -21,7 +21,7 @@ import { EMPTY_RELS, PartAllocator, REL, relTarget, relsPartOf } from "../parts.
 import { fitImage, imageSize, type Box, type ImageFit, type ImageSize } from "../image-size.js"
 import { slideFromLayout } from "../seed.js"
 import { HLINK_ATTR, setShapeText } from "../text.js"
-import { NS_A, NS_P, NS_R, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
+import { NS_A, NS_P, NS_R, colorElement, elements, firstElement, parseXml, relRefs, xmlEscape } from "../xml.js"
 import type { Package } from "./package.js"
 import { removeShape, repairContent, repairRels, type Repair } from "./repair.js"
 import type { Generated } from "./transplant.js"
@@ -57,7 +57,7 @@ const setSlideVisibility = (slide: Document, hidden: boolean): void => {
         root.removeAttribute("show")
 }
 
-/**  set a solid background color on a slide  */
+/**  set a solid background color (hex or theme color) on a slide  */
 const setBackground = (slide: Document, color: string): void => {
     const cSld = firstElement(slide, "p:cSld")
     if (cSld === null)
@@ -68,9 +68,7 @@ const setBackground = (slide: Document, color: string): void => {
     const bg = slide.createElementNS(NS_P, "p:bg")
     const bgPr = slide.createElementNS(NS_P, "p:bgPr")
     const fill = slide.createElementNS(NS_A, "a:solidFill")
-    const clr = slide.createElementNS(NS_A, "a:srgbClr")
-    clr.setAttribute("val", color)
-    fill.appendChild(clr)
+    fill.appendChild(colorElement(slide, color))
     bgPr.appendChild(fill)
     bgPr.appendChild(slide.createElementNS(NS_A, "a:effectLst"))
     bg.appendChild(bgPr)

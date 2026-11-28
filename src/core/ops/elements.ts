@@ -14,21 +14,45 @@ import type { ElementSpec } from "../../schema/payloads.js"
 import type { Frame, ShapeInfo } from "../model.js"
 import { slideAddrOf, type OpHandler, type PlanContext, type SlidePlanEntry } from "./registry.js"
 import { entryLayout, resolveEntry } from "./fill-common.js"
-import { lintElementOverlap, lintFontSize, richTextSizes, richTextToPlain, type Obstacle } from "../lint.js"
+import { lintElementOverlap, lintFontSize, richTextSizes, type Obstacle } from "../lint.js"
 import { nearestAspect } from "../describe/position.js"
+import { layoutTable } from "../table-grid.js"
 
 /**  shape-name prefix of generated prompt boxes (removable via el.rm)  */
 export const PROMPT_BOX_PREFIX = "PptcPromptBox"
 
-/**  the frame of an element spec; null for connectors (line geometry)
-     and for boxes without explicit extent (auto-height tables)  */
+/**  the frame of an element spec -- for a rotated element the axis-aligned
+     box it covers (90/270 degrees swap width and height); null for
+     connectors (line geometry) and for boxes without explicit extent
+     (auto-height tables)  */
 const specFrame = (spec: ElementSpec): Frame | null => {
     if (spec.type === "connector")
         return null
     const f = spec.frame
-    return f.w !== undefined && f.h !== undefined
-        ? { x: f.x, y: f.y, w: f.w, h: f.h }
-        : null
+    if (f.w === undefined || f.h === undefined)
+        return null
+    const rad = (f.rotation ?? 0) * Math.PI / 180
+    const cos = Math.abs(Math.cos(rad))
+    const sin = Math.abs(Math.sin(rad))
+    const w = f.w * cos + f.h * sin
+    const h = f.w * sin + f.h * cos
+    return { x: f.x + (f.w - w) / 2, y: f.y + (f.h - h) / 2, w, h }
+}
+
+/**  check a table's merged cells and its per-column fields against its
+     grid (E_SCHEMA): every row fills the columns of the first row, spans
+     stay inside the table, `colWidths`/`colAlign` give one value per column  */
+const checkTable = (spec: Extract<ElementSpec, { type: "table" }>, name: string): void => {
+    const rows: unknown[][] = [ ...(spec.data.headers !== undefined ? [ spec.data.headers ] : []), ...spec.data.rows ]
+    const grid = layoutTable(rows)
+    if (typeof grid === "string")
+        throw new PptcError("E_SCHEMA", `table '${name}': ${grid}`)
+    for (const field of [ "colWidths", "colAlign" ] as const) {
+        const values = spec[field]
+        if (values !== undefined && values.length !== grid.cols)
+            throw new PptcError("E_SCHEMA",
+                `table '${name}': '${field}' has ${values.length} value(s), the table has ${grid.cols} column(s)`)
+    }
 }
 
 /**  every explicitly set font size (pt) an element carries, for the readability
@@ -37,8 +61,11 @@ const specFrame = (spec: ElementSpec): Frame | null => {
 const collectElementSizes = (spec: ElementSpec): number[] => {
     switch (spec.type) {
         case "textbox": return richTextSizes(spec.text)
-        case "shape": return spec.fontSize !== undefined ? [spec.fontSize] : []
-        case "table": return spec.data.style?.fontSize !== undefined ? [spec.data.style.fontSize] : []
+        case "shape": return [ ...(spec.fontSize !== undefined ? [spec.fontSize] : []),
+            ...(spec.text !== undefined ? richTextSizes(spec.text) : []) ]
+        case "table": return [ ...(spec.data.style?.fontSize !== undefined ? [spec.data.style.fontSize] : []),
+            ...[ ...(spec.data.headers ?? []), ...spec.data.rows.flat() ]
+                .flatMap((cell) => typeof cell === "object" ? richTextSizes(cell.text) : []) ]
         case "chart": return spec.data.fontSize !== undefined ? [spec.data.fontSize] : []
         default: return []
     }
@@ -83,6 +110,8 @@ export const elAdd: OpHandler<Extract<Op, { op: "el.add" }>> = {
         for (const spec of op.elements) {
             const frame = specFrame(spec)
             const name = spec.name ?? spec.type
+            if (spec.type === "table")
+                checkTable(spec, name)
             /*  prompt boxes are exempt from both checks -- they overlay picture
                 placeholders by design and their footer-scale caption is intentional  */
             if (!name.startsWith(PROMPT_BOX_PREFIX)) {
@@ -147,10 +176,8 @@ export const elSet: OpHandler<Extract<Op, { op: "el.set" }>> = {
         /*  an element generated earlier in the same run: patch its spec  */
         const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name))
         if (planned !== undefined) {
-            if (planned.spec.type === "textbox")
+            if (planned.spec.type === "textbox" || planned.spec.type === "shape")
                 planned.spec.text = op.text
-            else if (planned.spec.type === "shape")
-                planned.spec.text = richTextToPlain(op.text).join("\n")
             else
                 throw new PptcError("E_SCHEMA",
                     `element '${op.name}' is a ${planned.spec.type} -- only textbox and shape text can be set`)

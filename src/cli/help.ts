@@ -26,13 +26,17 @@ Options:
                    on every level, '[hidden]' under --plain)
                  text (default): plus placeholder texts and notes
                  full: plus every shape with geometry AND styling --
-                   type, name, frame, text, table cells + column widths,
-                   autoshape preset/fill/border/font, the text language
-                   (lang), a picture's media file
-                   name (image), and -- for a body with explicit run
+                   type, name, frame, text, table cells + column widths
+                   (colWidths) + merged cells (merges) + vertical cell
+                   text (cellTextDirections), autoshape preset/fill/
+                   border/font, textDirection, connector startArrow/
+                   endArrow, the text language (lang), a picture's media
+                   file name (image), and -- for a body with explicit run
                    formatting -- its paragraphs/runs (per-run font, size,
-                   bold, italic, color), which pass straight back into
-                   slide.fill. This is the COMPLETE structure: enough to
+                   bold, italic, strike, super-/subscript, color,
+                   highlight; per paragraph bullet, spacing), which pass
+                   straight back into slide.fill. Colors read as RRGGBB,
+                   theme colors resolved. This is the COMPLETE structure: enough to
                    recreate or edit a styled table, diagram or code block, so
                    there is never a need to unzip the .pptx and read raw XML.
   --plain        readable text instead of the JSON envelope
@@ -255,6 +259,26 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   slide.copy   { "op": "slide.copy", "slide": SEL, "ref": "copy1" }
   el.add       free elements: textbox | table | chart | shape | image |
                connector -- all positioned via "frame": {x,y,w,h} inches
+               { "op": "el.add", "slide": SEL, "elements": [ ... ] }
+               textbox/shape: "text", "fill", "border", "borderPt",
+                 "valign": top|middle|bottom, "margin": 0.1 | [l,t,r,b],
+                 "textDirection": horizontal|rotate90|rotate270|stacked
+                 (shape also "shape", "fontColor", "fontSize")
+               table: "data": { "headers", "rows", "style" }, "colWidths":
+                 [1,2.5], "colAlign": ["left","right"], "textDirection";
+                 a cell is a value or { "text", "bold", "fill", "color",
+                 "align", "valign", "colspan", "rowspan", "textDirection" }
+                 -- cells covered by a span are left out (as in HTML)
+               chart: "data": { "type", "categories", "series", "title",
+                 "colors", "legend": true|top|bottom|left|right,
+                 "labels": { "value", "percent", "format", "position" },
+                 "axes": { "x": { "title", "min", "max", "format" }, "y" },
+                 "stacked": "percent", "smooth", "holeSize" }
+               image: "path", "fit": stretch|crop|contain, "hyperlink"
+               connector: "from": [x,y], "to": [x,y], "color", "widthPt",
+                 "dash": solid|dash|dot|dashDot|longDash,
+                 "startArrow"/"endArrow": none|arrow|triangle|stealth|
+                 diamond|oval
   el.set       retext an element:  { "op": "el.set", "slide": SEL,
                  "name": "Box1", "text": "new text" } -- placeholders,
                textboxes and shapes only
@@ -268,8 +292,14 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                { "op": "meta.props", "set": { "title": "Q3",
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
 
-Text values accept plain strings (\\n = new paragraph) or rich text
-(runs with bold/italic/color/size, paragraphs with bullet levels).
+Text values accept plain strings (\\n = new paragraph) or rich text:
+paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
+"number"|false, "spaceBefore"/"spaceAfter" (pt), "lineSpacing" (1.5) },
+runs { "text", "bold", "italic", "underline", "strike", "superscript",
+"subscript", "size", "font", "color", "highlight", "hyperlink", "lang" }.
+Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
+bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
+No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
 Picture fills crop to the placeholder by default ("fit": "crop");
 "contain" shows the whole image, "stretch" distorts it.
 Text language: every run carries a "lang" -- the deck language

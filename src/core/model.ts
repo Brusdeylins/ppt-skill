@@ -113,6 +113,14 @@ export interface RunInfo {
     italic?: boolean
     /**  font color RRGGBB (theme colors resolved) when set on the run  */
     color?: string
+    /**  struck through when set on the run  */
+    strike?: boolean
+    /**  raised (positive baseline) when set on the run  */
+    superscript?: boolean
+    /**  lowered (negative baseline) when set on the run  */
+    subscript?: boolean
+    /**  highlight color RRGGBB (theme colors resolved) when set on the run  */
+    highlight?: string
 }
 
 /**  One paragraph of a text body (read model), its runs in order. Mirrors a
@@ -122,10 +130,20 @@ export interface ParaInfo {
     runs: RunInfo[]
     /**  indent level (a:pPr lvl) when greater than 0  */
     level?: number
-    /**  true/false only when the paragraph sets a bullet explicitly
-         (a:buChar / a:buAutoNum / a:buNone); omitted when inherited  */
-    bullet?: boolean
+    /**  only when the paragraph sets a bullet explicitly: true (a:buChar),
+         "number" (a:buAutoNum), false (a:buNone); omitted when inherited  */
+    bullet?: boolean | "number"
+    /**  space before / after the paragraph in pt when set in points  */
+    spaceBefore?: number
+    spaceAfter?: number
+    /**  line spacing as a multiple when set in percent  */
+    lineSpacing?: number
 }
+
+/**  Direction of text that does not run horizontally (read model), as
+     el.add writes it: `rotate90` (vert), `rotate270` (vert270), `stacked`
+     (wordArtVert).  */
+export type TextDirectionInfo = "rotate90" | "rotate270" | "stacked"
 
 /**  One shape on a slide as the reader exposes it: identity, classification,
      geometry and -- depending on the shape kind -- text, table, style or
@@ -147,9 +165,23 @@ export interface ShapeInfo {
     text: string | null
     /**  table cell texts (rows x cols) when the shape is a table  */
     table?: string[][]
-    /**  column widths in inches for a table shape (read-only insight: el.add
-         tables auto-distribute columns, this cannot be passed back)  */
+    /**  column widths in inches for a table shape; pass back as el.add
+         `colWidths`  */
     colWidths?: number[]
+    /**  merged cells of a table shape (0-based grid row/col of the cell's
+         top-left corner, header row 0) with their spans; the covered cells
+         read as "" in `table`. Mirrors el.add cell `colspan`/`rowspan`.  */
+    merges?: { row: number, col: number, rowspan: number, colspan: number }[]
+    /**  table cells whose text does not run horizontally (grid row/col);
+         mirrors el.add cell `textDirection`  */
+    cellTextDirections?: { row: number, col: number, textDirection: TextDirectionInfo }[]
+    /**  text direction of a shape's body when not horizontal; mirrors
+         el.add `textDirection`  */
+    textDirection?: TextDirectionInfo
+    /**  line end decorations of a line or connector (headEnd/tailEnd) when
+         set; mirror el.add connector `startArrow`/`endArrow`  */
+    startArrow?: string
+    endArrow?: string
     /**  preset autoshape geometry (rect, roundRect, diamond, ...) when the
          shape carries an `a:prstGeom`; pass back as el.add `shape` to recreate  */
     shape?: string

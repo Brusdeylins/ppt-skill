@@ -16273,13 +16273,17 @@ Options:
                    on every level, '[hidden]' under --plain)
                  text (default): plus placeholder texts and notes
                  full: plus every shape with geometry AND styling --
-                   type, name, frame, text, table cells + column widths,
-                   autoshape preset/fill/border/font, the text language
-                   (lang), a picture's media file
-                   name (image), and -- for a body with explicit run
+                   type, name, frame, text, table cells + column widths
+                   (colWidths) + merged cells (merges) + vertical cell
+                   text (cellTextDirections), autoshape preset/fill/
+                   border/font, textDirection, connector startArrow/
+                   endArrow, the text language (lang), a picture's media
+                   file name (image), and -- for a body with explicit run
                    formatting -- its paragraphs/runs (per-run font, size,
-                   bold, italic, color), which pass straight back into
-                   slide.fill. This is the COMPLETE structure: enough to
+                   bold, italic, strike, super-/subscript, color,
+                   highlight; per paragraph bullet, spacing), which pass
+                   straight back into slide.fill. Colors read as RRGGBB,
+                   theme colors resolved. This is the COMPLETE structure: enough to
                    recreate or edit a styled table, diagram or code block, so
                    there is never a need to unzip the .pptx and read raw XML.
   --plain        readable text instead of the JSON envelope
@@ -16487,6 +16491,26 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
   slide.copy   { "op": "slide.copy", "slide": SEL, "ref": "copy1" }
   el.add       free elements: textbox | table | chart | shape | image |
                connector -- all positioned via "frame": {x,y,w,h} inches
+               { "op": "el.add", "slide": SEL, "elements": [ ... ] }
+               textbox/shape: "text", "fill", "border", "borderPt",
+                 "valign": top|middle|bottom, "margin": 0.1 | [l,t,r,b],
+                 "textDirection": horizontal|rotate90|rotate270|stacked
+                 (shape also "shape", "fontColor", "fontSize")
+               table: "data": { "headers", "rows", "style" }, "colWidths":
+                 [1,2.5], "colAlign": ["left","right"], "textDirection";
+                 a cell is a value or { "text", "bold", "fill", "color",
+                 "align", "valign", "colspan", "rowspan", "textDirection" }
+                 -- cells covered by a span are left out (as in HTML)
+               chart: "data": { "type", "categories", "series", "title",
+                 "colors", "legend": true|top|bottom|left|right,
+                 "labels": { "value", "percent", "format", "position" },
+                 "axes": { "x": { "title", "min", "max", "format" }, "y" },
+                 "stacked": "percent", "smooth", "holeSize" }
+               image: "path", "fit": stretch|crop|contain, "hyperlink"
+               connector: "from": [x,y], "to": [x,y], "color", "widthPt",
+                 "dash": solid|dash|dot|dashDot|longDash,
+                 "startArrow"/"endArrow": none|arrow|triangle|stealth|
+                 diamond|oval
   el.set       retext an element:  { "op": "el.set", "slide": SEL,
                  "name": "Box1", "text": "new text" } -- placeholders,
                textboxes and shapes only
@@ -16500,8 +16524,14 @@ Every <op> is an object with an "op" discriminator. The vocabulary:
                { "op": "meta.props", "set": { "title": "Q3",
                  "custom": { "pptcImageStyle": "Pencil Sketch" } } }
 
-Text values accept plain strings (\\n = new paragraph) or rich text
-(runs with bold/italic/color/size, paragraphs with bullet levels).
+Text values accept plain strings (\\n = new paragraph) or rich text:
+paragraphs { "text" | "runs", "level", "alignment", "bullet": true|
+"number"|false, "spaceBefore"/"spaceAfter" (pt), "lineSpacing" (1.5) },
+runs { "text", "bold", "italic", "underline", "strike", "superscript",
+"subscript", "size", "font", "color", "highlight", "hyperlink", "lang" }.
+Colors: hex "1F4E79" or a theme slot accent1-accent6, tx1, tx2, bg1,
+bg2, dk1, lt1, dk2, lt2 (follows the template; 'state' shows RRGGBB).
+No shrink-to-fit: overflowing text is shortened or split (W_TEXT_OVERFLOW).
 Picture fills crop to the placeholder by default ("fit": "crop");
 "contain" shows the whole image, "stretch" distorts it.
 Text language: every run carries a "lang" -- the deck language
@@ -17108,22 +17138,88 @@ var nearestAspect = (frame) => {
   return best[0];
 };
 
+// src/core/table-grid.ts
+var spansOf = (cell) => {
+  const c = typeof cell === "object" && cell !== null ? cell : {};
+  return { colspan: c.colspan ?? 1, rowspan: c.rowspan ?? 1 };
+};
+var layoutTable = (rows) => {
+  const cols = (rows[0] ?? []).reduce((sum, cell) => sum + spansOf(cell).colspan, 0);
+  const taken = rows.map(() => new Array(cols).fill(false));
+  const cells = [];
+  for (const [r, row] of rows.entries()) {
+    const placed = [];
+    let col = 0;
+    for (const cell of row) {
+      while (col < cols && taken[r]?.[col] === true)
+        col++;
+      const { colspan, rowspan } = spansOf(cell);
+      if (col + colspan > cols)
+        return `row ${r} has more cells than the ${cols} column(s) of the first row`;
+      if (r + rowspan > rows.length)
+        return `the cell at row ${r}, column ${col} spans ${rowspan} rows, but the table ends at row ${rows.length - 1}`;
+      for (let dr = 0; dr < rowspan; dr++) {
+        const line = taken[r + dr];
+        for (let dc = 0; dc < colspan; dc++) {
+          if (line[col + dc] === true)
+            return `the cell at row ${r}, column ${col} overlaps a merged cell at row ${r + dr}, column ${col + dc}`;
+          line[col + dc] = true;
+        }
+      }
+      placed.push({ row: r, col, colspan, rowspan });
+      col += colspan;
+    }
+    const filled = taken[r].filter((t) => t).length;
+    if (filled < cols)
+      return `row ${r} fills ${filled} of the ${cols} column(s) of the first row`;
+    cells.push(placed);
+  }
+  return { cols, cells };
+};
+
 // src/core/ops/elements.ts
 var PROMPT_BOX_PREFIX = "PptcPromptBox";
 var specFrame = (spec) => {
   if (spec.type === "connector")
     return null;
   const f = spec.frame;
-  return f.w !== void 0 && f.h !== void 0 ? { x: f.x, y: f.y, w: f.w, h: f.h } : null;
+  if (f.w === void 0 || f.h === void 0)
+    return null;
+  const rad = (f.rotation ?? 0) * Math.PI / 180;
+  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad));
+  const w = f.w * cos + f.h * sin;
+  const h = f.w * sin + f.h * cos;
+  return { x: f.x + (f.w - w) / 2, y: f.y + (f.h - h) / 2, w, h };
+};
+var checkTable = (spec, name) => {
+  const rows = [...spec.data.headers !== void 0 ? [spec.data.headers] : [], ...spec.data.rows];
+  const grid = layoutTable(rows);
+  if (typeof grid === "string")
+    throw new PptcError("E_SCHEMA", `table '${name}': ${grid}`);
+  for (const field of ["colWidths", "colAlign"]) {
+    const values = spec[field];
+    if (values !== void 0 && values.length !== grid.cols)
+      throw new PptcError(
+        "E_SCHEMA",
+        `table '${name}': '${field}' has ${values.length} value(s), the table has ${grid.cols} column(s)`
+      );
+  }
 };
 var collectElementSizes = (spec) => {
   switch (spec.type) {
     case "textbox":
       return richTextSizes(spec.text);
     case "shape":
-      return spec.fontSize !== void 0 ? [spec.fontSize] : [];
+      return [
+        ...spec.fontSize !== void 0 ? [spec.fontSize] : [],
+        ...spec.text !== void 0 ? richTextSizes(spec.text) : []
+      ];
     case "table":
-      return spec.data.style?.fontSize !== void 0 ? [spec.data.style.fontSize] : [];
+      return [
+        ...spec.data.style?.fontSize !== void 0 ? [spec.data.style.fontSize] : [],
+        ...[...spec.data.headers ?? [], ...spec.data.rows.flat()].flatMap((cell) => typeof cell === "object" ? richTextSizes(cell.text) : [])
+      ];
     case "chart":
       return spec.data.fontSize !== void 0 ? [spec.data.fontSize] : [];
     default:
@@ -17160,6 +17256,8 @@ var elAdd = {
     for (const spec of op.elements) {
       const frame = specFrame(spec);
       const name = spec.name ?? spec.type;
+      if (spec.type === "table")
+        checkTable(spec, name);
       if (!name.startsWith(PROMPT_BOX_PREFIX)) {
         const slideAddr = slideAddrOf(ctx, entry);
         if (frame !== null) {
@@ -17200,10 +17298,8 @@ var elSet = {
     }
     const planned = entry.elements.find((e) => e.name !== null && nameMatches(e.name, op.name));
     if (planned !== void 0) {
-      if (planned.spec.type === "textbox")
+      if (planned.spec.type === "textbox" || planned.spec.type === "shape")
         planned.spec.text = op.text;
-      else if (planned.spec.type === "shape")
-        planned.spec.text = richTextToPlain(op.text).join("\n");
       else
         throw new PptcError(
           "E_SCHEMA",
@@ -37080,7 +37176,27 @@ function date4(params) {
 }
 
 // src/schema/payloads.ts
-var ColorSchema = external_exports.string().regex(/^#?[0-9a-fA-F]{6}$/, "expected 6-digit hex color like '#1F4E79'").transform((s) => s.replace("#", "").toUpperCase());
+var SCHEME_COLORS = [
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+  "tx1",
+  "tx2",
+  "bg1",
+  "bg2",
+  "dk1",
+  "lt1",
+  "dk2",
+  "lt2"
+];
+var isSchemeColor = (color) => SCHEME_COLORS.includes(color);
+var ColorSchema = external_exports.string().regex(
+  /^(#?[0-9a-fA-F]{6}|accent[1-6]|tx[12]|bg[12]|dk[12]|lt[12])$/,
+  "expected a 6-digit hex color like '#1F4E79' or a theme color (accent1-accent6, tx1, tx2, bg1, bg2, dk1, lt1, dk2, lt2)"
+).transform((s) => isSchemeColor(s) ? s : s.replace("#", "").toUpperCase());
 var FrameSchema = external_exports.object({
   x: external_exports.number().min(0),
   y: external_exports.number().min(0),
@@ -37089,36 +37205,69 @@ var FrameSchema = external_exports.object({
   rotation: external_exports.number().min(-360).max(360).optional()
 }).strict();
 var LangSchema = external_exports.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "expected a language tag like 'de-DE' or 'en-US'");
+var TextDirectionSchema = external_exports.enum(["horizontal", "rotate90", "rotate270", "stacked"]);
+var ValignSchema = external_exports.enum(["top", "middle", "bottom"]);
+var MarginSchema = external_exports.union([
+  external_exports.number().min(0),
+  external_exports.tuple([external_exports.number().min(0), external_exports.number().min(0), external_exports.number().min(0), external_exports.number().min(0)])
+]);
+var HyperlinkSchema = external_exports.string().url();
 var fontProps = {
   bold: external_exports.boolean().optional(),
   italic: external_exports.boolean().optional(),
   underline: external_exports.boolean().optional(),
+  strike: external_exports.boolean().optional(),
+  superscript: external_exports.boolean().optional(),
+  subscript: external_exports.boolean().optional(),
   size: external_exports.number().positive().optional(),
   font: external_exports.string().min(1).optional(),
   color: ColorSchema.optional(),
+  /**  text highlight (marker) color  */
+  highlight: ColorSchema.optional(),
   /**  text language; a paragraph's applies to its runs  */
   lang: LangSchema.optional()
 };
+var oneBaseline = (f) => f.superscript !== true || f.subscript !== true;
 var RunSchema = external_exports.object({
   text: external_exports.string(),
-  hyperlink: external_exports.string().url().optional(),
+  hyperlink: HyperlinkSchema.optional(),
   ...fontProps
-}).strict();
+}).strict().refine(oneBaseline, "a run is either 'superscript' or 'subscript' (not both)");
 var ParagraphSchema = external_exports.object({
   text: external_exports.string().optional(),
   runs: external_exports.array(RunSchema).optional(),
   level: external_exports.number().int().min(0).max(8).optional(),
   alignment: external_exports.enum(["left", "center", "right", "justify"]).optional(),
-  bullet: external_exports.boolean().optional(),
+  /**  `true` a bullet (placeholders: their own bullet style), `"number"`
+       a numbered list (1. 2. 3.), `false` none  */
+  bullet: external_exports.union([external_exports.boolean(), external_exports.literal("number")]).optional(),
+  /**  space before / after the paragraph in pt  */
+  spaceBefore: external_exports.number().min(0).optional(),
+  spaceAfter: external_exports.number().min(0).optional(),
+  /**  line spacing as a multiple of single spacing (1.5 = 150%)  */
+  lineSpacing: external_exports.number().positive().max(10).optional(),
   ...fontProps
 }).strict().refine(
   (p) => p.text !== void 0 !== (p.runs !== void 0),
   "a paragraph needs either 'text' or 'runs' (not both)"
-);
+).refine(oneBaseline, "a paragraph is either 'superscript' or 'subscript' (not both)");
 var RichTextSchema = external_exports.union([external_exports.string(), external_exports.array(ParagraphSchema).min(1)]);
+var CellAlignSchema = external_exports.enum(["left", "center", "right"]);
+var TableCellSchema = external_exports.object({
+  text: RichTextSchema,
+  bold: external_exports.boolean().optional(),
+  fill: ColorSchema.optional(),
+  color: ColorSchema.optional(),
+  align: CellAlignSchema.optional(),
+  valign: ValignSchema.optional(),
+  colspan: external_exports.number().int().min(1).optional(),
+  rowspan: external_exports.number().int().min(1).optional(),
+  textDirection: TextDirectionSchema.optional()
+}).strict();
+var CellSchema = external_exports.union([external_exports.string(), external_exports.number(), external_exports.boolean(), TableCellSchema]);
 var TableSchema = external_exports.object({
-  headers: external_exports.array(external_exports.string()).optional(),
-  rows: external_exports.array(external_exports.array(external_exports.union([external_exports.string(), external_exports.number(), external_exports.boolean()]))).min(1),
+  headers: external_exports.array(external_exports.union([external_exports.string(), TableCellSchema])).optional(),
+  rows: external_exports.array(external_exports.array(CellSchema)).min(1),
   style: external_exports.object({
     headerBg: ColorSchema.optional(),
     headerFg: ColorSchema.optional(),
@@ -37146,6 +37295,39 @@ var ChartTypeSchema = external_exports.enum([
   "scatter",
   "bubble"
 ]);
+var LabelPositionSchema = external_exports.enum([
+  "center",
+  "insideEnd",
+  "insideBase",
+  "outsideEnd",
+  "bestFit",
+  "left",
+  "right",
+  "above",
+  "below"
+]);
+var AxisSchema = external_exports.object({
+  title: external_exports.string().optional(),
+  min: external_exports.number().optional(),
+  max: external_exports.number().optional(),
+  /**  number format code, e.g. "0%" or "#,##0"  */
+  format: external_exports.string().min(1).optional()
+}).strict();
+var LABEL_POSITIONS = {
+  clustered: ["center", "insideEnd", "insideBase", "outsideEnd"],
+  stacked: ["center", "insideEnd", "insideBase"],
+  line: ["center", "left", "right", "above", "below"],
+  pie: ["center", "insideEnd", "outsideEnd", "bestFit"]
+};
+var labelFamily = (type, stacked) => {
+  if (["bar", "column"].includes(type))
+    return stacked ? "stacked" : "clustered";
+  if (["barStacked", "columnStacked"].includes(type))
+    return "stacked";
+  if (["line", "lineMarkers", "scatter", "bubble"].includes(type))
+    return "line";
+  return type === "pie" ? "pie" : null;
+};
 var ChartSchema = external_exports.object({
   type: ChartTypeSchema,
   categories: external_exports.array(external_exports.union([external_exports.string(), external_exports.number()])).optional(),
@@ -37158,9 +37340,63 @@ var ChartSchema = external_exports.object({
   }).strict()).min(1),
   title: external_exports.string().optional(),
   colors: external_exports.array(ColorSchema).optional(),
-  legend: external_exports.boolean().optional(),
-  fontSize: external_exports.number().positive().optional()
-}).strict();
+  /**  show the legend (`true`: at the bottom) or place it  */
+  legend: external_exports.union([external_exports.boolean(), external_exports.enum(["top", "bottom", "left", "right"])]).optional(),
+  fontSize: external_exports.number().positive().optional(),
+  /**  data labels: values (default when `labels` is given) and/or
+       percentages (pie/doughnut), number format, position  */
+  labels: external_exports.object({
+    value: external_exports.boolean().optional(),
+    percent: external_exports.boolean().optional(),
+    format: external_exports.string().min(1).optional(),
+    position: LabelPositionSchema.optional()
+  }).strict().optional(),
+  /**  x = category axis (the x value axis of scatter/bubble), y = value axis  */
+  axes: external_exports.object({ x: AxisSchema.optional(), y: AxisSchema.optional() }).strict().optional(),
+  /**  bar/column/area: stack the series to 100%  */
+  stacked: external_exports.literal("percent").optional(),
+  /**  line: smoothed lines  */
+  smooth: external_exports.boolean().optional(),
+  /**  doughnut: hole size in percent of the diameter  */
+  holeSize: external_exports.number().int().min(10).max(90).optional()
+}).strict().superRefine((c, ctx) => {
+  const issue2 = (path10, message) => {
+    ctx.addIssue({ code: "custom", path: path10, message });
+  };
+  const xy = c.type === "scatter" || c.type === "bubble";
+  if (c.axes !== void 0 && (c.type === "pie" || c.type === "doughnut"))
+    issue2(["axes"], `a ${c.type} chart has no axes`);
+  const x = c.axes?.x;
+  if (x !== void 0 && !xy && (x.min !== void 0 || x.max !== void 0 || x.format !== void 0))
+    issue2(["axes", "x"], "only the x axis of a scatter or bubble chart takes min, max and format");
+  for (const [key, axis] of Object.entries(c.axes ?? {}))
+    if (axis?.min !== void 0 && axis.max !== void 0 && axis.min >= axis.max)
+      issue2(["axes", key], "'min' must be below 'max'");
+  if (c.labels?.percent === true && c.type !== "pie" && c.type !== "doughnut")
+    issue2(["labels", "percent"], "percent labels need a pie or doughnut chart");
+  const position = c.labels?.position;
+  if (position !== void 0) {
+    const family = labelFamily(c.type, c.stacked !== void 0);
+    const allowed = family === null ? [] : LABEL_POSITIONS[family] ?? [];
+    if (!allowed.includes(position))
+      issue2(["labels", "position"], allowed.length === 0 ? `a ${c.type} chart takes no label position` : `a ${c.stacked !== void 0 ? "percent-stacked " : ""}${c.type} chart takes the label positions ${allowed.join(", ")}`);
+  }
+  if (c.stacked !== void 0 && !["bar", "barStacked", "column", "columnStacked", "area", "areaStacked"].includes(c.type))
+    issue2(["stacked"], "percent stacking needs a bar, column or area chart");
+  if (c.smooth !== void 0 && !["line", "lineMarkers"].includes(c.type))
+    issue2(["smooth"], "smoothing needs a line chart");
+  if (xy)
+    c.series.forEach((s, i) => {
+      if (s.x === void 0 || s.y === void 0 || s.x.length !== s.y.length)
+        issue2(["series", i], `a ${c.type} series needs 'x' and 'y' of the same length`);
+      else if (JSON.stringify(s.x) !== JSON.stringify(c.series[0]?.x))
+        issue2(["series", i, "x"], `all series of a ${c.type} chart share the same 'x' values`);
+      if (c.type === "bubble" && s.size?.length !== s.x?.length)
+        issue2(["series", i, "size"], "a bubble series needs one 'size' per point");
+    });
+  if (c.holeSize !== void 0 && c.type !== "doughnut")
+    issue2(["holeSize"], "a hole size needs a doughnut chart");
+});
 var ShapeTypeSchema = external_exports.enum([
   "rect",
   "roundRect",
@@ -37182,6 +37418,12 @@ var ShapeTypeSchema = external_exports.enum([
   "flowChartTerminator",
   "line"
 ]);
+var ArrowSchema = external_exports.enum(["none", "arrow", "triangle", "stealth", "diamond", "oval"]);
+var boxTextProps = {
+  valign: ValignSchema.optional(),
+  margin: MarginSchema.optional(),
+  textDirection: TextDirectionSchema.optional()
+};
 var ElementSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
     type: external_exports.literal("textbox"),
@@ -37190,6 +37432,7 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     fill: ColorSchema.optional(),
     border: ColorSchema.optional(),
     borderPt: external_exports.number().positive().optional(),
+    ...boxTextProps,
     /**  text language of the element (paragraphs and runs may override)  */
     lang: LangSchema.optional(),
     name: external_exports.string().optional()
@@ -37198,6 +37441,13 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     type: external_exports.literal("table"),
     frame: FrameSchema,
     data: TableSchema,
+    /**  column widths in inches (as `state` reports them); scaled to
+         `frame.w` when that is given  */
+    colWidths: external_exports.array(external_exports.number().positive()).min(1).optional(),
+    /**  horizontal alignment per column (a cell's own `align` wins)  */
+    colAlign: external_exports.array(CellAlignSchema).min(1).optional(),
+    /**  text direction of every cell (a cell's own wins)  */
+    textDirection: TextDirectionSchema.optional(),
     /**  text language of every cell  */
     lang: LangSchema.optional(),
     name: external_exports.string().optional()
@@ -37212,12 +37462,13 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     type: external_exports.literal("shape"),
     frame: FrameSchema,
     shape: ShapeTypeSchema,
-    text: external_exports.string().optional(),
+    text: RichTextSchema.optional(),
     fill: ColorSchema.optional(),
     border: ColorSchema.optional(),
     borderPt: external_exports.number().positive().optional(),
     fontColor: ColorSchema.optional(),
     fontSize: external_exports.number().positive().optional(),
+    ...boxTextProps,
     /**  text language of the shape's text  */
     lang: LangSchema.optional(),
     name: external_exports.string().optional()
@@ -37226,6 +37477,12 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     type: external_exports.literal("image"),
     frame: FrameSchema,
     path: external_exports.string().min(1),
+    /**  how the image takes the frame: `stretch` (default) distorts it,
+         `crop` covers the frame and cuts the overhang off centered,
+         `contain` shows the whole image in a centered, shrunk frame  */
+    fit: external_exports.enum(["crop", "contain", "stretch"]).optional(),
+    /**  click target of the picture  */
+    hyperlink: HyperlinkSchema.optional(),
     name: external_exports.string().optional()
   }).strict(),
   external_exports.object({
@@ -37234,7 +37491,10 @@ var ElementSchema = external_exports.discriminatedUnion("type", [
     to: external_exports.tuple([external_exports.number(), external_exports.number()]),
     color: ColorSchema.optional(),
     widthPt: external_exports.number().positive().optional(),
-    dash: external_exports.enum(["solid", "dash", "dot"]).optional(),
+    dash: external_exports.enum(["solid", "dash", "dot", "dashDot", "longDash"]).optional(),
+    /**  decoration at the `from` / `to` end  */
+    startArrow: ArrowSchema.optional(),
+    endArrow: ArrowSchema.optional(),
     name: external_exports.string().optional()
   }).strict()
 ]);
@@ -37488,6 +37748,11 @@ var drawingText = (scope) => {
     parts.push(runs.join(""));
   }
   return parts.join("\n");
+};
+var colorElement = (doc, color) => {
+  const el = doc.createElementNS(NS_A, isSchemeColor(color) ? "a:schemeClr" : "a:srgbClr");
+  el.setAttribute("val", color);
+  return el;
 };
 
 // src/engine/parts.ts
@@ -38023,12 +38288,14 @@ var readLayouts = async (archive) => {
       }
       const frame = resolveFrame(sp, ph.kind, ph.idx);
       const fontSize = ph.kind === "title" ? sizes.title : sizes.body;
+      const vert = firstElement(sp, "a:bodyPr")?.getAttribute("vert") ?? "";
+      const textFrame = frame !== null && (vert === "vert" || vert === "vert270") ? { ...frame, w: frame.h, h: frame.w } : frame;
       placeholders.push({
         idx: ph.idx,
         kind: ph.kind,
         name: firstElement(sp, "p:cNvPr")?.getAttribute("name") ?? `Placeholder ${ph.idx}`,
         frame,
-        capacity: frame !== null && ph.kind !== "picture" ? estimateCapacity(frame, fontSize) : null
+        capacity: textFrame !== null && ph.kind !== "picture" ? estimateCapacity(textFrame, fontSize) : null
       });
     }
     for (const pic of placeholders) {
@@ -38135,6 +38402,44 @@ var shapeType = (el) => {
   }
 };
 var tableCells = (frame) => elements(frame, "a:tr").map((tr) => elements(tr, "a:tc").map((tc) => drawingText(tc)));
+var textDirectionOf = (vert) => ({ vert: "rotate90", vert270: "rotate270", wordArtVert: "stacked" })[vert ?? ""];
+var tableLayout = (frame) => {
+  const merges = [];
+  const directions = [];
+  elements(frame, "a:tr").forEach((tr, row) => {
+    elements(tr, "a:tc").filter((tc) => tc.parentNode === tr).forEach((tc, col) => {
+      const colspan = Number(tc.getAttribute("gridSpan") ?? "1") || 1;
+      const rowspan = Number(tc.getAttribute("rowSpan") ?? "1") || 1;
+      if (colspan > 1 || rowspan > 1)
+        merges.push({ row, col, rowspan, colspan });
+      const textDirection = textDirectionOf(directChild(tc, ["a:tcPr"])?.getAttribute("vert"));
+      if (textDirection !== void 0)
+        directions.push({ row, col, textDirection });
+    });
+  });
+  return {
+    ...merges.length > 0 && { merges },
+    ...directions.length > 0 && { cellTextDirections: directions }
+  };
+};
+var ARROW_OF = {
+  arrow: "arrow",
+  triangle: "triangle",
+  stealth: "stealth",
+  diamond: "diamond",
+  oval: "oval"
+};
+var lineEnds = (node2) => {
+  const ln = directChild(firstElement(node2, "p:spPr"), ["a:ln"]);
+  if (ln === null)
+    return {};
+  const head = ARROW_OF[directChild(ln, ["a:headEnd"])?.getAttribute("type") ?? ""];
+  const tail = ARROW_OF[directChild(ln, ["a:tailEnd"])?.getAttribute("type") ?? ""];
+  return {
+    ...head !== void 0 && { startArrow: head },
+    ...tail !== void 0 && { endArrow: tail }
+  };
+};
 var directChild = (parent, names) => {
   if (parent === null || parent.childNodes === null)
     return null;
@@ -38201,17 +38506,34 @@ var runStyle = (r, colors) => {
     out.bold = true;
   if (rPr.getAttribute("i") === "1")
     out.italic = true;
+  const strike = rPr.getAttribute("strike");
+  if (strike !== null && strike !== "" && strike !== "noStrike")
+    out.strike = true;
+  const baseline = Number(rPr.getAttribute("baseline") ?? "0");
+  if (baseline > 0)
+    out.superscript = true;
+  else if (baseline < 0)
+    out.subscript = true;
   const color = colorOf(directChild(rPr, ["a:solidFill"]), colors);
   if (color !== void 0)
     out.color = color;
+  const highlight = colorOf(directChild(rPr, ["a:highlight"]), colors);
+  if (highlight !== void 0)
+    out.highlight = highlight;
   return out;
+};
+var spacingOf = (pPr, tag2, unit) => {
+  const val = directChild(directChild(pPr, [tag2]), [unit])?.getAttribute("val");
+  if (val === null || val === void 0 || val === "" || !Number.isFinite(Number(val)))
+    return void 0;
+  return unit === "a:spcPts" ? Number(val) / 100 : Number(val) / 1e5;
 };
 var richParagraphs = (txBody, colors) => {
   const paras = [];
   let formatted = false;
   for (const p of elements(txBody, "a:p")) {
     const runs = elements(p, "a:r").map((r) => runStyle(r, colors));
-    if (runs.some((rn) => rn.font !== void 0 || rn.bold === true || rn.italic === true))
+    if (runs.some((rn) => rn.font !== void 0 || rn.bold === true || rn.italic === true || rn.strike === true || rn.superscript === true || rn.subscript === true || rn.highlight !== void 0))
       formatted = true;
     const para = { runs };
     const pPr = firstElement(p, "a:pPr");
@@ -38219,10 +38541,21 @@ var richParagraphs = (txBody, colors) => {
       const lvl = pPr.getAttribute("lvl");
       if (lvl !== null && lvl !== "" && Number(lvl) > 0)
         para.level = Number(lvl);
-      if (directChild(pPr, ["a:buChar", "a:buAutoNum"]) !== null)
+      if (directChild(pPr, ["a:buAutoNum"]) !== null)
+        para.bullet = "number";
+      else if (directChild(pPr, ["a:buChar"]) !== null)
         para.bullet = true;
       else if (directChild(pPr, ["a:buNone"]) !== null)
         para.bullet = false;
+      const spaceBefore = spacingOf(pPr, "a:spcBef", "a:spcPts");
+      const spaceAfter = spacingOf(pPr, "a:spcAft", "a:spcPts");
+      const lineSpacing = spacingOf(pPr, "a:lnSpc", "a:spcPct");
+      if (spaceBefore !== void 0)
+        para.spaceBefore = spaceBefore;
+      if (spaceAfter !== void 0)
+        para.spaceAfter = spaceAfter;
+      if (lineSpacing !== void 0)
+        para.lineSpacing = lineSpacing;
     }
     paras.push(para);
   }
@@ -38287,6 +38620,11 @@ var readDeckState = async (archive) => {
         };
         if (node2.nodeName === "p:sp")
           Object.assign(shape, shapeStyle(node2, info.colors));
+        if (node2.nodeName === "p:sp" || node2.nodeName === "p:cxnSp")
+          Object.assign(shape, lineEnds(node2));
+        const textDirection = txBody === null ? void 0 : textDirectionOf(directChild(txBody, ["a:bodyPr"])?.getAttribute("vert"));
+        if (textDirection !== void 0)
+          shape.textDirection = textDirection;
         if (node2.nodeName === "p:sp" || shape.type === "table") {
           const lang = firstElement(node2, "a:rPr")?.getAttribute("lang");
           if (lang !== null && lang !== void 0 && lang !== "")
@@ -38308,6 +38646,7 @@ var readDeckState = async (archive) => {
           const grid = firstElement(node2, "a:tblGrid");
           if (grid !== null)
             shape.colWidths = elements(grid, "a:gridCol").map((c) => emuToInch(Number(c.getAttribute("w"))));
+          Object.assign(shape, tableLayout(node2));
         }
         shapes.push(shape);
       }
@@ -38346,7 +38685,7 @@ var readDeckState = async (archive) => {
 
 // src/engine/inplace/engine.ts
 var import_jszip7 = __toESM(require_lib3(), 1);
-import { readFileSync as readFileSync6 } from "node:fs";
+import { readFileSync as readFileSync7 } from "node:fs";
 import path6 from "node:path";
 
 // src/engine/defects.ts
@@ -39668,6 +40007,7 @@ var buildEmptyDeck = async (template) => {
 // src/engine/text.ts
 var HLINK_ATTR = "pptc-hlink";
 var toParagraphs = (text) => typeof text === "string" ? text.split("\n").map((line) => ({ text: line })) : text;
+var BASELINE = { superscript: 3e4, subscript: -25e3 };
 var buildRunProps = (doc, run, lang) => {
   const rPr = doc.createElementNS(NS_A, "a:rPr");
   rPr.setAttribute("lang", run.lang ?? lang);
@@ -39677,14 +40017,23 @@ var buildRunProps = (doc, run, lang) => {
     rPr.setAttribute("i", run.italic ? "1" : "0");
   if (run.underline === true)
     rPr.setAttribute("u", "sng");
+  if (run.strike !== void 0)
+    rPr.setAttribute("strike", run.strike ? "sngStrike" : "noStrike");
+  if (run.superscript === true)
+    rPr.setAttribute("baseline", String(BASELINE.superscript));
+  else if (run.subscript === true)
+    rPr.setAttribute("baseline", String(BASELINE.subscript));
   if (run.size !== void 0)
     rPr.setAttribute("sz", String(Math.round(run.size * 100)));
   if (run.color !== void 0) {
     const fill = doc.createElementNS(NS_A, "a:solidFill");
-    const clr = doc.createElementNS(NS_A, "a:srgbClr");
-    clr.setAttribute("val", run.color);
-    fill.appendChild(clr);
+    fill.appendChild(colorElement(doc, run.color));
     rPr.appendChild(fill);
+  }
+  if (run.highlight !== void 0) {
+    const highlight = doc.createElementNS(NS_A, "a:highlight");
+    highlight.appendChild(colorElement(doc, run.highlight));
+    rPr.appendChild(highlight);
   }
   if (run.font !== void 0) {
     const latin = doc.createElementNS(NS_A, "a:latin");
@@ -39706,28 +40055,51 @@ var buildRun = (doc, run, lang) => {
   r.appendChild(t);
   return r;
 };
+var spacing = (doc, tag2, unit, val) => {
+  const el = doc.createElementNS(NS_A, tag2);
+  const v = doc.createElementNS(NS_A, unit);
+  v.setAttribute("val", String(Math.round(val)));
+  el.appendChild(v);
+  return el;
+};
+var paragraphRun = (p) => ({
+  text: p.text ?? "",
+  ...p.bold !== void 0 && { bold: p.bold },
+  ...p.italic !== void 0 && { italic: p.italic },
+  ...p.underline !== void 0 && { underline: p.underline },
+  ...p.strike !== void 0 && { strike: p.strike },
+  ...p.superscript !== void 0 && { superscript: p.superscript },
+  ...p.subscript !== void 0 && { subscript: p.subscript },
+  ...p.size !== void 0 && { size: p.size },
+  ...p.font !== void 0 && { font: p.font },
+  ...p.color !== void 0 && { color: p.color },
+  ...p.highlight !== void 0 && { highlight: p.highlight }
+});
 var buildParagraph = (doc, p, lang) => {
   const el = doc.createElementNS(NS_A, "a:p");
-  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false;
+  const needsPPr = p.level !== void 0 || p.alignment !== void 0 || p.bullet === false || p.bullet === "number" || p.lineSpacing !== void 0 || p.spaceBefore !== void 0 || p.spaceAfter !== void 0;
   if (needsPPr) {
     const pPr = doc.createElementNS(NS_A, "a:pPr");
     if (p.level !== void 0)
       pPr.setAttribute("lvl", String(p.level));
     if (p.alignment !== void 0)
       pPr.setAttribute("algn", { left: "l", center: "ctr", right: "r", justify: "just" }[p.alignment]);
+    if (p.lineSpacing !== void 0)
+      pPr.appendChild(spacing(doc, "a:lnSpc", "a:spcPct", p.lineSpacing * 1e5));
+    if (p.spaceBefore !== void 0)
+      pPr.appendChild(spacing(doc, "a:spcBef", "a:spcPts", p.spaceBefore * 100));
+    if (p.spaceAfter !== void 0)
+      pPr.appendChild(spacing(doc, "a:spcAft", "a:spcPts", p.spaceAfter * 100));
     if (p.bullet === false)
       pPr.appendChild(doc.createElementNS(NS_A, "a:buNone"));
+    else if (p.bullet === "number") {
+      const num = doc.createElementNS(NS_A, "a:buAutoNum");
+      num.setAttribute("type", "arabicPeriod");
+      pPr.appendChild(num);
+    }
     el.appendChild(pPr);
   }
-  const runs = p.runs ?? [{
-    text: p.text ?? "",
-    ...p.bold !== void 0 && { bold: p.bold },
-    ...p.italic !== void 0 && { italic: p.italic },
-    ...p.underline !== void 0 && { underline: p.underline },
-    ...p.size !== void 0 && { size: p.size },
-    ...p.font !== void 0 && { font: p.font },
-    ...p.color !== void 0 && { color: p.color }
-  }];
+  const runs = p.runs ?? [paragraphRun(p)];
   for (const run of runs)
     el.appendChild(buildRun(doc, run, p.lang ?? lang));
   return el;
@@ -39772,9 +40144,7 @@ var setBackground = (slide, color) => {
   const bg = slide.createElementNS(NS_P, "p:bg");
   const bgPr = slide.createElementNS(NS_P, "p:bgPr");
   const fill = slide.createElementNS(NS_A, "a:solidFill");
-  const clr = slide.createElementNS(NS_A, "a:srgbClr");
-  clr.setAttribute("val", color);
-  fill.appendChild(clr);
+  fill.appendChild(colorElement(slide, color));
   bgPr.appendChild(fill);
   bgPr.appendChild(slide.createElementNS(NS_A, "a:effectLst"));
   bg.appendChild(bgPr);
@@ -41460,8 +41830,8 @@ function addChartDefinition(target, type, data, opt) {
     options.dataBorder.pt = 0.75;
   if (options.dataBorder && options.dataBorder.color) {
     const isHexColor = typeof options.dataBorder.color === "string" && options.dataBorder.color.length === 6 && /^[0-9A-Fa-f]{6}$/.test(options.dataBorder.color);
-    const isSchemeColor = Object.values(SCHEME_COLOR_NAMES).includes(options.dataBorder.color);
-    if (!isHexColor && !isSchemeColor) {
+    const isSchemeColor2 = Object.values(SCHEME_COLOR_NAMES).includes(options.dataBorder.color);
+    if (!isHexColor && !isSchemeColor2) {
       options.dataBorder.color = "F9F9F9";
     }
   }
@@ -45368,6 +45738,73 @@ var PptxGenJS = class {
 import { randomUUID } from "node:crypto";
 
 // src/engine/elements.ts
+import { readFileSync as readFileSync6 } from "node:fs";
+var TEXT_DIRECTION_VERT = {
+  horizontal: "horz",
+  rotate90: "vert",
+  rotate270: "vert270",
+  stacked: "wordArtVert"
+};
+var GenColors = class _GenColors {
+  /**  token (RRGGBB) to theme slot  */
+  tokens = /* @__PURE__ */ new Map();
+  byName = /* @__PURE__ */ new Map();
+  base;
+  /**
+   *  Choose the token range for a set of element specs.
+   *
+   *  @param specs - every element of the apply (their hex colors and
+   *                 texts must not collide with a token)
+   */
+  constructor(specs) {
+    const used = new Set([...JSON.stringify(specs).matchAll(/[0-9A-Fa-f]{6}/g)].map((m) => m[0].toUpperCase()));
+    let base = 790496;
+    while ([...Array(16).keys()].some((i) => used.has(_GenColors.hex(base + i))))
+      base += 16;
+    this.base = base;
+  }
+  /**  RRGGBB of a number  */
+  static hex(n) {
+    return n.toString(16).toUpperCase().padStart(6, "0");
+  }
+  /**
+   *  The color to hand to PptxGenJS.
+   *
+   *  @param color - a validated color (RRGGBB or theme slot)
+   *  @returns the hex value, or the token of a theme slot
+   */
+  gen(color) {
+    if (!isSchemeColor(color))
+      return color;
+    let token = this.byName.get(color);
+    if (token === void 0) {
+      token = _GenColors.hex(this.base + this.byName.size);
+      this.byName.set(color, token);
+      this.tokens.set(token, color);
+    }
+    return token;
+  }
+};
+var finishGenerated = (doc, tokens) => {
+  let changed = false;
+  for (const clr of elements(doc, "a:srgbClr")) {
+    const slot = tokens.get((clr.getAttribute("val") ?? "").toUpperCase());
+    if (slot === void 0)
+      continue;
+    const scheme = doc.createElementNS(NS_A, "a:schemeClr");
+    scheme.setAttribute("val", slot);
+    while (clr.firstChild !== null)
+      scheme.appendChild(clr.firstChild);
+    clr.parentNode?.replaceChild(scheme, clr);
+    changed = true;
+  }
+  for (const p of elements(doc, "a:p"))
+    for (const pPr of elements(p, "a:pPr").filter((el) => el.parentNode === p).slice(1)) {
+      p.removeChild(pPr);
+      changed = true;
+    }
+  return changed;
+};
 var chartType = (gen, type) => {
   const map2 = {
     bar: ["bar", { barDir: "bar" }],
@@ -45387,20 +45824,12 @@ var chartType = (gen, type) => {
   const entry = map2[type];
   return { type: gen.ChartType[entry[0]], extra: entry[1] };
 };
-var genTextRuns = (text, lang) => {
+var genTextRuns = (text, lang, colors) => {
   if (typeof text === "string")
     return text;
   const out = [];
   for (const p of text) {
-    const runs = p.runs ?? [{
-      text: p.text ?? "",
-      bold: p.bold,
-      italic: p.italic,
-      underline: p.underline,
-      size: p.size,
-      font: p.font,
-      color: p.color
-    }];
+    const runs = p.runs ?? [paragraphRun(p)];
     runs.forEach((r, i) => {
       out.push({
         text: r.text,
@@ -45409,45 +45838,169 @@ var genTextRuns = (text, lang) => {
           lang: r.lang ?? p.lang ?? lang,
           ...r.bold !== void 0 && { bold: r.bold },
           ...r.italic !== void 0 && { italic: r.italic },
-          ...r.underline !== void 0 && { underline: { style: "sng" } },
+          ...r.underline === true && { underline: { style: "sng" } },
+          ...r.strike === true && { strike: "sngStrike" },
+          /*  PptxGenJS writes baseline * 50 (1/1000 %)  */
+          ...r.superscript === true && { baseline: BASELINE.superscript / 50 },
+          ...r.subscript === true && { baseline: BASELINE.subscript / 50 },
           ...r.size !== void 0 && { fontSize: r.size },
           ...r.font !== void 0 && { fontFace: r.font },
-          ...r.color !== void 0 && { color: r.color },
+          ...r.color !== void 0 && { color: colors.gen(r.color) },
+          ...r.highlight !== void 0 && { highlight: colors.gen(r.highlight) },
           ..."hyperlink" in r && r.hyperlink !== void 0 && { hyperlink: { url: r.hyperlink } },
           ...p.level !== void 0 && { indentLevel: p.level },
           ...p.alignment !== void 0 && { align: p.alignment },
-          ...p.bullet !== void 0 && { bullet: p.bullet }
+          ...p.spaceBefore !== void 0 && { paraSpaceBefore: p.spaceBefore },
+          ...p.spaceAfter !== void 0 && { paraSpaceAfter: p.spaceAfter },
+          ...p.lineSpacing !== void 0 && { lineSpacingMultiple: p.lineSpacing },
+          ...i === 0 && p.bullet !== void 0 && { bullet: p.bullet === "number" ? { type: "number" } : p.bullet }
         }
       });
     });
   }
   return out;
 };
-var genTableRows = (data, lang) => {
-  const rows = [];
-  if (data.headers !== void 0)
-    rows.push(data.headers.map((h) => ({
-      text: h,
-      options: {
-        lang,
-        bold: true,
-        color: data.style?.headerFg ?? "FFFFFF",
-        fill: { color: data.style?.headerBg ?? "333333" }
-      }
-    })));
-  data.rows.forEach((row, i) => {
-    rows.push(row.map((cell) => ({
-      text: String(cell),
-      options: data.style?.altRowBg !== void 0 && i % 2 === 1 ? { lang, fill: { color: data.style.altRowBg } } : { lang }
-    })));
-  });
-  return rows;
+var boxTextOptions = (el) => {
+  const out = {};
+  if (el.valign !== void 0)
+    out.valign = el.valign;
+  if (el.margin !== void 0) {
+    const [l, t, r, b] = typeof el.margin === "number" ? [el.margin, el.margin, el.margin, el.margin] : el.margin;
+    out.margin = [l * 72, r * 72, b * 72, t * 72];
+  }
+  if (el.textDirection !== void 0)
+    out.vert = TEXT_DIRECTION_VERT[el.textDirection];
+  return out;
+};
+var genTableRows = (el, lang, colors) => {
+  const data = el.data;
+  const header = data.headers !== void 0 ? 1 : 0;
+  const rows = [...data.headers !== void 0 ? [data.headers] : [], ...data.rows];
+  const grid = layoutTable(rows);
+  return rows.map((row, r) => row.map((cell, k) => {
+    const styled = typeof cell === "object" ? cell : null;
+    const options = { lang };
+    if (r < header) {
+      options.bold = true;
+      options.color = colors.gen(data.style?.headerFg ?? "FFFFFF");
+      options.fill = { color: colors.gen(data.style?.headerBg ?? "333333") };
+    } else if (data.style?.altRowBg !== void 0 && (r - header) % 2 === 1)
+      options.fill = { color: colors.gen(data.style.altRowBg) };
+    const col = typeof grid === "string" ? k : grid.cells[r]?.[k]?.col ?? k;
+    const align = styled?.align ?? el.colAlign?.[col];
+    if (align !== void 0)
+      options.align = align;
+    if (styled !== null) {
+      if (styled.bold !== void 0)
+        options.bold = styled.bold;
+      if (styled.color !== void 0)
+        options.color = colors.gen(styled.color);
+      if (styled.fill !== void 0)
+        options.fill = { color: colors.gen(styled.fill) };
+      if (styled.valign !== void 0)
+        options.valign = styled.valign;
+      if (styled.colspan !== void 0 && styled.colspan > 1)
+        options.colspan = styled.colspan;
+      if (styled.rowspan !== void 0 && styled.rowspan > 1)
+        options.rowspan = styled.rowspan;
+      if (styled.textDirection !== void 0)
+        options.textDirection = TEXT_DIRECTION_VERT[styled.textDirection];
+    }
+    return { text: styled !== null ? genTextRuns(styled.text, lang, colors) : String(cell), options };
+  }));
 };
 var DEFAULT_COLORS = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
-var addElement = (slide, gen, el, lang) => {
+var LABEL_POS = {
+  center: "ctr",
+  insideEnd: "inEnd",
+  insideBase: "inBase",
+  outsideEnd: "outEnd",
+  bestFit: "bestFit",
+  left: "l",
+  right: "r",
+  above: "t",
+  below: "b"
+};
+var chartOptions = (c) => {
+  const out = {
+    showLegend: typeof c.legend === "string" || (c.legend ?? !["pie", "doughnut"].includes(c.type)),
+    legendPos: typeof c.legend === "string" ? { top: "t", bottom: "b", left: "l", right: "r" }[c.legend] : "b"
+  };
+  if (c.labels !== void 0) {
+    const percent = c.labels.percent === true;
+    out.showValue = c.labels.value ?? !percent;
+    out.showPercent = percent;
+    if (c.labels.format !== void 0)
+      out.dataLabelFormatCode = c.labels.format;
+    const clustered = (c.type === "bar" || c.type === "column") && c.stacked === void 0;
+    if (c.labels.position !== void 0 && !(clustered && c.labels.position === "outsideEnd"))
+      out.dataLabelPosition = LABEL_POS[c.labels.position];
+  }
+  if (c.stacked === "percent") {
+    out.barGrouping = "percentStacked";
+    out.valAxisLabelFormatCode = "0%";
+  }
+  const { x, y } = c.axes ?? {};
+  if (x?.title !== void 0)
+    Object.assign(out, { showCatAxisTitle: true, catAxisTitle: x.title });
+  if (x?.min !== void 0)
+    out.catAxisMinVal = x.min;
+  if (x?.max !== void 0)
+    out.catAxisMaxVal = x.max;
+  if (y?.title !== void 0)
+    Object.assign(out, { showValAxisTitle: true, valAxisTitle: y.title });
+  if (y?.min !== void 0)
+    out.valAxisMinVal = y.min;
+  if (y?.max !== void 0)
+    out.valAxisMaxVal = y.max;
+  if (y?.format !== void 0)
+    out.valAxisLabelFormatCode = y.format;
+  if (c.smooth !== void 0)
+    out.lineSmooth = c.smooth;
+  if (c.holeSize !== void 0)
+    out.holeSize = c.holeSize;
+  return out;
+};
+var finishChart = (doc, chart) => {
+  if (chart.type !== "scatter" && chart.type !== "bubble")
+    return false;
+  const numFmt = elements(doc, "c:valAx").map((ax) => firstElement(ax, "c:numFmt"))[0] ?? null;
+  if (numFmt === null)
+    return false;
+  const format = chart.axes?.x?.format;
+  numFmt.setAttribute("formatCode", format ?? "General");
+  numFmt.setAttribute("sourceLinked", format !== void 0 ? "0" : "1");
+  return true;
+};
+var fileImageSize = (file2) => {
+  try {
+    return imageSize(readFileSync6(file2));
+  } catch {
+    return null;
+  }
+};
+var imageBox = (el) => el.frame.w === void 0 || el.frame.h === void 0 ? null : { x: inchToEmu(el.frame.x), y: inchToEmu(el.frame.y), w: inchToEmu(el.frame.w), h: inchToEmu(el.frame.h) };
+var finishShape = (shape, el) => {
+  if (el.type !== "image" || el.fit !== "crop")
+    return;
+  const box = imageBox(el);
+  const crop = box === null ? null : fitImage(box, fileImageSize(el.path), "crop").crop;
+  const blipFill = firstElement(shape, "p:blipFill");
+  if (crop === null || blipFill === null)
+    return;
+  const srcRect = shape.ownerDocument.createElementNS(NS_A, "a:srcRect");
+  for (const [side, value] of Object.entries(crop))
+    if (value > 0)
+      srcRect.setAttribute(side, String(value));
+  for (const old of elements(blipFill, "a:srcRect"))
+    blipFill.removeChild(old);
+  blipFill.insertBefore(srcRect, firstElement(blipFill, "a:stretch") ?? firstElement(blipFill, "a:tile"));
+};
+var addElement = (slide, gen, el, lang, colors) => {
   if (el.type === "connector") {
     const x = Math.min(el.from[0], el.to[0]);
     const y = Math.min(el.from[1], el.to[1]);
+    const arrow = (a) => a === void 0 || a === "none" ? null : a;
     slide.addShape(gen.ShapeType["line"], {
       x,
       y,
@@ -45456,9 +46009,12 @@ var addElement = (slide, gen, el, lang) => {
       flipH: el.to[0] < el.from[0],
       flipV: el.to[1] < el.from[1],
       line: {
-        color: el.color ?? "4A4A4A",
+        color: colors.gen(el.color ?? "4A4A4A"),
         width: el.widthPt ?? 1.5,
-        ...el.dash !== void 0 && el.dash !== "solid" && { dashType: el.dash }
+        ...el.dash !== void 0 && el.dash !== "solid" && { dashType: el.dash === "longDash" ? "lgDash" : el.dash },
+        /*  the flips keep the path start at `from`: head = start  */
+        ...arrow(el.startArrow) !== null && { beginArrowType: arrow(el.startArrow) },
+        ...arrow(el.endArrow) !== null && { endArrowType: arrow(el.endArrow) }
       }
     });
     return;
@@ -45472,23 +46028,32 @@ var addElement = (slide, gen, el, lang) => {
   };
   switch (el.type) {
     case "textbox":
-      slide.addText(genTextRuns(el.text, el.lang ?? lang), {
+      slide.addText(genTextRuns(el.text, el.lang ?? lang, colors), {
         ...frame,
         lang: el.lang ?? lang,
         valign: "top",
-        ...el.fill !== void 0 && { fill: { color: el.fill } },
-        ...el.border !== void 0 && { line: { color: el.border, width: el.borderPt ?? 1 } }
+        ...boxTextOptions(el),
+        ...el.fill !== void 0 && { fill: { color: colors.gen(el.fill) } },
+        ...el.border !== void 0 && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } }
       });
       break;
     case "table": {
       const st = el.data.style;
       const opts = {
         ...frame,
-        border: { type: "solid", color: st?.border ?? "ACACAC", pt: 0.5 },
+        border: { type: "solid", color: colors.gen(st?.border ?? "ACACAC"), pt: 0.5 },
         valign: "middle"
       };
       if (st?.fontSize !== void 0)
         opts.fontSize = st.fontSize;
+      if (el.textDirection !== void 0)
+        opts.textDirection = TEXT_DIRECTION_VERT[el.textDirection];
+      if (el.colWidths !== void 0) {
+        const sum = el.colWidths.reduce((a, b) => a + b, 0);
+        const w = el.frame.w ?? sum;
+        opts.w = w;
+        opts.colW = el.colWidths.map((c) => c * w / sum);
+      }
       if (st?.headerHeight !== void 0 || st?.rowHeight !== void 0) {
         const hh = st.headerHeight ?? st.rowHeight;
         const rh = st.rowHeight ?? st.headerHeight;
@@ -45499,18 +46064,17 @@ var addElement = (slide, gen, el, lang) => {
           heights.push(rh);
         opts.rowH = heights;
       }
-      slide.addTable(genTableRows(el.data, el.lang ?? lang), opts);
+      slide.addTable(genTableRows(el, el.lang ?? lang, colors), opts);
       break;
     }
     case "chart": {
       const { type, extra } = chartType(gen, el.data.type);
       const isXY = el.data.type === "scatter" || el.data.type === "bubble";
-      const data = isXY ? el.data.series.map((s) => ({
+      const data = isXY ? [{ name: "X", values: el.data.series[0]?.x ?? [] }, ...el.data.series.map((s) => ({
         name: s.name,
         values: s.y ?? [],
-        labels: (s.x ?? []).map(String),
         ...s.size !== void 0 && { sizes: s.size }
-      })) : el.data.series.map((s) => ({
+      }))] : el.data.series.map((s) => ({
         name: s.name,
         labels: (el.data.categories ?? []).map(String),
         values: s.values ?? []
@@ -45518,29 +46082,42 @@ var addElement = (slide, gen, el, lang) => {
       slide.addChart(type, data, {
         ...frame,
         ...extra,
-        chartColors: el.data.colors ?? DEFAULT_COLORS,
-        showLegend: el.data.legend ?? !["pie", "doughnut"].includes(el.data.type),
-        legendPos: "b",
+        chartColors: (el.data.colors ?? DEFAULT_COLORS).map((c) => colors.gen(c)),
+        ...chartOptions(el.data),
         ...el.data.title !== void 0 && { showTitle: true, title: el.data.title },
         ...el.data.fontSize !== void 0 && { catAxisLabelFontSize: el.data.fontSize, valAxisLabelFontSize: el.data.fontSize }
       });
       break;
     }
     case "shape":
-      slide.addText(el.text ?? "", {
+      slide.addText(el.text === void 0 ? "" : genTextRuns(el.text, el.lang ?? lang, colors), {
         ...frame,
         lang: el.lang ?? lang,
         shape: gen.ShapeType[el.shape],
         align: "center",
-        ...el.fill !== void 0 && { fill: { color: el.fill } },
-        ...el.border !== void 0 && { line: { color: el.border, width: el.borderPt ?? 1 } },
-        ...el.fontColor !== void 0 && { color: el.fontColor },
+        ...boxTextOptions(el),
+        ...el.fill !== void 0 && { fill: { color: colors.gen(el.fill) } },
+        ...el.border !== void 0 && { line: { color: colors.gen(el.border), width: el.borderPt ?? 1 } },
+        ...el.fontColor !== void 0 && { color: colors.gen(el.fontColor) },
         ...el.fontSize !== void 0 && { fontSize: el.fontSize }
       });
       break;
-    case "image":
-      slide.addImage({ path: el.path, ...frame });
+    case "image": {
+      const box = el.fit === "contain" ? imageBox(el) : null;
+      const fitted = box === null ? null : fitImage(box, fileImageSize(el.path), "contain").box;
+      slide.addImage({
+        path: el.path,
+        ...frame,
+        ...fitted !== null && {
+          x: fitted.x / EMU_PER_INCH,
+          y: fitted.y / EMU_PER_INCH,
+          w: fitted.w / EMU_PER_INCH,
+          h: fitted.h / EMU_PER_INCH
+        },
+        ...el.hyperlink !== void 0 && { hyperlink: { url: el.hyperlink } }
+      });
       break;
+    }
   }
 };
 
@@ -45569,22 +46146,49 @@ var named = (slide, objectName) => ({
     slide.addImage({ ...opts, objectName });
   }
 });
+var finishSource = async (source, entries, placed, colors) => {
+  const charts = /* @__PURE__ */ new Map();
+  for (const entry of entries) {
+    const info = placed.get(entry);
+    if (info === void 0 || !source.has(relsPartOf(info.part)))
+      continue;
+    const slide = await source.xml(info.part);
+    const rels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [t.id, t.target]));
+    entry.elements.forEach((planned, i) => {
+      const cNvPr = elements(slide, "p:cNvPr").find((el) => el.getAttribute("name") === info.names[i]);
+      const rid = cNvPr === void 0 ? null : firstElement(cNvPr.parentNode?.parentNode, "c:chart")?.getAttributeNS(NS_R, "id") ?? null;
+      const target = rid === null ? null : rels.get(rid) ?? null;
+      if (planned.spec.type === "chart" && target !== null && target !== void 0)
+        charts.set(target, planned.spec.data);
+    });
+  }
+  const parts = Object.keys(source.zip.files).filter((f) => /^ppt\/(slides\/slide|charts\/chart)\d+\.xml$/.test(f));
+  for (const part of parts) {
+    const doc = await source.xml(part);
+    const chart = charts.get(part);
+    const changed = finishGenerated(doc, colors.tokens);
+    if (chart !== void 0 && finishChart(doc, chart) || changed)
+      source.write(part, doc);
+  }
+};
 var generateElements = async (entries, lang) => {
   const withElements = entries.filter((e) => e.elements.length > 0);
   if (withElements.length === 0)
     return null;
   const gen = new PptxGenJS2();
+  const colors = new GenColors(withElements.flatMap((e) => e.elements.map((planned) => planned.spec)));
   const placed = /* @__PURE__ */ new Map();
   for (const [k, entry] of withElements.entries()) {
     const slide = gen.addSlide();
     const names = entry.elements.map((planned) => {
       const name = `${planned.name !== null ? `${planned.name}-` : ""}${randomUUID()}`;
-      addElement(named(slide, name), gen, planned.spec, lang);
+      addElement(named(slide, name), gen, planned.spec, lang, colors);
       return name;
     });
     placed.set(entry, { part: `ppt/slides/slide${k + 1}.xml`, names });
   }
   const source = await Package.open(await gen.write({ outputType: "nodebuffer" }), []);
+  await finishSource(source, withElements, placed, colors);
   return {
     async transplant(pkg, entry, slide, rels, part) {
       const info = placed.get(entry);
@@ -45614,6 +46218,7 @@ var generateElements = async (entries, lang) => {
             el.setAttributeNS(NS_R, attr.name, id);
         }
         firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()));
+        finishShape(shape, entry.elements[info.names.indexOf(name)]?.spec);
         spTree.insertBefore(shape, anchor2);
       }
     }
@@ -45858,7 +46463,7 @@ var expectations = (states) => states.map(({ entry, touched, released, repairs, 
   notes: entry.notes !== null,
   assets: entry.removeNames.length > 0 || entry.background !== null || entry.fills.some((f) => f.image !== void 0) ? "any" : entry.elements.length > 0 ? "grow" : "same",
   grow: {
-    images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync6(e.spec.path))] : []),
+    images: entry.elements.flatMap((e) => e.spec.type === "image" ? [digestBytes(readFileSync7(e.spec.path))] : []),
     fallbacks: entry.elements.filter((e) => e.spec.type === "image" && /\.svg$/i.test(e.spec.path)).length,
     charts: entry.elements.filter((e) => e.spec.type === "chart").length
   },
@@ -46361,7 +46966,7 @@ var cmdMove = async (argv) => {
 };
 
 // src/commands/tpl.ts
-import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
+import { readdirSync, existsSync as existsSync3, readFileSync as readFileSync8 } from "node:fs";
 import path9 from "node:path";
 
 // src/core/describe/minimap.ts
@@ -46481,7 +47086,7 @@ var narrateTemplate = (info, source, sidecar) => {
 var loadTemplate = async (file2) => {
   const info = await readTemplateInfo(await DeckArchive.open(file2));
   const sidecarPath = file2.replace(/\.(potx|pptx)$/i, ".md");
-  const sidecar = sidecarPath !== file2 && existsSync3(sidecarPath) ? readFileSync7(sidecarPath, "utf8") : null;
+  const sidecar = sidecarPath !== file2 && existsSync3(sidecarPath) ? readFileSync8(sidecarPath, "utf8") : null;
   return { info, sidecar };
 };
 var filterLayouts = (info, selector) => {

@@ -9,6 +9,7 @@
 
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
 import type { Attr, Document, Element } from "@xmldom/xmldom"
+import { isSchemeColor } from "../schema/payloads.js"
 
 /**  DrawingML main namespace (`a:`)  */
 export const NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -175,4 +176,18 @@ export const drawingText = (scope: Element): string => {
         parts.push(runs.join(""))
     }
     return parts.join("\n")
+}
+
+/**
+ *  Build the DrawingML color element of a validated color: `a:srgbClr`
+ *  for a hex value, `a:schemeClr` for a theme color slot.
+ *
+ *  @param doc - the owning document
+ *  @param color - RRGGBB or a theme color slot name
+ *  @returns the color element
+ */
+export const colorElement = (doc: Document, color: string): Element => {
+    const el = doc.createElementNS(NS_A, isSchemeColor(color) ? "a:schemeClr" : "a:srgbClr")
+    el.setAttribute("val", color)
+    return el
 }

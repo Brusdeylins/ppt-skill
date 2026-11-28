@@ -38,6 +38,7 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `core/ops/registry.ts` | op contract (`plan(ctx, op)`) and the MutationPlan model |
 | `core/ops/*` | one plan transformer per op (slide-add, slide-edit, elements) |
 | `core/ops/fill-common.ts` | the shared fill payload (placeholders, notes, footer, background, hidden) planned identically for `slide.add` and `slide.fill` |
+| `core/table-grid.ts` | the HTML-like grid of a table payload with merged cells (positions, column count, plan-time checks) |
 | `core/ops/planner.ts` | registry assembly, rev check, whole-document planning |
 | `engine/reader.ts` | read-only OOXML: TemplateInfo, DeckState, rev hashing |
 | `engine/seed.ts` | slides and decks from layouts: `slideFromLayout` (empty slide with cloned placeholders `PptcPh-<idx>`), `buildEmptyDeck` for `new` |
@@ -49,7 +50,7 @@ second leaf: every layer above may import it, it imports nothing but zod.
 | `engine/text.ts` | DOM rich-text builder (`a:p`/`a:r`/`a:t`), every run with its `lang` |
 | `engine/lang.ts` | the deck language of written text: `pptcDeckLang`, else the deck's default text language, else the first run language, else `en-US` |
 | `engine/image-size.ts` | pixel size from image headers (PNG, JPEG, GIF, WebP, BMP, SVG) and the crop/contain/stretch fit of an image into a frame |
-| `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide |
+| `engine/elements.ts` | ElementSpec → PptxGenJS calls on a generator slide, and the finishing of its output for what PptxGenJS cannot write: theme colors (passed as hex tokens, turned into `a:schemeClr`), one `a:pPr` per paragraph, picture crops, a scatter chart's x-axis format |
 | `engine/post.ts` | package-wide steps: sweep unreferenced notes and stale presentation refs, doc props, asset GC, sections, content types, app properties |
 | `engine/defects.ts` | the repair triggers of a single part (duplicate or dead relationships, references to missing relationships, duplicate shape ids, notes ownership) -- ONE rule set: the engine detects its input defects with it and repairs exactly these, verify reports them |
 | `engine/verify.ts` | read-only integrity check: the part rules of `defects.ts` on every part plus the package-level rules (slide list, content types, notes 1:1, app properties, orphans); backs `pptc verify` and the self-verify before every write (`E_INTEGRITY`) |
@@ -127,7 +128,11 @@ write       tmp file + rename (atomic), re-read → rev.after + ref→id map
   apply are rendered into one PptxGenJS deck; each shape is moved into its
   target slide by its `<name>-<uuid>` object name, with the parts it
   references copied under fresh names. `pptxgenjs` is pinned exactly
-  (4.0.1) so generated XML stays stable.
+  (4.0.1) so generated XML stays stable. What PptxGenJS cannot write is
+  finished on its output before the move (`engine/elements.ts`): theme
+  colors go in as hex tokens no element uses and come out as
+  `a:schemeClr`, a paragraph keeps one `a:pPr`, pictures get their crop,
+  a scatter chart's x axis its own number format.
 - **Repairs where pptc writes, and on package parts.** BOM stripping,
   absolute-to-relative targets and repair-trigger fixes happen on touched
   slides only; a slide whose input carries repair triggers counts as

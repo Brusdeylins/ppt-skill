@@ -29,6 +29,53 @@
 - **`el.set` refuses what it cannot retext.** Text for a table, chart,
   picture, connector or group used to vanish silently (or replace the text
   of a group's first child); it now fails with `E_SCHEMA` at plan time.
+- **Connector arrows.** `connector` elements take `startArrow`/`endArrow`
+  (`none`, `arrow`, `triangle`, `stealth`, `diamond`, `oval`) at their
+  `from`/`to` end, also for lines drawn right to left; `dash` gains
+  `dashDot` and `longDash`. `state --level full` reports the arrows.
+- **Table columns.** `table` elements take `colWidths` (inches, as `state`
+  reports them -- scaled to `frame.w` when that is given) and `colAlign`
+  (`left`/`center`/`right` per column); a list whose length differs from
+  the table's columns fails with `E_SCHEMA`.
+- **Text direction.** `textDirection: horizontal|rotate90|rotate270|stacked`
+  on textboxes, shapes, tables and table cells (`vert`, `vert270`,
+  `wordArtVert`); `state --level full` reports it with the same names. The
+  capacity of a layout placeholder whose text runs vertically swaps width
+  and height, and the overlap lint takes the axis-aligned box a rotated
+  element covers.
+- **Theme colors.** Every color field -- `el.add` fills, borders, fonts,
+  lines, table and chart colors, rich-text runs, slide backgrounds --
+  accepts a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`,
+  `dk1`, `lt1`, `dk2`, `lt2`) besides hex and writes it as `a:schemeClr`,
+  so the element follows the template's color scheme. PptxGenJS knows only
+  some slots and writes chart series colors as RGB, so theme colors pass it
+  as unused hex tokens that are turned into `a:schemeClr` on its output.
+  `state` keeps resolving colors to RRGGBB.
+- **Image fit and link.** `el.add` images take `fit: crop|contain|stretch`
+  (default `stretch`, as before) with the same centered crop and contain
+  frame as picture placeholders, and a `hyperlink` URL.
+- **Chart labels and axes.** Charts take `labels` (`value`, `percent`,
+  `format`, `position`), `axes.x`/`axes.y` (`title`, `min`, `max`,
+  `format`), `legend` as a position (`top`/`bottom`/`left`/`right`),
+  `stacked: "percent"`, `smooth` and a doughnut `holeSize`; options a chart
+  type does not support (a label position PowerPoint rejects, axes on a
+  pie, ...) fail with `E_SCHEMA`. Scatter and bubble charts were written
+  without any series; their series now share one x column (required to be
+  the same for every series).
+- **Table cells.** A table cell is a plain value or a styled cell
+  `{text, bold, fill, color, align, valign, colspan, rowspan,
+  textDirection}` with rich text; cells covered by a span are left out of
+  their rows, as in HTML, and a grid that does not add up fails with
+  `E_SCHEMA`. `state --level full` reports `merges` and
+  `cellTextDirections`; the covered cells read as `""` in `table`.
+- **Text layout.** Textboxes and shapes take `valign` and `margin`;
+  paragraphs `spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple) and
+  `bullet: "number"`; runs `strike`, `superscript`, `subscript` and
+  `highlight` -- in `el.add` as well as in `slide.fill` and `el.set`, and
+  read back in `paragraphs`. Shape text takes rich text. A paragraph of
+  several runs in an `el.add` textbox got one paragraph property set per
+  run from PptxGenJS (invalid after the first run, and a bulleted run
+  started a new paragraph); it now keeps one.
 
 - **New engine: decks are edited in place.** Every apply used to rebuild
   the whole deck through `pptx-automizer`, whose count-based, slide-local

@@ -109,7 +109,12 @@ Elements (tables, charts, free shapes)
     sidecar primary-slot override, see `color-roles.md`) with white text,
     single-line headers, a light `altRowBg`, a subtle `border`, and a
     FIXED `headerHeight`/`rowHeight` (table `style`) so header bands and
-    row heights match on every slide.
+    row heights match on every slide. Give theme colors by slot name
+    (`"headerBg": "accent1"`, `"headerFg": "bg1"`) -- they then follow the
+    template. Set `colWidths` when columns differ in content (a narrow
+    number column, a wide text column) and `colAlign` to right-align
+    number columns; merge cells (`colspan`/`rowspan`) only for real group
+    headers.
 -   **Never cover existing text fields** (placeholders incl. the
     footer/slide-number area, textboxes, tables, charts) with a new
     element -- prompt boxes and the AI-note textbox (where no footer

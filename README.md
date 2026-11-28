@@ -231,13 +231,18 @@ The deck read model and the **`rev` token** for optimistic locking.
   true` on every hidden slide ("Hide Slide"); preserved across `apply`
 - `--level text` (default) -- plus all placeholder texts and notes
 - `--level full` -- plus every shape with geometry and styling: type,
-  name, `frame`, text, table cells + column widths, autoshape
-  preset/fill/border/font, the text language (`lang`), a picture's media
+  name, `frame`, text, table cells + column widths (`colWidths`), merged
+  cells (`merges`: row, col, rowspan, colspan; covered cells read as `""`)
+  and vertical cell text (`cellTextDirections`), autoshape
+  preset/fill/border/font, the `textDirection` of a text body, connector
+  `startArrow`/`endArrow`, the text language (`lang`), a picture's media
   file name (`image`), and --
   for a body with explicit run formatting -- its `paragraphs`/`runs`
-  (per-run font, size, bold, italic, color, round-tripping into
+  (per-run font, size, bold, italic, strike, superscript/subscript, color,
+  highlight; per paragraph bullet and spacing -- round-tripping into
   `slide.fill`) -- enough to recreate or edit a styled table, diagram or
-  code block without touching the raw XML
+  code block without touching the raw XML. Colors read as RRGGBB, theme
+  colors resolved against the deck's theme
 - `--slide SEL` -- restrict to one slide
 
 Read-before-write protocol: take `rev` from here and pass it to
@@ -392,6 +397,21 @@ Anatomy:
   `false` shows it; omitted keeps the current state). Text accepts plain
   strings (`\n` = new paragraph) or rich text (runs with
   bold/italic/color/size, bullet levels).
+- **Rich text**: a paragraph is `{ "text": ... }` or `{ "runs": [...] }`
+  with `level`, `alignment`, `bullet` (`true`, `"number"` for 1. 2. 3.,
+  `false`; in placeholders `true` keeps the placeholder's own bullet
+  style), `spaceBefore`/`spaceAfter` (pt) and `lineSpacing` (a multiple,
+  `1.5`); a run takes `bold`, `italic`, `underline`, `strike`,
+  `superscript`, `subscript`, `size`, `font`, `color`, `highlight`,
+  `hyperlink` and `lang` (paragraph-level character fields apply to a
+  paragraph without runs). The same vocabulary works in `slide.fill`,
+  `el.set` and `el.add`. There is no shrink-to-fit: text that overflows is
+  shortened or split (`W_TEXT_OVERFLOW`).
+- **Colors**: every color field takes a hex value (`"1F4E79"`, `"#1F4E79"`)
+  or a theme slot -- `accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`,
+  `dk1`, `lt1`, `dk2`, `lt2` -- written as a theme reference
+  (`a:schemeClr`, no tint/shade), so the element follows the template's
+  color scheme. `state` reports colors as RRGGBB (theme colors resolved).
 - **Text language**: every run pptc writes carries a `lang` (PowerPoint's
   proofing language). It is the deck language -- the custom property
   `pptcDeckLang` (`meta.props`), else the deck's own default text language,
@@ -414,13 +434,68 @@ Recommended agent loop:
 | `slide.add` | add a slide from a template layout (`layout`: index or name; optional `ref`, `at`, inline fill) |
 | `slide.fill` | fill placeholders (`text`/`image`), `notes`, `footer`, `background`, `hidden` (hide/show) of a slide |
 | `slide.rm` / `slide.move` / `slide.copy` | structure edits |
-| `el.add` | add free elements: `textbox`, `table`, `chart`, `shape`, `image`, `connector` -- all share `frame: {x,y,w,h}` in inches |
+| `el.add` | add free elements: `textbox`, `table`, `chart`, `shape`, `image`, `connector` -- all share `frame: {x,y,w,h}` in inches (see below) |
 | `el.set` / `el.rm` | retext / remove an element by shape name; matches exactly or as prefix of the engine's UUID-suffixed names (`Kasten` matches `Kasten-1d22c8b0-...`), and also targets elements generated earlier in the same ops document; `el.set` text goes to placeholders, textboxes and shapes only (a table, chart, picture, connector or group fails with `E_SCHEMA`) |
 | `img.prompts` | overlay picture placeholders with visible image-prompt boxes (removable via `el.rm`) |
 | `meta.props` | document properties: core fields (title, author, subject, keywords, category, comments) and/or arbitrary `custom` name/value pairs stored in the `.pptx` (read back by `state` -- the deck's self-describing memory) |
 
 Run `pptc schema <op>` for the authoritative JSON Schema with all fields, or
 `pptc schema document` for the whole ops document.
+
+### `el.add` elements
+
+Every element has a `type`, an optional `name` (addresses it in later
+`el.set`/`el.rm`) and -- except connectors -- a `frame: {x, y, w, h,
+rotation}` in inches.
+
+- **`textbox`**: `text` (rich text), `fill`, `border`, `borderPt`, `lang`,
+  and the text box layout shared with `shape`: `valign`
+  (`top`/`middle`/`bottom`), `margin` (inner margin in inches: one value
+  or `[left, top, right, bottom]`), `textDirection` (`horizontal`,
+  `rotate90`, `rotate270`, `stacked`).
+- **`shape`**: `shape` (preset: `rect`, `roundRect`, `ellipse`, arrows,
+  flowchart shapes, ...), `text` (rich text), `fill`, `border`,
+  `borderPt`, `fontColor`, `fontSize`, `lang`, `valign`, `margin`,
+  `textDirection`.
+- **`table`**: `data: {headers, rows, style}` (`style`: `headerBg`,
+  `headerFg`, `altRowBg`, `fontSize`, `border`, `headerHeight`,
+  `rowHeight`); `colWidths` (inches per column, as `state` reports them;
+  scaled to `frame.w` when that is given), `colAlign`
+  (`left`/`center`/`right` per column), `textDirection` (all cells),
+  `lang`. A cell (also a header cell) is a plain value or `{text, bold,
+  fill, color, align, valign, colspan, rowspan, textDirection}` with rich
+  `text`; a cell covered by a `colspan`/`rowspan` is left out of its row,
+  as in HTML. Rows that do not fill the grid, and `colWidths`/`colAlign`
+  of the wrong length, fail with `E_SCHEMA`.
+- **`chart`**: `data: {type, categories, series, title, colors, legend,
+  fontSize, labels, axes, stacked, smooth, holeSize}`. `type` is `bar`,
+  `barStacked`, `column`, `columnStacked`, `line`, `lineMarkers`, `pie`,
+  `doughnut`, `area`, `areaStacked`, `radar`, `scatter` or `bubble`
+  (scatter/bubble series give `x` and `y` -- the same `x` for every series
+  -- and bubble `size`). `legend`: `true`/`false` or `top`/`bottom`/
+  `left`/`right`. `labels: {value, percent, format, position}` shows data
+  labels (values unless only `percent` is asked; percentages on
+  pie/doughnut only); `position` is one of `center`, `insideEnd`,
+  `insideBase`, `outsideEnd` (bar/column; stacked ones not `outsideEnd`),
+  `left`, `right`, `above`, `below` (line/scatter/bubble), `center`,
+  `insideEnd`, `outsideEnd`, `bestFit` (pie) -- doughnut, area and radar
+  take none. `axes: {x, y}` with `title`, `min`, `max`, `format` (number
+  format like `"0%"`); `x` is the category axis (titles only), the x value
+  axis on scatter/bubble; pie/doughnut have no axes. `stacked: "percent"`
+  stacks bar/column/area series to 100%, `smooth` smooths line charts,
+  `holeSize` (10-90) sizes a doughnut's hole. Unsupported combinations fail
+  with `E_SCHEMA`.
+- **`image`**: `path`, `fit` (`stretch` -- the default --, `crop`:
+  centered cover, `contain`: the whole image in a centered, shrunk frame),
+  `hyperlink` (URL).
+- **`connector`**: `from`/`to` `[x, y]`, `color`, `widthPt`, `dash`
+  (`solid`, `dash`, `dot`, `dashDot`, `longDash`), `startArrow`/`endArrow`
+  (`none`, `arrow`, `triangle`, `stealth`, `diamond`, `oval`) at the
+  `from`/`to` end.
+
+The overlap lint (`W_ELEMENT_OVERLAP`) takes the box a rotated element
+covers; the capacity of a placeholder with vertical text (rotated by 90 or
+270 degrees in the layout) swaps its width and height.
 
 ### Ops document semantics
 

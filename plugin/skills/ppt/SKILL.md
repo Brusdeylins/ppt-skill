@@ -115,7 +115,8 @@ tpl inspect <tpl>     # precise JSON: colors, layouts, placeholders, capacity
 tpl validate <tpl>    # check template against pptc's expectations (exit 7 on fail)
 new <deck> --template <tpl>
 state <deck> [--slide SEL] [--level summary|text|full]   # slides + rev; full = shape geometry
-                      #   + table cells/colWidths + autoshape styling (round-trip)
+                      #   + table cells/colWidths/merges + autoshape styling, textDirection,
+                      #   arrows, styled paragraphs/runs (round-trip; colors as RRGGBB)
 apply <deck> --ops @<ops.json> --rev <rev> [--dry-run] [--strict] [--template <tpl>]
 verify <deck> [--strict]   # PowerPoint repair-trigger check (exit 8 on --strict)
 schema                # ops JSON schema
@@ -126,6 +127,41 @@ Ops (in one JSON document, applied atomically): `slide.add`, `slide.fill`,
 `slide.rm`, `slide.move`, `slide.copy`, `el.add`, `el.rm`, `el.set`,
 `img.prompts`, `meta.props`. Slides are addressed by `id:<sldId>`,
 `title:<exact>`, `$ref` (doc-local), or `index:N` (escape hatch only).
+
+Text and colors (every op that writes text or color): rich text paragraphs
+take `level`, `alignment`, `bullet` (`true`, `"number"`, `false`),
+`spaceBefore`/`spaceAfter` (pt), `lineSpacing` (multiple); runs take
+`bold`, `italic`, `underline`, `strike`, `superscript`, `subscript`,
+`size`, `font`, `color`, `highlight`, `hyperlink`, `lang`. A color is hex
+or a theme slot (`accent1`-`accent6`, `tx1`, `tx2`, `bg1`, `bg2`, `dk1`,
+`lt1`, `dk2`, `lt2`) -- prefer the slot over the hex it resolves to, so
+the element follows the template. There is NO shrink-to-fit.
+
+`el.add` element fields (authoritative: `schema el.add`):
+
+```text
+textbox   frame, text, fill, border, borderPt, lang,
+          valign top|middle|bottom, margin 0.1|[l,t,r,b] (in),
+          textDirection horizontal|rotate90|rotate270|stacked
+shape     shape (preset), text (rich), fill, border, borderPt, fontColor,
+          fontSize, lang, valign, margin, textDirection
+table     frame, data {headers, rows, style}, colWidths [in], colAlign
+          [left|center|right], textDirection, lang; a cell = value or
+          {text, bold, fill, color, align, valign, colspan, rowspan,
+          textDirection} -- cells covered by a span are LEFT OUT (HTML)
+chart     frame, data {type, categories, series, title, colors, fontSize,
+          legend true|top|bottom|left|right, labels {value, percent,
+          format, position}, axes {x, y: {title, min, max, format}},
+          stacked "percent", smooth (line), holeSize (doughnut)};
+          scatter/bubble series share the same x
+image     frame, path, fit stretch|crop|contain, hyperlink
+connector from, to, color, widthPt, dash solid|dash|dot|dashDot|longDash,
+          startArrow/endArrow none|arrow|triangle|stealth|diamond|oval
+```
+
+Unsupported combinations (a label position the chart type does not take,
+axes on a pie, a ragged table grid) fail with `E_SCHEMA` -- fix the field
+the `issues` path names.
 
 Pitfalls: the ops file is passed as `--ops @/abs/path.json` (note the `@`;
 `-` reads stdin). `slide.add` on an EXISTING deck needs **no** `--template`
@@ -434,7 +470,9 @@ with `E_TEMPLATE`; then drop `--template`.
     -   **Quantitative data → a native chart, not a drawn SVG.** Trends,
         magnitude comparisons or parts of a whole go into an `el.add` chart
         (bar/column/line/pie/doughnut/area -- data-bound and editable in
-        PowerPoint) on the blank layout; never hand-draw numbers as shapes.
+        PowerPoint) on the blank layout; never hand-draw numbers as shapes
+        -- show values with the chart's `labels` and name the axes with
+        `axes`, not with textboxes laid over the chart.
         Reserve drawn SVG shapes for NON-numeric diagrams (flow, hierarchy,
         cycle, timeline, structure).
     -   New slides get `$ref`s so later ops in the document can address

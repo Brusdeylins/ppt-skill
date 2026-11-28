@@ -8,15 +8,18 @@
 **  generator slide per target slide -- and every generated shape is moved
 **  into its target slide by its unique object name, together with the parts
 **  it references (charts with their workbook, media) under fresh names.
+**  The generator output is finished first (engine/elements: theme colors,
+**  paragraph properties, chart axes), each moved shape after its move.
 */
 
 import PptxGenJsPkg from "pptxgenjs"
 import { randomUUID } from "node:crypto"
 import type { Document, Element } from "@xmldom/xmldom"
 import { PptcError } from "../../infra/errors.js"
+import type { ChartData, ElementSpec } from "../../schema/payloads.js"
 import type { SlidePlanEntry } from "../../core/ops/registry.js"
-import { addElement, type GenRoot, type GenSlide } from "../elements.js"
-import { PartAllocator, relTarget } from "../parts.js"
+import { GenColors, addElement, finishChart, finishGenerated, finishShape, type GenRoot, type GenSlide } from "../elements.js"
+import { PartAllocator, relTarget, relsPartOf } from "../parts.js"
 import { NS_R, elements, firstElement, relRefs } from "../xml.js"
 import { Package } from "./package.js"
 
@@ -70,6 +73,43 @@ export interface Generated {
 }
 
 /**
+ *  Finish the generator output before anything is moved: every slide and
+ *  chart part gets its theme colors and paragraph properties, every chart
+ *  its axis formats.
+ *
+ *  @param source - the generator package (changed in place)
+ *  @param entries - the plan entries with elements
+ *  @param placed - generator slide part and object names per entry
+ *  @param colors - the color tokens of the apply
+ */
+const finishSource = async (source: Package, entries: SlidePlanEntry[],
+    placed: Map<SlidePlanEntry, { part: string, names: string[] }>, colors: GenColors): Promise<void> => {
+    const charts = new Map<string, ChartData>()
+    for (const entry of entries) {
+        const info = placed.get(entry)
+        if (info === undefined || !source.has(relsPartOf(info.part)))
+            continue
+        const slide = await source.xml(info.part)
+        const rels = new Map(source.targets(info.part, await source.rels(info.part)).map((t) => [ t.id, t.target ]))
+        entry.elements.forEach((planned, i) => {
+            const cNvPr = elements(slide, "p:cNvPr").find((el) => el.getAttribute("name") === info.names[i])
+            const rid = cNvPr === undefined ? null : firstElement(cNvPr.parentNode?.parentNode as Element, "c:chart")?.getAttributeNS(NS_R, "id") ?? null
+            const target = rid === null ? null : rels.get(rid) ?? null
+            if (planned.spec.type === "chart" && target !== null && target !== undefined)
+                charts.set(target, planned.spec.data)
+        })
+    }
+    const parts = Object.keys(source.zip.files).filter((f) => /^ppt\/(slides\/slide|charts\/chart)\d+\.xml$/.test(f))
+    for (const part of parts) {
+        const doc = await source.xml(part)
+        const chart = charts.get(part)
+        const changed = finishGenerated(doc, colors.tokens)
+        if ((chart !== undefined && finishChart(doc, chart)) || changed)
+            source.write(part, doc)
+    }
+}
+
+/**
  *  Render the planned elements of all entries with PptxGenJS. Each element
  *  is named `<name>-<uuid>` (or `<uuid>` when unnamed), so el.set/el.rm keep
  *  addressing it by its name prefix.
@@ -83,17 +123,19 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string):
     if (withElements.length === 0)
         return null
     const gen = new PptxGenJS()
+    const colors = new GenColors(withElements.flatMap((e) => e.elements.map((planned) => planned.spec)))
     const placed = new Map<SlidePlanEntry, { part: string, names: string[] }>()
     for (const [ k, entry ] of withElements.entries()) {
         const slide = gen.addSlide()
         const names = entry.elements.map((planned) => {
             const name = `${planned.name !== null ? `${planned.name}-` : ""}${randomUUID()}`
-            addElement(named(slide, name), gen, planned.spec, lang)
+            addElement(named(slide, name), gen, planned.spec, lang, colors)
             return name
         })
         placed.set(entry, { part: `ppt/slides/slide${k + 1}.xml`, names })
     }
     const source = await Package.open(await gen.write({ outputType: "nodebuffer" }) as Buffer, [])
+    await finishSource(source, withElements, placed, colors)
 
     return {
         async transplant(pkg, entry, slide, rels, part): Promise<void> {
@@ -129,6 +171,7 @@ export const generateElements = async (entries: SlidePlanEntry[], lang: string):
                         el.setAttributeNS(NS_R, attr.name, id)
                 }
                 firstElement(shape, "p:cNvPr")?.setAttribute("id", String(nextId()))
+                finishShape(shape, entry.elements[info.names.indexOf(name)]?.spec as ElementSpec)
                 spTree.insertBefore(shape, anchor)
             }
         }
